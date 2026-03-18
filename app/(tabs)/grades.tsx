@@ -9,9 +9,11 @@ import {
 import { useEffect, useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/lib/auth-context";
+import { classeviva } from "@/lib/classeviva-client";
 import { generateMockGrades } from "@/lib/mock-data";
 import { useColors } from "@/hooks/use-colors";
 import { ElegantCard } from "@/components/ui/elegant-card";
+import { SearchBar } from "@/components/ui/search-bar";
 // Grade type defined locally
 interface Grade {
   id: string;
@@ -29,13 +31,19 @@ export default function GradesScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const loadGrades = async () => {
     try {
       if (isDemoMode) {
         const mockGrades = generateMockGrades();
         setGrades(mockGrades as any);
+      } else {
+        const realGrades = await classeviva.getGrades().catch(() => []);
+        setGrades(realGrades as any);
       }
+    } catch (err) {
+      console.error("Errore nel caricamento dei voti:", err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -48,6 +56,7 @@ export default function GradesScreen() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    await new Promise((resolve) => setTimeout(resolve, 500));
     await loadGrades();
   };
 
@@ -71,9 +80,19 @@ export default function GradesScreen() {
   );
 
   const subjects = Object.keys(gradesBySubject);
-  const filteredGrades = selectedSubject
+  let filteredGrades = selectedSubject
     ? gradesBySubject[selectedSubject]
     : grades;
+
+  // Applica filtro di ricerca
+  if (searchQuery.trim()) {
+    const query = searchQuery.toLowerCase();
+    filteredGrades = filteredGrades.filter(
+      (g) =>
+        g.subject.toLowerCase().includes(query) ||
+        g.teacher.toLowerCase().includes(query)
+    );
+  }
 
   const getSubjectAverage = (subject: string) => {
     const subjectGrades = gradesBySubject[subject]
@@ -130,6 +149,14 @@ export default function GradesScreen() {
               {grades.length} valutazioni registrate
             </Text>
           </View>
+
+          {/* Search Bar */}
+          <SearchBar
+            placeholder="Cerca per materia o insegnante..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onClear={() => setSearchQuery("")}
+          />
 
           {/* Subject Filter */}
           {subjects.length > 0 && (

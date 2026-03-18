@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import { classeviva, StudentProfile, AuthToken } from "./classeviva-client";
 import { mockStudentProfile } from "./mock-data";
+import { notificationsService } from "./notifications-service";
 
 interface AuthContextType {
   isLoading: boolean;
@@ -68,6 +69,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       error: null,
     }
   );
+
+  // Inizializza notifiche al mount
+  useEffect(() => {
+    notificationsService.initialize();
+  }, []);
 
   // Ripristina il token al mount
   useEffect(() => {

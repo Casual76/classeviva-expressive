@@ -9,33 +9,50 @@ import {
 import { useEffect, useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/lib/auth-context";
+import { classeviva } from "@/lib/classeviva-client";
 import {
   generateMockGrades,
   generateMockHomeworks,
   generateMockAbsences,
+  generateMockLessons,
 } from "@/lib/mock-data";
 import { useColors } from "@/hooks/use-colors";
 import { ElegantCard } from "@/components/ui/elegant-card";
 import { ElegantButton } from "@/components/ui/elegant-button";
+import { AnimatedCard } from "@/components/ui/animated-card";
+
+interface DashboardStats {
+  averageGrade: number | string;
+  absences: number;
+  lates: number;
+  upcomingHomeworks: number;
+  recentGrades?: any[];
+  nextLessons?: any[];
+}
 
 export default function HomeScreen() {
   const colors = useColors();
   const { user, isDemoMode } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     averageGrade: 0,
     absences: 0,
     lates: 0,
     upcomingHomeworks: 0,
   });
+  const [error, setError] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
+      setError(null);
+
       if (isDemoMode) {
+        // Carica dati mock per demo mode
         const grades = generateMockGrades();
         const homeworks = generateMockHomeworks();
         const absences = generateMockAbsences();
+        const lessons = generateMockLessons();
 
         const numericGrades = grades
           .map((g) => {
@@ -49,21 +66,64 @@ export default function HomeScreen() {
             ? (numericGrades.reduce((a, b) => a + b, 0) / numericGrades.length).toFixed(1)
             : "0";
 
-        const now = new Date();
-        const upcomingCount = homeworks.filter(
-          (h) => new Date(h.dueDate) > now
-        ).length;
-
         const absenceCount = absences.filter((a) => a.type === "assenza").length;
         const lateCount = absences.filter((a) => a.type === "ritardo").length;
+        const upcomingHW = homeworks.filter(
+          (h) => new Date(h.dueDate) >= new Date()
+        ).length;
 
         setStats({
-          averageGrade: parseFloat(average),
+          averageGrade: average,
           absences: absenceCount,
           lates: lateCount,
-          upcomingHomeworks: upcomingCount,
+          upcomingHomeworks: upcomingHW,
+          recentGrades: grades.slice(-3),
+          nextLessons: lessons.slice(0, 2),
+        });
+      } else {
+        // Carica dati reali da Classeviva
+        const [grades, absences, homeworks, lessons] = await Promise.all([
+          classeviva.getGrades().catch(() => []),
+          classeviva.getAbsences().catch(() => []),
+          classeviva.getHomeworks().catch(() => []),
+          classeviva.getLessons().catch(() => []),
+        ]);
+
+        // Calcola statistiche dai dati reali
+        const numericGrades = (grades as any[])
+          .map((g) => {
+            const num = typeof g.grade === "number" ? g.grade : parseFloat(String(g.grade));
+            return isNaN(num) ? 0 : num;
+          })
+          .filter((g) => g > 0);
+
+        const averageGrade =
+          numericGrades.length > 0
+            ? (numericGrades.reduce((a, b) => a + b, 0) / numericGrades.length).toFixed(2)
+            : "N/A";
+
+        const absenceCount = (absences as any[]).filter(
+          (a) => a.type === "assenza"
+        ).length;
+        const lateCount = (absences as any[]).filter(
+          (a) => a.type === "ritardo"
+        ).length;
+        const upcomingHW = (homeworks as any[]).filter(
+          (h) => new Date(h.dueDate) >= new Date()
+        ).length;
+
+        setStats({
+          averageGrade: parseFloat(averageGrade as string) || 0,
+          absences: absenceCount,
+          lates: lateCount,
+          upcomingHomeworks: upcomingHW,
+          recentGrades: (grades as any[]).slice(-3),
+          nextLessons: (lessons as any[]).slice(0, 2),
         });
       }
+    } catch (err: any) {
+      console.error("Errore nel caricamento dei dati:", err);
+      setError(err.message || "Errore nel caricamento dei dati");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -72,10 +132,11 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadData();
-  }, [isDemoMode]);
+  }, [isDemoMode, user]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    await new Promise((resolve) => setTimeout(resolve, 500));
     await loadData();
   };
 
@@ -96,177 +157,151 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 20 }}
       >
-        <View className="px-6 py-6 gap-8">
-          {/* Welcome Header */}
-          <View className="gap-3">
-            <Text className="text-5xl font-bold text-foreground">
+        <View className="px-6 py-6 gap-6">
+          {/* Header */}
+          <View className="gap-2">
+            <Text className="text-4xl font-bold text-foreground">
               Ciao, {user?.name}! 👋
             </Text>
-            <Text className="text-base text-muted">
+            <Text className="text-sm text-muted">
               Benvenuto su Classeviva Expressive
             </Text>
-            {isDemoMode && (
-              <View className="px-4 py-2 rounded-full bg-primary/15 w-fit">
-                <Text className="text-xs font-bold text-primary">
-                  🎯 MODALITÀ DEMO
-                </Text>
-              </View>
-            )}
           </View>
 
-          {/* Main Stats Card */}
-          <ElegantCard variant="gradient" gradient="primary" className="p-6 gap-4">
-            <View className="gap-1">
-              <Text className="text-sm font-semibold text-background/80">
-                Media Voti
-              </Text>
-              <View className="flex-row items-baseline gap-2">
-                <Text className="text-6xl font-bold text-background">
-                  {stats.averageGrade.toFixed(1)}
-                </Text>
-                <Text className="text-lg text-background/80">/10</Text>
-              </View>
-            </View>
-            <View className="h-px bg-background/20" />
-            <Text className="text-xs text-background/70">
-              Basato su {stats.averageGrade > 0 ? "ultimi voti" : "nessun voto"}
-            </Text>
-          </ElegantCard>
+          {/* Error Message */}
+          {error && (
+            <ElegantCard
+              variant="filled"
+              className="p-4 bg-error/10 border-error/30"
+            >
+              <Text className="text-sm text-error">{error}</Text>
+            </ElegantCard>
+          )}
 
-          {/* Quick Stats */}
+          {/* Average Grade Card */}
+          <AnimatedCard
+            variant="gradient"
+            gradient="primary"
+            className="p-6 gap-3"
+            delay={100}
+          >
+            <Text className="text-sm font-bold text-background/80">
+              Media Voti
+            </Text>
+            <View className="flex-row items-baseline gap-2">
+              <Text className="text-5xl font-bold text-background">
+                {stats.averageGrade}
+              </Text>
+              <Text className="text-lg text-background/80">/10</Text>
+            </View>
+            <Text className="text-xs text-background/70">
+              {stats.recentGrades && stats.recentGrades.length > 0
+                ? "Basato su " + stats.recentGrades.length + " voti recenti"
+                : "Nessun voto disponibile"}
+            </Text>
+          </AnimatedCard>
+
+          {/* Summary Stats */}
           <View className="gap-3">
             <Text className="text-sm font-bold text-foreground">
               Riepilogo
             </Text>
-            <View className="gap-3">
-              {/* Absences and Lates */}
-              <View className="flex-row gap-3">
-                <ElegantCard variant="filled" className="flex-1 p-4 gap-2">
-                  <Text className="text-xs font-semibold text-muted">
-                    Assenze
-                  </Text>
-                  <Text className="text-4xl font-bold text-error">
-                    {stats.absences}
-                  </Text>
-                </ElegantCard>
-                <ElegantCard variant="filled" className="flex-1 p-4 gap-2">
-                  <Text className="text-xs font-semibold text-muted">
-                    Ritardi
-                  </Text>
-                  <Text className="text-4xl font-bold text-warning">
-                    {stats.lates}
-                  </Text>
-                </ElegantCard>
-              </View>
-
-              {/* Upcoming Homeworks */}
+            <View className="flex-row gap-3">
               <ElegantCard
-                variant={
-                  stats.upcomingHomeworks > 0 ? "filled" : "filled"
-                }
-                className={`p-4 gap-2 ${
-                  stats.upcomingHomeworks === 0 ? "bg-success/10" : ""
-                }`}
+                variant="filled"
+                className="flex-1 p-4 gap-2 bg-error/10 border-error/30"
               >
-                <Text className="text-xs font-semibold text-muted">
-                  Compiti in Scadenza
+                <Text className="text-xs font-bold text-muted">Assenze</Text>
+                <Text className="text-3xl font-bold text-error">
+                  {stats.absences}
                 </Text>
-                <View className="flex-row items-center justify-between">
-                  <Text
-                    className={`text-4xl font-bold ${
-                      stats.upcomingHomeworks === 0
-                        ? "text-success"
-                        : "text-primary"
-                    }`}
-                  >
-                    {stats.upcomingHomeworks}
-                  </Text>
-                  {stats.upcomingHomeworks === 0 && (
-                    <Text className="text-2xl">✓</Text>
-                  )}
-                </View>
+              </ElegantCard>
+              <ElegantCard
+                variant="filled"
+                className="flex-1 p-4 gap-2 bg-warning/10 border-warning/30"
+              >
+                <Text className="text-xs font-bold text-muted">Ritardi</Text>
+                <Text className="text-3xl font-bold text-warning">
+                  {stats.lates}
+                </Text>
               </ElegantCard>
             </View>
+            <ElegantCard
+              variant="filled"
+              className="p-4 gap-2 bg-success/10 border-success/30"
+            >
+              <Text className="text-xs font-bold text-muted">
+                Compiti in Scadenza
+              </Text>
+              <Text className="text-3xl font-bold text-success">
+                {stats.upcomingHomeworks}
+              </Text>
+            </ElegantCard>
           </View>
 
-          {/* Quick Actions */}
-          <View className="gap-4">
+          {/* Recent Grades */}
+          {stats.recentGrades && stats.recentGrades.length > 0 && (
+            <View className="gap-3">
+              <Text className="text-sm font-bold text-foreground">
+                Ultimi Voti
+              </Text>
+              <View className="gap-2">
+                {stats.recentGrades.map((grade: any) => (
+                  <ElegantCard
+                    key={grade.id}
+                    variant="filled"
+                    className="p-4 gap-2"
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <View className="flex-1 gap-1">
+                        <Text className="text-sm font-bold text-foreground">
+                          {grade.subject}
+                        </Text>
+                        <Text className="text-xs text-muted">
+                          {new Date(grade.date).toLocaleDateString("it-IT")}
+                        </Text>
+                      </View>
+                      <View
+                        className={`px-3 py-1 rounded-full ${
+                          typeof grade.grade === "number" && grade.grade >= 7
+                            ? "bg-success/20"
+                            : "bg-warning/20"
+                        }`}
+                      >
+                        <Text
+                          className={`text-sm font-bold ${
+                            typeof grade.grade === "number" && grade.grade >= 7
+                              ? "text-success"
+                              : "text-warning"
+                          }`}
+                        >
+                          {grade.grade}
+                        </Text>
+                      </View>
+                    </View>
+                  </ElegantCard>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Quick Access */}
+          <View className="gap-3">
             <Text className="text-sm font-bold text-foreground">
               Accesso Rapido
             </Text>
-            <View className="gap-3">
-              <TouchableOpacity
-                activeOpacity={0.7}
-                className="active:opacity-70"
-              >
-                <ElegantCard variant="outlined" className="p-4 flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-3">
-                    <Text className="text-3xl">📊</Text>
-                    <View className="gap-1">
-                      <Text className="text-sm font-bold text-foreground">
-                        Voti
-                      </Text>
-                      <Text className="text-xs text-muted">
-                        Ultime valutazioni
-                      </Text>
-                    </View>
-                  </View>
-                  <Text className="text-lg text-primary">→</Text>
-                </ElegantCard>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.7}
-                className="active:opacity-70"
-              >
-                <ElegantCard variant="outlined" className="p-4 flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-3">
-                    <Text className="text-3xl">📅</Text>
-                    <View className="gap-1">
-                      <Text className="text-sm font-bold text-foreground">
-                        Agenda
-                      </Text>
-                      <Text className="text-xs text-muted">
-                        Lezioni e compiti
-                      </Text>
-                    </View>
-                  </View>
-                  <Text className="text-lg text-primary">→</Text>
-                </ElegantCard>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.7}
-                className="active:opacity-70"
-              >
-                <ElegantCard variant="outlined" className="p-4 flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-3">
-                    <Text className="text-3xl">🔔</Text>
-                    <View className="gap-1">
-                      <Text className="text-sm font-bold text-foreground">
-                        Comunicazioni
-                      </Text>
-                      <Text className="text-xs text-muted">
-                        Ultime notizie
-                      </Text>
-                    </View>
-                  </View>
-                  <Text className="text-lg text-primary">→</Text>
-                </ElegantCard>
-              </TouchableOpacity>
+            <View className="gap-2">
+              <ElegantButton variant="secondary" size="lg" fullWidth>
+                📊 Visualizza Tutti i Voti
+              </ElegantButton>
+              <ElegantButton variant="secondary" size="lg" fullWidth>
+                📅 Vedi Agenda Completa
+              </ElegantButton>
+              <ElegantButton variant="secondary" size="lg" fullWidth>
+                📬 Comunicazioni
+              </ElegantButton>
             </View>
           </View>
-
-          {/* Info Card */}
-          <ElegantCard variant="filled" className="p-4 gap-2 bg-primary/5 border border-primary/20">
-            <Text className="text-xs font-bold text-primary">
-              💡 Suggerimento
-            </Text>
-            <Text className="text-xs text-muted leading-relaxed">
-              Mantieni aggiornati i tuoi compiti e controlla regolarmente le
-              comunicazioni della scuola.
-            </Text>
-          </ElegantCard>
         </View>
       </ScrollView>
     </ScreenContainer>

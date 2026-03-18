@@ -8,6 +8,7 @@ import {
 import { useEffect, useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/lib/auth-context";
+import { classeviva } from "@/lib/classeviva-client";
 import { generateMockAbsences } from "@/lib/mock-data";
 import { useColors } from "@/hooks/use-colors";
 import { ElegantCard } from "@/components/ui/elegant-card";
@@ -32,7 +33,12 @@ export default function AbsencesScreen() {
       if (isDemoMode) {
         const mockAbsences = generateMockAbsences();
         setAbsences(mockAbsences as any);
+      } else {
+        const realAbsences = await classeviva.getAbsences().catch(() => []);
+        setAbsences(realAbsences as any);
       }
+    } catch (err) {
+      console.error("Errore nel caricamento delle assenze:", err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -45,6 +51,7 @@ export default function AbsencesScreen() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    await new Promise((resolve) => setTimeout(resolve, 500));
     await loadAbsences();
   };
 

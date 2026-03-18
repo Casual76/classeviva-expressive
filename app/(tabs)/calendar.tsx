@@ -9,6 +9,7 @@ import {
 import { useEffect, useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/lib/auth-context";
+import { classeviva } from "@/lib/classeviva-client";
 import { generateMockLessons, generateMockHomeworks } from "@/lib/mock-data";
 import { useColors } from "@/hooks/use-colors";
 import { ElegantCard } from "@/components/ui/elegant-card";
@@ -55,7 +56,34 @@ export default function CalendarScreen() {
           })),
         ];
         setEvents(mockEvents);
+      } else {
+        const [lessons, homeworks] = await Promise.all([
+          classeviva.getLessons().catch(() => []),
+          classeviva.getHomeworks().catch(() => []),
+        ]);
+        
+        const realEvents = [
+          ...lessons.map((l: any) => ({
+            id: l.id,
+            title: l.topic || "Lezione",
+            description: l.topic,
+            date: l.date,
+            type: "lezione" as const,
+            subject: l.subject,
+          })),
+          ...homeworks.map((h: any) => ({
+            id: h.id,
+            title: h.description,
+            description: h.description,
+            date: h.dueDate,
+            type: "compito" as const,
+            subject: h.subject,
+          })),
+        ];
+        setEvents(realEvents);
       }
+    } catch (err) {
+      console.error("Errore nel caricamento dell'agenda:", err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -68,6 +96,7 @@ export default function CalendarScreen() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    await new Promise((resolve) => setTimeout(resolve, 500));
     await loadEvents();
   };
 
