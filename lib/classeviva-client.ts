@@ -9,6 +9,8 @@
 import axios, { AxiosInstance } from "axios";
 
 const API_BASE_URL = "https://web.spaggiari.eu/rest/v1";
+// API Key pubblica di Classeviva (da documentazione ufficiale)
+const API_KEY = "+zorro+";
 
 export interface LoginCredentials {
   username: string;
@@ -102,6 +104,7 @@ export class ClassevivaClient {
       headers: {
         "User-Agent": "ClassevivaExpressive/1.0",
         "Content-Type": "application/json",
+        "Z-Dev-Apikey": API_KEY,
       },
     });
 
