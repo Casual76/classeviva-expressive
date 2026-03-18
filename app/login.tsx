@@ -12,6 +12,8 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
+import { ElegantCard } from "@/components/ui/elegant-card";
+import { ElegantButton } from "@/components/ui/elegant-button";
 
 export default function LoginScreen() {
   const { login, loginDemo, isLoading, error } = useAuth();
@@ -58,34 +60,43 @@ export default function LoginScreen() {
           {/* Header */}
           <View className="gap-8">
             {/* Logo Section */}
-            <View className="items-center gap-4 pt-8">
-              <View className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary to-primary/80 items-center justify-center shadow-lg">
-                <Text className="text-5xl">📚</Text>
-              </View>
+            <View className="items-center gap-6 pt-12">
+              <ElegantCard
+                variant="gradient"
+                gradient="primary"
+                className="w-24 h-24 items-center justify-center"
+              >
+                <Text className="text-6xl">📚</Text>
+              </ElegantCard>
               <View className="items-center gap-2">
-                <Text className="text-4xl font-bold text-foreground">
+                <Text className="text-5xl font-bold text-foreground">
                   Classeviva
                 </Text>
-                <Text className="text-base text-muted">Expressive</Text>
+                <Text className="text-lg font-semibold text-primary">
+                  Expressive
+                </Text>
+                <Text className="text-xs text-muted mt-2">
+                  Accedi al tuo registro elettronico
+                </Text>
               </View>
             </View>
 
             {/* Login Form */}
             <View className="gap-6">
               {error && (
-                <View className="p-4 rounded-xl bg-error/10 border border-error">
-                  <Text className="text-sm font-semibold text-error">
-                    {error}
+                <ElegantCard variant="filled" className="p-4 gap-2 bg-error/10 border border-error">
+                  <Text className="text-sm font-bold text-error">
+                    ⚠️ {error}
                   </Text>
-                </View>
+                </ElegantCard>
               )}
 
               {/* Username Field */}
               <View className="gap-2">
-                <Text className="text-sm font-semibold text-foreground">
+                <Text className="text-sm font-bold text-foreground">
                   Username
                 </Text>
-                <View className="rounded-xl bg-surface border border-border px-4 py-3 flex-row items-center">
+                <ElegantCard variant="filled" className="px-4 py-3 flex-row items-center">
                   <TextInput
                     placeholder="Inserisci username"
                     placeholderTextColor={colors.muted}
@@ -94,15 +105,15 @@ export default function LoginScreen() {
                     editable={!isLoading}
                     className="flex-1 text-base text-foreground"
                   />
-                </View>
+                </ElegantCard>
               </View>
 
               {/* Password Field */}
               <View className="gap-2">
-                <Text className="text-sm font-semibold text-foreground">
+                <Text className="text-sm font-bold text-foreground">
                   Password
                 </Text>
-                <View className="rounded-xl bg-surface border border-border px-4 py-3 flex-row items-center gap-2">
+                <ElegantCard variant="filled" className="px-4 py-3 flex-row items-center gap-2">
                   <TextInput
                     placeholder="Inserisci password"
                     placeholderTextColor={colors.muted}
@@ -120,60 +131,63 @@ export default function LoginScreen() {
                       {showPassword ? "👁️" : "👁️‍🗨️"}
                     </Text>
                   </TouchableOpacity>
-                </View>
+                </ElegantCard>
               </View>
 
               {/* Login Button */}
-              <TouchableOpacity
+              <ElegantButton
+                variant="primary"
+                size="lg"
+                fullWidth
                 onPress={handleLogin}
                 disabled={isLoading}
-                className="py-4 rounded-xl bg-primary items-center justify-center active:opacity-80"
               >
                 {isLoading ? (
                   <ActivityIndicator color={colors.background} size="small" />
                 ) : (
-                  <Text className="text-base font-semibold text-background">
-                    Accedi
-                  </Text>
+                  "Accedi"
                 )}
-              </TouchableOpacity>
+              </ElegantButton>
             </View>
           </View>
 
           {/* Demo Mode Section */}
-          <View className="gap-4">
+          <View className="gap-5">
             {/* Divider */}
             <View className="flex-row items-center gap-3">
               <View className="flex-1 h-px bg-border" />
-              <Text className="text-xs font-semibold text-muted">OPPURE</Text>
+              <Text className="text-xs font-bold text-muted">OPPURE</Text>
               <View className="flex-1 h-px bg-border" />
             </View>
 
             {/* Demo Button */}
-            <TouchableOpacity
+            <ElegantButton
+              variant="outline"
+              size="lg"
+              fullWidth
               onPress={handleDemoLogin}
               disabled={isLoading}
-              className="py-4 rounded-xl border-2 border-primary items-center justify-center active:opacity-80"
             >
-              <Text className="text-base font-semibold text-primary">
-                Accedi in Modalità Demo
-              </Text>
-            </TouchableOpacity>
+              Accedi in Modalità Demo
+            </ElegantButton>
 
             {/* Demo Info */}
-            <View className="p-4 rounded-xl bg-primary/5 border border-primary/20 gap-2">
-              <Text className="text-xs font-semibold text-primary">
-                💡 Modalità Demo
-              </Text>
+            <ElegantCard variant="filled" className="p-5 gap-3 bg-primary/8 border border-primary/25">
+              <View className="flex-row items-center gap-2">
+                <Text className="text-lg">🎯</Text>
+                <Text className="text-xs font-bold text-primary">
+                  Modalità Demo Attiva
+                </Text>
+              </View>
               <Text className="text-xs text-muted leading-relaxed">
-                Accedi senza credenziali per esplorare tutte le funzionalità
-                dell'app con dati di esempio realistici.
+                Esplora tutte le funzionalità dell'app con dati di esempio
+                realistici senza inserire credenziali.
               </Text>
-            </View>
+            </ElegantCard>
 
             {/* Footer */}
             <Text className="text-xs text-muted text-center">
-              Classeviva Expressive v1.0.0
+              Classeviva Expressive v2.0.0
             </Text>
           </View>
         </View>
