@@ -29,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isSignedIn: action.payload.token !== null,
             user: action.payload.user,
             token: action.payload.token,
+            isDemoMode: action.payload.isDemoMode || false,
             error: null,
           };
         case "SIGN_IN":
@@ -52,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return {
             ...prevState,
             error: action.payload,
+            isLoading: false,
           };
         default:
           return prevState;
@@ -90,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       dispatch({
         type: "RESTORE_TOKEN",
-        payload: { token, user },
+        payload: { token, user, isDemoMode: false },
       });
     };
 
@@ -107,6 +109,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     login: async (username: string, password: string) => {
       try {
+        dispatch({
+          type: "SET_ERROR",
+          payload: null,
+        });
+
         const authToken = await classeviva.login({
           username,
           password,
@@ -120,11 +127,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         dispatch({
           type: "SIGN_IN",
-          payload: { token: authToken.token, user },
+          payload: { token: authToken.token, user, isDemoMode: false },
         });
       } catch (error: any) {
-        const errorMessage =
-          error.message || "Errore durante il login. Riprova.";
+        let errorMessage = "Errore durante il login. Riprova.";
+        
+        if (error.message?.includes("Network") || error.message?.includes("internet")) {
+          errorMessage = "Connessione internet non disponibile. Usa la modalità Demo per continuare.";
+        } else if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
+          errorMessage = "Username o password non validi.";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        
         dispatch({
           type: "SET_ERROR",
           payload: errorMessage,
@@ -135,6 +150,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     loginDemo: async () => {
       try {
+        dispatch({
+          type: "SET_ERROR",
+          payload: null,
+        });
+        
+        // Simula un piccolo delay per UX
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        
         dispatch({
           type: "SIGN_IN",
           payload: { token: "demo-token", user: mockStudentProfile, isDemoMode: true },
