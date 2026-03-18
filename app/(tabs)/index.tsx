@@ -1,33 +1,67 @@
-import { ScrollView, Text, View, TouchableOpacity, RefreshControl, ActivityIndicator } from "react-native";
+import {
+  ScrollView,
+  Text,
+  View,
+  TouchableOpacity,
+  RefreshControl,
+  ActivityIndicator,
+} from "react-native";
 import { useEffect, useState } from "react";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/lib/auth-context";
-import { classeviva, Grade, Homework, Absence } from "@/lib/classeviva-client";
+import {
+  generateMockGrades,
+  generateMockHomeworks,
+  generateMockAbsences,
+} from "@/lib/mock-data";
 import { useColors } from "@/hooks/use-colors";
 
 export default function HomeScreen() {
-  const { user } = useAuth();
   const colors = useColors();
+  const { user, isDemoMode } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [grades, setGrades] = useState<Grade[]>([]);
-  const [homeworks, setHomeworks] = useState<Homework[]>([]);
-  const [absences, setAbsences] = useState<Absence[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    averageGrade: 0,
+    absences: 0,
+    lates: 0,
+    upcomingHomeworks: 0,
+  });
 
   const loadData = async () => {
     try {
-      setError(null);
-      const [gradesData, homeworksData, absencesData] = await Promise.all([
-        classeviva.getGrades(),
-        classeviva.getHomeworks(),
-        classeviva.getAbsences(),
-      ]);
-      setGrades(gradesData);
-      setHomeworks(homeworksData);
-      setAbsences(absencesData);
-    } catch (err: any) {
-      setError(err.message || "Errore nel caricamento dei dati");
+      if (isDemoMode) {
+        const grades = generateMockGrades();
+        const homeworks = generateMockHomeworks();
+        const absences = generateMockAbsences();
+
+        const numericGrades = grades
+          .map((g) => {
+            const num = parseFloat(String(g.grade));
+            return isNaN(num) ? 0 : num;
+          })
+          .filter((g) => g > 0);
+
+        const average =
+          numericGrades.length > 0
+            ? (numericGrades.reduce((a, b) => a + b, 0) / numericGrades.length).toFixed(1)
+            : "0";
+
+        const now = new Date();
+        const upcomingCount = homeworks.filter(
+          (h) => new Date(h.dueDate) > now
+        ).length;
+
+        const absenceCount = absences.filter((a) => a.type === "assenza").length;
+        const lateCount = absences.filter((a) => a.type === "ritardo").length;
+
+        setStats({
+          averageGrade: parseFloat(average),
+          absences: absenceCount,
+          lates: lateCount,
+          upcomingHomeworks: upcomingCount,
+        });
+      }
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -36,31 +70,12 @@ export default function HomeScreen() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [isDemoMode]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await loadData();
   };
-
-  const calculateAverageGrade = () => {
-    if (grades.length === 0) return 0;
-    const numericGrades = grades
-      .map((g) => {
-        const num = parseFloat(String(g.grade));
-        return isNaN(num) ? 0 : num;
-      })
-      .filter((g) => g > 0);
-    if (numericGrades.length === 0) return 0;
-    return (numericGrades.reduce((a, b) => a + b, 0) / numericGrades.length).toFixed(2);
-  };
-
-  const upcomingHomeworks = homeworks
-    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-    .slice(0, 3);
-
-  const totalAbsences = absences.filter((a) => a.type === "assenza").length;
-  const totalLates = absences.filter((a) => a.type === "ritardo").length;
 
   if (isLoading) {
     return (
@@ -73,119 +88,164 @@ export default function HomeScreen() {
   return (
     <ScreenContainer className="flex-1 bg-background">
       <ScrollView
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
+        }
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 20 }}
       >
         <View className="px-6 py-6 gap-6">
-          {/* Greeting */}
-          <View className="gap-1">
-            <Text className="text-3xl font-bold text-foreground">
-              Ciao, {user?.name || "Studente"}! 👋
+          {/* Welcome Header */}
+          <View className="gap-2">
+            <Text className="text-4xl font-bold text-foreground">
+              Ciao, {user?.name}! 👋
             </Text>
-            <Text className="text-sm text-muted">
-              {user?.class} {user?.section}
-            </Text>
+            {isDemoMode && (
+              <View className="px-3 py-1 rounded-full bg-primary/20 w-fit">
+                <Text className="text-xs font-semibold text-primary">
+                  📊 Modalità Demo
+                </Text>
+              </View>
+            )}
           </View>
 
-          {error && (
-            <View className="p-4 rounded-lg bg-error/10 border border-error">
-              <Text className="text-sm text-error">{error}</Text>
+          {/* Stats Cards */}
+          <View className="gap-3">
+            {/* Average Grade */}
+            <View className="rounded-2xl bg-gradient-to-br from-primary to-primary/80 p-6 gap-2">
+              <Text className="text-sm font-semibold text-background/80">
+                Media Voti
+              </Text>
+              <View className="flex-row items-baseline gap-2">
+                <Text className="text-5xl font-bold text-background">
+                  {stats.averageGrade.toFixed(1)}
+                </Text>
+                <Text className="text-sm text-background/80">/10</Text>
+              </View>
             </View>
-          )}
 
-          {/* Media Voti Card */}
-          <View className="rounded-2xl bg-gradient-to-br from-primary to-primary/80 p-6 gap-3">
-            <Text className="text-sm font-semibold text-background/80">Media Voti</Text>
-            <Text className="text-4xl font-bold text-background">{calculateAverageGrade()}</Text>
-            <Text className="text-xs text-background/70">
-              Basato su {grades.length} voti
-            </Text>
+            {/* Attendance Stats */}
+            <View className="grid grid-cols-2 gap-3">
+              <View className="rounded-2xl bg-surface border border-border p-4 gap-2">
+                <Text className="text-xs font-semibold text-muted">Assenze</Text>
+                <Text className="text-4xl font-bold text-error">
+                  {stats.absences}
+                </Text>
+              </View>
+              <View className="rounded-2xl bg-surface border border-border p-4 gap-2">
+                <Text className="text-xs font-semibold text-muted">Ritardi</Text>
+                <Text className="text-4xl font-bold text-warning">
+                  {stats.lates}
+                </Text>
+              </View>
+            </View>
           </View>
 
-          {/* Assenze Card */}
-          <View className="flex-row gap-4">
-            <View className="flex-1 rounded-2xl bg-surface border border-border p-4 gap-2">
-              <Text className="text-xs font-semibold text-muted">Assenze</Text>
-              <Text className="text-3xl font-bold text-foreground">{totalAbsences}</Text>
-            </View>
-            <View className="flex-1 rounded-2xl bg-surface border border-border p-4 gap-2">
-              <Text className="text-xs font-semibold text-muted">Ritardi</Text>
-              <Text className="text-3xl font-bold text-foreground">{totalLates}</Text>
-            </View>
-          </View>
-
-          {/* Prossimi Compiti */}
+          {/* Upcoming Homeworks Section */}
           <View className="gap-3">
             <View className="flex-row items-center justify-between">
-              <Text className="text-lg font-semibold text-foreground">Prossimi Compiti</Text>
-              {upcomingHomeworks.length > 0 && (
-                <Text className="text-xs text-muted">{upcomingHomeworks.length}</Text>
-              )}
+              <Text className="text-lg font-bold text-foreground">
+                Prossimi Compiti
+              </Text>
+              <TouchableOpacity className="active:opacity-70">
+                <Text className="text-sm font-semibold text-primary">
+                  Vedi tutti →
+                </Text>
+              </TouchableOpacity>
             </View>
 
-            {upcomingHomeworks.length > 0 ? (
-              <View className="gap-2">
-                {upcomingHomeworks.map((hw) => (
-                  <View
-                    key={hw.id}
-                    className="rounded-xl bg-surface border border-border p-4 gap-2"
-                  >
-                    <View className="flex-row items-start justify-between">
-                      <View className="flex-1 gap-1">
-                        <Text className="text-sm font-semibold text-foreground">
-                          {hw.subject}
-                        </Text>
-                        <Text className="text-xs text-muted" numberOfLines={2}>
-                          {hw.description}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text className="text-xs text-primary font-medium">
-                      Scadenza: {new Date(hw.dueDate).toLocaleDateString("it-IT")}
+            {stats.upcomingHomeworks > 0 ? (
+              <View className="rounded-2xl bg-surface border border-border p-4 gap-3">
+                <View className="flex-row items-center justify-between">
+                  <View className="gap-1">
+                    <Text className="text-sm font-semibold text-foreground">
+                      Compiti in scadenza
+                    </Text>
+                    <Text className="text-xs text-muted">
+                      Prossimi 7 giorni
                     </Text>
                   </View>
-                ))}
+                  <View className="items-center gap-1">
+                    <Text className="text-3xl font-bold text-primary">
+                      {stats.upcomingHomeworks}
+                    </Text>
+                  </View>
+                </View>
               </View>
             ) : (
-              <View className="rounded-xl bg-surface border border-border p-6 items-center">
-                <Text className="text-sm text-muted">Nessun compito in scadenza</Text>
+              <View className="rounded-2xl bg-success/10 border border-success p-4 gap-2">
+                <Text className="text-sm font-semibold text-success">
+                  ✓ Nessun compito in scadenza
+                </Text>
+                <Text className="text-xs text-success/80">
+                  Sei in pari con i compiti!
+                </Text>
               </View>
             )}
           </View>
 
-          {/* Ultimi Voti */}
+          {/* Quick Actions */}
           <View className="gap-3">
-            <Text className="text-lg font-semibold text-foreground">Ultimi Voti</Text>
-            {grades.length > 0 ? (
-              <View className="gap-2">
-                {grades.slice(0, 3).map((grade) => (
-                  <View
-                    key={grade.id}
-                    className="rounded-xl bg-surface border border-border p-4 flex-row items-center justify-between"
-                  >
-                    <View className="flex-1 gap-1">
-                      <Text className="text-sm font-semibold text-foreground">
-                        {grade.subject}
-                      </Text>
-                      <Text className="text-xs text-muted">{grade.type}</Text>
-                    </View>
-                    <View className="items-center gap-1">
-                      <Text className="text-2xl font-bold text-primary">
-                        {grade.grade}
-                      </Text>
-                      <Text className="text-xs text-muted">
-                        {new Date(grade.date).toLocaleDateString("it-IT")}
-                      </Text>
-                    </View>
+            <Text className="text-lg font-bold text-foreground">
+              Accesso Rapido
+            </Text>
+            <View className="gap-2">
+              <TouchableOpacity className="rounded-xl bg-surface border border-border p-4 flex-row items-center justify-between active:opacity-70">
+                <View className="flex-row items-center gap-3">
+                  <Text className="text-2xl">📝</Text>
+                  <View className="gap-1">
+                    <Text className="text-sm font-semibold text-foreground">
+                      Voti Recenti
+                    </Text>
+                    <Text className="text-xs text-muted">
+                      Ultimi voti registrati
+                    </Text>
                   </View>
-                ))}
-              </View>
-            ) : (
-              <View className="rounded-xl bg-surface border border-border p-6 items-center">
-                <Text className="text-sm text-muted">Nessun voto disponibile</Text>
-              </View>
-            )}
+                </View>
+                <Text className="text-lg">→</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity className="rounded-xl bg-surface border border-border p-4 flex-row items-center justify-between active:opacity-70">
+                <View className="flex-row items-center gap-3">
+                  <Text className="text-2xl">📅</Text>
+                  <View className="gap-1">
+                    <Text className="text-sm font-semibold text-foreground">
+                      Agenda
+                    </Text>
+                    <Text className="text-xs text-muted">
+                      Lezioni e compiti
+                    </Text>
+                  </View>
+                </View>
+                <Text className="text-lg">→</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity className="rounded-xl bg-surface border border-border p-4 flex-row items-center justify-between active:opacity-70">
+                <View className="flex-row items-center gap-3">
+                  <Text className="text-2xl">🔔</Text>
+                  <View className="gap-1">
+                    <Text className="text-sm font-semibold text-foreground">
+                      Comunicazioni
+                    </Text>
+                    <Text className="text-xs text-muted">
+                      Ultime notizie dalla scuola
+                    </Text>
+                  </View>
+                </View>
+                <Text className="text-lg">→</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Info Card */}
+          <View className="rounded-2xl bg-primary/5 border border-primary/20 p-4 gap-2">
+            <Text className="text-xs font-semibold text-primary">
+              💡 Suggerimento
+            </Text>
+            <Text className="text-xs text-muted leading-relaxed">
+              Controlla regolarmente le comunicazioni della scuola e i compiti
+              in scadenza per rimanere sempre aggiornato.
+            </Text>
           </View>
         </View>
       </ScrollView>

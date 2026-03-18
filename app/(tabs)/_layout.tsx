@@ -64,6 +64,27 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
         }}
       />
+      <Tabs.Screen
+        name="report-cards"
+        options={{
+          title: "Pagelle",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="doc.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="schedule"
+        options={{
+          title: "Orario",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="clock.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="communications"
+        options={{
+          title: "Comunicazioni",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="bell.fill" color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

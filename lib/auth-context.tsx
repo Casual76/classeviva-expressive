@@ -1,13 +1,16 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import { classeviva, StudentProfile, AuthToken } from "./classeviva-client";
+import { mockStudentProfile } from "./mock-data";
 
 interface AuthContextType {
   isLoading: boolean;
   isSignedIn: boolean;
   user: StudentProfile | null;
   token: string | null;
+  isDemoMode: boolean;
   login: (username: string, password: string) => Promise<void>;
+  loginDemo: () => Promise<void>;
   logout: () => Promise<void>;
   restoreToken: () => Promise<void>;
   error: string | null;
@@ -34,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isSignedIn: true,
             user: action.payload.user,
             token: action.payload.token,
+            isDemoMode: action.payload.isDemoMode || false,
             error: null,
           };
         case "SIGN_OUT":
@@ -58,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isSignedIn: false,
       user: null,
       token: null,
+      isDemoMode: false,
       error: null,
     }
   );
@@ -97,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isSignedIn: state.isSignedIn,
     user: state.user,
     token: state.token,
+    isDemoMode: state.isDemoMode,
     error: state.error,
 
     login: async (username: string, password: string) => {
@@ -119,6 +125,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error: any) {
         const errorMessage =
           error.message || "Errore durante il login. Riprova.";
+        dispatch({
+          type: "SET_ERROR",
+          payload: errorMessage,
+        });
+        throw error;
+      }
+    },
+
+    loginDemo: async () => {
+      try {
+        dispatch({
+          type: "SIGN_IN",
+          payload: { token: "demo-token", user: mockStudentProfile, isDemoMode: true },
+        });
+      } catch (error: any) {
+        const errorMessage = error.message || "Errore durante il login demo";
         dispatch({
           type: "SET_ERROR",
           payload: errorMessage,

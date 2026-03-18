@@ -1,4 +1,4 @@
-# Classeviva Expressive - TODO
+# Classeviva Expressive - TODO (Versione 2 - Completa e Raffinata)
 
 ## Phase 1: Autenticazione e Struttura Base
 - [x] Setup API client per Classeviva
@@ -44,3 +44,31 @@
 - [x] Configurazione app.config.ts
 - [x] Setup splash screen
 - [x] Setup app icon
+
+## Phase 7: Modalita Demo e Dati Mock
+- [x] Implementazione demo mode (accesso senza credenziali)
+- [x] Generazione dati mock realistici
+- [x] Toggle demo/real mode nella login
+- [x] Dati mock per tutte le sezioni
+
+## Phase 8: Tutte le Sezioni Classeviva
+- [x] Pagelle (voti finali per periodo)
+- [x] Orario Scolastico
+- [ ] Note Disciplinari
+- [x] Comunicazioni (sezione dedicata)
+- [ ] Compiti (sezione dedicata)
+- [ ] Lezioni/Argomenti
+- [ ] Bacheca/Annunci
+- [ ] Prenotazioni (sportelli, colloqui)
+- [ ] Materiale Didattico
+- [ ] Questionari/Sondaggi
+
+## Phase 9: Grafica Raffinata
+- [ ] Design system Material 3 Expressive avanzato
+- [ ] Componenti custom eleganti
+- [ ] Animazioni fluide e raffinate
+- [ ] Gradients e effetti visivi
+- [ ] Tipografia curata
+- [ ] Spacing e layout perfezionato
+- [ ] Icone custom/illustrazioni
+- [ ] Transizioni smooth tra schermate
