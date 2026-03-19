@@ -1,305 +1,257 @@
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
-  TouchableOpacity,
-  RefreshControl,
-  ActivityIndicator,
 } from "react-native";
-import { useEffect, useState } from "react";
-import { ScreenContainer } from "@/components/screen-container";
-import { useAuth } from "@/lib/auth-context";
-import { classeviva } from "@/lib/classeviva-client";
-import {
-  generateMockGrades,
-  generateMockHomeworks,
-  generateMockAbsences,
-  generateMockLessons,
-} from "@/lib/mock-data";
-import { useColors } from "@/hooks/use-colors";
-import { ElegantCard } from "@/components/ui/elegant-card";
-import { ElegantButton } from "@/components/ui/elegant-button";
-import { AnimatedCard } from "@/components/ui/animated-card";
 
-interface DashboardStats {
-  averageGrade: number | string;
-  absences: number;
-  lates: number;
-  upcomingHomeworks: number;
-  recentGrades?: any[];
-  nextLessons?: any[];
+import { ScreenContainer } from "@/components/screen-container";
+import { ElegantCard } from "@/components/ui/elegant-card";
+import { ScreenHeader } from "@/components/ui/screen-header";
+import { Fonts } from "@/constants/theme";
+import { useColors } from "@/hooks/use-colors";
+import { useAuth } from "@/lib/auth-context";
+import { loadDashboardView, type DashboardViewModel } from "@/lib/student-data";
+
+function ActionCard({
+  title,
+  subtitle,
+  icon,
+  onPress,
+}: {
+  title: string;
+  subtitle: string;
+  icon: keyof typeof MaterialIcons.glyphMap;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+
+  return (
+    <Pressable className="flex-1" onPress={onPress}>
+      <ElegantCard className="gap-3 p-4" variant="filled">
+        <View
+          className="h-11 w-11 items-center justify-center rounded-full"
+          style={{ backgroundColor: colors.surfaceAlt ?? colors.background }}
+        >
+          <MaterialIcons color={colors.primary} name={icon} size={20} />
+        </View>
+        <View className="gap-1">
+          <Text className="text-sm font-semibold text-foreground">{title}</Text>
+          <Text className="text-xs leading-5 text-muted">{subtitle}</Text>
+        </View>
+      </ElegantCard>
+    </Pressable>
+  );
 }
 
 export default function HomeScreen() {
   const colors = useColors();
+  const router = useRouter();
   const { user, isDemoMode } = useAuth();
+  const [dashboard, setDashboard] = useState<DashboardViewModel | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [stats, setStats] = useState<DashboardStats>({
-    averageGrade: 0,
-    absences: 0,
-    lates: 0,
-    upcomingHomeworks: 0,
-  });
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const mode = isDemoMode ? "demo" : "real";
+
+  const loadData = useCallback(async () => {
     try {
       setError(null);
-
-      if (isDemoMode) {
-        // Carica dati mock per demo mode
-        const grades = generateMockGrades();
-        const homeworks = generateMockHomeworks();
-        const absences = generateMockAbsences();
-        const lessons = generateMockLessons();
-
-        const numericGrades = grades
-          .map((g) => {
-            const num = parseFloat(String(g.grade));
-            return isNaN(num) ? 0 : num;
-          })
-          .filter((g) => g > 0);
-
-        const average =
-          numericGrades.length > 0
-            ? (numericGrades.reduce((a, b) => a + b, 0) / numericGrades.length).toFixed(1)
-            : "0";
-
-        const absenceCount = absences.filter((a) => a.type === "assenza").length;
-        const lateCount = absences.filter((a) => a.type === "ritardo").length;
-        const upcomingHW = homeworks.filter(
-          (h) => new Date(h.dueDate) >= new Date()
-        ).length;
-
-        setStats({
-          averageGrade: average,
-          absences: absenceCount,
-          lates: lateCount,
-          upcomingHomeworks: upcomingHW,
-          recentGrades: grades.slice(-3),
-          nextLessons: lessons.slice(0, 2),
-        });
-      } else {
-        // Carica dati reali da Classeviva
-        const [grades, absences, homeworks, lessons] = await Promise.all([
-          classeviva.getGrades().catch(() => []),
-          classeviva.getAbsences().catch(() => []),
-          classeviva.getHomeworks().catch(() => []),
-          classeviva.getLessons().catch(() => []),
-        ]);
-
-        // Calcola statistiche dai dati reali
-        const numericGrades = (grades as any[])
-          .map((g) => {
-            const num = typeof g.grade === "number" ? g.grade : parseFloat(String(g.grade));
-            return isNaN(num) ? 0 : num;
-          })
-          .filter((g) => g > 0);
-
-        const averageGrade =
-          numericGrades.length > 0
-            ? (numericGrades.reduce((a, b) => a + b, 0) / numericGrades.length).toFixed(2)
-            : "N/A";
-
-        const absenceCount = (absences as any[]).filter(
-          (a) => a.type === "assenza"
-        ).length;
-        const lateCount = (absences as any[]).filter(
-          (a) => a.type === "ritardo"
-        ).length;
-        const upcomingHW = (homeworks as any[]).filter(
-          (h) => new Date(h.dueDate) >= new Date()
-        ).length;
-
-        setStats({
-          averageGrade: parseFloat(averageGrade as string) || 0,
-          absences: absenceCount,
-          lates: lateCount,
-          upcomingHomeworks: upcomingHW,
-          recentGrades: (grades as any[]).slice(-3),
-          nextLessons: (lessons as any[]).slice(0, 2),
-        });
-      }
-    } catch (err: any) {
-      console.error("Errore nel caricamento dei dati:", err);
-      setError(err.message || "Errore nel caricamento dei dati");
+      const data = await loadDashboardView(mode, user);
+      setDashboard(data);
+    } catch (loadError) {
+      console.error("Dashboard load failed", loadError);
+      setError(loadError instanceof Error ? loadError.message : "Non riesco a caricare la dashboard.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [mode, user]);
 
   useEffect(() => {
-    loadData();
-  }, [isDemoMode, user]);
+    void loadData();
+  }, [loadData]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
     await loadData();
   };
 
   if (isLoading) {
     return (
-      <ScreenContainer className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary} />
+      <ScreenContainer className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator color={colors.primary} size="large" />
       </ScreenContainer>
     );
   }
 
+  if (!dashboard) {
+    return (
+      <ScreenContainer className="flex-1 justify-center bg-background px-6">
+        <ElegantCard className="gap-4 p-6" tone="error" variant="filled">
+          <Text className="text-lg font-semibold text-foreground">Dashboard non disponibile</Text>
+          <Text className="text-sm leading-6 text-muted">{error ?? "Riprova tra poco."}</Text>
+        </ElegantCard>
+      </ScreenContainer>
+    );
+  }
+
+  const secondaryArea = [
+    {
+      title: "Comunicazioni",
+      description: "Seconda iterazione: lista completa e lettura allegati.",
+    },
+    {
+      title: "Orario e pagelle",
+      description: "Restano fuori dalla navigazione primaria finche non sono robusti.",
+    },
+  ];
+
   return (
     <ScreenContainer className="flex-1 bg-background">
       <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-        }
+        contentContainerStyle={{ paddingBottom: 112 }}
+        refreshControl={<RefreshControl onRefresh={handleRefresh} refreshing={isRefreshing} />}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 20 }}
       >
-        <View className="px-6 py-6 gap-6">
-          {/* Header */}
-          <View className="gap-2">
-            <Text className="text-4xl font-bold text-foreground">
-              Ciao, {user?.name}! 👋
-            </Text>
-            <Text className="text-sm text-muted">
-              Benvenuto su Classeviva Expressive
-            </Text>
-          </View>
-
-          {/* Error Message */}
-          {error && (
-            <ElegantCard
-              variant="filled"
-              className="p-4 bg-error/10 border-error/30"
-            >
-              <Text className="text-sm text-error">{error}</Text>
-            </ElegantCard>
-          )}
-
-          {/* Average Grade Card */}
-          <AnimatedCard
-            variant="gradient"
-            gradient="primary"
-            className="p-6 gap-3"
-            delay={100}
-          >
-            <Text className="text-sm font-bold text-background/80">
-              Media Voti
-            </Text>
-            <View className="flex-row items-baseline gap-2">
-              <Text className="text-5xl font-bold text-background">
-                {stats.averageGrade}
-              </Text>
-              <Text className="text-lg text-background/80">/10</Text>
-            </View>
-            <Text className="text-xs text-background/70">
-              {stats.recentGrades && stats.recentGrades.length > 0
-                ? "Basato su " + stats.recentGrades.length + " voti recenti"
-                : "Nessun voto disponibile"}
-            </Text>
-          </AnimatedCard>
-
-          {/* Summary Stats */}
-          <View className="gap-3">
-            <Text className="text-sm font-bold text-foreground">
-              Riepilogo
-            </Text>
-            <View className="flex-row gap-3">
-              <ElegantCard
-                variant="filled"
-                className="flex-1 p-4 gap-2 bg-error/10 border-error/30"
+        <View className="gap-6 px-6 py-6">
+          <ScreenHeader
+            action={
+              <Pressable
+                className="h-12 w-12 items-center justify-center rounded-full"
+                onPress={() => router.push("/profile")}
+                style={{ backgroundColor: colors.surface }}
               >
-                <Text className="text-xs font-bold text-muted">Assenze</Text>
-                <Text className="text-3xl font-bold text-error">
-                  {stats.absences}
-                </Text>
-              </ElegantCard>
-              <ElegantCard
-                variant="filled"
-                className="flex-1 p-4 gap-2 bg-warning/10 border-warning/30"
-              >
-                <Text className="text-xs font-bold text-muted">Ritardi</Text>
-                <Text className="text-3xl font-bold text-warning">
-                  {stats.lates}
-                </Text>
-              </ElegantCard>
-            </View>
-            <ElegantCard
-              variant="filled"
-              className="p-4 gap-2 bg-success/10 border-success/30"
-            >
-              <Text className="text-xs font-bold text-muted">
-                Compiti in Scadenza
-              </Text>
-              <Text className="text-3xl font-bold text-success">
-                {stats.upcomingHomeworks}
-              </Text>
-            </ElegantCard>
-          </View>
+                <MaterialIcons color={colors.foreground} name="person-outline" size={22} />
+              </Pressable>
+            }
+            eyebrow={isDemoMode ? "Demo mode" : "Classeviva live"}
+            subtitle={dashboard.subheadline}
+            title={dashboard.headline}
+          />
 
-          {/* Recent Grades */}
-          {stats.recentGrades && stats.recentGrades.length > 0 && (
-            <View className="gap-3">
-              <Text className="text-sm font-bold text-foreground">
-                Ultimi Voti
+          {error ? (
+            <ElegantCard className="gap-2 p-4" tone="warning" variant="filled">
+              <Text className="text-sm font-semibold text-foreground">Aggiornamento parziale</Text>
+              <Text className="text-sm leading-6 text-muted">{error}</Text>
+            </ElegantCard>
+          ) : null}
+
+          <ElegantCard className="gap-4 p-6" gradient="primary" variant="gradient">
+            <View className="gap-2">
+              <Text className="text-xs font-semibold uppercase tracking-[2px] text-background/75">
+                Media corrente
               </Text>
-              <View className="gap-2">
-                {stats.recentGrades.map((grade: any) => (
-                  <ElegantCard
-                    key={grade.id}
-                    variant="filled"
-                    className="p-4 gap-2"
-                  >
-                    <View className="flex-row items-center justify-between">
-                      <View className="flex-1 gap-1">
-                        <Text className="text-sm font-bold text-foreground">
-                          {grade.subject}
-                        </Text>
-                        <Text className="text-xs text-muted">
-                          {new Date(grade.date).toLocaleDateString("it-IT")}
-                        </Text>
-                      </View>
-                      <View
-                        className={`px-3 py-1 rounded-full ${
-                          typeof grade.grade === "number" && grade.grade >= 7
-                            ? "bg-success/20"
-                            : "bg-warning/20"
-                        }`}
-                      >
-                        <Text
-                          className={`text-sm font-bold ${
-                            typeof grade.grade === "number" && grade.grade >= 7
-                              ? "text-success"
-                              : "text-warning"
-                          }`}
-                        >
-                          {grade.grade}
-                        </Text>
-                      </View>
-                    </View>
-                  </ElegantCard>
-                ))}
+              <View className="flex-row items-end gap-3">
+                <Text
+                  className="text-6xl leading-[60px] text-background"
+                  style={{ fontFamily: Fonts.serif, fontWeight: "700" }}
+                >
+                  {dashboard.averageLabel}
+                </Text>
+                <Text className="pb-2 text-base font-semibold text-background/75">/ 10</Text>
               </View>
             </View>
-          )}
-
-          {/* Quick Access */}
-          <View className="gap-3">
-            <Text className="text-sm font-bold text-foreground">
-              Accesso Rapido
+            <Text className="text-sm leading-6 text-background/80">
+              Vista sintetica delle valutazioni piu recenti, pensata per aprire l&apos;app e capire subito dove sei.
             </Text>
-            <View className="gap-2">
-              <ElegantButton variant="secondary" size="lg" fullWidth>
-                📊 Visualizza Tutti i Voti
-              </ElegantButton>
-              <ElegantButton variant="secondary" size="lg" fullWidth>
-                📅 Vedi Agenda Completa
-              </ElegantButton>
-              <ElegantButton variant="secondary" size="lg" fullWidth>
-                📬 Comunicazioni
-              </ElegantButton>
+          </ElegantCard>
+
+          <View className="gap-3">
+            <Text className="text-xs font-semibold uppercase tracking-[2px] text-muted">Riepilogo rapido</Text>
+            <View className="gap-3">
+              {dashboard.stats.map((stat) => (
+                <ElegantCard key={stat.id} className="gap-3 p-4" tone={stat.tone} variant="filled">
+                  <View className="flex-row items-start justify-between gap-3">
+                    <View className="flex-1 gap-1">
+                      <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
+                        {stat.label}
+                      </Text>
+                      <Text className="text-sm leading-6 text-muted">{stat.detail}</Text>
+                    </View>
+                    <Text className="text-3xl font-semibold text-foreground">{stat.value}</Text>
+                  </View>
+                </ElegantCard>
+              ))}
+            </View>
+          </View>
+
+          <View className="gap-3">
+            <Text className="text-xs font-semibold uppercase tracking-[2px] text-muted">Muoviti dall&apos;hub</Text>
+            <View className="flex-row gap-3">
+              <ActionCard
+                icon="warning-amber"
+                onPress={() => router.push("/absences")}
+                subtitle="Storico completo e stato giustificazioni."
+                title="Assenze"
+              />
+              <ActionCard
+                icon="person-outline"
+                onPress={() => router.push("/profile")}
+                subtitle="Dati studente, modalita attiva e logout."
+                title="Profilo"
+              />
+            </View>
+            <View className="flex-row gap-3">
+              <ActionCard
+                icon="bar-chart"
+                onPress={() => router.push("/(tabs)/grades")}
+                subtitle="Filtri e andamento valutazioni."
+                title="Voti"
+              />
+              <ActionCard
+                icon="calendar-today"
+                onPress={() => router.push("/(tabs)/calendar")}
+                subtitle="Lezioni, scadenze e vista per giorno."
+                title="Agenda"
+              />
+            </View>
+          </View>
+
+          <View className="gap-3">
+            <Text className="text-xs font-semibold uppercase tracking-[2px] text-muted">Prossimo in agenda</Text>
+            <View className="gap-3">
+              {dashboard.upcomingItems.length > 0 ? (
+                dashboard.upcomingItems.map((item) => (
+                  <ElegantCard key={item.id} className="gap-3 p-4" tone={item.tone} variant="filled">
+                    <View className="flex-row items-start justify-between gap-4">
+                      <View className="flex-1 gap-1">
+                        <Text className="text-sm font-semibold text-foreground">{item.title}</Text>
+                        <Text className="text-sm text-muted">{item.subtitle}</Text>
+                      </View>
+                      <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
+                        {item.shortDateLabel}
+                      </Text>
+                    </View>
+                    <Text className="text-sm leading-6 text-muted">{item.detail}</Text>
+                  </ElegantCard>
+                ))
+              ) : (
+                <ElegantCard className="gap-2 p-4" variant="filled">
+                  <Text className="text-sm font-semibold text-foreground">Nessuna voce imminente</Text>
+                  <Text className="text-sm leading-6 text-muted">
+                    La nuova agenda comparira qui appena abbiamo elementi da mettere in evidenza.
+                  </Text>
+                </ElegantCard>
+              )}
+            </View>
+          </View>
+
+          <View className="gap-3">
+            <Text className="text-xs font-semibold uppercase tracking-[2px] text-muted">Seconda area</Text>
+            <View className="gap-3">
+              {secondaryArea.map((item) => (
+                <ElegantCard key={item.title} className="gap-2 p-4" variant="outlined">
+                  <Text className="text-sm font-semibold text-foreground">{item.title}</Text>
+                  <Text className="text-sm leading-6 text-muted">{item.description}</Text>
+                </ElegantCard>
+              ))}
             </View>
           </View>
         </View>

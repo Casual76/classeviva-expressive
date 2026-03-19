@@ -1,218 +1,192 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
-import * as SecureStore from "expo-secure-store";
-import { classeviva, StudentProfile, AuthToken } from "./classeviva-client";
-import { mockStudentProfile } from "./mock-data";
-import { notificationsService } from "./notifications-service";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from "react";
+import { Platform } from "react-native";
+
+import {
+  authReducer,
+  initialAuthState,
+  isBusyAuthState,
+  type AuthStatus,
+  type SessionMode,
+} from "@/lib/auth-state";
+import { ClassevivaApiError, type StudentProfile, classeviva } from "@/lib/classeviva-client";
+import { mockStudentProfile } from "@/lib/mock-data";
+import { notificationsService } from "@/lib/notifications-service";
+import {
+  clearStoredSession,
+  readStoredSession,
+  writeDemoSession,
+  writeRealSession,
+} from "@/lib/session-storage";
 
 interface AuthContextType {
+  status: AuthStatus;
   isLoading: boolean;
   isSignedIn: boolean;
   user: StudentProfile | null;
   token: string | null;
+  sessionMode: SessionMode;
   isDemoMode: boolean;
   login: (username: string, password: string) => Promise<void>;
   loginDemo: () => Promise<void>;
   logout: () => Promise<void>;
   restoreToken: () => Promise<void>;
+  clearError: () => void;
   error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = React.useReducer(
-    (prevState: any, action: any) => {
-      switch (action.type) {
-        case "RESTORE_TOKEN":
-          return {
-            ...prevState,
-            isLoading: false,
-            isSignedIn: action.payload.token !== null,
-            user: action.payload.user,
-            token: action.payload.token,
-            isDemoMode: action.payload.isDemoMode || false,
-            error: null,
-          };
-        case "SIGN_IN":
-          return {
-            ...prevState,
-            isSignedIn: true,
-            user: action.payload.user,
-            token: action.payload.token,
-            isDemoMode: action.payload.isDemoMode || false,
-            error: null,
-          };
-        case "SIGN_OUT":
-          return {
-            ...prevState,
-            isSignedIn: false,
-            user: null,
-            token: null,
-            error: null,
-          };
-        case "SET_ERROR":
-          return {
-            ...prevState,
-            error: action.payload,
-            isLoading: false,
-          };
-        default:
-          return prevState;
-      }
-    },
-    {
-      isLoading: true,
-      isSignedIn: false,
-      user: null,
-      token: null,
-      isDemoMode: false,
-      error: null,
-    }
-  );
+function toFriendlyAuthMessage(error: unknown): string {
+  if (error instanceof ClassevivaApiError) {
+    return error.message;
+  }
 
-  // Inizializza notifiche al mount
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  return "Si e verificato un errore inatteso durante l'accesso.";
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [state, dispatch] = useReducer(authReducer, initialAuthState);
+
   useEffect(() => {
     notificationsService.initialize();
   }, []);
 
-  // Ripristina il token al mount
-  useEffect(() => {
-    const bootstrapAsync = async () => {
-      let token = null;
-      let user = null;
+  const restoreToken = useCallback(async () => {
+    dispatch({ type: "RESTORE_START" });
 
-      try {
-        // Prova a ripristinare il token da secure storage
-        token = await SecureStore.getItemAsync("classeviva_token");
-        const studentId = await SecureStore.getItemAsync("classeviva_student_id");
+    try {
+      const stored = await readStoredSession();
 
-        if (token && studentId) {
-          classeviva.setToken(token, studentId);
-          // Verifica che il token sia ancora valido
-          user = await classeviva.getProfile();
-        }
-      } catch (e) {
-        // Ignora errori durante il ripristino
-        console.error("Errore durante il ripristino del token:", e);
+      if (stored.sessionMode === "demo") {
+        dispatch({
+          type: "RESTORE_SUCCESS",
+          payload: { token: null, user: mockStudentProfile, sessionMode: "demo" },
+        });
+        return;
       }
 
-      dispatch({
-        type: "RESTORE_TOKEN",
-        payload: { token, user, isDemoMode: false },
-      });
-    };
-
-    bootstrapAsync();
-  }, []);
-
-  const authContext: AuthContextType = {
-    isLoading: state.isLoading,
-    isSignedIn: state.isSignedIn,
-    user: state.user,
-    token: state.token,
-    isDemoMode: state.isDemoMode,
-    error: state.error,
-
-    login: async (username: string, password: string) => {
-      try {
-        dispatch({
-          type: "SET_ERROR",
-          payload: null,
-        });
-
-        const authToken = await classeviva.login({
-          username,
-          password,
-        });
-
+      if (stored.sessionMode === "real" && stored.token && stored.studentId && Platform.OS !== "web") {
+        classeviva.setToken(stored.token, stored.studentId);
         const user = await classeviva.getProfile();
 
-        // Salva il token in secure storage
-        await SecureStore.setItemAsync("classeviva_token", authToken.token);
-        await SecureStore.setItemAsync("classeviva_student_id", user.id);
-
         dispatch({
-          type: "SIGN_IN",
-          payload: { token: authToken.token, user, isDemoMode: false },
+          type: "RESTORE_SUCCESS",
+          payload: { token: stored.token, user, sessionMode: "real" },
         });
-      } catch (error: any) {
-        let errorMessage = "Errore durante il login. Riprova.";
-        
-        if (error.message?.includes("Network") || error.message?.includes("internet")) {
-          errorMessage = "Connessione internet non disponibile. Usa la modalità Demo per continuare.";
-        } else if (error.message?.includes("401") || error.message?.includes("Unauthorized")) {
-          errorMessage = "Username o password non validi.";
-        } else if (error.message) {
-          errorMessage = error.message;
-        }
-        
-        dispatch({
-          type: "SET_ERROR",
-          payload: errorMessage,
-        });
-        throw error;
+        return;
       }
-    },
 
-    loginDemo: async () => {
-      try {
-        dispatch({
-          type: "SET_ERROR",
-          payload: null,
-        });
-        
-        // Simula un piccolo delay per UX
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        
-        dispatch({
-          type: "SIGN_IN",
-          payload: { token: "demo-token", user: mockStudentProfile, isDemoMode: true },
-        });
-      } catch (error: any) {
-        const errorMessage = error.message || "Errore durante il login demo";
-        dispatch({
-          type: "SET_ERROR",
-          payload: errorMessage,
-        });
-        throw error;
+      await clearStoredSession();
+      classeviva.logout();
+      dispatch({
+        type: "RESTORE_SUCCESS",
+        payload: { token: null, user: null, sessionMode: null },
+      });
+    } catch (error) {
+      console.error("Restore session failed", error);
+      await clearStoredSession();
+      classeviva.logout();
+      dispatch({
+        type: "RESTORE_SUCCESS",
+        payload: { token: null, user: null, sessionMode: null },
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void restoreToken();
+  }, [restoreToken]);
+
+  const login = useCallback(async (username: string, password: string) => {
+    if (Platform.OS === "web") {
+      const message = "Il login reale e disponibile solo nell'app mobile. Sul web usa la demo.";
+      dispatch({ type: "SET_ERROR", payload: message });
+      throw new Error(message);
+    }
+
+    dispatch({ type: "SIGN_IN_START" });
+
+    try {
+      const authToken = await classeviva.login({ username, password });
+      const user = await classeviva.getProfile().catch(() => authToken.profileHint ?? null);
+
+      if (!user) {
+        throw new Error("Accesso riuscito, ma il profilo non e ancora disponibile.");
       }
-    },
 
-    logout: async () => {
-      try {
-        classeviva.logout();
-        await SecureStore.deleteItemAsync("classeviva_token");
-        await SecureStore.deleteItemAsync("classeviva_student_id");
-        dispatch({ type: "SIGN_OUT" });
-      } catch (error) {
-        console.error("Errore durante il logout:", error);
+      const studentId = classeviva.getStudentId() ?? user.id;
+      if (!studentId) {
+        throw new Error("Studente non identificato dopo il login.");
       }
-    },
 
-    restoreToken: async () => {
-      try {
-        const token = await SecureStore.getItemAsync("classeviva_token");
-        const studentId = await SecureStore.getItemAsync(
-          "classeviva_student_id"
-        );
+      await writeRealSession(authToken.token, studentId);
 
-        if (token && studentId) {
-          classeviva.setToken(token, studentId);
-          const user = await classeviva.getProfile();
-          dispatch({
-            type: "RESTORE_TOKEN",
-            payload: { token, user },
-          });
-        }
-      } catch (error) {
-        console.error("Errore durante il ripristino del token:", error);
-      }
-    },
-  };
+      dispatch({
+        type: "SIGN_IN_SUCCESS",
+        payload: { token: authToken.token, user, sessionMode: "real" },
+      });
+    } catch (error) {
+      console.error("Login failed", error);
+      classeviva.logout();
+      await clearStoredSession();
+      dispatch({ type: "SET_ERROR", payload: toFriendlyAuthMessage(error) });
+      throw error;
+    }
+  }, []);
 
-  return (
-    <AuthContext.Provider value={authContext}>{children}</AuthContext.Provider>
+  const loginDemo = useCallback(async () => {
+    dispatch({ type: "SIGN_IN_START" });
+
+    try {
+      await writeDemoSession();
+      dispatch({
+        type: "SIGN_IN_SUCCESS",
+        payload: { token: null, user: mockStudentProfile, sessionMode: "demo" },
+      });
+    } catch (error) {
+      console.error("Demo login failed", error);
+      dispatch({ type: "SET_ERROR", payload: "Non riesco ad aprire la demo in questo momento." });
+      throw error;
+    }
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      classeviva.logout();
+      await clearStoredSession();
+    } finally {
+      dispatch({ type: "SIGN_OUT" });
+    }
+  }, []);
+
+  const clearError = useCallback(() => {
+    dispatch({ type: "SET_ERROR", payload: null });
+  }, []);
+
+  const value = useMemo<AuthContextType>(
+    () => ({
+      status: state.status,
+      isLoading: isBusyAuthState(state),
+      isSignedIn: Boolean(state.user),
+      user: state.user,
+      token: state.token,
+      sessionMode: state.sessionMode,
+      isDemoMode: state.sessionMode === "demo",
+      login,
+      loginDemo,
+      logout,
+      restoreToken,
+      clearError,
+      error: state.error,
+    }),
+    [state, login, loginDemo, logout, restoreToken, clearError],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextType {
@@ -220,5 +194,6 @@ export function useAuth(): AuthContextType {
   if (!context) {
     throw new Error("useAuth deve essere usato dentro AuthProvider");
   }
+
   return context;
 }

@@ -1,5 +1,11 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { ClassevivaClient, Grade, Absence } from "../classeviva-client";
+import { beforeEach, describe, expect, it } from "vitest";
+
+import {
+  ClassevivaClient,
+  normalizeAbsence,
+  normalizeGrade,
+  normalizeProfile,
+} from "../classeviva-client";
 
 describe("ClassevivaClient", () => {
   let client: ClassevivaClient;
@@ -9,79 +15,72 @@ describe("ClassevivaClient", () => {
   });
 
   describe("Authentication", () => {
-    it("should initialize without authentication", () => {
+    it("initializes without authentication", () => {
       expect(client.isAuthenticated()).toBe(false);
     });
 
-    it("should set token and student ID", () => {
+    it("sets token and student ID", () => {
       client.setToken("test-token", "student-123");
       expect(client.isAuthenticated()).toBe(true);
+      expect(client.getStudentId()).toBe("student-123");
     });
 
-    it("should clear authentication on logout", () => {
+    it("clears authentication on logout", () => {
       client.setToken("test-token", "student-123");
-      expect(client.isAuthenticated()).toBe(true);
       client.logout();
+
       expect(client.isAuthenticated()).toBe(false);
+      expect(client.getStudentId()).toBeNull();
     });
   });
 
-  describe("Grade Mapping", () => {
-    it("should map grade data correctly", () => {
-      const mockGrade = {
-        id: "grade-1",
-        materia: { desc: "Matematica" },
-        votoDecimale: 8,
-        descrVoto: "Buono",
-        dataRegistrazione: "2026-03-18",
-        tipo: { desc: "Compito" },
-        peso: 1,
-        note: "Bene",
-      };
+  describe("Grade mapping", () => {
+    it("maps modern grade payloads", () => {
+      const mapped = normalizeGrade({
+        evtId: 223044,
+        subjectDesc: "Matematica",
+        decimalValue: 8,
+        displayValue: "8",
+        evtDate: "2026-03-18",
+        componentDesc: "Compito",
+        weightFactor: 1,
+        notesForFamily: "Buona verifica",
+        periodDesc: "Trimestre",
+      });
 
-      // Use reflection to access private method for testing
-      const mapGrade = (client as any).mapGrade.bind(client);
-      const mapped = mapGrade(mockGrade);
-
-      expect(mapped.id).toBe("grade-1");
+      expect(mapped.id).toBe("223044");
       expect(mapped.subject).toBe("Matematica");
       expect(mapped.grade).toBe(8);
-      expect(mapped.description).toBe("Buono");
       expect(mapped.type).toBe("Compito");
       expect(mapped.weight).toBe(1);
+      expect(mapped.notes).toBe("Buona verifica");
+      expect(mapped.period).toBe("Trimestre");
     });
 
-    it("should handle missing grade fields", () => {
-      const mockGrade = {
+    it("handles sparse grade payloads", () => {
+      const mapped = normalizeGrade({
         id: "grade-2",
         grade: 7,
-      };
-
-      const mapGrade = (client as any).mapGrade.bind(client);
-      const mapped = mapGrade(mockGrade);
+      });
 
       expect(mapped.subject).toBe("");
       expect(mapped.grade).toBe(7);
-      expect(mapped.type).toBe("");
+      expect(mapped.type).toBe("Valutazione");
     });
   });
 
-  describe("Absence Mapping", () => {
-    it("should map absence data correctly", () => {
-      const mockAbsence = {
-        id: "absence-1",
-        data: "2026-03-18",
+  describe("Absence mapping", () => {
+    it("maps standard absence payloads", () => {
+      const mapped = normalizeAbsence({
+        evtId: 100,
+        evtDate: "2026-03-18",
         tipo: "assenza",
         ore: 6,
         giustificata: true,
-        dataGiustificazione: "2026-03-19",
         motivoGiustificazione: "Malattia",
-      };
+      });
 
-      const mapAbsence = (client as any).mapAbsence.bind(client);
-      const mapped = mapAbsence(mockAbsence);
-
-      expect(mapped.id).toBe("absence-1");
+      expect(mapped.id).toBe("100");
       expect(mapped.date).toBe("2026-03-18");
       expect(mapped.type).toBe("assenza");
       expect(mapped.hours).toBe(6);
@@ -89,109 +88,102 @@ describe("ClassevivaClient", () => {
       expect(mapped.justificationReason).toBe("Malattia");
     });
 
-    it("should handle different absence types", () => {
-      const types = ["assenza", "ritardo", "uscita"];
+    it("detects different absence types", () => {
+      const ritardo = normalizeAbsence({ id: "r", data: "2026-03-18", tipo: "ritardo" });
+      const uscita = normalizeAbsence({ id: "u", data: "2026-03-18", tipo: "uscita" });
 
-      types.forEach((type) => {
-        const mockAbsence = {
-          id: `absence-${type}`,
-          data: "2026-03-18",
-          tipo: type,
-          giustificata: false,
-        };
-
-        const mapAbsence = (client as any).mapAbsence.bind(client);
-        const mapped = mapAbsence(mockAbsence);
-
-        expect(mapped.type).toBe(type);
-        expect(mapped.justified).toBe(false);
-      });
+      expect(ritardo.type).toBe("ritardo");
+      expect(uscita.type).toBe("uscita");
     });
   });
 
-  describe("Profile Mapping", () => {
-    it("should map profile data correctly", () => {
-      const mockProfile = {
-        id: "student-123",
-        firstName: "Marco",
-        lastName: "Rossi",
-        email: "marco.rossi@example.com",
-        classe: { desc: "5A", sezione: "A" },
-        scuola: { desc: "Liceo Scientifico" },
-        anno: "2025-2026",
-      };
+  describe("Profile mapping", () => {
+    it("maps card payloads", () => {
+      const mapped = normalizeProfile({
+        card: {
+          usrId: 8733880,
+          firstName: "Marco",
+          lastName: "Rossi",
+          email: "marco.rossi@example.com",
+          classe: { desc: "5A", sezione: "A" },
+          schName: "Liceo Scientifico",
+          schDedication: "Galileo Galilei",
+          anno: "2025-2026",
+        },
+      });
 
-      const mapProfile = (client as any).mapProfile.bind(client);
-      const mapped = mapProfile(mockProfile);
-
-      expect(mapped.id).toBe("student-123");
+      expect(mapped.id).toBe("8733880");
       expect(mapped.name).toBe("Marco");
       expect(mapped.surname).toBe("Rossi");
       expect(mapped.email).toBe("marco.rossi@example.com");
       expect(mapped.class).toBe("5A");
       expect(mapped.section).toBe("A");
-      expect(mapped.school).toBe("Liceo Scientifico");
+      expect(mapped.school).toBe("Liceo Scientifico Galileo Galilei");
       expect(mapped.schoolYear).toBe("2025-2026");
     });
   });
 
-  describe("Error Handling", () => {
-    it("should handle network errors", () => {
-      const error = {
-        request: {},
-        message: "Network error",
-      };
-
-      const handleError = (client as any).handleError.bind(client);
-      const result = handleError(error, "Test error");
+  describe("Error handling", () => {
+    it("maps network errors", () => {
+      const handleAxiosError = (client as any).handleAxiosError.bind(client);
+      const result = handleAxiosError(
+        {
+          request: {},
+          message: "Network error",
+        },
+        "Test error",
+      );
 
       expect(result.code).toBe("NETWORK_ERROR");
-      expect(result.message).toContain("connessione");
+      expect(result.message).toContain("Connessione");
     });
 
-    it("should handle 401 unauthorized errors", () => {
-      const error = {
-        response: {
-          status: 401,
-          data: { message: "Unauthorized" },
+    it("maps 401 errors", () => {
+      const handleAxiosError = (client as any).handleAxiosError.bind(client);
+      const result = handleAxiosError(
+        {
+          response: {
+            status: 401,
+            data: { message: "Unauthorized" },
+          },
         },
-      };
-
-      const handleError = (client as any).handleError.bind(client);
-      const result = handleError(error, "Test error");
+        "Test error",
+      );
 
       expect(result.code).toBe("UNAUTHORIZED");
-      expect(result.message).toContain("Credenziali");
+      expect(result.message).toContain("Username o password");
     });
 
-    it("should handle 429 rate limit errors", () => {
-      const error = {
-        response: {
-          status: 429,
-          data: { message: "Too many requests" },
+    it("maps 429 errors", () => {
+      const handleAxiosError = (client as any).handleAxiosError.bind(client);
+      const result = handleAxiosError(
+        {
+          response: {
+            status: 429,
+            data: { message: "Too many requests" },
+          },
         },
-      };
-
-      const handleError = (client as any).handleError.bind(client);
-      const result = handleError(error, "Test error");
+        "Test error",
+      );
 
       expect(result.code).toBe("RATE_LIMITED");
       expect(result.message).toContain("Troppi tentativi");
     });
 
-    it("should handle 500 server errors", () => {
-      const error = {
-        response: {
-          status: 500,
-          data: { message: "Internal server error" },
+    it("maps 500 errors", () => {
+      const handleAxiosError = (client as any).handleAxiosError.bind(client);
+      const result = handleAxiosError(
+        {
+          response: {
+            status: 500,
+            data: { message: "Internal server error" },
+          },
         },
-      };
-
-      const handleError = (client as any).handleError.bind(client);
-      const result = handleError(error, "Test error");
+        "Test error",
+      );
 
       expect(result.code).toBe("SERVER_ERROR");
-      expect(result.message).toContain("server");
+      expect(result.message).toContain("Classeviva");
     });
   });
 });
