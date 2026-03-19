@@ -1,0 +1,21 @@
+{
+    "app": {
+        "id": "classeviva-expressive",
+        "name": "classeviva-expressive",
+        "description": "Un'app mobile moderna in stile Material 3 Expressive che si integra con il registro elettronico Classeviva per mostrare voti, agenda, assenze e altro.",
+        "packageName": "",
+        "iconUrl": "",
+        "category": "General",
+        "developer": "Pampa",
+        "screenshots": [],
+        "repository": {
+            "repoOwner": "Casual76",
+            "repoName": "classeviva-expressive",
+            "manifestPath": "manifest.json",
+            "ref": ""
+        },
+        "stable": null,
+        "beta": null,
+        "history": []
+    }
+}
