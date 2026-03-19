@@ -1,9 +1,7 @@
-/**
- * Componente SearchBar elegante per Classeviva
- */
-
 import React from "react";
-import { View, TextInput, TouchableOpacity, Text } from "react-native";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import { Pressable, TextInput, View } from "react-native";
+
 import { useColors } from "@/hooks/use-colors";
 import { cn } from "@/lib/utils";
 
@@ -26,30 +24,32 @@ export function SearchBar({
 
   return (
     <View
-      className={cn(
-        "flex-row items-center gap-3 px-4 py-3 rounded-2xl border border-border bg-surface",
-        className
-      )}
+      className={cn("flex-row items-center gap-3 rounded-[26px] border px-4 py-3", className)}
+      style={{
+        backgroundColor: colors.surface,
+        borderColor: colors.border,
+      }}
     >
+      <MaterialIcons color={colors.muted} name="search" size={18} />
+
       <TextInput
+        className="flex-1 text-base text-foreground"
+        onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.muted}
+        style={{ color: colors.foreground }}
         value={value}
-        onChangeText={onChangeText}
-        className="flex-1 text-foreground text-base"
-        style={{
-          color: colors.foreground,
-        }}
       />
-      {value.length > 0 && onClear && (
-        <TouchableOpacity
+
+      {value.length > 0 && onClear ? (
+        <Pressable
+          className="h-8 w-8 items-center justify-center rounded-full"
           onPress={onClear}
-          activeOpacity={0.7}
-          className="p-2"
+          style={{ backgroundColor: colors.surfaceAlt ?? colors.background }}
         >
-          <Text className="text-lg text-muted">✕</Text>
-        </TouchableOpacity>
-      )}
+          <MaterialIcons color={colors.muted} name="close" size={16} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }

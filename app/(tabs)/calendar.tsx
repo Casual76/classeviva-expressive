@@ -1,344 +1,213 @@
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
-  ActivityIndicator,
-  RefreshControl,
-  TouchableOpacity,
 } from "react-native";
-import { useEffect, useState } from "react";
-import { ScreenContainer } from "@/components/screen-container";
-import { useAuth } from "@/lib/auth-context";
-import { classeviva } from "@/lib/classeviva-client";
-import { generateMockLessons, generateMockHomeworks } from "@/lib/mock-data";
-import { useColors } from "@/hooks/use-colors";
-import { ElegantCard } from "@/components/ui/elegant-card";
 
-interface CalendarEvent {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  type: "lezione" | "compito" | "verifica" | "evento";
-  subject: string;
-}
+import { ScreenContainer } from "@/components/screen-container";
+import { ElegantCard } from "@/components/ui/elegant-card";
+import { ScreenHeader } from "@/components/ui/screen-header";
+import { SearchBar } from "@/components/ui/search-bar";
+import { useColors } from "@/hooks/use-colors";
+import { useAuth } from "@/lib/auth-context";
+import {
+  groupAgendaByDate,
+  loadAgendaView,
+  type AgendaItemViewModel,
+} from "@/lib/student-data";
+
+type CategoryFilter = "all" | AgendaItemViewModel["category"];
+
+const CATEGORY_LABELS: Record<CategoryFilter, string> = {
+  all: "Tutto",
+  lesson: "Lezioni",
+  homework: "Compiti",
+  assessment: "Verifiche",
+  event: "Eventi",
+};
 
 export default function CalendarScreen() {
   const colors = useColors();
   const { isDemoMode } = useAuth();
+  const [items, setItems] = useState<AgendaItemViewModel[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const deferredQuery = useDeferredValue(searchQuery);
+  const [category, setCategory] = useState<CategoryFilter>("all");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadEvents = async () => {
+  const mode = isDemoMode ? "demo" : "real";
+
+  const loadData = useCallback(async () => {
     try {
-      if (isDemoMode) {
-        const lessons = generateMockLessons();
-        const homeworks = generateMockHomeworks();
-        
-        const mockEvents = [
-          ...lessons.map((l: any) => ({
-            id: l.id,
-            title: l.topic || "Lezione",
-            description: l.topic,
-            date: l.date,
-            type: "lezione" as const,
-            subject: l.subject,
-          })),
-          ...homeworks.map((h: any) => ({
-            id: h.id,
-            title: h.description,
-            description: h.description,
-            date: h.dueDate,
-            type: "compito" as const,
-            subject: h.subject,
-          })),
-        ];
-        setEvents(mockEvents);
-      } else {
-        const [lessons, homeworks] = await Promise.all([
-          classeviva.getLessons().catch(() => []),
-          classeviva.getHomeworks().catch(() => []),
-        ]);
-        
-        const realEvents = [
-          ...lessons.map((l: any) => ({
-            id: l.id,
-            title: l.topic || "Lezione",
-            description: l.topic,
-            date: l.date,
-            type: "lezione" as const,
-            subject: l.subject,
-          })),
-          ...homeworks.map((h: any) => ({
-            id: h.id,
-            title: h.description,
-            description: h.description,
-            date: h.dueDate,
-            type: "compito" as const,
-            subject: h.subject,
-          })),
-        ];
-        setEvents(realEvents);
-      }
-    } catch (err) {
-      console.error("Errore nel caricamento dell'agenda:", err);
+      setError(null);
+      const data = await loadAgendaView(mode);
+      setItems(data);
+    } catch (loadError) {
+      console.error("Agenda load failed", loadError);
+      setError(loadError instanceof Error ? loadError.message : "Non riesco a caricare l'agenda.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  };
+  }, [mode]);
 
   useEffect(() => {
-    loadEvents();
-  }, [isDemoMode]);
+    void loadData();
+  }, [loadData]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    await loadEvents();
+    await loadData();
   };
+
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (category !== "all" && item.category !== category) {
+        return false;
+      }
+
+      if (!deferredQuery.trim()) {
+        return true;
+      }
+
+      const query = deferredQuery.toLowerCase();
+      return (
+        item.title.toLowerCase().includes(query) ||
+        item.subtitle.toLowerCase().includes(query) ||
+        item.detail.toLowerCase().includes(query)
+      );
+    });
+  }, [items, category, deferredQuery]);
+
+  const sections = useMemo(() => groupAgendaByDate(filteredItems), [filteredItems]);
+  const upcomingItems = useMemo(() => filteredItems.slice(0, 3), [filteredItems]);
 
   if (isLoading) {
     return (
-      <ScreenContainer className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary} />
+      <ScreenContainer className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator color={colors.primary} size="large" />
       </ScreenContainer>
     );
   }
 
-  const getEventColor = (type: string) => {
-    const colors: Record<string, string> = {
-      lezione: "bg-primary/10 border-primary/30",
-      compito: "bg-warning/10 border-warning/30",
-      verifica: "bg-error/10 border-error/30",
-      evento: "bg-success/10 border-success/30",
-    };
-    return colors[type] || "bg-surface";
-  };
-
-  const getEventIcon = (type: string) => {
-    const icons: Record<string, string> = {
-      lezione: "📚",
-      compito: "📝",
-      verifica: "✏️",
-      evento: "🎉",
-    };
-    return icons[type] || "📌";
-  };
-
-  const getEventTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      lezione: "Lezione",
-      compito: "Compito",
-      verifica: "Verifica",
-      evento: "Evento",
-    };
-    return labels[type] || type;
-  };
-
-  const eventsByDate = events.reduce(
-    (acc, event) => {
-      const date = new Date(event.date).toLocaleDateString("it-IT");
-      if (!acc[date]) {
-        acc[date] = [];
-      }
-      acc[date].push(event);
-      return acc;
-    },
-    {} as Record<string, CalendarEvent[]>
-  );
-
-  const sortedDates = Object.keys(eventsByDate).sort(
-    (a, b) => new Date(a).getTime() - new Date(b).getTime()
-  );
-
-  const filteredDates = selectedDate
-    ? sortedDates.filter((d) => d === selectedDate)
-    : sortedDates;
-
-  const upcomingEvents = events
-    .filter((e) => new Date(e.date) >= new Date())
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(0, 3);
-
   return (
     <ScreenContainer className="flex-1 bg-background">
       <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
-        }
+        contentContainerStyle={{ paddingBottom: 112 }}
+        refreshControl={<RefreshControl onRefresh={handleRefresh} refreshing={isRefreshing} />}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 20 }}
       >
-        <View className="px-6 py-6 gap-6">
-          {/* Header */}
-          <View className="gap-2">
-            <Text className="text-4xl font-bold text-foreground">Agenda</Text>
-            <Text className="text-sm text-muted">
-              {events.length} eventi registrati
-            </Text>
-          </View>
+        <View className="gap-6 px-6 py-6">
+          <ScreenHeader
+            eyebrow="Agenda"
+            subtitle="Lezioni, compiti e verifiche raccolti in una sola vista per data."
+            title="Agenda"
+          />
 
-          {/* Upcoming Events */}
-          {upcomingEvents.length > 0 && (
-            <View className="gap-3">
-              <Text className="text-sm font-bold text-foreground">
-                Prossimi Eventi
-              </Text>
-              <View className="gap-2">
-                {upcomingEvents.map((event) => (
+          {error ? (
+            <ElegantCard className="gap-2 p-4" tone="warning" variant="filled">
+              <Text className="text-sm font-semibold text-foreground">Aggiornamento parziale</Text>
+              <Text className="text-sm leading-6 text-muted">{error}</Text>
+            </ElegantCard>
+          ) : null}
+
+          <SearchBar
+            onChangeText={setSearchQuery}
+            onClear={() => setSearchQuery("")}
+            placeholder="Cerca una lezione o una scadenza"
+            value={searchQuery}
+          />
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View className="flex-row gap-3">
+              {(Object.keys(CATEGORY_LABELS) as CategoryFilter[]).map((key) => (
+                <Pressable key={key} onPress={() => setCategory(key)}>
                   <ElegantCard
-                    key={event.id}
-                    variant="filled"
-                    className={`p-4 gap-2 border ${getEventColor(event.type)}`}
+                    className="px-4 py-3"
+                    tone={category === key ? "primary" : "neutral"}
+                    variant={category === key ? "filled" : "outlined"}
                   >
-                    <View className="flex-row items-center gap-2">
-                      <Text className="text-2xl">
-                        {getEventIcon(event.type)}
-                      </Text>
+                    <Text className="text-sm font-semibold text-foreground">{CATEGORY_LABELS[key]}</Text>
+                  </ElegantCard>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+
+          <View className="gap-3">
+            <Text className="text-xs font-semibold uppercase tracking-[2px] text-muted">Subito dopo</Text>
+            {upcomingItems.length > 0 ? (
+              <View className="gap-3">
+                {upcomingItems.map((item) => (
+                  <ElegantCard key={`upcoming-${item.id}`} className="gap-3 p-4" tone={item.tone} variant="filled">
+                    <View className="flex-row items-start justify-between gap-4">
                       <View className="flex-1 gap-1">
-                        <Text className="text-sm font-bold text-foreground">
-                          {event.title}
-                        </Text>
-                        <Text className="text-xs text-muted">
-                          {event.subject}
-                        </Text>
+                        <Text className="text-sm font-semibold text-foreground">{item.title}</Text>
+                        <Text className="text-sm text-muted">{item.subtitle}</Text>
                       </View>
-                      <Text className="text-xs font-bold text-primary">
-                        {new Date(event.date).toLocaleDateString("it-IT")}
+                      <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
+                        {item.shortDateLabel}
                       </Text>
                     </View>
-                    {event.description && (
-                      <Text className="text-xs text-muted">
-                        {event.description}
-                      </Text>
-                    )}
+                    <Text className="text-sm leading-6 text-muted">{item.detail}</Text>
+                    <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
+                      {item.timeLabel}
+                    </Text>
                   </ElegantCard>
                 ))}
               </View>
-            </View>
-          )}
+            ) : (
+              <ElegantCard className="gap-2 p-4" variant="filled">
+                <Text className="text-sm font-semibold text-foreground">Agenda vuota</Text>
+                <Text className="text-sm leading-6 text-muted">
+                  Quando ci sono lezioni o scadenze imminenti le vedrai qui.
+                </Text>
+              </ElegantCard>
+            )}
+          </View>
 
-          {/* Date Filter */}
-          {sortedDates.length > 0 && (
-            <View className="gap-3">
-              <Text className="text-sm font-bold text-foreground">
-                Filtra per Data
-              </Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8 }}
-              >
-                <TouchableOpacity
-                  onPress={() => setSelectedDate(null)}
-                  activeOpacity={0.7}
-                >
-                  <ElegantCard
-                    variant={selectedDate === null ? "gradient" : "outlined"}
-                    className={`px-4 py-2 ${
-                      selectedDate === null ? "" : "border-primary"
-                    }`}
-                  >
-                    <Text
-                      className={`text-sm font-bold ${
-                        selectedDate === null ? "text-background" : "text-primary"
-                      }`}
-                    >
-                      Tutte
-                    </Text>
-                  </ElegantCard>
-                </TouchableOpacity>
-
-                {sortedDates.slice(0, 5).map((date) => (
-                  <TouchableOpacity
-                    key={date}
-                    onPress={() => setSelectedDate(date)}
-                    activeOpacity={0.7}
-                  >
-                    <ElegantCard
-                      variant={selectedDate === date ? "gradient" : "outlined"}
-                      className={`px-4 py-2 ${
-                        selectedDate === date ? "" : "border-primary"
-                      }`}
-                    >
-                      <Text
-                        className={`text-sm font-bold ${
-                          selectedDate === date ? "text-background" : "text-primary"
-                        }`}
-                      >
-                        {new Date(date).toLocaleDateString("it-IT", {
-                          day: "2-digit",
-                          month: "short",
-                        })}
-                      </Text>
-                    </ElegantCard>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          {/* Events by Date */}
-          {filteredDates.length > 0 ? (
-            <View className="gap-4">
-              {filteredDates.map((date) => (
-                <View key={date} className="gap-3">
-                  <View className="flex-row items-center gap-2">
-                    <View className="flex-1 h-px bg-border" />
-                    <Text className="text-sm font-bold text-foreground">
-                      {new Date(date).toLocaleDateString("it-IT", {
-                        weekday: "long",
-                        day: "numeric",
-                        month: "long",
-                      })}
-                    </Text>
-                    <View className="flex-1 h-px bg-border" />
-                  </View>
-
-                  <View className="gap-2">
-                    {eventsByDate[date].map((event: any) => (
-                      <ElegantCard
-                        key={event.id}
-                        variant="filled"
-                        className={`p-4 gap-2 border ${getEventColor(
-                          event.type
-                        )}`}
-                      >
-                        <View className="flex-row items-start gap-3">
-                          <Text className="text-2xl">
-                            {getEventIcon(event.type)}
-                          </Text>
+          <View className="gap-4">
+            <Text className="text-xs font-semibold uppercase tracking-[2px] text-muted">Per data</Text>
+            {sections.length > 0 ? (
+              sections.map((section) => (
+                <View key={section.id} className="gap-3">
+                  <Text className="text-sm font-semibold text-foreground">{section.label}</Text>
+                  <View className="gap-3">
+                    {section.items.map((item) => (
+                      <ElegantCard key={item.id} className="gap-3 p-4" tone={item.tone} variant="filled">
+                        <View className="flex-row items-start justify-between gap-3">
                           <View className="flex-1 gap-1">
-                            <Text className="text-sm font-bold text-foreground">
-                              {event.title}
-                            </Text>
-                            <Text className="text-xs text-muted">
-                              {event.subject} •{" "}
-                              {getEventTypeLabel(event.type)}
-                            </Text>
-                            {event.description && (
-                              <Text className="text-xs text-muted mt-1">
-                                {event.description}
-                              </Text>
-                            )}
+                            <Text className="text-sm font-semibold text-foreground">{item.title}</Text>
+                            <Text className="text-sm text-muted">{item.subtitle}</Text>
                           </View>
+                          <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
+                            {CATEGORY_LABELS[item.category]}
+                          </Text>
                         </View>
+                        <Text className="text-sm leading-6 text-muted">{item.detail}</Text>
+                        <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
+                          {item.timeLabel}
+                        </Text>
                       </ElegantCard>
                     ))}
                   </View>
                 </View>
-              ))}
-            </View>
-          ) : (
-            <ElegantCard variant="filled" className="p-6 items-center">
-              <Text className="text-sm text-muted">
-                Nessun evento disponibile
-              </Text>
-            </ElegantCard>
-          )}
+              ))
+            ) : (
+              <ElegantCard className="gap-2 p-5" variant="filled">
+                <Text className="text-sm font-semibold text-foreground">Nessuna voce da mostrare</Text>
+                <Text className="text-sm leading-6 text-muted">
+                  Filtri e ricerca non restituiscono risultati in questo momento.
+                </Text>
+              </ElegantCard>
+            )}
+          </View>
         </View>
       </ScrollView>
     </ScreenContainer>

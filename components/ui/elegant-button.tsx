@@ -28,21 +28,42 @@ export function ElegantButton({
   const colors = useColors();
 
   const sizeClasses = {
-    sm: "px-4 py-2 rounded-lg",
-    md: "px-6 py-3 rounded-xl",
-    lg: "px-8 py-4 rounded-2xl",
+    sm: "px-4 py-3 rounded-2xl",
+    md: "px-5 py-4 rounded-3xl",
+    lg: "px-6 py-5 rounded-[28px]",
   };
 
-  const variantClasses = {
-    primary: "bg-primary",
-    secondary: "bg-surface border-2 border-primary",
-    outline: "border-2 border-primary",
-    ghost: "bg-transparent",
+  const variantStyle: Record<NonNullable<ElegantButtonProps["variant"]>, ViewStyle> = {
+    primary: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+      borderWidth: 1,
+      shadowColor: colors.primary,
+      shadowOpacity: 0.18,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 10 },
+      elevation: 4,
+    },
+    secondary: {
+      backgroundColor: colors.surfaceAlt ?? colors.surface,
+      borderColor: colors.border,
+      borderWidth: 1,
+    },
+    outline: {
+      backgroundColor: "transparent",
+      borderColor: colors.primary,
+      borderWidth: 1.25,
+    },
+    ghost: {
+      backgroundColor: "transparent",
+      borderColor: "transparent",
+      borderWidth: 1,
+    },
   };
 
   const textColorClasses = {
     primary: "text-background font-semibold",
-    secondary: "text-primary font-semibold",
+    secondary: "text-foreground font-semibold",
     outline: "text-primary font-semibold",
     ghost: "text-primary font-semibold",
   };
@@ -53,15 +74,15 @@ export function ElegantButton({
     <Pressable
       {...props}
       style={({ pressed }) => [
+        variantStyle[variant],
         {
-          opacity: pressed ? 0.8 : 1,
-          transform: [{ scale: pressed ? 0.98 : 1 }],
+          opacity: props.disabled ? 0.45 : pressed ? 0.88 : 1,
+          transform: [{ scale: pressed ? 0.985 : 1 }],
         } as ViewStyle,
       ]}
       className={cn(
         baseClasses,
         sizeClasses[size],
-        variantClasses[variant],
         fullWidth && "w-full",
         className
       )}
