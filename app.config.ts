@@ -30,6 +30,9 @@ const env = {
   // App branding - update these values directly (do not use env vars)
   appName: "Classeviva Expressive",
   appSlug: "classeviva-expressive",
+  appVersion: "1.0.2",
+  androidVersionCode: 2026031902,
+  iosBuildNumber: "2026031902",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
   logoUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310519663448700249/kqfQ32yC3QuwteoihCTBLr/icon-PkWupTgFYEqimVR6YtJSsS.webp",
@@ -41,7 +44,7 @@ const env = {
 const config: ExpoConfig = {
   name: env.appName,
   slug: env.appSlug,
-  version: "1.0.0",
+  version: env.appVersion,
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: env.scheme,
@@ -50,6 +53,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
+    buildNumber: env.iosBuildNumber,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
     }
@@ -64,6 +68,7 @@ const config: ExpoConfig = {
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
     package: env.androidPackage,
+    versionCode: env.androidVersionCode,
     permissions: ["POST_NOTIFICATIONS"],
     intentFilters: [
       {

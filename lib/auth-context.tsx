@@ -35,6 +35,27 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const STORAGE_TIMEOUT_MS = 4000;
+const PROFILE_TIMEOUT_MS = 12000;
+const CLEANUP_TIMEOUT_MS = 2500;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`${label} timeout after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+  });
+}
 
 function toFriendlyAuthMessage(error: unknown): string {
   if (error instanceof ClassevivaApiError) {
@@ -51,15 +72,36 @@ function toFriendlyAuthMessage(error: unknown): string {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, initialAuthState);
 
-  useEffect(() => {
-    notificationsService.initialize();
+  const safeClearStoredSession = useCallback(async () => {
+    try {
+      await withTimeout(clearStoredSession(), CLEANUP_TIMEOUT_MS, "clear session");
+    } catch (error) {
+      console.error("Session cleanup failed", error);
+    }
   }, []);
+
+  const restoreSignedOutState = useCallback(() => {
+    classeviva.logout();
+    dispatch({
+      type: "RESTORE_SUCCESS",
+      payload: { token: null, user: null, sessionMode: null },
+    });
+    void safeClearStoredSession();
+  }, [safeClearStoredSession]);
+
+  useEffect(() => {
+    if (state.status !== "signed_in") {
+      return;
+    }
+
+    void notificationsService.initialize();
+  }, [state.status]);
 
   const restoreToken = useCallback(async () => {
     dispatch({ type: "RESTORE_START" });
 
     try {
-      const stored = await readStoredSession();
+      const stored = await withTimeout(readStoredSession(), STORAGE_TIMEOUT_MS, "restore storage");
 
       if (stored.sessionMode === "demo") {
         dispatch({
@@ -71,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (stored.sessionMode === "real" && stored.token && stored.studentId && Platform.OS !== "web") {
         classeviva.setToken(stored.token, stored.studentId);
-        const user = await classeviva.getProfile();
+        const user = await withTimeout(classeviva.getProfile(), PROFILE_TIMEOUT_MS, "restore profile");
 
         dispatch({
           type: "RESTORE_SUCCESS",
@@ -80,22 +122,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      await clearStoredSession();
-      classeviva.logout();
-      dispatch({
-        type: "RESTORE_SUCCESS",
-        payload: { token: null, user: null, sessionMode: null },
-      });
+      restoreSignedOutState();
     } catch (error) {
       console.error("Restore session failed", error);
-      await clearStoredSession();
-      classeviva.logout();
-      dispatch({
-        type: "RESTORE_SUCCESS",
-        payload: { token: null, user: null, sessionMode: null },
-      });
+      restoreSignedOutState();
     }
-  }, []);
+  }, [restoreSignedOutState]);
 
   useEffect(() => {
     void restoreToken();
@@ -112,7 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const authToken = await classeviva.login({ username, password });
-      const user = await classeviva.getProfile().catch(() => authToken.profileHint ?? null);
+      const user = await withTimeout(classeviva.getProfile(), PROFILE_TIMEOUT_MS, "login profile").catch(
+        () => authToken.profileHint ?? null,
+      );
 
       if (!user) {
         throw new Error("Accesso riuscito, ma il profilo non e ancora disponibile.");
@@ -123,7 +157,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Studente non identificato dopo il login.");
       }
 
-      await writeRealSession(authToken.token, studentId);
+      try {
+        await withTimeout(writeRealSession(authToken.token, studentId), STORAGE_TIMEOUT_MS, "persist session");
+      } catch (storageError) {
+        console.error("Persist real session failed", storageError);
+      }
 
       dispatch({
         type: "SIGN_IN_SUCCESS",
@@ -132,17 +170,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Login failed", error);
       classeviva.logout();
-      await clearStoredSession();
+      void safeClearStoredSession();
       dispatch({ type: "SET_ERROR", payload: toFriendlyAuthMessage(error) });
       throw error;
     }
-  }, []);
+  }, [safeClearStoredSession]);
 
   const loginDemo = useCallback(async () => {
     dispatch({ type: "SIGN_IN_START" });
 
     try {
-      await writeDemoSession();
+      try {
+        await withTimeout(writeDemoSession(), STORAGE_TIMEOUT_MS, "persist demo session");
+      } catch (storageError) {
+        console.error("Persist demo session failed", storageError);
+      }
+
       dispatch({
         type: "SIGN_IN_SUCCESS",
         payload: { token: null, user: mockStudentProfile, sessionMode: "demo" },
@@ -155,13 +198,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    try {
-      classeviva.logout();
-      await clearStoredSession();
-    } finally {
-      dispatch({ type: "SIGN_OUT" });
-    }
-  }, []);
+    classeviva.logout();
+    dispatch({ type: "SIGN_OUT" });
+    await safeClearStoredSession();
+  }, [safeClearStoredSession]);
 
   const clearError = useCallback(() => {
     dispatch({ type: "SET_ERROR", payload: null });
