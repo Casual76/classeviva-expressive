@@ -62,12 +62,13 @@ export default function HomeScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      setError(null);
       const data = await loadDashboardView(mode, user);
       setDashboard(data);
+      setError(data.warning);
     } catch (loadError) {
       console.error("Dashboard load failed", loadError);
       setError(loadError instanceof Error ? loadError.message : "Non riesco a caricare la dashboard.");
+      setDashboard(null);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);

@@ -1,6 +1,7 @@
 import {
   AgendaEvent,
   Absence,
+  ClassevivaApiError,
   Grade,
   Homework,
   Lesson,
@@ -17,6 +18,7 @@ import {
 
 export type DataMode = "real" | "demo";
 export type CardTone = "neutral" | "primary" | "success" | "warning" | "error";
+const DATA_REQUEST_TIMEOUT_MS = 10000;
 
 export interface GradeRowViewModel {
   id: string;
@@ -68,6 +70,7 @@ export interface DashboardViewModel {
   subheadline: string;
   averageLabel: string;
   averageNumeric: number | null;
+  warning: string | null;
   stats: DashboardStat[];
   recentGrades: GradeRowViewModel[];
   upcomingItems: AgendaItemViewModel[];
@@ -94,6 +97,59 @@ function formatDate(value: string, options: Intl.DateTimeFormatOptions) {
   }
 
   return new Intl.DateTimeFormat("it-IT", options).format(date);
+}
+
+function withDataTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(
+        new ClassevivaApiError({
+          code: "REQUEST_TIMEOUT",
+          message: `Tempo scaduto nel caricamento di ${label}.`,
+        }),
+      );
+    }, DATA_REQUEST_TIMEOUT_MS);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+  });
+}
+
+function toErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
+}
+
+async function resolveDashboardSegment<T>(
+  promise: Promise<T>,
+  fallback: T,
+  fallbackMessage: string,
+  warnings: string[],
+): Promise<T> {
+  try {
+    return await promise;
+  } catch (error) {
+    warnings.push(toErrorMessage(error, fallbackMessage));
+    return fallback;
+  }
+}
+
+function summarizeWarnings(warnings: string[]): string | null {
+  if (warnings.length === 0) {
+    return null;
+  }
+
+  if (warnings.length === 1) {
+    return warnings[0];
+  }
+
+  return `${warnings[0]} Alcune sezioni non sono ancora sincronizzate.`;
 }
 
 function sortByDateDescending<T extends { date: string }>(items: T[]): T[] {
@@ -339,11 +395,13 @@ async function getRealAgendaItems(): Promise<AgendaItemViewModel[]> {
 
 function createRealSource(): DataSource {
   return {
-    getProfile: async () => classeviva.getProfile(),
-    getGrades: async () => sortByDateDescending(await classeviva.getGrades()),
-    getAgenda: async () => getRealAgendaItems(),
+    getProfile: async () => withDataTimeout(classeviva.getProfile(), "profilo"),
+    getGrades: async () => sortByDateDescending(await withDataTimeout(classeviva.getGrades(), "voti")),
+    getAgenda: async () => withDataTimeout(getRealAgendaItems(), "agenda"),
     getAbsences: async () =>
-      sortByDateDescending(await classeviva.getAbsences()).map(toAbsenceRecordViewModel),
+      sortByDateDescending(await withDataTimeout(classeviva.getAbsences(), "assenze")).map(
+        toAbsenceRecordViewModel,
+      ),
   };
 }
 
@@ -373,12 +431,28 @@ export async function loadDashboardView(
   providedProfile?: StudentProfile | null,
 ): Promise<DashboardViewModel> {
   const source = getSource(mode);
+  const warnings: string[] = [];
+  const fallbackProfile = providedProfile ?? (mode === "demo" ? mockStudentProfile : null);
   const [profile, grades, agenda, absences] = await Promise.all([
-    providedProfile ? Promise.resolve(providedProfile) : source.getProfile(),
-    loadGradesView(mode),
-    source.getAgenda(),
-    source.getAbsences(),
+    resolveDashboardSegment(
+      providedProfile ? Promise.resolve(providedProfile) : source.getProfile(),
+      fallbackProfile,
+      "Non riesco a caricare il profilo.",
+      warnings,
+    ),
+    resolveDashboardSegment(loadGradesView(mode), [] as GradeRowViewModel[], "Non riesco a caricare i voti.", warnings),
+    resolveDashboardSegment(source.getAgenda(), [] as AgendaItemViewModel[], "Non riesco a caricare l'agenda.", warnings),
+    resolveDashboardSegment(
+      source.getAbsences(),
+      [] as AbsenceRecordViewModel[],
+      "Non riesco a caricare le assenze.",
+      warnings,
+    ),
   ]);
+
+  if (!profile) {
+    throw new Error(summarizeWarnings(warnings) ?? "Non riesco a preparare la dashboard.");
+  }
 
   const numericGrades = grades
     .map((grade) => grade.numericValue)
@@ -403,6 +477,7 @@ export async function loadDashboardView(
         : "Riepilogo sincronizzato dalle sezioni principali di Classeviva.",
     averageLabel: averageNumeric === null ? "--" : averageNumeric.toFixed(1),
     averageNumeric,
+    warning: summarizeWarnings(warnings),
     stats: [
       {
         id: "avg",
