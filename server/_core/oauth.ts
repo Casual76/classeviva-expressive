@@ -40,6 +40,27 @@ async function syncUser(userInfo: {
   );
 }
 
+function getFrontendRedirectUrl(req: Request): string {
+  const configuredUrl =
+    process.env.EXPO_WEB_PREVIEW_URL || process.env.EXPO_PACKAGER_PROXY_URL || undefined;
+
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  const origin = req.headers.origin;
+  if (typeof origin === "string" && origin.length > 0) {
+    return origin;
+  }
+
+  const host = req.headers.host;
+  if (typeof host === "string" && host.length > 0) {
+    return `${req.protocol}://${host}`;
+  }
+
+  return "http://localhost:8081";
+}
+
 function buildUserResponse(
   user:
     | Awaited<ReturnType<typeof getUserByOpenId>>
@@ -83,13 +104,8 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      // Redirect to the frontend URL (Expo web on port 8081)
-      // Cookie is set with parent domain so it works across both 3000 and 8081 subdomains
-      const frontendUrl =
-        process.env.EXPO_WEB_PREVIEW_URL ||
-        process.env.EXPO_PACKAGER_PROXY_URL ||
-        "http://localhost:8081";
-      res.redirect(302, frontendUrl);
+      // Redirect back to the active frontend origin after establishing the session cookie.
+      res.redirect(302, getFrontendRedirectUrl(req));
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });
