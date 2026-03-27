@@ -13,6 +13,27 @@ export default function TabLayout() {
   const { status, isSignedIn } = useAuth();
   const bottomPadding = Platform.OS === "web" ? 0 : Math.max(insets.bottom, 0);
   const tabBarHeight = 80 + bottomPadding;
+  const renderTabIcon = (name: keyof typeof MaterialIcons.glyphMap) => {
+    const TabBarIcon = ({ color, focused }: { color: string; focused: boolean }) => (
+      <View
+        style={{
+          alignItems: "center",
+          justifyContent: "center",
+          paddingHorizontal: 20,
+          paddingVertical: 4,
+          borderRadius: 16,
+          backgroundColor: focused
+            ? (colors.secondaryContainer ?? colors.primaryContainer)
+            : "transparent",
+        }}
+      >
+        <MaterialIcons color={color} name={name} size={24} />
+      </View>
+    );
+
+    TabBarIcon.displayName = `${name}TabBarIcon`;
+    return TabBarIcon;
+  };
 
   if (status === "restoring") {
     return null;
@@ -66,128 +87,43 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "Home",
-          tabBarIcon: ({ color, focused }) => (
-            <View
-              style={[
-                {
-                  alignItems: "center",
-                  justifyContent: "center",
-                  paddingHorizontal: 20,
-                  paddingVertical: 4,
-                  borderRadius: 16,
-                },
-                focused && {
-                  backgroundColor: colors.secondaryContainer ?? colors.primaryContainer,
-                },
-              ]}
-            >
-              <MaterialIcons color={color} name={focused ? "space-dashboard" : "space-dashboard"} size={24} />
-            </View>
-          ),
+          tabBarIcon: renderTabIcon("space-dashboard"),
         }}
       />
       <Tabs.Screen
         name="grades"
         options={{
           title: "Voti",
-          tabBarIcon: ({ color, focused }) => (
-            <View
-              style={[
-                {
-                  alignItems: "center",
-                  justifyContent: "center",
-                  paddingHorizontal: 20,
-                  paddingVertical: 4,
-                  borderRadius: 16,
-                },
-                focused && {
-                  backgroundColor: colors.secondaryContainer ?? colors.primaryContainer,
-                },
-              ]}
-            >
-              <MaterialIcons color={color} name="leaderboard" size={24} />
-            </View>
-          ),
+          tabBarIcon: renderTabIcon("leaderboard"),
         }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
           title: "Agenda",
-          tabBarIcon: ({ color, focused }) => (
-            <View
-              style={[
-                {
-                  alignItems: "center",
-                  justifyContent: "center",
-                  paddingHorizontal: 20,
-                  paddingVertical: 4,
-                  borderRadius: 16,
-                },
-                focused && {
-                  backgroundColor: colors.secondaryContainer ?? colors.primaryContainer,
-                },
-              ]}
-            >
-              <MaterialIcons color={color} name="calendar-month" size={24} />
-            </View>
-          ),
+          tabBarIcon: renderTabIcon("calendar-month"),
         }}
       />
       <Tabs.Screen
-        name="absences"
+        name="schedule"
         options={{
-          title: "Assenze",
-          tabBarIcon: ({ color, focused }) => (
-            <View
-              style={[
-                {
-                  alignItems: "center",
-                  justifyContent: "center",
-                  paddingHorizontal: 20,
-                  paddingVertical: 4,
-                  borderRadius: 16,
-                },
-                focused && {
-                  backgroundColor: colors.secondaryContainer ?? colors.primaryContainer,
-                },
-              ]}
-            >
-              <MaterialIcons color={color} name="fact-check" size={24} />
-            </View>
-          ),
+          title: "Orario",
+          tabBarIcon: renderTabIcon("view-week"),
         }}
       />
       <Tabs.Screen
         name="more"
         options={{
           title: "Altro",
-          tabBarIcon: ({ color, focused }) => (
-            <View
-              style={[
-                {
-                  alignItems: "center",
-                  justifyContent: "center",
-                  paddingHorizontal: 20,
-                  paddingVertical: 4,
-                  borderRadius: 16,
-                },
-                focused && {
-                  backgroundColor: colors.secondaryContainer ?? colors.primaryContainer,
-                },
-              ]}
-            >
-              <MaterialIcons color={color} name="widgets" size={24} />
-            </View>
-          ),
+          tabBarIcon: renderTabIcon("widgets"),
         }}
       />
+      <Tabs.Screen name="absences" options={{ href: null }} />
       <Tabs.Screen name="communications" options={{ href: null }} />
       <Tabs.Screen name="notes" options={{ href: null }} />
       <Tabs.Screen name="materials" options={{ href: null }} />
       <Tabs.Screen name="schoolbooks" options={{ href: null }} />
       <Tabs.Screen name="report-cards" options={{ href: null }} />
-      <Tabs.Screen name="schedule" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ href: null }} />
     </Tabs>
   );

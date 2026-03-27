@@ -52,20 +52,20 @@ export default function MoreScreen() {
     detail: string;
     icon: keyof typeof MaterialIcons.glyphMap;
     href:
+      | "/(tabs)/absences"
       | "/(tabs)/communications"
       | "/(tabs)/notes"
       | "/(tabs)/materials"
       | "/(tabs)/schoolbooks"
       | "/(tabs)/report-cards"
-      | "/(tabs)/schedule"
       | "/(tabs)/profile";
   }[] = [
+    { title: "Assenze", detail: "Storico assenze, ritardi e stato delle giustificazioni.", icon: "fact-check", href: "/(tabs)/absences" },
     { title: "Comunicazioni", detail: "Circolari, bacheca, allegati e contenuti completi in lettura.", icon: "campaign", href: "/(tabs)/communications" },
     { title: "Note", detail: "Richiami, note docente e dettaglio completo per ogni evento.", icon: "edit-note", href: "/(tabs)/notes" },
     { title: "Materiale didattico", detail: "Cartelle, contenuti condivisi e apertura controllata di file e PDF.", icon: "folder-copy", href: "/(tabs)/materials" },
     { title: "Libri", detail: "Elenco testi per corso, stato di acquisto e riepilogo materia.", icon: "menu-book", href: "/(tabs)/schoolbooks" },
     { title: "Pagelle", detail: "Documenti pubblicati dal portale con apertura esterna quando disponibile.", icon: "description", href: "/(tabs)/report-cards" },
-    { title: "Orario", detail: "Vista settimanale delle lezioni con navigazione rapida tra le settimane.", icon: "view-week", href: "/(tabs)/schedule" },
     { title: "Profilo", detail: "Anagrafica studente, materie, periodi e gestione della sessione.", icon: "person-outline", href: "/(tabs)/profile" },
   ];
 
@@ -123,7 +123,7 @@ export default function MoreScreen() {
             <ElegantCard className="gap-2 p-5" variant="filled" radius="md">
               <Text className="text-sm font-medium" style={{ color: colors.foreground }}>Architettura più pulita</Text>
               <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
-                Home, Voti, Agenda e Assenze restano sempre in tab. Il resto vive qui con schermate dedicate complete.
+                Home, Voti, Agenda e Orario restano sempre in tab. Il resto vive qui con schermate dedicate complete.
               </Text>
             </ElegantCard>
           </AnimatedListItem>

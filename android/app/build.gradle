@@ -1,0 +1,127 @@
+plugins {
+  alias(libs.plugins.android.application)
+  alias(libs.plugins.kotlin.android)
+  alias(libs.plugins.kotlin.kapt)
+  alias(libs.plugins.hilt)
+}
+
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+if (keystorePropertiesFile.exists()) {
+  keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+def defaultApplicationId = "dev.antigravity.classevivaexpressive"
+def configuredApplicationId = providers.gradleProperty("releaseApplicationId")
+  .orElse(defaultApplicationId)
+  .get()
+
+android {
+  namespace "dev.antigravity.classevivaexpressive"
+  compileSdk 35
+
+  defaultConfig {
+    applicationId configuredApplicationId
+    minSdk 26
+    targetSdk 35
+    versionCode 2026032701
+    versionName "3.0.0"
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    vectorDrawables.useSupportLibrary = true
+  }
+
+  signingConfigs {
+    if (keystorePropertiesFile.exists()) {
+      release {
+        storeFile rootProject.file(keystoreProperties["storeFile"])
+        storePassword keystoreProperties["storePassword"]
+        keyAlias keystoreProperties["keyAlias"]
+        keyPassword keystoreProperties["keyPassword"]
+      }
+    }
+  }
+
+  buildTypes {
+    release {
+      if (keystorePropertiesFile.exists()) {
+        signingConfig signingConfigs.release
+      }
+      minifyEnabled false
+      proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+    }
+  }
+
+  buildFeatures {
+    compose true
+    buildConfig true
+  }
+
+  composeOptions {
+    kotlinCompilerExtensionVersion libs.versions.composeCompiler.get()
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+
+  packaging {
+    resources {
+      excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+  }
+
+  sourceSets {
+    main.java.setSrcDirs(["src/main/kotlin"])
+    debug.manifest.srcFile "src/debug/AndroidManifest.xml"
+  }
+}
+
+dependencies {
+  implementation project(":core:core-domain")
+  implementation project(":core:core-designsystem")
+  implementation project(":core:core-database")
+  implementation project(":core:core-datastore")
+  implementation project(":core:core-network")
+  implementation project(":core:core-data")
+  implementation project(":feature:feature-dashboard")
+  implementation project(":feature:feature-agenda")
+  implementation project(":feature:feature-grades")
+  implementation project(":feature:feature-lessons")
+  implementation project(":feature:feature-communications")
+  implementation project(":feature:feature-materials")
+  implementation project(":feature:feature-documents")
+  implementation project(":feature:feature-absences")
+  implementation project(":feature:feature-settings")
+  implementation project(":feature:feature-student-score")
+
+  implementation platform(libs.compose.bom)
+  implementation libs.androidx.appcompat
+  implementation libs.bundles.compose
+  implementation libs.androidx.navigation.runtime.ktx
+  implementation libs.hilt.android
+  implementation libs.androidx.hilt.navigation.compose
+  implementation libs.androidx.hilt.work
+  implementation libs.work.runtime
+  implementation libs.webkit
+  implementation libs.coil.compose
+
+  kapt libs.hilt.compiler
+  kapt libs.androidx.hilt.compiler
+
+  testImplementation libs.junit4
+  androidTestImplementation platform(libs.compose.bom)
+  androidTestImplementation libs.androidx.test.ext.junit
+  androidTestImplementation libs.espresso.core
+  androidTestImplementation libs.compose.ui.test.junit4
+  debugImplementation libs.compose.ui.tooling
+  debugImplementation libs.compose.ui.test.manifest
+}
+
+kapt {
+  correctErrorTypes true
+}
