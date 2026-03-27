@@ -1,0 +1,49 @@
+plugins {
+  alias(libs.plugins.android.library)
+  alias(libs.plugins.kotlin.android)
+  alias(libs.plugins.kotlin.kapt)
+  alias(libs.plugins.hilt)
+}
+
+android {
+  namespace "dev.antigravity.classevivaexpressive.feature.materials"
+  compileSdk 35
+
+  defaultConfig {
+    minSdk 26
+  }
+
+  buildFeatures {
+    compose true
+  }
+
+  composeOptions {
+    kotlinCompilerExtensionVersion libs.versions.composeCompiler.get()
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+}
+
+dependencies {
+  implementation project(":core:core-domain")
+  implementation project(":core:core-designsystem")
+  implementation project(":core:core-data")
+  implementation platform(libs.compose.bom)
+  implementation libs.bundles.compose
+  implementation libs.coil.compose
+  implementation libs.hilt.android
+  implementation libs.androidx.hilt.navigation.compose
+
+  kapt libs.hilt.compiler
+}
+
+kapt {
+  correctErrorTypes true
+}

@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 
@@ -10,6 +11,7 @@ import { M3Chip } from "@/components/ui/m3-chip";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SectionTitle } from "@/components/ui/section-title";
+import { useReturnToMoreOnHardwareBack } from "@/hooks/use-return-to-more-on-hardware-back";
 import { useColors } from "@/hooks/use-colors";
 import {
   loadAbsencesView,
@@ -27,6 +29,8 @@ const FILTER_LABELS: Record<FilterKey, string> = {
 
 export default function AbsencesScreen() {
   const colors = useColors();
+  const router = useRouter();
+  useReturnToMoreOnHardwareBack();
   const [absences, setAbsences] = useState<AbsenceRecordViewModel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -99,7 +103,13 @@ export default function AbsencesScreen() {
       >
         <View className="gap-5 px-5 py-6">
           <AnimatedListItem index={0}>
-            <ScreenHeader eyebrow="Presenze" subtitle="Storico completo, stato delle giustificazioni e vista più leggibile degli eventi." title="Assenze" />
+            <ScreenHeader
+              backLabel="Altro"
+              eyebrow="Presenze"
+              onBack={() => router.replace("/(tabs)/more")}
+              subtitle="Storico completo, stato delle giustificazioni e vista più leggibile degli eventi."
+              title="Assenze"
+            />
           </AnimatedListItem>
 
           {error ? (

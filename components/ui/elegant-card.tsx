@@ -7,7 +7,7 @@ interface ElegantCardProps extends ViewProps {
   variant?: "elevated" | "filled" | "outlined" | "gradient";
   gradient?: "primary" | "success" | "warning" | "error";
   tone?: "neutral" | "primary" | "success" | "warning" | "error";
-  radius?: "sm" | "md" | "lg";
+  radius?: "sm" | "md" | "lg" | "xl";
 }
 
 export function ElegantCard({
@@ -26,6 +26,7 @@ export function ElegantCard({
     sm: "rounded-xl",       // 12dp
     md: "rounded-2xl",      // 16dp
     lg: "rounded-[28px]",   // 28dp
+    xl: "rounded-[36px]",   // 36dp
   } as const;
 
   const tones = {

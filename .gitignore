@@ -40,7 +40,15 @@ app-example
 
 # generated native folders
 /ios
-/android
+/android/.gradle/
+/android/build/
+/android/**/build/
+/android/local.properties
+/android/.idea/
+/android/captures/
+/android/*.jks
+/android/*.keystore
+/android/keystore.properties
 
 # IDE
 .vscode/

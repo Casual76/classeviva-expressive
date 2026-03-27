@@ -1,0 +1,49 @@
+plugins {
+  alias(libs.plugins.android.library)
+  alias(libs.plugins.kotlin.android)
+  alias(libs.plugins.kotlin.kapt)
+  alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.hilt)
+}
+
+android {
+  namespace "dev.antigravity.classevivaexpressive.core.data"
+  compileSdk 35
+
+  defaultConfig {
+    minSdk 26
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+}
+
+dependencies {
+  implementation project(":core:core-domain")
+  implementation project(":core:core-network")
+  implementation project(":core:core-database")
+  implementation project(":core:core-datastore")
+
+  implementation libs.androidx.core.ktx
+  implementation libs.androidx.lifecycle.runtime.ktx
+  implementation libs.hilt.android
+  implementation libs.androidx.hilt.work
+  implementation libs.work.runtime
+  implementation libs.serialization.json
+
+  kapt libs.hilt.compiler
+  kapt libs.androidx.hilt.compiler
+
+  testImplementation libs.junit4
+}
+
+kapt {
+  correctErrorTypes true
+}

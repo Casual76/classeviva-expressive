@@ -1,0 +1,534 @@
+package dev.antigravity.classevivaexpressive.core.domain.model
+
+import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.Serializable
+
+@Serializable
+enum class ThemeMode {
+  SYSTEM,
+  LIGHT,
+  DARK,
+  AMOLED,
+}
+
+@Serializable
+enum class AccentMode {
+  BRAND,
+  DYNAMIC,
+  CUSTOM_PRESET,
+}
+
+@Serializable
+enum class SyncState {
+  IDLE,
+  SYNCING,
+  PARTIAL,
+  OFFLINE,
+  ERROR,
+}
+
+@Serializable
+enum class CapabilityStatus {
+  AVAILABLE,
+  EMPTY,
+  EXTERNAL_ONLY,
+  UNAVAILABLE,
+}
+
+@Serializable
+enum class AgendaCategory {
+  LESSON,
+  HOMEWORK,
+  ASSESSMENT,
+  EVENT,
+  CUSTOM,
+}
+
+@Serializable
+enum class AbsenceType {
+  ABSENCE,
+  LATE,
+  EXIT,
+}
+
+@Serializable
+data class CapabilityState(
+  val status: CapabilityStatus = CapabilityStatus.UNAVAILABLE,
+  val label: String = "",
+  val detail: String? = null,
+)
+
+@Serializable
+data class SyncStatus(
+  val state: SyncState = SyncState.IDLE,
+  val lastSuccessfulSyncEpochMillis: Long? = null,
+  val message: String? = null,
+)
+
+@Serializable
+data class StudentProfile(
+  val id: String = "",
+  val name: String = "",
+  val surname: String = "",
+  val email: String = "",
+  val schoolClass: String = "",
+  val section: String = "",
+  val school: String = "",
+  val schoolYear: String = "",
+)
+
+@Serializable
+data class UserSession(
+  val token: String,
+  val studentId: String,
+  val username: String,
+  val password: String,
+  val profile: StudentProfile,
+)
+
+@Serializable
+data class Grade(
+  val id: String,
+  val subject: String,
+  val valueLabel: String,
+  val numericValue: Double? = null,
+  val description: String? = null,
+  val date: String,
+  val type: String,
+  val weight: Double? = null,
+  val notes: String? = null,
+  val period: String? = null,
+  val teacher: String? = null,
+  val color: String? = null,
+)
+
+@Serializable
+data class Lesson(
+  val id: String,
+  val subject: String,
+  val date: String,
+  val time: String,
+  val durationMinutes: Int,
+  val topic: String? = null,
+  val teacher: String? = null,
+  val room: String? = null,
+)
+
+@Serializable
+data class Homework(
+  val id: String,
+  val subject: String,
+  val description: String,
+  val dueDate: String,
+  val notes: String? = null,
+  val attachments: List<RemoteAttachment> = emptyList(),
+)
+
+@Serializable
+data class AgendaItem(
+  val id: String,
+  val title: String,
+  val subtitle: String,
+  val date: String,
+  val time: String? = null,
+  val detail: String? = null,
+  val subject: String? = null,
+  val category: AgendaCategory,
+  val sharePayload: String? = null,
+)
+
+@Serializable
+data class CustomEvent(
+  val id: String,
+  val title: String,
+  val description: String,
+  val subject: String,
+  val date: String,
+  val time: String? = null,
+  val category: AgendaCategory = AgendaCategory.CUSTOM,
+)
+
+@Serializable
+data class AbsenceRecord(
+  val id: String,
+  val date: String,
+  val type: AbsenceType,
+  val hours: Int? = null,
+  val justified: Boolean,
+  val justificationDate: String? = null,
+  val justificationReason: String? = null,
+  val justifyUrl: String? = null,
+  val detailUrl: String? = null,
+)
+
+@Serializable
+data class RemoteAttachment(
+  val id: String,
+  val name: String,
+  val url: String? = null,
+  val mimeType: String? = null,
+  val portalOnly: Boolean = false,
+)
+
+@Serializable
+data class Communication(
+  val id: String,
+  val pubId: String,
+  val evtCode: String,
+  val title: String,
+  val contentPreview: String,
+  val sender: String,
+  val date: String,
+  val read: Boolean,
+  val attachments: List<RemoteAttachment> = emptyList(),
+  val category: String? = null,
+  val needsAck: Boolean = false,
+  val needsReply: Boolean = false,
+  val needsJoin: Boolean = false,
+  val needsFile: Boolean = false,
+  val capabilityState: CapabilityState = CapabilityState(),
+)
+
+@Serializable
+data class CommunicationDetail(
+  val communication: Communication,
+  val content: String,
+  val replyText: String? = null,
+  val portalDetailUrl: String? = null,
+  val acknowledgeUrl: String? = null,
+  val replyUrl: String? = null,
+  val joinUrl: String? = null,
+  val fileUploadUrl: String? = null,
+)
+
+@Serializable
+data class Note(
+  val id: String,
+  val categoryCode: String,
+  val categoryLabel: String,
+  val title: String,
+  val contentPreview: String,
+  val date: String,
+  val author: String,
+  val read: Boolean,
+  val severity: String,
+)
+
+@Serializable
+data class NoteDetail(
+  val note: Note,
+  val content: String,
+)
+
+@Serializable
+data class MaterialItem(
+  val id: String,
+  val teacherId: String,
+  val teacherName: String,
+  val folderId: String,
+  val folderName: String,
+  val title: String,
+  val objectId: String,
+  val objectType: String,
+  val sharedAt: String,
+  val capabilityState: CapabilityState,
+  val attachments: List<RemoteAttachment> = emptyList(),
+)
+
+@Serializable
+data class MaterialAsset(
+  val id: String,
+  val title: String,
+  val objectType: String,
+  val fileName: String? = null,
+  val mimeType: String? = null,
+  val base64Content: String? = null,
+  val textPreview: String? = null,
+  val capabilityState: CapabilityState = CapabilityState(),
+)
+
+@Serializable
+data class DocumentItem(
+  val id: String,
+  val title: String,
+  val detail: String,
+  val viewUrl: String? = null,
+  val confirmUrl: String? = null,
+  val capabilityState: CapabilityState = CapabilityState(),
+)
+
+@Serializable
+data class DocumentAsset(
+  val id: String,
+  val title: String,
+  val fileName: String? = null,
+  val mimeType: String? = null,
+  val base64Content: String? = null,
+  val textPreview: String? = null,
+  val sourceUrl: String? = null,
+  val capabilityState: CapabilityState = CapabilityState(),
+)
+
+@Serializable
+data class Schoolbook(
+  val id: String,
+  val isbn: String,
+  val title: String,
+  val subtitle: String? = null,
+  val volume: String? = null,
+  val author: String? = null,
+  val publisher: String? = null,
+  val subject: String,
+  val price: Double? = null,
+  val coverUrl: String? = null,
+  val toBuy: Boolean = false,
+  val alreadyOwned: Boolean = false,
+  val alreadyInUse: Boolean = false,
+  val recommended: Boolean = false,
+  val recommendedFor: String? = null,
+  val newAdoption: Boolean = false,
+)
+
+@Serializable
+data class SchoolbookCourse(
+  val id: String,
+  val title: String,
+  val books: List<Schoolbook> = emptyList(),
+)
+
+@Serializable
+data class Period(
+  val code: String,
+  val order: Int,
+  val description: String,
+  val label: String,
+  val isFinal: Boolean,
+  val startDate: String,
+  val endDate: String,
+)
+
+@Serializable
+data class Subject(
+  val id: String,
+  val description: String,
+  val order: Int,
+  val teachers: List<String> = emptyList(),
+)
+
+@Serializable
+data class TimelinePoint(
+  val label: String,
+  val value: Double,
+)
+
+@Serializable
+data class SubjectSummary(
+  val subject: String,
+  val average: Double? = null,
+  val teacherLabel: String = "",
+  val count: Int = 0,
+  val recentValues: List<Double> = emptyList(),
+  val typeBreakdown: String = "",
+)
+
+@Serializable
+data class GradeDistribution(
+  val insufficient: Int = 0,
+  val sufficient: Int = 0,
+  val good: Int = 0,
+  val veryGood: Int = 0,
+  val excellent: Int = 0,
+)
+
+@Serializable
+data class DashboardStat(
+  val id: String,
+  val label: String,
+  val value: String,
+  val detail: String,
+)
+
+@Serializable
+data class DashboardSnapshot(
+  val profile: StudentProfile = StudentProfile(),
+  val headline: String = "",
+  val subheadline: String = "",
+  val averageLabel: String = "--",
+  val averageNumeric: Double? = null,
+  val stats: List<DashboardStat> = emptyList(),
+  val todayLessons: List<AgendaItem> = emptyList(),
+  val recentGrades: List<Grade> = emptyList(),
+  val upcomingItems: List<AgendaItem> = emptyList(),
+  val unreadCommunications: List<Communication> = emptyList(),
+  val highlightedNotes: List<Note> = emptyList(),
+  val recentAbsences: List<AbsenceRecord> = emptyList(),
+  val schoolDocuments: List<DocumentItem> = emptyList(),
+  val syncStatus: SyncStatus = SyncStatus(),
+)
+
+@Serializable
+data class StatsSnapshot(
+  val overallAverage: Double? = null,
+  val subjectSummaries: List<SubjectSummary> = emptyList(),
+  val gradeDistribution: GradeDistribution = GradeDistribution(),
+  val gradeTrend: List<TimelinePoint> = emptyList(),
+  val absenceBreakdown: Map<String, Int> = emptyMap(),
+  val workloadBreakdown: Map<String, Int> = emptyMap(),
+)
+
+@Serializable
+data class SimulatedGrade(
+  val id: String,
+  val subject: String,
+  val value: Double,
+  val type: String,
+  val date: String,
+  val weight: Double = 1.0,
+  val note: String? = null,
+)
+
+@Serializable
+data class GradeSimulationSummary(
+  val realAverage: Double? = null,
+  val simulatedAverage: Double? = null,
+  val delta: Double = 0.0,
+  val grades: List<SimulatedGrade> = emptyList(),
+)
+
+@Serializable
+data class StudentScoreComponent(
+  val title: String,
+  val value: Double,
+  val maxValue: Double,
+  val weight: Double,
+)
+
+@Serializable
+data class StudentScoreSnapshot(
+  val score: Double,
+  val label: String,
+  val computedAtEpochMillis: Long,
+  val components: List<StudentScoreComponent>,
+  val sharePayload: String,
+)
+
+@Serializable
+data class StudentScoreComparison(
+  val current: StudentScoreSnapshot,
+  val imported: StudentScoreSnapshot,
+  val difference: Double,
+)
+
+@Serializable
+data class AppSettings(
+  val themeMode: ThemeMode = ThemeMode.SYSTEM,
+  val accentMode: AccentMode = AccentMode.BRAND,
+  val customAccentName: String = "ember",
+  val dynamicColorEnabled: Boolean = true,
+  val amoledEnabled: Boolean = false,
+  val notificationsEnabled: Boolean = true,
+  val periodicSyncEnabled: Boolean = true,
+)
+
+interface AuthRepository {
+  val session: Flow<UserSession?>
+  suspend fun restore(): UserSession?
+  suspend fun login(username: String, password: String): Result<UserSession>
+  suspend fun logout()
+}
+
+interface DashboardRepository {
+  fun observeDashboard(): Flow<DashboardSnapshot>
+  suspend fun refreshDashboard(force: Boolean = false): Result<DashboardSnapshot>
+}
+
+interface GradesRepository {
+  fun observeGrades(): Flow<List<Grade>>
+  fun observePeriods(): Flow<List<Period>>
+  fun observeSubjects(): Flow<List<Subject>>
+  fun observeStats(): Flow<StatsSnapshot>
+  suspend fun refreshGrades(force: Boolean = false): Result<List<Grade>>
+}
+
+interface AgendaRepository {
+  fun observeAgenda(): Flow<List<AgendaItem>>
+  fun observeCustomEvents(): Flow<List<CustomEvent>>
+  suspend fun addCustomEvent(event: CustomEvent)
+  suspend fun removeCustomEvent(id: String)
+  suspend fun refreshAgenda(force: Boolean = false): Result<List<AgendaItem>>
+}
+
+interface LessonsRepository {
+  fun observeLessons(): Flow<List<Lesson>>
+  suspend fun refreshLessons(force: Boolean = false): Result<List<Lesson>>
+}
+
+interface CommunicationsRepository {
+  fun observeCommunications(): Flow<List<Communication>>
+  fun observeNotes(): Flow<List<Note>>
+  suspend fun refreshCommunications(force: Boolean = false): Result<List<Communication>>
+  suspend fun getCommunicationDetail(pubId: String, evtCode: String): Result<CommunicationDetail>
+  suspend fun getNoteDetail(id: String, categoryCode: String): Result<NoteDetail>
+  suspend fun queueDownload(attachment: RemoteAttachment): Result<Long>
+  suspend fun acknowledgeCommunication(detail: CommunicationDetail): Result<CommunicationDetail>
+  suspend fun replyToCommunication(detail: CommunicationDetail, text: String): Result<CommunicationDetail>
+  suspend fun joinCommunication(detail: CommunicationDetail): Result<CommunicationDetail>
+  suspend fun uploadCommunicationFile(
+    detail: CommunicationDetail,
+    fileName: String,
+    mimeType: String?,
+    bytes: ByteArray,
+  ): Result<CommunicationDetail>
+}
+
+interface MaterialsRepository {
+  fun observeMaterials(): Flow<List<MaterialItem>>
+  suspend fun refreshMaterials(force: Boolean = false): Result<List<MaterialItem>>
+  suspend fun openAsset(item: MaterialItem): Result<MaterialAsset>
+  suspend fun queueDownload(attachment: RemoteAttachment): Result<Long>
+}
+
+interface DocumentsRepository {
+  fun observeDocuments(): Flow<List<DocumentItem>>
+  fun observeSchoolbooks(): Flow<List<SchoolbookCourse>>
+  suspend fun refreshDocuments(force: Boolean = false): Result<List<DocumentItem>>
+  suspend fun openDocument(document: DocumentItem): Result<DocumentAsset>
+  suspend fun queueDownload(document: DocumentItem): Result<Long>
+}
+
+interface AbsencesRepository {
+  fun observeAbsences(): Flow<List<AbsenceRecord>>
+  suspend fun refreshAbsences(force: Boolean = false): Result<List<AbsenceRecord>>
+  suspend fun justifyAbsence(record: AbsenceRecord, reason: String? = null): Result<List<AbsenceRecord>>
+}
+
+interface StatsRepository {
+  fun observeStats(): Flow<StatsSnapshot>
+  suspend fun refreshStats(force: Boolean = false): Result<StatsSnapshot>
+}
+
+interface StudentScoreRepository {
+  fun observeCurrentScore(): Flow<StudentScoreSnapshot?>
+  fun observeSnapshots(): Flow<List<StudentScoreSnapshot>>
+  suspend fun refreshStudentScore(force: Boolean = false): Result<StudentScoreSnapshot>
+  suspend fun exportCurrentPayload(): Result<String>
+  suspend fun importPayload(payload: String): Result<StudentScoreComparison>
+}
+
+interface SimulationRepository {
+  fun observeSimulation(): Flow<GradeSimulationSummary>
+  suspend fun addSimulatedGrade(grade: SimulatedGrade)
+  suspend fun removeSimulatedGrade(id: String)
+  suspend fun clearSimulation()
+}
+
+interface SettingsRepository {
+  fun observeSettings(): Flow<AppSettings>
+  suspend fun updateThemeMode(mode: ThemeMode)
+  suspend fun updateAccentMode(mode: AccentMode)
+  suspend fun updateCustomAccent(name: String)
+  suspend fun setDynamicColorEnabled(enabled: Boolean)
+  suspend fun setAmoledEnabled(enabled: Boolean)
+  suspend fun setNotificationsEnabled(enabled: Boolean)
+  suspend fun setPeriodicSyncEnabled(enabled: Boolean)
+}

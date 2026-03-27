@@ -35,6 +35,7 @@ export interface GradeRowViewModel {
   detail: string;
   teacherLabel: string;
   periodLabel: string;
+  periodKey: string;
   tone: CardTone;
 }
 
@@ -44,6 +45,8 @@ export interface GradeSubjectSummaryViewModel {
   averageNumeric: number | null;
   count: number;
   teacherLabel: string;
+  recentValues: number[];
+  typeBreakdown: string;
   tone: CardTone;
 }
 
@@ -167,6 +170,22 @@ export interface DashboardStat {
   tone: CardTone;
 }
 
+export interface GradeDistributionViewModel {
+  insufficient: number;
+  sufficient: number;
+  good: number;
+  veryGood: number;
+  excellent: number;
+}
+
+export interface GradeSummariesViewModel {
+  averageNumeric: number | null;
+  averageLabel: string;
+  subjectSummaries: GradeSubjectSummaryViewModel[];
+  trend: GradeTrendPoint[];
+  gradeDistribution: GradeDistributionViewModel;
+}
+
 export interface DashboardViewModel {
   headline: string;
   subheadline: string;
@@ -174,7 +193,9 @@ export interface DashboardViewModel {
   averageNumeric: number | null;
   warning: string | null;
   stats: DashboardStat[];
+  todayLessons: AgendaItemViewModel[];
   recentGrades: GradeRowViewModel[];
+  upcomingAssessments: AgendaItemViewModel[];
   upcomingItems: AgendaItemViewModel[];
   recentAbsences: AbsenceRecordViewModel[];
   unreadCommunications: CommunicationRowViewModel[];
@@ -189,8 +210,72 @@ export interface ProfileSnapshotViewModel {
   periods: Period[];
 }
 
+const LOCAL_ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseDateValue(value: string): Date {
+  if (LOCAL_ISO_DATE_RE.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  return new Date(value);
+}
+
+export function toLocalIsoDate(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function compareDateValues(left: string, right: string): number {
+  if (LOCAL_ISO_DATE_RE.test(left) && LOCAL_ISO_DATE_RE.test(right)) {
+    return left.localeCompare(right);
+  }
+
+  return parseDateValue(left).getTime() - parseDateValue(right).getTime();
+}
+
+function parseTimeValue(value: string): number | null {
+  const match = value.match(/(\d{1,2}):(\d{2})/);
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+}
+
+export function compareTimeLabels(left: string, right: string): number {
+  const leftValue = parseTimeValue(left);
+  const rightValue = parseTimeValue(right);
+
+  if (leftValue !== null && rightValue !== null) {
+    return leftValue - rightValue;
+  }
+  if (leftValue !== null) {
+    return -1;
+  }
+  if (rightValue !== null) {
+    return 1;
+  }
+
+  return left.localeCompare(right, "it-IT");
+}
+
 function formatDate(value: string, options: Intl.DateTimeFormatOptions) {
-  const date = new Date(value);
+  const date = parseDateValue(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
@@ -228,11 +313,11 @@ function withDataTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
 }
 
 function sortByDateDescending<T extends { date: string }>(items: T[]): T[] {
-  return [...items].sort((left, right) => new Date(right.date).getTime() - new Date(left.date).getTime());
+  return [...items].sort((left, right) => compareDateValues(right.date, left.date));
 }
 
 function sortByDateAscending<T extends { date: string }>(items: T[]): T[] {
-  return [...items].sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime());
+  return [...items].sort((left, right) => compareDateValues(left.date, right.date));
 }
 
 function summarizeWarnings(warnings: string[]): string | null {
@@ -280,6 +365,31 @@ function getGradeTone(value: number | null): CardTone {
   return "error";
 }
 
+function normalizePeriodKey(value?: string | null): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function getComparablePeriodKeys(period: Pick<Period, "code" | "label" | "description">): string[] {
+  const keys = [period.code, period.label, period.description]
+    .map(normalizePeriodKey)
+    .filter((value) => value.length > 0);
+
+  return Array.from(new Set(keys));
+}
+
+export function doesGradeMatchPeriod(
+  grade: Pick<GradeRowViewModel, "periodKey" | "periodLabel">,
+  period: Pick<Period, "code" | "label" | "description">,
+): boolean {
+  const gradeKeys = new Set([grade.periodKey, normalizePeriodKey(grade.periodLabel)].filter(Boolean));
+  return getComparablePeriodKeys(period).some((key) => gradeKeys.has(key));
+}
+
 function getAgendaTone(category: AgendaItemViewModel["category"]): CardTone {
   switch (category) {
     case "assessment":
@@ -311,6 +421,7 @@ function getAbsenceTone(absence: Absence): CardTone {
 
 export function toGradeRowViewModel(grade: Grade): GradeRowViewModel {
   const numericValue = getNumericGrade(grade.grade);
+  const periodLabel = grade.period || "Periodo non indicato";
 
   return {
     id: grade.id,
@@ -326,17 +437,13 @@ export function toGradeRowViewModel(grade: Grade): GradeRowViewModel {
     typeLabel: grade.type || "Valutazione",
     detail: grade.notes || grade.description || "Senza note aggiuntive",
     teacherLabel: grade.teacher || "Docente non indicato",
-    periodLabel: grade.period || "Periodo non indicato",
+    periodLabel,
+    periodKey: normalizePeriodKey(periodLabel),
     tone: getGradeTone(numericValue),
   };
 }
 
-export function summarizeGrades(rows: GradeRowViewModel[]): {
-  averageNumeric: number | null;
-  averageLabel: string;
-  subjectSummaries: GradeSubjectSummaryViewModel[];
-  trend: GradeTrendPoint[];
-} {
+export function summarizeGrades(rows: GradeRowViewModel[]): GradeSummariesViewModel {
   const numericValues = rows
     .map((row) => row.numericValue)
     .filter((value): value is number => value !== null);
@@ -361,6 +468,30 @@ export function summarizeGrades(rows: GradeRowViewModel[]): {
         values.length > 0
           ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(1))
           : null;
+      const recentValues = sortByDateAscending(items)
+        .filter((item) => item.numericValue !== null)
+        .slice(-4)
+        .map((item) => item.numericValue as number);
+      const writtenTypes = ["scritto", "compito", "compito in classe", "written"];
+      const oralTypes = ["orale", "interrogazione", "oral"];
+      const written = items.filter((item) =>
+        writtenTypes.some((type) => item.typeLabel.toLowerCase().includes(type)),
+      ).length;
+      const oral = items.filter((item) =>
+        oralTypes.some((type) => item.typeLabel.toLowerCase().includes(type)),
+      ).length;
+      const other = items.length - written - oral;
+      const parts: string[] = [];
+
+      if (written > 0) {
+        parts.push(`${written} ${written === 1 ? "scritto" : "scritti"}`);
+      }
+      if (oral > 0) {
+        parts.push(`${oral} ${oral === 1 ? "orale" : "orali"}`);
+      }
+      if (other > 0) {
+        parts.push(`${other} ${other === 1 ? "altro" : "altri"}`);
+      }
 
       return {
         subject,
@@ -368,6 +499,8 @@ export function summarizeGrades(rows: GradeRowViewModel[]): {
         averageNumeric: subjectAverage,
         count: items.length,
         teacherLabel: items[0]?.teacherLabel ?? "Docente non indicato",
+        recentValues,
+        typeBreakdown: parts.join(" · ") || `${items.length} valutazioni`,
         tone: getGradeTone(subjectAverage),
       } satisfies GradeSubjectSummaryViewModel;
     })
@@ -388,6 +521,13 @@ export function summarizeGrades(rows: GradeRowViewModel[]): {
     averageLabel: averageNumeric === null ? "--" : averageNumeric.toFixed(1),
     subjectSummaries,
     trend,
+    gradeDistribution: {
+      insufficient: numericValues.filter((value) => value < 6).length,
+      sufficient: numericValues.filter((value) => value >= 6 && value < 7).length,
+      good: numericValues.filter((value) => value >= 7 && value < 8).length,
+      veryGood: numericValues.filter((value) => value >= 8 && value < 9).length,
+      excellent: numericValues.filter((value) => value >= 9).length,
+    },
   };
 }
 
@@ -597,6 +737,7 @@ export function buildCalendarMonth(monthDate: Date, items: AgendaItemViewModel[]
   const firstOfMonth = new Date(year, month, 1);
   const startDay = (firstOfMonth.getDay() + 6) % 7;
   const gridStart = new Date(year, month, 1 - startDay);
+  const todayIso = toLocalIsoDate();
 
   const itemMap = new Map<string, AgendaItemViewModel[]>();
   for (const item of items) {
@@ -608,7 +749,7 @@ export function buildCalendarMonth(monthDate: Date, items: AgendaItemViewModel[]
   return Array.from({ length: 42 }, (_, index) => {
     const date = new Date(gridStart);
     date.setDate(gridStart.getDate() + index);
-    const isoDate = date.toISOString().slice(0, 10);
+    const isoDate = toLocalIsoDate(date);
     const dayItems = itemMap.get(isoDate) ?? [];
 
     return {
@@ -616,7 +757,7 @@ export function buildCalendarMonth(monthDate: Date, items: AgendaItemViewModel[]
       isoDate,
       dayLabel: String(date.getDate()),
       isCurrentMonth: date.getMonth() === month,
-      isToday: isoDate === new Date().toISOString().slice(0, 10),
+      isToday: isoDate === todayIso,
       count: dayItems.length,
       tones: Array.from(new Set(dayItems.slice(0, 3).map((item) => item.tone))),
     };
@@ -633,9 +774,8 @@ export async function loadGradesView(): Promise<GradeRowViewModel[]> {
 }
 
 export async function loadAgendaView(startDate?: string, endDate?: string): Promise<AgendaItemViewModel[]> {
-  const safeStart = startDate ?? new Date().toISOString().slice(0, 10);
-  const safeEnd =
-    endDate ?? new Date(Date.now() + 21 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const safeStart = startDate ?? toLocalIsoDate();
+  const safeEnd = endDate ?? toLocalIsoDate(addDays(new Date(), 21));
 
   const [lessonsResult, homeworksResult, agendaResult] = await Promise.allSettled([
     withDataTimeout(classeviva.getLessons(safeStart, safeEnd), "lezioni"),
@@ -744,6 +884,7 @@ export async function loadProfileSnapshot(user?: StudentProfile | null): Promise
 
 export async function loadDashboardView(providedProfile?: StudentProfile | null): Promise<DashboardViewModel> {
   const warnings: string[] = [];
+  const todayIso = toLocalIsoDate();
 
   const [profileResult, gradesResult, agendaResult, absencesResult, communicationsResult, notesResult, reportsResult] =
     await Promise.allSettled([
@@ -794,7 +935,13 @@ export async function loadDashboardView(providedProfile?: StudentProfile | null)
   }
 
   const gradeSummary = summarizeGrades(grades);
-  const upcomingItems = agenda.filter((item) => new Date(item.date).getTime() >= Date.now()).slice(0, 4);
+  const todayLessons = agenda
+    .filter((item) => item.category === "lesson" && item.date === todayIso)
+    .sort((left, right) => compareTimeLabels(left.timeLabel, right.timeLabel));
+  const upcomingAssessments = agenda
+    .filter((item) => item.category === "assessment" && compareDateValues(item.date, todayIso) >= 0)
+    .slice(0, 3);
+  const upcomingItems = agenda.filter((item) => compareDateValues(item.date, todayIso) >= 0).slice(0, 4);
   const unjustified = absences.filter((absence) => !absence.justified).length;
   const unreadCommunications = communications.filter((item) => item.statusLabel === "Da leggere");
   const booksToBuy = reports.length > 0 ? "Pagelle disponibili" : "Nessun documento recente";
@@ -835,7 +982,9 @@ export async function loadDashboardView(providedProfile?: StudentProfile | null)
         tone: unreadCommunications.length > 0 ? "primary" : "neutral",
       },
     ],
+    todayLessons,
     recentGrades: grades.slice(0, 4),
+    upcomingAssessments,
     upcomingItems,
     recentAbsences: absences.slice(0, 3),
     unreadCommunications: unreadCommunications.slice(0, 3),

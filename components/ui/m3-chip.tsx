@@ -5,7 +5,7 @@
 
 import React from "react";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -21,6 +21,7 @@ interface M3ChipProps {
   selected?: boolean;
   onPress?: () => void;
   icon?: keyof typeof MaterialIcons.glyphMap;
+  size?: "sm" | "md" | "lg";
 }
 
 export function M3Chip({
@@ -28,9 +29,16 @@ export function M3Chip({
   selected = false,
   onPress,
   icon,
+  size = "md",
 }: M3ChipProps) {
   const colors = useColors();
   const scale = useSharedValue(1);
+  const paddingStyle =
+    size === "lg"
+      ? { paddingHorizontal: 20, paddingVertical: 10 }
+      : size === "sm"
+        ? { paddingHorizontal: 10, paddingVertical: 4 }
+        : { paddingHorizontal: 16, paddingVertical: 8 };
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -47,8 +55,9 @@ export function M3Chip({
           borderWidth: selected ? 0 : 1,
           borderColor: colors.outline ?? colors.border,
         },
+        paddingStyle,
       ]}
-      className="flex-row items-center gap-1.5 rounded-lg px-4 py-2"
+      className="flex-row items-center gap-1.5 rounded-lg"
       onPress={onPress}
       onPressIn={() => {
         scale.value = withSpring(0.95, { damping: 15, stiffness: 400 });
