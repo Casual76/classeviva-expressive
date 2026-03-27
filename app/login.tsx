@@ -15,7 +15,6 @@ import {
 import { ScreenContainer } from "@/components/screen-container";
 import { ElegantButton } from "@/components/ui/elegant-button";
 import { ElegantCard } from "@/components/ui/elegant-card";
-import { Fonts } from "@/constants/theme";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-context";
 
@@ -33,14 +32,14 @@ function FeatureRow({
   return (
     <View className="flex-row items-start gap-3">
       <View
-        className="mt-1 h-10 w-10 items-center justify-center rounded-full"
-        style={{ backgroundColor: colors.surfaceAlt ?? colors.surface }}
+        className="mt-0.5 h-10 w-10 items-center justify-center rounded-full"
+        style={{ backgroundColor: colors.primaryContainer ?? colors.surface }}
       >
-        <MaterialIcons color={colors.primary} name={icon} size={18} />
+        <MaterialIcons color={colors.onPrimaryContainer ?? colors.primary} name={icon} size={18} />
       </View>
-      <View className="flex-1 gap-1">
-        <Text className="text-sm font-semibold text-foreground">{title}</Text>
-        <Text className="text-sm leading-6 text-muted">{detail}</Text>
+      <View className="flex-1 gap-0.5">
+        <Text className="text-sm font-medium" style={{ color: colors.onPrimaryContainer ?? colors.foreground }}>{title}</Text>
+        <Text className="text-sm leading-5" style={{ color: colors.onPrimaryContainer ? `${colors.onPrimaryContainer}CC` : colors.muted }}>{detail}</Text>
       </View>
     </View>
   );
@@ -80,30 +79,39 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View className="flex-1 gap-5 px-6 py-6">
-            <ElegantCard className="gap-6 p-6" gradient="primary" variant="gradient">
+          <View className="flex-1 gap-5 px-5 py-6">
+            <ElegantCard className="gap-6 p-6" variant="gradient" radius="lg">
               <View className="flex-row items-start justify-between gap-4">
                 <View className="flex-1 gap-3">
-                  <Text className="text-xs font-semibold uppercase tracking-[2px] text-background/75">
+                  <Text
+                    className="text-xs font-medium uppercase tracking-[1.5px]"
+                    style={{ color: colors.onPrimaryContainer ? `${colors.onPrimaryContainer}BB` : colors.muted }}
+                  >
                     Classeviva live
                   </Text>
                   <Text
-                    className="text-[38px] leading-[42px] text-background"
-                    style={{ fontFamily: Fonts.serif, fontWeight: "700" }}
+                    className="text-[28px] leading-[34px]"
+                    style={{ color: colors.onPrimaryContainer ?? colors.foreground }}
                   >
                     Registro scolastico, ripensato per essere davvero usabile.
                   </Text>
-                  <Text className="text-sm leading-7 text-background/80">
-                    Accesso reale, dati sincronizzati dal portale e navigazione piu chiara per l&apos;uso quotidiano.
+                  <Text
+                    className="text-sm leading-6"
+                    style={{ color: colors.onPrimaryContainer ? `${colors.onPrimaryContainer}CC` : colors.muted }}
+                  >
+                    Accesso reale, dati sincronizzati dal portale e navigazione più chiara per l&apos;uso quotidiano.
                   </Text>
                 </View>
 
-                <View className="h-14 w-14 items-center justify-center rounded-full bg-background/15">
-                  <MaterialIcons color={colors.background} name="school" size={24} />
+                <View
+                  className="h-12 w-12 items-center justify-center rounded-full"
+                  style={{ backgroundColor: colors.primary }}
+                >
+                  <MaterialIcons color={colors.onPrimary ?? "#FFFFFF"} name="school" size={22} />
                 </View>
               </View>
 
-              <View className="gap-3">
+              <View className="gap-4">
                 <FeatureRow
                   detail="Solo sessione reale, con persistenza sicura e ripristino automatico."
                   icon="verified-user"
@@ -115,46 +123,62 @@ export default function LoginScreen() {
                   title="Autofill e password manager"
                 />
                 <FeatureRow
-                  detail="Home, voti, agenda, assenze e funzioni secondarie organizzate per priorita."
+                  detail="Home, voti, agenda, assenze e funzioni secondarie organizzate per priorità."
                   icon="dashboard"
                   title="Esperienza mobile-first"
                 />
               </View>
             </ElegantCard>
 
-            <ElegantCard className="gap-5 p-6" variant="elevated">
+            <ElegantCard className="gap-5 p-6" variant="elevated" radius="lg">
               <View className="gap-2">
-                <Text className="text-xs font-semibold uppercase tracking-[2px] text-muted">Accesso</Text>
                 <Text
-                  className="text-3xl leading-[36px] text-foreground"
-                  style={{ fontFamily: Fonts.serif, fontWeight: "700" }}
+                  className="text-[11px] font-medium uppercase tracking-[1.5px]"
+                  style={{ color: colors.onSurfaceVariant ?? colors.muted }}
+                >
+                  Accesso
+                </Text>
+                <Text
+                  className="text-2xl leading-[30px]"
+                  style={{ color: colors.foreground }}
                 >
                   Entra con le tue credenziali Classeviva
                 </Text>
-                <Text className="text-sm leading-6 text-muted">
+                <Text
+                  className="text-sm leading-5"
+                  style={{ color: colors.onSurfaceVariant ?? colors.muted }}
+                >
                   I campi qui sotto sono preparati per essere riconosciuti dal telefono come username e password.
                 </Text>
               </View>
 
               {error ? (
-                <ElegantCard className="p-4" tone="error" variant="filled">
-                  <Text className="text-sm font-semibold text-foreground">{error}</Text>
+                <ElegantCard className="p-4" tone="error" variant="filled" radius="md">
+                  <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{error}</Text>
                 </ElegantCard>
               ) : null}
 
               <View className="gap-4">
                 <View className="gap-2">
-                  <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
+                  <Text
+                    className="text-[11px] font-medium uppercase tracking-[1.5px]"
+                    style={{ color: colors.onSurfaceVariant ?? colors.muted }}
+                  >
                     Username
                   </Text>
-                  <ElegantCard className="px-4 py-4" variant="filled">
+                  <View
+                    className="rounded-xl px-4 py-4"
+                    style={{
+                      backgroundColor: colors.surfaceContainerHighest ?? colors.surfaceContainerHigh ?? colors.surface,
+                    }}
+                  >
                     <TextInput
                       accessibilityLabel="Username Classeviva"
                       autoCapitalize="none"
                       autoComplete="username"
                       autoCorrect={false}
                       blurOnSubmit={false}
-                      className="text-base text-foreground"
+                      className="text-base"
                       editable={!isLoading}
                       importantForAutofill="yes"
                       onChangeText={(value) => {
@@ -163,27 +187,35 @@ export default function LoginScreen() {
                       }}
                       onSubmitEditing={() => passwordInputRef.current?.focus()}
                       placeholder="Inserisci username"
-                      placeholderTextColor={colors.muted}
+                      placeholderTextColor={colors.onSurfaceVariant ?? colors.muted}
                       returnKeyType="next"
                       style={{ color: colors.foreground }}
                       textContentType="username"
                       value={username}
                     />
-                  </ElegantCard>
+                  </View>
                 </View>
 
                 <View className="gap-2">
-                  <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
+                  <Text
+                    className="text-[11px] font-medium uppercase tracking-[1.5px]"
+                    style={{ color: colors.onSurfaceVariant ?? colors.muted }}
+                  >
                     Password
                   </Text>
-                  <ElegantCard className="flex-row items-center gap-3 px-4 py-4" variant="filled">
+                  <View
+                    className="flex-row items-center gap-3 rounded-xl px-4 py-4"
+                    style={{
+                      backgroundColor: colors.surfaceContainerHighest ?? colors.surfaceContainerHigh ?? colors.surface,
+                    }}
+                  >
                     <TextInput
                       ref={passwordInputRef}
                       accessibilityLabel="Password Classeviva"
                       autoCapitalize="none"
                       autoComplete="current-password"
                       autoCorrect={false}
-                      className="flex-1 text-base text-foreground"
+                      className="flex-1 text-base"
                       editable={!isLoading}
                       importantForAutofill="yes"
                       onChangeText={(value) => {
@@ -192,7 +224,7 @@ export default function LoginScreen() {
                       }}
                       onSubmitEditing={() => void handleLogin()}
                       placeholder="Inserisci password"
-                      placeholderTextColor={colors.muted}
+                      placeholderTextColor={colors.onSurfaceVariant ?? colors.muted}
                       returnKeyType="go"
                       secureTextEntry={!showPassword}
                       style={{ color: colors.foreground }}
@@ -203,15 +235,15 @@ export default function LoginScreen() {
                       accessibilityLabel={showPassword ? "Nascondi password" : "Mostra password"}
                       className="h-10 w-10 items-center justify-center rounded-full"
                       onPress={() => setShowPassword((current) => !current)}
-                      style={{ backgroundColor: colors.surfaceAlt ?? colors.background }}
+                      style={{ backgroundColor: colors.surfaceContainerHigh ?? colors.background }}
                     >
                       <MaterialIcons
-                        color={colors.foreground}
+                        color={colors.onSurfaceVariant ?? colors.foreground}
                         name={showPassword ? "visibility-off" : "visibility"}
-                        size={18}
+                        size={20}
                       />
                     </Pressable>
-                  </ElegantCard>
+                  </View>
                 </View>
 
                 <ElegantButton
@@ -222,16 +254,16 @@ export default function LoginScreen() {
                   variant="primary"
                 >
                   {isLoading ? (
-                    <ActivityIndicator color={colors.background} size="small" />
+                    <ActivityIndicator color={colors.onPrimary ?? "#FFFFFF"} size="small" />
                   ) : (
                     "Accedi"
                   )}
                 </ElegantButton>
               </View>
 
-              <ElegantCard className="gap-2 p-4" variant="outlined">
-                <Text className="text-sm font-semibold text-foreground">Sessione protetta</Text>
-                <Text className="text-sm leading-6 text-muted">
+              <ElegantCard className="gap-2 p-4" variant="outlined" radius="md">
+                <Text className="text-sm font-medium" style={{ color: colors.foreground }}>Sessione protetta</Text>
+                <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
                   Dopo il login la sessione viene salvata in modo sicuro e ripristinata automaticamente all&apos;apertura successiva.
                 </Text>
               </ElegantCard>

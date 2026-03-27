@@ -1,18 +1,13 @@
 import { useRouter } from "expo-router";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { AnimatedListItem } from "@/components/ui/animated-list-item";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ElegantCard } from "@/components/ui/elegant-card";
 import { LoadingState } from "@/components/ui/loading-state";
+import { M3Chip } from "@/components/ui/m3-chip";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SectionTitle } from "@/components/ui/section-title";
@@ -25,25 +20,18 @@ import {
   type CommunicationRowViewModel,
 } from "@/lib/student-data";
 
-type FilterKey = "all" | "unread";
-
-const FILTER_LABELS: Record<FilterKey, string> = {
-  all: "Tutte",
-  unread: "Da leggere",
-};
-
 export default function CommunicationsScreen() {
   const colors = useColors();
   const router = useRouter();
   useReturnToMoreOnHardwareBack();
-  const [communications, setCommunications] = useState<CommunicationRowViewModel[]>([]);
-  const [selectedCommunication, setSelectedCommunication] = useState<CommunicationRowViewModel | null>(null);
+  const [items, setItems] = useState<CommunicationRowViewModel[]>([]);
+  const [selectedItem, setSelectedItem] = useState<CommunicationRowViewModel | null>(null);
   const [detail, setDetail] = useState<NoticeboardItemDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredQuery = useDeferredValue(searchQuery);
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [filter, setFilter] = useState<"all" | "read" | "unread">("all");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +40,7 @@ export default function CommunicationsScreen() {
     try {
       setError(null);
       const data = await loadCommunicationsView();
-      setCommunications(data);
+      setItems(data);
     } catch (loadError) {
       console.error("Communications load failed", loadError);
       setError(loadError instanceof Error ? loadError.message : "Non riesco a caricare le comunicazioni.");
@@ -67,67 +55,41 @@ export default function CommunicationsScreen() {
   }, [loadData]);
 
   const handleSelect = useCallback(async (item: CommunicationRowViewModel) => {
-    setSelectedCommunication(item);
+    setSelectedItem(item);
     setDetail(null);
     setDetailError(null);
     setIsDetailLoading(true);
-
     try {
       const nextDetail = await loadCommunicationDetailView(item);
       setDetail(nextDetail);
-      setCommunications((current) =>
-        current.map((entry) =>
-          entry.id === item.id ? { ...entry, statusLabel: "Letta", tone: "neutral" } : entry,
-        ),
-      );
     } catch (loadError) {
       console.error("Communication detail failed", loadError);
-      setDetailError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Non riesco a caricare il dettaglio della comunicazione.",
-      );
+      setDetailError(loadError instanceof Error ? loadError.message : "Non riesco a caricare il contenuto.");
     } finally {
       setIsDetailLoading(false);
     }
   }, []);
 
-  const unreadCount = useMemo(
-    () => communications.filter((item) => item.statusLabel === "Da leggere").length,
-    [communications],
-  );
-  const withAttachmentsCount = useMemo(
-    () => communications.filter((item) => item.metadataLabel.toLowerCase().includes("alleg")).length,
-    [communications],
-  );
-
-  const filteredCommunications = useMemo(() => {
-    return communications.filter((item) => {
-      if (filter === "unread" && item.statusLabel !== "Da leggere") {
-        return false;
-      }
-
-      if (!deferredQuery.trim()) {
-        return true;
-      }
-
+  const filteredItems = useMemo(() => {
+    return items.filter((item) => {
+      if (filter === "read" && item.statusLabel !== "Letta") return false;
+      if (filter === "unread" && item.statusLabel === "Letta") return false;
+      if (!deferredQuery.trim()) return true;
       const query = deferredQuery.toLowerCase();
       return (
         item.title.toLowerCase().includes(query) ||
         item.preview.toLowerCase().includes(query) ||
-        item.sender.toLowerCase().includes(query) ||
         item.metadataLabel.toLowerCase().includes(query)
       );
     });
-  }, [communications, deferredQuery, filter]);
+  }, [items, filter, deferredQuery]);
+
+  const unreadCount = useMemo(() => items.filter((item) => item.statusLabel !== "Letta").length, [items]);
 
   if (isLoading) {
     return (
       <ScreenContainer className="flex-1 bg-background">
-        <LoadingState
-          title="Sto caricando le comunicazioni"
-          detail="Recupero bacheca, stato di lettura e dettagli delle circolari."
-        />
+        <LoadingState title="Sto caricando le comunicazioni" detail="Recupero circolari, contenuti e stato di lettura." />
       </ScreenContainer>
     );
   }
@@ -135,173 +97,107 @@ export default function CommunicationsScreen() {
   return (
     <ScreenContainer className="flex-1 bg-background">
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 112 }}
-        refreshControl={
-          <RefreshControl
-            onRefresh={() => {
-              setIsRefreshing(true);
-              void loadData();
-            }}
-            refreshing={isRefreshing}
-          />
-        }
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={<RefreshControl onRefresh={() => { setIsRefreshing(true); void loadData(); }} refreshing={isRefreshing} />}
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-6 px-6 py-6">
-          <ScreenHeader
-            backLabel="Altro"
-            eyebrow="Bacheca"
-            onBack={() => router.replace("/(tabs)/more")}
-            subtitle="Lista completa, filtro per non lette e dettaglio reale di ogni comunicazione."
-            title="Comunicazioni"
-          />
+        <View className="gap-5 px-5 py-6">
+          <AnimatedListItem index={0}>
+            <ScreenHeader
+              backLabel="Altro"
+              eyebrow="Bacheca"
+              onBack={() => router.replace("/(tabs)/more")}
+              subtitle="Circolari, allegati e contenuti completi con stato di lettura."
+              title="Comunicazioni"
+            />
+          </AnimatedListItem>
 
           {error ? (
-            <ElegantCard className="gap-2 p-4" tone="warning" variant="filled">
-              <Text className="text-sm font-semibold text-foreground">Aggiornamento parziale</Text>
-              <Text className="text-sm leading-6 text-muted">{error}</Text>
+            <ElegantCard className="gap-2 p-4" tone="warning" variant="filled" radius="md">
+              <Text className="text-sm font-medium" style={{ color: colors.foreground }}>Aggiornamento parziale</Text>
+              <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{error}</Text>
             </ElegantCard>
           ) : null}
 
-          <View className="flex-row gap-3">
-            <ElegantCard className="flex-1 gap-2 p-4" tone="primary" variant="filled">
-              <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Da leggere</Text>
-              <Text className="text-3xl font-semibold text-foreground">{unreadCount}</Text>
-            </ElegantCard>
-            <ElegantCard className="flex-1 gap-2 p-4" variant="filled">
-              <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Con allegati</Text>
-              <Text className="text-3xl font-semibold text-foreground">{withAttachmentsCount}</Text>
-            </ElegantCard>
-          </View>
+          <AnimatedListItem index={1}>
+            <View className="flex-row gap-3">
+              <ElegantCard className="flex-1 gap-1.5 p-4" tone="warning" variant="filled" radius="md">
+                <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Non lette</Text>
+                <Text className="text-3xl font-light" style={{ color: colors.foreground }}>{unreadCount}</Text>
+              </ElegantCard>
+              <ElegantCard className="flex-1 gap-1.5 p-4" variant="filled" radius="md">
+                <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Totale</Text>
+                <Text className="text-3xl font-light" style={{ color: colors.foreground }}>{items.length}</Text>
+              </ElegantCard>
+            </View>
+          </AnimatedListItem>
 
-          <SearchBar
-            onChangeText={setSearchQuery}
-            onClear={() => setSearchQuery("")}
-            placeholder="Cerca titolo, mittente o contenuto"
-            value={searchQuery}
-          />
+          <SearchBar onChangeText={setSearchQuery} onClear={() => setSearchQuery("")} placeholder="Cerca titolo, contenuto o mittente" value={searchQuery} />
 
           <View className="gap-3">
-            <SectionTitle eyebrow="Filtro" title="Riduci la bacheca" />
+            <SectionTitle eyebrow="Filtro" title="Stato lettura" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row gap-3">
-                {(Object.keys(FILTER_LABELS) as FilterKey[]).map((key) => (
-                  <Pressable key={key} onPress={() => setFilter(key)}>
-                    <ElegantCard
-                      className="px-4 py-3"
-                      tone={filter === key ? "primary" : "neutral"}
-                      variant={filter === key ? "filled" : "outlined"}
-                    >
-                      <Text className="text-sm font-semibold text-foreground">
-                        {FILTER_LABELS[key]}
-                      </Text>
-                    </ElegantCard>
-                  </Pressable>
-                ))}
+              <View className="flex-row gap-2">
+                <M3Chip label="Tutte" selected={filter === "all"} onPress={() => setFilter("all")} />
+                <M3Chip label="Non lette" selected={filter === "unread"} onPress={() => setFilter("unread")} />
+                <M3Chip label="Lette" selected={filter === "read"} onPress={() => setFilter("read")} />
               </View>
             </ScrollView>
           </View>
 
           <View className="gap-3">
             <SectionTitle eyebrow="Dettaglio" title="Comunicazione selezionata" />
-            {selectedCommunication ? (
-              <ElegantCard className="gap-4 p-5" tone="primary" variant="filled">
-                <View className="gap-1">
-                  <Text className="text-base font-semibold text-foreground">
-                    {selectedCommunication.title}
-                  </Text>
-                  <Text className="text-sm text-muted">
-                    {selectedCommunication.sender} - {selectedCommunication.dateLabel}
+            {selectedItem ? (
+              <ElegantCard className="gap-4 p-5" tone="primary" variant="filled" radius="lg">
+                <View className="gap-0.5">
+                  <Text className="text-base font-medium" style={{ color: colors.foreground }}>{selectedItem.title}</Text>
+                  <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
+                    {selectedItem.metadataLabel} — {selectedItem.dateLabel}
                   </Text>
                 </View>
-
                 {isDetailLoading ? (
                   <View className="flex-row items-center gap-3">
                     <ActivityIndicator color={colors.primary} size="small" />
-                    <Text className="text-sm text-muted">Sto recuperando il contenuto completo.</Text>
+                    <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Sto caricando il contenuto completo.</Text>
                   </View>
                 ) : null}
-
-                {detailError ? (
-                  <Text className="text-sm leading-6 text-muted">{detailError}</Text>
-                ) : null}
-
-                {detail ? (
-                  <View className="gap-4">
-                    <Text className="text-sm leading-7 text-muted">{detail.content}</Text>
-
-                    {detail.replyText ? (
-                      <ElegantCard className="gap-2 p-4" variant="outlined">
-                        <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
-                          Risposta
-                        </Text>
-                        <Text className="text-sm leading-6 text-muted">{detail.replyText}</Text>
-                      </ElegantCard>
-                    ) : null}
-
-                    {detail.attachments.length > 0 ? (
-                      <View className="gap-2">
-                        <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
-                          Allegati registrati
-                        </Text>
-                        {detail.attachments.map((attachment) => (
-                          <ElegantCard key={attachment} className="p-4" variant="outlined">
-                            <Text className="text-sm text-foreground">{attachment}</Text>
-                          </ElegantCard>
-                        ))}
-                        <Text className="text-xs leading-5 text-muted">
-                          Gli allegati risultano presenti nel portale ma non espongono un link diretto via API.
-                        </Text>
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
+                {detailError ? <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{detailError}</Text> : null}
+                {detail ? <Text className="text-sm leading-6" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{detail.content}</Text> : null}
               </ElegantCard>
             ) : (
-              <EmptyState
-                detail="Seleziona una riga dalla lista per leggere il testo completo."
-                title="Nessuna comunicazione selezionata"
-              />
+              <EmptyState detail="Seleziona una comunicazione per leggere il contenuto completo." title="Nessuna comunicazione selezionata" />
             )}
           </View>
 
           <View className="gap-3">
             <SectionTitle eyebrow="Elenco" title="Tutte le comunicazioni" />
-            {filteredCommunications.length > 0 ? (
+            {filteredItems.length > 0 ? (
               <View className="gap-3">
-                {filteredCommunications.map((item) => {
-                  const isSelected = selectedCommunication?.id === item.id;
-
+                {filteredItems.map((item, i) => {
+                  const isSelected = selectedItem?.id === item.id;
                   return (
-                    <Pressable key={item.id} onPress={() => void handleSelect(item)}>
-                      <ElegantCard
-                        className="gap-3 p-4"
-                        tone={isSelected ? "primary" : item.tone}
-                        variant={isSelected ? "elevated" : "filled"}
-                      >
-                        <View className="flex-row items-start justify-between gap-3">
-                          <View className="flex-1 gap-1">
-                            <Text className="text-sm font-semibold text-foreground">{item.title}</Text>
-                            <Text className="text-xs text-muted">{item.sender}</Text>
+                    <AnimatedListItem key={item.id} index={4 + i}>
+                      <Pressable onPress={() => void handleSelect(item)}>
+                        <ElegantCard className="gap-3 p-4" tone={isSelected ? "primary" : item.tone} variant={isSelected ? "elevated" : "filled"} radius="md">
+                          <View className="flex-row items-start justify-between gap-3">
+                            <View className="flex-1 gap-0.5">
+                              <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{item.title}</Text>
+                              <Text className="text-xs" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.metadataLabel}</Text>
+                            </View>
+                            <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
+                              {item.statusLabel === "Letta" ? "Letta" : "Nuova"}
+                            </Text>
                           </View>
-                          <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
-                            {item.statusLabel}
-                          </Text>
-                        </View>
-                        <Text className="text-sm leading-6 text-muted">{item.preview}</Text>
-                        <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
-                          {item.dateLabel} - {item.metadataLabel}
-                        </Text>
-                      </ElegantCard>
-                    </Pressable>
+                          <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.preview}</Text>
+                          <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.dateLabel}</Text>
+                        </ElegantCard>
+                      </Pressable>
+                    </AnimatedListItem>
                   );
                 })}
               </View>
             ) : (
-              <EmptyState
-                detail="Modifica filtro o ricerca per rivedere altre comunicazioni."
-                title="Nessuna comunicazione trovata"
-              />
+              <EmptyState detail="Modifica filtro o ricerca per trovare altre comunicazioni." title="Nessuna comunicazione trovata" />
             )}
           </View>
         </View>

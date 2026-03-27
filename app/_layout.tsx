@@ -33,7 +33,7 @@ function AuthBootstrapScreen() {
     <ScreenContainer className="flex-1 items-center justify-center gap-4 bg-background">
       <ActivityIndicator size="large" />
       <View className="items-center gap-1 px-8">
-        <Text className="text-lg font-semibold text-foreground">Sto preparando la sessione</Text>
+        <Text className="text-lg font-medium text-foreground">Sto preparando la sessione</Text>
         <Text className="text-center text-sm text-muted">
           Controllo accesso, tema e dati di base prima di aprire l&apos;app.
         </Text>
@@ -50,7 +50,13 @@ function RootLayoutNav() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        animation: "fade_from_bottom",
+        animationDuration: 300,
+      }}
+    >
       {isSignedIn ? <Stack.Screen name="(tabs)" /> : <Stack.Screen name="login" />}
       <Stack.Screen name="absences" />
       <Stack.Screen name="profile" />

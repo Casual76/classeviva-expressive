@@ -1,15 +1,9 @@
 import { useRouter } from "expo-router";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { AnimatedListItem } from "@/components/ui/animated-list-item";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ElegantButton } from "@/components/ui/elegant-button";
 import { ElegantCard } from "@/components/ui/elegant-card";
@@ -18,18 +12,13 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SectionTitle } from "@/components/ui/section-title";
 import { useReturnToMoreOnHardwareBack } from "@/hooks/use-return-to-more-on-hardware-back";
-import type {
-  DidacticAsset,
-  DidacticContent,
-  DidacticFolder,
-} from "@/lib/classeviva-client";
+import { useColors } from "@/hooks/use-colors";
+import type { DidacticAsset, DidacticContent, DidacticFolder } from "@/lib/classeviva-client";
 import { openExternalContent } from "@/lib/open-content";
-import {
-  loadMaterialAssetView,
-  loadMaterialsView,
-} from "@/lib/student-data";
+import { loadMaterialAssetView, loadMaterialsView } from "@/lib/student-data";
 
 export default function MaterialsScreen() {
+  const colors = useColors();
   const router = useRouter();
   useReturnToMoreOnHardwareBack();
   const [folders, setFolders] = useState<DidacticFolder[]>([]);
@@ -51,199 +40,96 @@ export default function MaterialsScreen() {
     } catch (loadError) {
       console.error("Materials load failed", loadError);
       setError(loadError instanceof Error ? loadError.message : "Non riesco a caricare il materiale.");
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
+    } finally { setIsLoading(false); setIsRefreshing(false); }
   }, []);
 
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
+  useEffect(() => { void loadData(); }, [loadData]);
 
   const handleSelect = useCallback(async (content: DidacticContent) => {
-    setSelectedContent(content);
-    setAsset(null);
-    setAssetError(null);
-    setIsAssetLoading(true);
-
-    try {
-      const nextAsset = await loadMaterialAssetView(content);
-      setAsset(nextAsset);
-    } catch (loadError) {
-      console.error("Material asset failed", loadError);
-      setAssetError(loadError instanceof Error ? loadError.message : "Non riesco ad aprire il materiale.");
-    } finally {
-      setIsAssetLoading(false);
-    }
+    setSelectedContent(content); setAsset(null); setAssetError(null); setIsAssetLoading(true);
+    try { const nextAsset = await loadMaterialAssetView(content); setAsset(nextAsset); }
+    catch (loadError) { console.error("Material asset failed", loadError); setAssetError(loadError instanceof Error ? loadError.message : "Non riesco ad aprire il materiale."); }
+    finally { setIsAssetLoading(false); }
   }, []);
 
   const filteredFolders = useMemo(() => {
-    return folders
-      .map((folder) => {
-        const query = deferredQuery.trim().toLowerCase();
-        const matchesFolder = !query
-          ? true
-          : `${folder.title} ${folder.teacherName}`.toLowerCase().includes(query);
-
-        const contents = folder.contents.filter((content) => {
-          if (matchesFolder || !query) {
-            return true;
-          }
-
-          const haystack = `${content.title} ${content.teacherName} ${content.folderName} ${content.objectType}`;
-          return haystack.toLowerCase().includes(query);
-        });
-
-        return {
-          ...folder,
-          contents: matchesFolder ? folder.contents : contents,
-        };
-      })
-      .filter((folder) => folder.contents.length > 0);
+    return folders.map((folder) => {
+      const query = deferredQuery.trim().toLowerCase();
+      const matchesFolder = !query ? true : `${folder.title} ${folder.teacherName}`.toLowerCase().includes(query);
+      const contents = folder.contents.filter((content) => {
+        if (matchesFolder || !query) return true;
+        return `${content.title} ${content.teacherName} ${content.folderName} ${content.objectType}`.toLowerCase().includes(query);
+      });
+      return { ...folder, contents: matchesFolder ? folder.contents : contents };
+    }).filter((folder) => folder.contents.length > 0);
   }, [deferredQuery, folders]);
 
-  const materialCount = useMemo(
-    () => folders.reduce((sum, folder) => sum + folder.contents.length, 0),
-    [folders],
-  );
-  const fileCount = useMemo(
-    () =>
-      folders.reduce(
-        (sum, folder) => sum + folder.contents.filter((content) => content.objectType === "file").length,
-        0,
-      ),
-    [folders],
-  );
+  const materialCount = useMemo(() => folders.reduce((sum, folder) => sum + folder.contents.length, 0), [folders]);
+  const fileCount = useMemo(() => folders.reduce((sum, folder) => sum + folder.contents.filter((c) => c.objectType === "file").length, 0), [folders]);
 
   if (isLoading) {
-    return (
-      <ScreenContainer className="flex-1 bg-background">
-        <LoadingState
-          title="Sto caricando i materiali"
-          detail="Recupero cartelle, contenuti condivisi e disponibilita dei documenti."
-        />
-      </ScreenContainer>
-    );
+    return (<ScreenContainer className="flex-1 bg-background"><LoadingState title="Sto caricando i materiali" detail="Recupero cartelle, contenuti condivisi e disponibilità dei documenti." /></ScreenContainer>);
   }
 
   return (
     <ScreenContainer className="flex-1 bg-background">
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: 112 }}
-        refreshControl={
-          <RefreshControl
-            onRefresh={() => {
-              setIsRefreshing(true);
-              void loadData();
-            }}
-            refreshing={isRefreshing}
-          />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        <View className="gap-6 px-6 py-6">
-          <ScreenHeader
-            backLabel="Altro"
-            eyebrow="Didattica"
-            onBack={() => router.replace("/(tabs)/more")}
-            subtitle="Cartelle reali dal portale, contenuti condivisi e apertura controllata dei documenti."
-            title="Materiali"
-          />
+      <ScrollView contentContainerStyle={{ paddingBottom: 100 }} refreshControl={<RefreshControl onRefresh={() => { setIsRefreshing(true); void loadData(); }} refreshing={isRefreshing} />} showsVerticalScrollIndicator={false}>
+        <View className="gap-5 px-5 py-6">
+          <AnimatedListItem index={0}>
+            <ScreenHeader backLabel="Altro" eyebrow="Didattica" onBack={() => router.replace("/(tabs)/more")} subtitle="Cartelle reali dal portale, contenuti condivisi e apertura controllata dei documenti." title="Materiali" />
+          </AnimatedListItem>
 
-          {error ? (
-            <ElegantCard className="gap-2 p-4" tone="warning" variant="filled">
-              <Text className="text-sm font-semibold text-foreground">Aggiornamento parziale</Text>
-              <Text className="text-sm leading-6 text-muted">{error}</Text>
-            </ElegantCard>
-          ) : null}
+          {error ? (<ElegantCard className="gap-2 p-4" tone="warning" variant="filled" radius="md"><Text className="text-sm font-medium" style={{ color: colors.foreground }}>Aggiornamento parziale</Text><Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{error}</Text></ElegantCard>) : null}
 
-          <View className="flex-row gap-3">
-            <ElegantCard className="flex-1 gap-2 p-4" tone="primary" variant="filled">
-              <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Cartelle</Text>
-              <Text className="text-3xl font-semibold text-foreground">{folders.length}</Text>
-            </ElegantCard>
-            <ElegantCard className="flex-1 gap-2 p-4" variant="filled">
-              <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Risorse</Text>
-              <Text className="text-3xl font-semibold text-foreground">{materialCount}</Text>
-            </ElegantCard>
-            <ElegantCard className="flex-1 gap-2 p-4" tone="warning" variant="filled">
-              <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">File</Text>
-              <Text className="text-3xl font-semibold text-foreground">{fileCount}</Text>
-            </ElegantCard>
-          </View>
+          <AnimatedListItem index={1}>
+            <View className="flex-row gap-3">
+              <ElegantCard className="flex-1 gap-1.5 p-4" tone="primary" variant="filled" radius="md">
+                <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Cartelle</Text>
+                <Text className="text-3xl font-light" style={{ color: colors.foreground }}>{folders.length}</Text>
+              </ElegantCard>
+              <ElegantCard className="flex-1 gap-1.5 p-4" variant="filled" radius="md">
+                <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Risorse</Text>
+                <Text className="text-3xl font-light" style={{ color: colors.foreground }}>{materialCount}</Text>
+              </ElegantCard>
+              <ElegantCard className="flex-1 gap-1.5 p-4" tone="warning" variant="filled" radius="md">
+                <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>File</Text>
+                <Text className="text-3xl font-light" style={{ color: colors.foreground }}>{fileCount}</Text>
+              </ElegantCard>
+            </View>
+          </AnimatedListItem>
 
-          <SearchBar
-            onChangeText={setSearchQuery}
-            onClear={() => setSearchQuery("")}
-            placeholder="Cerca titolo, cartella o docente"
-            value={searchQuery}
-          />
+          <SearchBar onChangeText={setSearchQuery} onClear={() => setSearchQuery("")} placeholder="Cerca titolo, cartella o docente" value={searchQuery} />
 
           <View className="gap-3">
             <SectionTitle eyebrow="Anteprima" title="Contenuto selezionato" />
             {selectedContent ? (
-              <ElegantCard className="gap-4 p-5" tone="primary" variant="filled">
-                <View className="gap-1">
-                  <Text className="text-base font-semibold text-foreground">{selectedContent.title}</Text>
-                  <Text className="text-sm text-muted">
-                    {selectedContent.folderName} - {selectedContent.teacherName}
-                  </Text>
+              <ElegantCard className="gap-4 p-5" tone="primary" variant="filled" radius="lg">
+                <View className="gap-0.5">
+                  <Text className="text-base font-medium" style={{ color: colors.foreground }}>{selectedContent.title}</Text>
+                  <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{selectedContent.folderName} — {selectedContent.teacherName}</Text>
                 </View>
-
-                {isAssetLoading ? (
-                  <View className="flex-row items-center gap-3">
-                    <ActivityIndicator size="small" />
-                    <Text className="text-sm text-muted">Sto preparando il contenuto da aprire.</Text>
-                  </View>
-                ) : null}
-
-                {assetError ? <Text className="text-sm leading-6 text-muted">{assetError}</Text> : null}
-
+                {isAssetLoading ? (<View className="flex-row items-center gap-3"><ActivityIndicator size="small" /><Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Sto preparando il contenuto da aprire.</Text></View>) : null}
+                {assetError ? <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{assetError}</Text> : null}
                 {asset ? (
                   <View className="gap-4">
-                    <ElegantCard className="gap-2 p-4" variant="outlined">
-                      <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
-                        Stato
-                      </Text>
-                      <Text className="text-sm font-semibold text-foreground">
-                        {asset.capabilityState.label}
-                      </Text>
-                      {asset.capabilityState.detail ? (
-                        <Text className="text-sm leading-6 text-muted">{asset.capabilityState.detail}</Text>
-                      ) : null}
+                    <ElegantCard className="gap-2 p-4" variant="outlined" radius="md">
+                      <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Stato</Text>
+                      <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{asset.capabilityState.label}</Text>
+                      {asset.capabilityState.detail ? <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{asset.capabilityState.detail}</Text> : null}
                     </ElegantCard>
-
                     {asset.textPreview ? (
-                      <ElegantCard className="gap-2 p-4" variant="outlined">
-                        <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
-                          Anteprima testo
-                        </Text>
-                        <Text className="text-sm leading-6 text-muted">{asset.textPreview}</Text>
+                      <ElegantCard className="gap-2 p-4" variant="outlined" radius="md">
+                        <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Anteprima testo</Text>
+                        <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{asset.textPreview}</Text>
                       </ElegantCard>
                     ) : null}
-
-                    {asset.dataUrl ? (
-                      <ElegantButton
-                        fullWidth
-                        onPress={() => void openExternalContent(asset.dataUrl ?? "")}
-                        variant="primary"
-                      >
-                        Apri documento
-                      </ElegantButton>
-                    ) : null}
-
-                    <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
-                      {asset.mimeType ?? "Mime type non disponibile"}
-                    </Text>
+                    {asset.dataUrl ? (<ElegantButton fullWidth onPress={() => void openExternalContent(asset.dataUrl ?? "")} variant="primary">Apri documento</ElegantButton>) : null}
+                    <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{asset.mimeType ?? "Mime type non disponibile"}</Text>
                   </View>
                 ) : null}
               </ElegantCard>
             ) : (
-              <EmptyState
-                detail="Seleziona un materiale dall'elenco per preparare l'apertura o la preview."
-                title="Nessun contenuto selezionato"
-              />
+              <EmptyState detail="Seleziona un materiale dall'elenco per preparare l'apertura o la preview." title="Nessun contenuto selezionato" />
             )}
           </View>
 
@@ -251,51 +137,38 @@ export default function MaterialsScreen() {
             <SectionTitle eyebrow="Cartelle" title="Tutto il materiale didattico" />
             {filteredFolders.length > 0 ? (
               <View className="gap-4">
-                {filteredFolders.map((folder) => (
-                  <View key={folder.id} className="gap-3">
-                    <ElegantCard className="gap-2 p-4" variant="outlined">
-                      <Text className="text-sm font-semibold text-foreground">{folder.title}</Text>
-                      <Text className="text-sm text-muted">{folder.teacherName}</Text>
-                    </ElegantCard>
-
+                {filteredFolders.map((folder, fi) => (
+                  <AnimatedListItem key={folder.id} index={3 + fi}>
                     <View className="gap-3">
-                      {folder.contents.map((content) => {
-                        const isSelected = selectedContent?.id === content.id;
-
-                        return (
-                          <Pressable key={content.id} onPress={() => void handleSelect(content)}>
-                            <ElegantCard
-                              className="gap-3 p-4"
-                              tone={isSelected ? "primary" : "neutral"}
-                              variant={isSelected ? "elevated" : "filled"}
-                            >
-                              <View className="flex-row items-start justify-between gap-3">
-                                <View className="flex-1 gap-1">
-                                  <Text className="text-sm font-semibold text-foreground">
-                                    {content.title}
-                                  </Text>
-                                  <Text className="text-xs text-muted">{content.teacherName}</Text>
+                      <ElegantCard className="gap-1.5 p-4" variant="outlined" radius="md">
+                        <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{folder.title}</Text>
+                        <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{folder.teacherName}</Text>
+                      </ElegantCard>
+                      <View className="gap-3">
+                        {folder.contents.map((content) => {
+                          const isSelected = selectedContent?.id === content.id;
+                          return (
+                            <Pressable key={content.id} onPress={() => void handleSelect(content)}>
+                              <ElegantCard className="gap-3 p-4" tone={isSelected ? "primary" : "neutral"} variant={isSelected ? "elevated" : "filled"} radius="md">
+                                <View className="flex-row items-start justify-between gap-3">
+                                  <View className="flex-1 gap-0.5">
+                                    <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{content.title}</Text>
+                                    <Text className="text-xs" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{content.teacherName}</Text>
+                                  </View>
+                                  <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{content.objectType}</Text>
                                 </View>
-                                <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
-                                  {content.objectType}
-                                </Text>
-                              </View>
-                              <Text className="text-sm leading-6 text-muted">
-                                {content.capabilityState.detail ?? "Contenuto disponibile"}
-                              </Text>
-                            </ElegantCard>
-                          </Pressable>
-                        );
-                      })}
+                                <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{content.capabilityState.detail ?? "Contenuto disponibile"}</Text>
+                              </ElegantCard>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
                     </View>
-                  </View>
+                  </AnimatedListItem>
                 ))}
               </View>
             ) : (
-              <EmptyState
-                detail="Non ci sono materiali che corrispondono ai filtri attuali."
-                title="Nessun materiale trovato"
-              />
+              <EmptyState detail="Non ci sono materiali che corrispondono ai filtri attuali." title="Nessun materiale trovato" />
             )}
           </View>
         </View>

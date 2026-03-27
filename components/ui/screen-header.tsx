@@ -1,7 +1,6 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { Pressable, Text, View } from "react-native";
 
-import { Fonts } from "@/constants/theme";
 import { useColors } from "@/hooks/use-colors";
 import { cn } from "@/lib/utils";
 
@@ -27,35 +26,49 @@ export function ScreenHeader({
   const colors = useColors();
 
   return (
-    <View className={cn("gap-5", className)}>
+    <View className={cn("gap-4", className)}>
       <View className="flex-row items-start justify-between gap-4">
-        <View className="flex-1 gap-3">
+        <View className="flex-1 gap-2">
           {onBack ? (
             <Pressable
               accessibilityLabel={backLabel}
-              className="flex-row items-center gap-2 self-start rounded-full border border-border bg-surface/60 px-3 py-2.5"
+              className="flex-row items-center gap-2 self-start rounded-full px-3 py-2.5"
+              style={{ backgroundColor: colors.surfaceContainerHigh ?? colors.surface }}
               onPress={onBack}
             >
-              <MaterialIcons color={colors.foreground} name="west" size={16} />
-              <Text className="text-xs font-semibold text-foreground">{backLabel}</Text>
+              <MaterialIcons color={colors.onSurfaceVariant ?? colors.foreground} name="arrow-back" size={18} />
+              <Text
+                className="text-sm font-medium"
+                style={{ color: colors.onSurfaceVariant ?? colors.foreground }}
+              >
+                {backLabel}
+              </Text>
             </Pressable>
           ) : null}
 
           {eyebrow ? (
-            <Text className="text-xs font-semibold uppercase tracking-[2px] text-muted">
+            <Text
+              className="text-xs font-medium uppercase tracking-[1.5px]"
+              style={{ color: colors.onSurfaceVariant ?? colors.muted }}
+            >
               {eyebrow}
             </Text>
           ) : null}
 
           <Text
-            className="text-[38px] leading-[42px] text-foreground"
-            style={{ fontFamily: Fonts.serif, fontWeight: "700" }}
+            className="text-[28px] leading-[34px] font-normal tracking-[0px]"
+            style={{ color: colors.foreground }}
           >
             {title}
           </Text>
 
           {subtitle ? (
-            <Text className="max-w-[340px] text-sm leading-6 text-muted">{subtitle}</Text>
+            <Text
+              className="max-w-[340px] text-sm leading-5 font-normal"
+              style={{ color: colors.onSurfaceVariant ?? colors.muted }}
+            >
+              {subtitle}
+            </Text>
           ) : null}
         </View>
 

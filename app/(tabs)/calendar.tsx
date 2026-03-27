@@ -3,13 +3,16 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "rea
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { AnimatedListItem } from "@/components/ui/animated-list-item";
 import { CalendarGrid } from "@/components/ui/calendar-grid";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ElegantCard } from "@/components/ui/elegant-card";
 import { LoadingState } from "@/components/ui/loading-state";
+import { M3Chip } from "@/components/ui/m3-chip";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SectionTitle } from "@/components/ui/section-title";
+import { useColors } from "@/hooks/use-colors";
 import {
   buildCalendarMonth,
   groupAgendaByDate,
@@ -37,6 +40,7 @@ function monthRange(date: Date) {
 }
 
 export default function CalendarScreen() {
+  const colors = useColors();
   const [items, setItems] = useState<AgendaItemViewModel[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredQuery = useDeferredValue(searchQuery);
@@ -71,11 +75,9 @@ export default function CalendarScreen() {
       if (category !== "all" && item.category !== category) {
         return false;
       }
-
       if (!deferredQuery.trim()) {
         return true;
       }
-
       const query = deferredQuery.toLowerCase();
       return (
         item.title.toLowerCase().includes(query) ||
@@ -111,89 +113,94 @@ export default function CalendarScreen() {
   return (
     <ScreenContainer className="flex-1 bg-background">
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 112 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
           <RefreshControl
-            onRefresh={() => {
-              setIsRefreshing(true);
-              void loadData(currentMonth);
-            }}
+            onRefresh={() => { setIsRefreshing(true); void loadData(currentMonth); }}
             refreshing={isRefreshing}
           />
         }
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-6 px-6 py-6">
-          <ScreenHeader
-            eyebrow="Agenda"
-            subtitle="Calendario mensile, vista giorno e lettura unica di lezioni, compiti e verifiche."
-            title="Agenda"
-          />
+        <View className="gap-5 px-5 py-6">
+          <AnimatedListItem index={0}>
+            <ScreenHeader
+              eyebrow="Agenda"
+              subtitle="Calendario mensile, vista giorno e lettura unica di lezioni, compiti e verifiche."
+              title="Agenda"
+            />
+          </AnimatedListItem>
 
           {error ? (
-            <ElegantCard className="gap-2 p-4" tone="warning" variant="filled">
-              <Text className="text-sm font-semibold text-foreground">Aggiornamento parziale</Text>
-              <Text className="text-sm leading-6 text-muted">{error}</Text>
-            </ElegantCard>
+            <AnimatedListItem index={1}>
+              <ElegantCard className="gap-2 p-4" tone="warning" variant="filled" radius="md">
+                <Text className="text-sm font-medium" style={{ color: colors.foreground }}>Aggiornamento parziale</Text>
+                <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{error}</Text>
+              </ElegantCard>
+            </AnimatedListItem>
           ) : null}
 
-          <SearchBar
-            onChangeText={setSearchQuery}
-            onClear={() => setSearchQuery("")}
-            placeholder="Cerca una lezione o una scadenza"
-            value={searchQuery}
-          />
+          <AnimatedListItem index={2}>
+            <SearchBar
+              onChangeText={setSearchQuery}
+              onClear={() => setSearchQuery("")}
+              placeholder="Cerca una lezione o una scadenza"
+              value={searchQuery}
+            />
+          </AnimatedListItem>
 
-          <View className="gap-3">
-            <View className="flex-row items-center justify-between">
-              <SectionTitle eyebrow="Mese" title={monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)} />
-              <View className="flex-row gap-2">
-                <Pressable
-                  className="h-11 w-11 items-center justify-center rounded-full border border-border bg-surface"
-                  onPress={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
-                >
-                  <MaterialIcons name="west" size={18} />
-                </Pressable>
-                <Pressable
-                  className="h-11 w-11 items-center justify-center rounded-full border border-border bg-surface"
-                  onPress={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
-                >
-                  <MaterialIcons name="east" size={18} />
-                </Pressable>
-              </View>
-            </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View className="flex-row gap-3">
-                {(Object.keys(CATEGORY_LABELS) as CategoryFilter[]).map((key) => (
-                  <Pressable key={key} onPress={() => setCategory(key)}>
-                    <ElegantCard className="px-4 py-3" tone={category === key ? "primary" : "neutral"} variant={category === key ? "filled" : "outlined"}>
-                      <Text className="text-sm font-semibold text-foreground">{CATEGORY_LABELS[key]}</Text>
-                    </ElegantCard>
+          <AnimatedListItem index={3}>
+            <View className="gap-3">
+              <View className="flex-row items-center justify-between">
+                <SectionTitle eyebrow="Mese" title={monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)} />
+                <View className="flex-row gap-2">
+                  <Pressable
+                    className="h-10 w-10 items-center justify-center rounded-full"
+                    style={{ backgroundColor: colors.surfaceContainerHigh ?? colors.surface }}
+                    onPress={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+                  >
+                    <MaterialIcons color={colors.onSurfaceVariant ?? colors.foreground} name="chevron-left" size={20} />
                   </Pressable>
-                ))}
+                  <Pressable
+                    className="h-10 w-10 items-center justify-center rounded-full"
+                    style={{ backgroundColor: colors.surfaceContainerHigh ?? colors.surface }}
+                    onPress={() => setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+                  >
+                    <MaterialIcons color={colors.onSurfaceVariant ?? colors.foreground} name="chevron-right" size={20} />
+                  </Pressable>
+                </View>
               </View>
-            </ScrollView>
 
-            <CalendarGrid days={calendarDays} onSelectDate={setSelectedDate} selectedDate={selectedDate} />
-          </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View className="flex-row gap-2">
+                  {(Object.keys(CATEGORY_LABELS) as CategoryFilter[]).map((key) => (
+                    <M3Chip key={key} label={CATEGORY_LABELS[key]} selected={category === key} onPress={() => setCategory(key)} />
+                  ))}
+                </View>
+              </ScrollView>
+
+              <CalendarGrid days={calendarDays} onSelectDate={setSelectedDate} selectedDate={selectedDate} />
+            </View>
+          </AnimatedListItem>
 
           <View className="gap-3">
             <SectionTitle eyebrow="Giorno selezionato" title={new Date(selectedDate).toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })} />
             {selectedDayItems.length > 0 ? (
               <View className="gap-3">
-                {selectedDayItems.map((item) => (
-                  <ElegantCard key={item.id} className="gap-3 p-4" tone={item.tone} variant="filled">
-                    <View className="flex-row items-start justify-between gap-3">
-                      <View className="flex-1 gap-1">
-                        <Text className="text-sm font-semibold text-foreground">{item.title}</Text>
-                        <Text className="text-sm text-muted">{item.subtitle}</Text>
+                {selectedDayItems.map((item, i) => (
+                  <AnimatedListItem key={item.id} index={4 + i}>
+                    <ElegantCard className="gap-3 p-4" tone={item.tone} variant="filled" radius="md">
+                      <View className="flex-row items-start justify-between gap-3">
+                        <View className="flex-1 gap-0.5">
+                          <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{item.title}</Text>
+                          <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.subtitle}</Text>
+                        </View>
+                        <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{CATEGORY_LABELS[item.category]}</Text>
                       </View>
-                      <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">{CATEGORY_LABELS[item.category]}</Text>
-                    </View>
-                    <Text className="text-sm leading-6 text-muted">{item.detail}</Text>
-                    <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">{item.timeLabel}</Text>
-                  </ElegantCard>
+                      <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.detail}</Text>
+                      <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.timeLabel}</Text>
+                    </ElegantCard>
+                  </AnimatedListItem>
                 ))}
               </View>
             ) : (
@@ -207,18 +214,18 @@ export default function CalendarScreen() {
               <View className="gap-4">
                 {sections.map((section) => (
                   <View key={section.id} className="gap-3">
-                    <Text className="text-sm font-semibold text-foreground">{section.label}</Text>
+                    <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{section.label}</Text>
                     <View className="gap-3">
                       {section.items.map((item) => (
-                        <ElegantCard key={item.id} className="gap-3 p-4" tone={item.tone} variant="filled">
+                        <ElegantCard key={item.id} className="gap-3 p-4" tone={item.tone} variant="filled" radius="md">
                           <View className="flex-row items-start justify-between gap-3">
-                            <View className="flex-1 gap-1">
-                              <Text className="text-sm font-semibold text-foreground">{item.title}</Text>
-                              <Text className="text-sm text-muted">{item.subtitle}</Text>
+                            <View className="flex-1 gap-0.5">
+                              <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{item.title}</Text>
+                              <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.subtitle}</Text>
                             </View>
-                            <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">{item.timeLabel}</Text>
+                            <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.timeLabel}</Text>
                           </View>
-                          <Text className="text-sm leading-6 text-muted">{item.detail}</Text>
+                          <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.detail}</Text>
                         </ElegantCard>
                       ))}
                     </View>

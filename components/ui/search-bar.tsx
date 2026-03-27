@@ -24,21 +24,20 @@ export function SearchBar({
 
   return (
     <View
-      className={cn("flex-row items-center gap-3 rounded-[28px] border px-4 py-3.5", className)}
+      className={cn("flex-row items-center gap-3 rounded-full px-4 py-3.5", className)}
       style={{
-        backgroundColor: colors.surface,
-        borderColor: colors.border,
+        backgroundColor: colors.surfaceContainerHigh ?? colors.surface,
       }}
     >
-      <MaterialIcons color={colors.muted} name="search" size={18} />
+      <MaterialIcons color={colors.onSurfaceVariant ?? colors.muted} name="search" size={20} />
 
       <TextInput
-        className="flex-1 text-base text-foreground"
+        className="flex-1 text-base"
         autoCapitalize="none"
         autoCorrect={false}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={colors.muted}
+        placeholderTextColor={colors.onSurfaceVariant ?? colors.muted}
         style={{ color: colors.foreground }}
         value={value}
       />
@@ -47,9 +46,9 @@ export function SearchBar({
         <Pressable
           className="h-8 w-8 items-center justify-center rounded-full"
           onPress={onClear}
-          style={{ backgroundColor: colors.surfaceAlt ?? colors.background }}
+          style={{ backgroundColor: colors.surfaceContainerHighest ?? colors.surfaceAlt ?? colors.background }}
         >
-          <MaterialIcons color={colors.muted} name="close" size={16} />
+          <MaterialIcons color={colors.onSurfaceVariant ?? colors.muted} name="close" size={18} />
         </Pressable>
       ) : null}
     </View>
