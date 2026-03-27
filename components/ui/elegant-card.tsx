@@ -1,7 +1,7 @@
 import { View, ViewProps, type ViewStyle } from "react-native";
 
 import { useColors } from "@/hooks/use-colors";
-import { cn } from "@/lib/utils";
+import { cn, withAlpha } from "@/lib/utils";
 
 interface ElegantCardProps extends ViewProps {
   variant?: "elevated" | "filled" | "outlined" | "gradient";
@@ -29,23 +29,23 @@ export function ElegantCard({
     },
     primary: {
       backgroundColor: colors.primary,
-      accentBackground: surfaceAlt,
-      borderColor: colors.primary,
+      accentBackground: withAlpha(colors.primary, 0.1),
+      borderColor: withAlpha(colors.primary, 0.26),
     },
     success: {
       backgroundColor: colors.success,
-      accentBackground: surfaceAlt,
-      borderColor: colors.success,
+      accentBackground: withAlpha(colors.success, 0.12),
+      borderColor: withAlpha(colors.success, 0.28),
     },
     warning: {
       backgroundColor: colors.warning,
-      accentBackground: surfaceAlt,
-      borderColor: colors.warning,
+      accentBackground: withAlpha(colors.warning, 0.12),
+      borderColor: withAlpha(colors.warning, 0.28),
     },
     error: {
       backgroundColor: colors.error,
-      accentBackground: surfaceAlt,
-      borderColor: colors.error,
+      accentBackground: withAlpha(colors.error, 0.12),
+      borderColor: withAlpha(colors.error, 0.28),
     },
   } as const;
 
@@ -62,21 +62,21 @@ export function ElegantCard({
   const variantStyle: Record<NonNullable<ElegantCardProps["variant"]>, ViewStyle> = {
     elevated: {
       backgroundColor: colors.surface,
-      borderColor: colors.border,
+      borderColor: withAlpha(colors.border, 0.78),
       borderWidth: 1,
       shadowColor: colors.secondary ?? colors.foreground,
-      shadowOpacity: 0.1,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 10 },
-      elevation: 5,
+      shadowOpacity: 0.12,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 14 },
+      elevation: 6,
     },
     filled: {
       backgroundColor: selectedTone.accentBackground,
-      borderColor: colors.border,
+      borderColor: tone === "neutral" ? colors.border : selectedTone.borderColor,
       borderWidth: 1,
     },
     outlined: {
-      backgroundColor: "transparent",
+      backgroundColor: withAlpha(colors.surface, 0.45),
       borderColor: selectedTone.borderColor,
       borderWidth: 1.5,
     },
@@ -85,15 +85,15 @@ export function ElegantCard({
       borderColor: gradientTone.borderColor,
       borderWidth: 1,
       shadowColor: gradientTone.borderColor,
-      shadowOpacity: 0.18,
-      shadowRadius: 20,
-      shadowOffset: { width: 0, height: 12 },
-      elevation: 6,
+      shadowOpacity: 0.2,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 16 },
+      elevation: 7,
     },
   };
 
   return (
-    <View className={cn("overflow-hidden rounded-[28px]", className)} style={[variantStyle[variant], style]} {...props}>
+    <View className={cn("overflow-hidden rounded-[32px]", className)} style={[variantStyle[variant], style]} {...props}>
       {children}
     </View>
   );

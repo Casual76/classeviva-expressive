@@ -1,5 +1,4 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from "react";
-import { Platform } from "react-native";
 
 import {
   authReducer,
@@ -9,12 +8,10 @@ import {
   type SessionMode,
 } from "@/lib/auth-state";
 import { ClassevivaApiError, type StudentProfile, classeviva } from "@/lib/classeviva-client";
-import { mockStudentProfile } from "@/lib/mock-data";
 import { notificationsService } from "@/lib/notifications-service";
 import {
   clearStoredSession,
   readStoredSession,
-  writeDemoSession,
   writeRealSession,
 } from "@/lib/session-storage";
 
@@ -25,9 +22,7 @@ interface AuthContextType {
   user: StudentProfile | null;
   token: string | null;
   sessionMode: SessionMode;
-  isDemoMode: boolean;
   login: (username: string, password: string) => Promise<void>;
-  loginDemo: () => Promise<void>;
   logout: () => Promise<void>;
   restoreToken: () => Promise<void>;
   clearError: () => void;
@@ -103,15 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const stored = await withTimeout(readStoredSession(), STORAGE_TIMEOUT_MS, "restore storage");
 
-      if (stored.sessionMode === "demo") {
-        dispatch({
-          type: "RESTORE_SUCCESS",
-          payload: { token: null, user: mockStudentProfile, sessionMode: "demo" },
-        });
-        return;
-      }
-
-      if (stored.sessionMode === "real" && stored.token && stored.studentId && Platform.OS !== "web") {
+      if (stored.sessionMode === "real" && stored.token && stored.studentId) {
         classeviva.setToken(stored.token, stored.studentId);
         const user = await withTimeout(classeviva.getProfile(), PROFILE_TIMEOUT_MS, "restore profile");
 
@@ -134,23 +121,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [restoreToken]);
 
   const login = useCallback(async (username: string, password: string) => {
-    if (Platform.OS === "web") {
-      const message = "Il login reale e disponibile solo nell'app mobile. Sul web usa la demo.";
-      dispatch({ type: "SET_ERROR", payload: message });
-      throw new Error(message);
-    }
-
     dispatch({ type: "SIGN_IN_START" });
 
     try {
       const authToken = await classeviva.login({ username, password });
-      const user = await withTimeout(classeviva.getProfile(), PROFILE_TIMEOUT_MS, "login profile").catch(
-        () => authToken.profileHint ?? null,
-      );
-
-      if (!user) {
-        throw new Error("Accesso riuscito, ma il profilo non e ancora disponibile.");
-      }
+      const user = await withTimeout(classeviva.getProfile(), PROFILE_TIMEOUT_MS, "login profile");
 
       const studentId = classeviva.getStudentId() ?? user.id;
       if (!studentId) {
@@ -176,27 +151,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [safeClearStoredSession]);
 
-  const loginDemo = useCallback(async () => {
-    dispatch({ type: "SIGN_IN_START" });
-
-    try {
-      try {
-        await withTimeout(writeDemoSession(), STORAGE_TIMEOUT_MS, "persist demo session");
-      } catch (storageError) {
-        console.error("Persist demo session failed", storageError);
-      }
-
-      dispatch({
-        type: "SIGN_IN_SUCCESS",
-        payload: { token: null, user: mockStudentProfile, sessionMode: "demo" },
-      });
-    } catch (error) {
-      console.error("Demo login failed", error);
-      dispatch({ type: "SET_ERROR", payload: "Non riesco ad aprire la demo in questo momento." });
-      throw error;
-    }
-  }, []);
-
   const logout = useCallback(async () => {
     classeviva.logout();
     dispatch({ type: "SIGN_OUT" });
@@ -215,15 +169,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user: state.user,
       token: state.token,
       sessionMode: state.sessionMode,
-      isDemoMode: state.sessionMode === "demo",
       login,
-      loginDemo,
       logout,
       restoreToken,
       clearError,
       error: state.error,
     }),
-    [state, login, loginDemo, logout, restoreToken, clearError],
+    [state, login, logout, restoreToken, clearError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

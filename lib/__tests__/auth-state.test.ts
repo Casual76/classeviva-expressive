@@ -36,8 +36,8 @@ describe("auth state reducer", () => {
     const signedIn = authReducer(initialAuthState, {
       type: "SIGN_IN_SUCCESS",
       payload: {
-        token: null,
-        sessionMode: "demo",
+        token: "token-1",
+        sessionMode: "real",
         user: {
           id: "student-1",
           name: "Marco",

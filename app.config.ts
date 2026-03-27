@@ -35,7 +35,8 @@ const env = {
   iosBuildNumber: "2026031902",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "https://d2xsxph8kpxj0f.cloudfront.net/310519663448700249/kqfQ32yC3QuwteoihCTBLr/icon-PkWupTgFYEqimVR6YtJSsS.webp",
+  logoUrl:
+    "https://d2xsxph8kpxj0f.cloudfront.net/310519663448700249/kqfQ32yC3QuwteoihCTBLr/icon-PkWupTgFYEqimVR6YtJSsS.webp",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
@@ -56,7 +57,7 @@ const config: ExpoConfig = {
     buildNumber: env.iosBuildNumber,
     infoPlist: {
       ITSAppUsesNonExemptEncryption: false,
-    }
+    },
   },
   android: {
     adaptiveIcon: {
@@ -91,10 +92,13 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-font",
+    "expo-asset",
     [
       "expo-audio",
       {
-        microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
+        microphonePermission:
+          "Allow $(PRODUCT_NAME) to access your microphone.",
       },
     ],
     [

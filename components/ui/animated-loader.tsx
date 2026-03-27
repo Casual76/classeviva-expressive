@@ -6,13 +6,11 @@
 import React, { useEffect } from "react";
 import { View } from "react-native";
 import Animated, {
-  useSharedValue,
+  Easing,
   useAnimatedStyle,
   withRepeat,
   withTiming,
-  Easing,
-  interpolate,
-  Extrapolate,
+  useSharedValue,
 } from "react-native-reanimated";
 import { useColors } from "@/hooks/use-colors";
 
@@ -27,7 +25,7 @@ export function AnimatedLoader() {
         duration: 2000,
         easing: Easing.linear,
       }),
-      -1
+      -1,
     );
 
     opacity.value = withRepeat(
@@ -36,9 +34,9 @@ export function AnimatedLoader() {
         easing: Easing.inOut(Easing.ease),
       }),
       -1,
-      true
+      true,
     );
-  }, []);
+  }, [opacity, rotation]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],

@@ -24,7 +24,7 @@ export function SearchBar({
 
   return (
     <View
-      className={cn("flex-row items-center gap-3 rounded-[26px] border px-4 py-3", className)}
+      className={cn("flex-row items-center gap-3 rounded-[28px] border px-4 py-3.5", className)}
       style={{
         backgroundColor: colors.surface,
         borderColor: colors.border,
@@ -34,6 +34,8 @@ export function SearchBar({
 
       <TextInput
         className="flex-1 text-base text-foreground"
+        autoCapitalize="none"
+        autoCorrect={false}
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.muted}

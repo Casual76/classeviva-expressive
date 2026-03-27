@@ -25,6 +25,16 @@ describe("ClassevivaClient", () => {
       expect(client.getStudentId()).toBe("student-123");
     });
 
+    it("normalizes student IDs with Classeviva prefixes", () => {
+      client.setToken("test-token", "S1234567");
+      expect(client.getStudentId()).toBe("1234567");
+    });
+
+    it("normalizes student IDs with Classeviva suffixes", () => {
+      client.setToken("test-token", "S1234567Q");
+      expect(client.getStudentId()).toBe("1234567");
+    });
+
     it("clears authentication on logout", () => {
       client.setToken("test-token", "student-123");
       client.logout();
@@ -121,6 +131,30 @@ describe("ClassevivaClient", () => {
       expect(mapped.school).toBe("Liceo Scientifico Galileo Galilei");
       expect(mapped.schoolYear).toBe("2025-2026");
     });
+
+    it("normalizes prefixed profile identifiers", () => {
+      const mapped = normalizeProfile({
+        card: {
+          ident: "S8733880",
+          firstName: "Marco",
+          lastName: "Rossi",
+        },
+      });
+
+      expect(mapped.id).toBe("8733880");
+    });
+
+    it("normalizes profile identifiers with trailing suffixes", () => {
+      const mapped = normalizeProfile({
+        card: {
+          ident: "S8733880I",
+          firstName: "Marco",
+          lastName: "Rossi",
+        },
+      });
+
+      expect(mapped.id).toBe("8733880");
+    });
   });
 
   describe("Error handling", () => {
@@ -168,6 +202,23 @@ describe("ClassevivaClient", () => {
 
       expect(result.code).toBe("RATE_LIMITED");
       expect(result.message).toContain("Troppi tentativi");
+    });
+
+    it("maps rejected api key errors", () => {
+      const handleAxiosError = (client as any).handleAxiosError.bind(client);
+      const result = handleAxiosError(
+        {
+          response: {
+            status: 400,
+            data: { statusCode: 400, error: "203:CvvRestApi/apikey.3" },
+          },
+        },
+        "Test error",
+      );
+
+      expect(result.code).toBe("API_KEY_REJECTED");
+      expect(result.message).toContain("rifiutando temporaneamente");
+      expect(result.message).toContain("portale ufficiale");
     });
 
     it("maps 500 errors", () => {

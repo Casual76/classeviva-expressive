@@ -8,7 +8,7 @@ const TOKEN_KEY = "classeviva_token";
 const STUDENT_ID_KEY = "classeviva_student_id";
 const SESSION_MODE_KEY = "classeviva_session_mode";
 const STORAGE_VERSION_KEY = "classeviva_storage_version";
-const STORAGE_VERSION = "20260319-auth-reset";
+const STORAGE_VERSION = "20260327-real-first-session";
 const LEGACY_SECURE_KEYS = ["app_session_token", "manus-runtime-user-info"];
 const LEGACY_ASYNC_KEYS = ["scheduled_notifications"];
 
@@ -85,7 +85,7 @@ export async function readStoredSession(): Promise<StoredSession> {
   return {
     token,
     studentId,
-    sessionMode: rawMode === "real" || rawMode === "demo" ? rawMode : null,
+    sessionMode: rawMode === "real" ? "real" : null,
   };
 }
 
@@ -94,14 +94,6 @@ export async function writeRealSession(token: string, studentId: string): Promis
     setStoredValue(TOKEN_KEY, token),
     setStoredValue(STUDENT_ID_KEY, studentId),
     setStoredValue(SESSION_MODE_KEY, "real"),
-  ]);
-}
-
-export async function writeDemoSession(): Promise<void> {
-  await Promise.all([
-    removeStoredValue(TOKEN_KEY),
-    removeStoredValue(STUDENT_ID_KEY),
-    setStoredValue(SESSION_MODE_KEY, "demo"),
   ]);
 }
 
