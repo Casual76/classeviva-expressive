@@ -1,14 +1,17 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
+import { AnimatedListItem } from "@/components/ui/animated-list-item";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ElegantCard } from "@/components/ui/elegant-card";
 import { LoadingState } from "@/components/ui/loading-state";
+import { M3Chip } from "@/components/ui/m3-chip";
 import { MiniBarChart } from "@/components/ui/mini-bar-chart";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SectionTitle } from "@/components/ui/section-title";
+import { useColors } from "@/hooks/use-colors";
 import {
   loadGradesView,
   summarizeGrades,
@@ -16,6 +19,7 @@ import {
 } from "@/lib/student-data";
 
 export default function GradesScreen() {
+  const colors = useColors();
   const [grades, setGrades] = useState<GradeRowViewModel[]>([]);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -47,11 +51,9 @@ export default function GradesScreen() {
       if (selectedSubject && grade.subject !== selectedSubject) {
         return false;
       }
-
       if (!deferredQuery.trim()) {
         return true;
       }
-
       const query = deferredQuery.toLowerCase();
       return (
         grade.subject.toLowerCase().includes(query) ||
@@ -79,93 +81,93 @@ export default function GradesScreen() {
   return (
     <ScreenContainer className="flex-1 bg-background">
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 112 }}
+        contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
           <RefreshControl
-            onRefresh={() => {
-              setIsRefreshing(true);
-              void loadData();
-            }}
+            onRefresh={() => { setIsRefreshing(true); void loadData(); }}
             refreshing={isRefreshing}
           />
         }
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-6 px-6 py-6">
-          <ScreenHeader
-            eyebrow="Valutazioni"
-            subtitle="Medie per materia, andamento recente e lettura piu compatta delle prove."
-            title="Voti"
-          />
+        <View className="gap-5 px-5 py-6">
+          <AnimatedListItem index={0}>
+            <ScreenHeader
+              eyebrow="Valutazioni"
+              subtitle="Medie per materia, andamento recente e lettura più compatta delle prove."
+              title="Voti"
+            />
+          </AnimatedListItem>
 
           {error ? (
-            <ElegantCard className="gap-2 p-4" tone="warning" variant="filled">
-              <Text className="text-sm font-semibold text-foreground">Aggiornamento parziale</Text>
-              <Text className="text-sm leading-6 text-muted">{error}</Text>
-            </ElegantCard>
+            <AnimatedListItem index={1}>
+              <ElegantCard className="gap-2 p-4" tone="warning" variant="filled" radius="md">
+                <Text className="text-sm font-medium" style={{ color: colors.foreground }}>Aggiornamento parziale</Text>
+                <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{error}</Text>
+              </ElegantCard>
+            </AnimatedListItem>
           ) : null}
 
-          <ElegantCard className="gap-5 p-5" variant="elevated">
-            <View className="flex-row gap-3">
-              <ElegantCard className="flex-1 gap-2 p-4" tone="primary" variant="filled">
-                <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Media vista</Text>
-                <Text className="text-3xl font-semibold text-foreground">{summaries.averageLabel}</Text>
-              </ElegantCard>
-              <ElegantCard className="flex-1 gap-2 p-4" variant="filled">
-                <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Valutazioni</Text>
-                <Text className="text-3xl font-semibold text-foreground">{filteredGrades.length}</Text>
-              </ElegantCard>
-            </View>
+          <AnimatedListItem index={2}>
+            <ElegantCard className="gap-4 p-5" variant="elevated" radius="lg">
+              <View className="flex-row gap-3">
+                <ElegantCard className="flex-1 gap-1.5 p-4" tone="primary" variant="filled" radius="md">
+                  <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Media vista</Text>
+                  <Text className="text-3xl font-light" style={{ color: colors.foreground }}>{summaries.averageLabel}</Text>
+                </ElegantCard>
+                <ElegantCard className="flex-1 gap-1.5 p-4" variant="filled" radius="md">
+                  <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Valutazioni</Text>
+                  <Text className="text-3xl font-light" style={{ color: colors.foreground }}>{filteredGrades.length}</Text>
+                </ElegantCard>
+              </View>
+              {summaries.trend.length > 0 ? <MiniBarChart points={summaries.trend} /> : null}
+            </ElegantCard>
+          </AnimatedListItem>
 
-            {summaries.trend.length > 0 ? <MiniBarChart points={summaries.trend} /> : null}
-          </ElegantCard>
-
-          <SearchBar
-            onChangeText={setSearchQuery}
-            onClear={() => setSearchQuery("")}
-            placeholder="Cerca materia, docente o note"
-            value={searchQuery}
-          />
+          <AnimatedListItem index={3}>
+            <SearchBar
+              onChangeText={setSearchQuery}
+              onClear={() => setSearchQuery("")}
+              placeholder="Cerca materia, docente o note"
+              value={searchQuery}
+            />
+          </AnimatedListItem>
 
           {subjects.length > 0 ? (
-            <View className="gap-3">
-              <SectionTitle eyebrow="Materie" title="Filtra la vista" />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View className="flex-row gap-3">
-                  <Pressable onPress={() => setSelectedSubject(null)}>
-                    <ElegantCard className="px-4 py-3" tone={selectedSubject === null ? "primary" : "neutral"} variant={selectedSubject === null ? "filled" : "outlined"}>
-                      <Text className="text-sm font-semibold text-foreground">Tutte</Text>
-                    </ElegantCard>
-                  </Pressable>
-                  {subjects.map((subject) => (
-                    <Pressable key={subject} onPress={() => setSelectedSubject(subject)}>
-                      <ElegantCard className="px-4 py-3" tone={selectedSubject === subject ? "primary" : "neutral"} variant={selectedSubject === subject ? "filled" : "outlined"}>
-                        <Text className="text-sm font-semibold text-foreground">{subject}</Text>
-                      </ElegantCard>
-                    </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
-            </View>
+            <AnimatedListItem index={4}>
+              <View className="gap-3">
+                <SectionTitle eyebrow="Materie" title="Filtra la vista" />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View className="flex-row gap-2">
+                    <M3Chip label="Tutte" selected={selectedSubject === null} onPress={() => setSelectedSubject(null)} />
+                    {subjects.map((subject) => (
+                      <M3Chip key={subject} label={subject} selected={selectedSubject === subject} onPress={() => setSelectedSubject(subject)} />
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            </AnimatedListItem>
           ) : null}
 
           {summaries.subjectSummaries.length > 0 ? (
             <View className="gap-3">
               <SectionTitle eyebrow="Quadro per materia" title="Dove stai andando meglio" />
               <View className="gap-3">
-                {summaries.subjectSummaries.map((item) => (
-                  <ElegantCard key={item.subject} className="gap-2 p-4" tone={item.tone} variant="filled">
-                    <View className="flex-row items-start justify-between gap-4">
-                      <View className="flex-1 gap-1">
-                        <Text className="text-sm font-semibold text-foreground">{item.subject}</Text>
-                        <Text className="text-xs leading-5 text-muted">{item.teacherLabel}</Text>
+                {summaries.subjectSummaries.map((item, i) => (
+                  <AnimatedListItem key={item.subject} index={5 + i}>
+                    <ElegantCard className="gap-2 p-4" tone={item.tone} variant="filled" radius="md">
+                      <View className="flex-row items-start justify-between gap-4">
+                        <View className="flex-1 gap-0.5">
+                          <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{item.subject}</Text>
+                          <Text className="text-xs leading-4" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.teacherLabel}</Text>
+                        </View>
+                        <Text className="text-2xl font-light" style={{ color: colors.foreground }}>{item.averageLabel}</Text>
                       </View>
-                      <Text className="text-2xl font-semibold text-foreground">{item.averageLabel}</Text>
-                    </View>
-                    <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
-                      {item.count} valutazioni considerate
-                    </Text>
-                  </ElegantCard>
+                      <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
+                        {item.count} valutazioni considerate
+                      </Text>
+                    </ElegantCard>
+                  </AnimatedListItem>
                 ))}
               </View>
             </View>
@@ -175,23 +177,28 @@ export default function GradesScreen() {
             <SectionTitle eyebrow="Storico" title="Elenco completo" />
             {filteredGrades.length > 0 ? (
               <View className="gap-3">
-                {filteredGrades.map((grade) => (
-                  <ElegantCard key={grade.id} className="gap-4 p-4" tone={grade.tone} variant="filled">
-                    <View className="flex-row items-start justify-between gap-4">
-                      <View className="flex-1 gap-1">
-                        <Text className="text-sm font-semibold text-foreground">{grade.subject}</Text>
-                        <Text className="text-sm text-muted">{grade.typeLabel}</Text>
+                {filteredGrades.map((grade, i) => (
+                  <AnimatedListItem key={grade.id} index={8 + i}>
+                    <ElegantCard className="gap-3 p-4" tone={grade.tone} variant="filled" radius="md">
+                      <View className="flex-row items-start justify-between gap-4">
+                        <View className="flex-1 gap-0.5">
+                          <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{grade.subject}</Text>
+                          <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{grade.typeLabel}</Text>
+                        </View>
+                        <Text className="text-4xl font-light" style={{ color: colors.foreground }}>{grade.valueLabel}</Text>
                       </View>
-                      <Text className="text-4xl font-semibold text-foreground">{grade.valueLabel}</Text>
-                    </View>
-                    <View className="gap-2 border-t border-border pt-3">
-                      <Text className="text-sm leading-6 text-muted">{grade.detail}</Text>
-                      <Text className="text-xs text-muted">{grade.teacherLabel}</Text>
-                      <Text className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">
-                        {grade.dateLabel} · {grade.periodLabel}
-                      </Text>
-                    </View>
-                  </ElegantCard>
+                      <View
+                        className="gap-2 pt-3"
+                        style={{ borderTopWidth: 1, borderTopColor: colors.outlineVariant ?? colors.border }}
+                      >
+                        <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{grade.detail}</Text>
+                        <Text className="text-xs" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{grade.teacherLabel}</Text>
+                        <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
+                          {grade.dateLabel} · {grade.periodLabel}
+                        </Text>
+                      </View>
+                    </ElegantCard>
+                  </AnimatedListItem>
                 ))}
               </View>
             ) : (

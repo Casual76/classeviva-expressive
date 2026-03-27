@@ -61,13 +61,13 @@ const config: ExpoConfig = {
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: "#6750A4",
+      backgroundColor: "#EADDFF",
       foregroundImage: "./assets/images/android-icon-foreground.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
     },
     edgeToEdgeEnabled: true,
-    predictiveBackGestureEnabled: false,
+    predictiveBackGestureEnabled: true,
     package: env.androidPackage,
     versionCode: env.androidVersionCode,
     permissions: ["POST_NOTIFICATIONS"],
@@ -114,9 +114,9 @@ const config: ExpoConfig = {
         image: "./assets/images/splash-icon.png",
         imageWidth: 200,
         resizeMode: "contain",
-        backgroundColor: "#ffffff",
+        backgroundColor: "#FEF7FF",
         dark: {
-          backgroundColor: "#000000",
+          backgroundColor: "#141218",
         },
       },
     ],

@@ -5,8 +5,15 @@ import {
   View,
   ViewStyle,
 } from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 import { cn, withAlpha } from "@/lib/utils";
 import { useColors } from "@/hooks/use-colors";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 interface ElegantButtonProps extends Omit<PressableProps, "style"> {
   variant?: "primary" | "secondary" | "outline" | "ghost";
@@ -26,59 +33,72 @@ export function ElegantButton({
   ...props
 }: ElegantButtonProps) {
   const colors = useColors();
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.96, { damping: 15, stiffness: 400 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 400 });
+  };
 
   const sizeClasses = {
-    sm: "px-4 py-3 rounded-[20px]",
-    md: "px-5 py-4 rounded-[24px]",
-    lg: "px-6 py-5 rounded-[28px]",
+    sm: "px-4 py-3 rounded-full",
+    md: "px-5 py-4 rounded-full",
+    lg: "px-6 py-5 rounded-full",
   };
 
   const variantStyle: Record<NonNullable<ElegantButtonProps["variant"]>, ViewStyle> = {
     primary: {
       backgroundColor: colors.primary,
-      borderColor: colors.primary,
-      borderWidth: 1,
       shadowColor: colors.primary,
-      shadowOpacity: 0.2,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 12 },
-      elevation: 5,
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 3,
     },
     secondary: {
-      backgroundColor: withAlpha(colors.surfaceAlt ?? colors.surface, 0.94),
-      borderColor: withAlpha(colors.border, 0.86),
-      borderWidth: 1,
+      backgroundColor: colors.secondaryContainer ?? withAlpha(colors.secondary ?? colors.primary, 0.12),
     },
     outline: {
-      backgroundColor: withAlpha(colors.primary, 0.06),
-      borderColor: withAlpha(colors.primary, 0.3),
-      borderWidth: 1.25,
+      backgroundColor: "transparent",
+      borderColor: colors.outline ?? colors.border,
+      borderWidth: 1,
     },
     ghost: {
-      backgroundColor: withAlpha(colors.surface, 0.3),
-      borderColor: "transparent",
-      borderWidth: 1,
+      backgroundColor: "transparent",
     },
   };
 
   const textColorClasses = {
-    primary: "text-background font-semibold",
-    secondary: "text-foreground font-semibold",
-    outline: "text-primary font-semibold",
-    ghost: "text-primary font-semibold",
+    primary: "text-onPrimary font-medium",
+    secondary: "text-onSecondaryContainer font-medium",
+    outline: "text-primary font-medium",
+    ghost: "text-primary font-medium",
+  };
+
+  // Fallback text styles for colors that may not be in Tailwind
+  const textColorStyle = {
+    primary: { color: colors.onPrimary ?? "#FFFFFF" },
+    secondary: { color: colors.onSecondaryContainer ?? colors.foreground },
+    outline: { color: colors.primary },
+    ghost: { color: colors.primary },
   };
 
   const baseClasses = "flex-row items-center justify-center gap-2";
 
   return (
-    <Pressable
+    <AnimatedPressable
       {...props}
-      style={({ pressed }) => [
+      style={[
         variantStyle[variant],
-        {
-          opacity: props.disabled ? 0.45 : pressed ? 0.88 : 1,
-          transform: [{ scale: pressed ? 0.985 : 1 }],
-        } as ViewStyle,
+        animatedStyle,
+        { opacity: props.disabled ? 0.38 : 1 },
       ]}
       className={cn(
         baseClasses,
@@ -86,15 +106,26 @@ export function ElegantButton({
         fullWidth && "w-full",
         className
       )}
+      onPressIn={(e) => {
+        handlePressIn();
+        props.onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        handlePressOut();
+        props.onPressOut?.(e);
+      }}
     >
       {icon && <View>{icon}</View>}
       {typeof children === "string" ? (
-        <Text className={cn("text-base tracking-[0.2px]", textColorClasses[variant])}>
+        <Text
+          className={cn("text-base tracking-[0.1px]", textColorClasses[variant])}
+          style={textColorStyle[variant]}
+        >
           {children}
         </Text>
       ) : (
         children
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }

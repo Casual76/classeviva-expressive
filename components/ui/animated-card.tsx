@@ -1,20 +1,21 @@
 /**
- * Componente Card Animato con Reanimated
- * Fornisce animazioni di fade-in e scale quando la card appare
+ * Componente Card Animato con Reanimated — M3 Expressive
+ * Spring-based entrance con fade-in, scale e translateY
  */
 
 import React, { useEffect } from "react";
 import Animated, {
-  Easing,
   useAnimatedStyle,
-  withTiming,
+  withSpring,
+  withDelay,
   useSharedValue,
+  withTiming,
+  Easing,
 } from "react-native-reanimated";
 import { ElegantCard } from "./elegant-card";
 
 interface AnimatedCardProps {
   delay?: number;
-  duration?: number;
   children?: React.ReactNode;
   variant?: "filled" | "outlined" | "gradient" | "elevated";
   gradient?: "primary" | "success" | "warning" | "error";
@@ -24,35 +25,29 @@ interface AnimatedCardProps {
 
 export function AnimatedCard({
   delay = 0,
-  duration = 400,
   children,
   ...props
 }: AnimatedCardProps) {
   const opacity = useSharedValue(0);
-  const scale = useSharedValue(0.95);
+  const translateY = useSharedValue(12);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      opacity.value = withTiming(1, {
-        duration,
-        easing: Easing.out(Easing.cubic),
-      });
-
-      scale.value = withTiming(1, {
-        duration,
-        easing: Easing.out(Easing.cubic),
-      });
-    }, delay);
-
-    return () => clearTimeout(timer);
-  }, [delay, duration, opacity, scale]);
+    opacity.value = withDelay(
+      delay,
+      withTiming(1, { duration: 350, easing: Easing.out(Easing.cubic) }),
+    );
+    translateY.value = withDelay(
+      delay,
+      withSpring(0, { damping: 18, stiffness: 180, mass: 0.8 }),
+    );
+  }, [delay, opacity, translateY]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
-    transform: [{ scale: scale.value }],
+    transform: [{ translateY: translateY.value }],
   }));
 
-  const { delay: _, duration: __, children: ___, ...cardProps } = props;
+  const { delay: _, children: __, ...cardProps } = props;
 
   return (
     <Animated.View style={animatedStyle}>

@@ -12,7 +12,7 @@ type ChartPoint = {
 };
 
 const COLOR_BY_TONE = {
-  neutral: "border",
+  neutral: "outline",
   primary: "primary",
   success: "success",
   warning: "warning",
@@ -32,10 +32,13 @@ export function MiniBarChart({
   const maxValue = Math.max(...points.map((point) => point.value), 10);
 
   return (
-    <View className="overflow-hidden rounded-[28px]" style={{ backgroundColor: withAlpha(colors.surface, 0.52) }}>
+    <View
+      className="overflow-hidden rounded-2xl"
+      style={{ backgroundColor: colors.surfaceContainer ?? withAlpha(colors.surface, 0.52) }}
+    >
       <Svg height={height} width={width}>
         <Line
-          stroke={withAlpha(colors.border, 0.9)}
+          stroke={colors.outlineVariant ?? withAlpha(colors.border, 0.9)}
           strokeWidth={1}
           x1={16}
           x2={width - 8}
@@ -49,15 +52,15 @@ export function MiniBarChart({
           const valueHeight = Math.max(10, (point.value / maxValue) * (chartHeight - 18));
           const y = chartHeight - valueHeight;
           const colorKey = COLOR_BY_TONE[point.tone];
-          const fill = colors[colorKey];
+          const fill = (colors as any)[colorKey] ?? colors.primary;
 
           return (
             <Rect
               key={point.id}
               fill={fill}
               height={valueHeight}
-              rx={10}
-              ry={10}
+              rx={8}
+              ry={8}
               width={barWidth}
               x={x}
               y={y}
@@ -68,9 +71,9 @@ export function MiniBarChart({
         {points.map((point, index) => (
           <SvgText
             key={`${point.id}-label`}
-            fill={colors.muted}
+            fill={colors.onSurfaceVariant ?? colors.muted}
             fontSize="11"
-            fontWeight="600"
+            fontWeight="500"
             textAnchor="middle"
             x={28 + index * 42}
             y={height - 10}

@@ -1,6 +1,6 @@
 /**
- * Componente Loader Animato con Reanimated
- * Mostra un'animazione di caricamento elegante
+ * Componente Loader Animato con Reanimated — M3 Expressive
+ * Spinner circolare con pulsazione e rotazione fluida
  */
 
 import React, { useEffect } from "react";
@@ -9,6 +9,7 @@ import Animated, {
   Easing,
   useAnimatedStyle,
   withRepeat,
+  withSequence,
   withTiming,
   useSharedValue,
 } from "react-native-reanimated";
@@ -17,30 +18,28 @@ import { useColors } from "@/hooks/use-colors";
 export function AnimatedLoader() {
   const colors = useColors();
   const rotation = useSharedValue(0);
-  const opacity = useSharedValue(0.3);
+  const scale = useSharedValue(1);
 
   useEffect(() => {
     rotation.value = withRepeat(
       withTiming(360, {
-        duration: 2000,
-        easing: Easing.linear,
+        duration: 1200,
+        easing: Easing.bezier(0.4, 0, 0.2, 1), // M3 emphasized easing
       }),
       -1,
     );
 
-    opacity.value = withRepeat(
-      withTiming(1, {
-        duration: 1500,
-        easing: Easing.inOut(Easing.ease),
-      }),
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.08, { duration: 600, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.95, { duration: 600, easing: Easing.inOut(Easing.ease) }),
+      ),
       -1,
-      true,
     );
-  }, [opacity, rotation]);
+  }, [rotation, scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
-    opacity: opacity.value,
+    transform: [{ rotate: `${rotation.value}deg` }, { scale: scale.value }],
   }));
 
   return (
@@ -49,13 +48,13 @@ export function AnimatedLoader() {
         style={[
           animatedStyle,
           {
-            width: 50,
-            height: 50,
-            borderRadius: 25,
-            borderWidth: 3,
-            borderColor: colors.primary,
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            borderWidth: 4,
+            borderColor: colors.primaryContainer ?? colors.primary,
             borderTopColor: colors.primary,
-            borderRightColor: "transparent",
+            borderRightColor: colors.primaryContainer ?? colors.primary,
           },
         ]}
       />
