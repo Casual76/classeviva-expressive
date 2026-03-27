@@ -202,6 +202,8 @@ export function generateMockCommunications(): Communication[] {
 
     communications.push({
       id: `comm-${i}`,
+      pubId: `pub-${i}`,
+      evtCode: `EVT${100 + i}`,
       title:
         COMMUNICATION_TITLES[
           Math.floor(Math.random() * COMMUNICATION_TITLES.length)
@@ -211,6 +213,12 @@ export function generateMockCommunications(): Communication[] {
       date: date.toISOString().split("T")[0],
       read: Math.random() > 0.4,
       attachments: Math.random() > 0.7 ? ["allegato.pdf"] : [],
+      category: "Comunicazione",
+      needsAck: false,
+      needsReply: false,
+      needsJoin: false,
+      needsFile: false,
+      hasAttachments: false,
     });
   }
 
@@ -223,11 +231,11 @@ export interface MockReportCard {
   id: string;
   period: string; // "Trimestre 1", "Pentamestre"
   date: string;
-  grades: Array<{
+  grades: {
     subject: string;
     grade: number;
     teacher: string;
-  }>;
+  }[];
   overallGrade?: string;
   credits?: number;
 }
@@ -290,12 +298,12 @@ export function generateMockDisciplinaryNotes(): MockDisciplinaryNote[] {
 
 export interface MockSchedule {
   day: string;
-  hours: Array<{
+  hours: {
     time: string;
     subject: string;
     teacher: string;
     room: string;
-  }>;
+  }[];
 }
 
 export function generateMockSchedule(): MockSchedule[] {

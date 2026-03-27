@@ -5,7 +5,7 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import { cn } from "@/lib/utils";
+import { cn, withAlpha } from "@/lib/utils";
 import { useColors } from "@/hooks/use-colors";
 
 interface ElegantButtonProps extends Omit<PressableProps, "style"> {
@@ -28,8 +28,8 @@ export function ElegantButton({
   const colors = useColors();
 
   const sizeClasses = {
-    sm: "px-4 py-3 rounded-2xl",
-    md: "px-5 py-4 rounded-3xl",
+    sm: "px-4 py-3 rounded-[20px]",
+    md: "px-5 py-4 rounded-[24px]",
     lg: "px-6 py-5 rounded-[28px]",
   };
 
@@ -39,23 +39,23 @@ export function ElegantButton({
       borderColor: colors.primary,
       borderWidth: 1,
       shadowColor: colors.primary,
-      shadowOpacity: 0.18,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 10 },
-      elevation: 4,
+      shadowOpacity: 0.2,
+      shadowRadius: 18,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 5,
     },
     secondary: {
-      backgroundColor: colors.surfaceAlt ?? colors.surface,
-      borderColor: colors.border,
+      backgroundColor: withAlpha(colors.surfaceAlt ?? colors.surface, 0.94),
+      borderColor: withAlpha(colors.border, 0.86),
       borderWidth: 1,
     },
     outline: {
-      backgroundColor: "transparent",
-      borderColor: colors.primary,
+      backgroundColor: withAlpha(colors.primary, 0.06),
+      borderColor: withAlpha(colors.primary, 0.3),
       borderWidth: 1.25,
     },
     ghost: {
-      backgroundColor: "transparent",
+      backgroundColor: withAlpha(colors.surface, 0.3),
       borderColor: "transparent",
       borderWidth: 1,
     },
@@ -89,7 +89,7 @@ export function ElegantButton({
     >
       {icon && <View>{icon}</View>}
       {typeof children === "string" ? (
-        <Text className={cn("text-base", textColorClasses[variant])}>
+        <Text className={cn("text-base tracking-[0.2px]", textColorClasses[variant])}>
           {children}
         </Text>
       ) : (

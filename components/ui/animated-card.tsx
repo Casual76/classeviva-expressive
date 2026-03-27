@@ -4,12 +4,11 @@
  */
 
 import React, { useEffect } from "react";
-import { View, type ViewProps } from "react-native";
 import Animated, {
-  useSharedValue,
+  Easing,
   useAnimatedStyle,
   withTiming,
-  Easing,
+  useSharedValue,
 } from "react-native-reanimated";
 import { ElegantCard } from "./elegant-card";
 
@@ -46,7 +45,7 @@ export function AnimatedCard({
     }, delay);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [delay, duration, opacity, scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,

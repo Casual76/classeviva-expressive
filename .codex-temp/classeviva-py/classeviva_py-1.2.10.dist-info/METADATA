@@ -1,0 +1,56 @@
+Metadata-Version: 2.4
+Name: Classeviva.py
+Version: 1.2.10
+Summary: Classeviva Python API wrapper
+Home-page: https://github.com/Lioydiano/Classeviva
+Download-URL: https://github.com/Lioydiano/Classeviva/archive/refs/tags/v1.2.10.tar.gz
+Author: FLAK-ZOSO
+Author-email: mattia.marchese.2006@gmail.com
+License: MIT
+Keywords: classeviva,api
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Development Status :: 3 - Alpha
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Intended Audience :: Developers
+Classifier: Natural Language :: Italian
+Classifier: Natural Language :: English
+Classifier: Typing :: Typed
+Requires: requests
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests>=2.27
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: download-url
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: requires
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# Classeviva.py
+[`Wrapper`](https://rapidapi.com/blog/api-glossary/api-wrapper/) dell'API di [`Classeviva`](https://web.spaggiari.eu/) - registro elettronico di [`Spaggiari`](https://web.spaggiari.eu/www/app/default/index.php) - per Python.
+
+![image](https://github.com/user-attachments/assets/e4bd8149-b913-4513-9d9e-47c30bb7a33a)
+
+# Documentazione
+La [`documentazione italiana`](https://classeviva.readthedocs.io/it/stable/) si trova su ReadTheDocs.
+
+# Contributi
+Il codice sorgente puÃ² essere modificato su [`GitHub Dev`](https://github.dev) con l'[`editor della repository`](https://github.dev/Lioydiano/Classeviva); anche aprire delle [issue]([url](https://github.com/Lioydiano/Classeviva/issues)) puÃ² aiutare.
+
+# Pacchetto
+Il pacchetto puÃ² essere scaricato dal `PyPI` tramite `pip`, il progetto si trova [`qui`](https://pypi.org/project/Classeviva.py/).
+
+# API REST
+L'`API REST` si trova a [`web.spaggiari.eu/rest`](https://web.spaggiari.eu/rest/), la documentazione si trova [su `GitHub`](https://github.com/Lioydiano/Classeviva-Official-Endpoints).

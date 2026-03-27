@@ -1,7 +1,7 @@
 import type { StudentProfile } from "@/lib/classeviva-client";
 
 export type AuthStatus = "restoring" | "signed_out" | "signing_in" | "signed_in";
-export type SessionMode = "real" | "demo" | null;
+export type SessionMode = "real" | null;
 
 export interface AuthState {
   status: AuthStatus;
