@@ -3,7 +3,7 @@
         "id": "classeviva-expressive",
         "name": "classeviva-expressive",
         "description": "Manifest app non disponibile nella repository Casual76/classeviva-expressive.",
-        "packageName": "",
+        "packageName": "dev.antigravity.classevivaexpressive",
         "iconUrl": "",
         "category": "General",
         "developer": "Pampa",
@@ -15,7 +15,15 @@
             "ref": ""
         },
         "stable": null,
-        "beta": null,
+        "beta": {
+            "version": "3.1.0",
+            "releaseDate": "2026-03-28",
+            "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.0. Asset rilevati: app-release.apk.",
+            "releaseTag": "beta-classeviva-expressive-v3.1.0",
+            "apkAsset": "classeviva-expressive-3.1.0.apk",
+            "exeAsset": "",
+            "sizeBytes": 0
+        },
         "history": []
     }
 }
