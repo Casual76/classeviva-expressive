@@ -14,13 +14,21 @@
             "manifestPath": "manifest.json",
             "ref": ""
         },
-        "stable": null,
-        "beta": {
-            "version": "3.1.0",
+        "stable": {
+            "version": "3.1.1",
             "releaseDate": "2026-03-28",
-            "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.0. Asset rilevati: app-release.apk.",
-            "releaseTag": "beta-classeviva-expressive-v3.1.0",
-            "apkAsset": "classeviva-expressive-3.1.0.apk",
+            "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.1. Asset rilevati: classeviva-expressive-3.1.1-release.apk.",
+            "releaseTag": "stable-classeviva-expressive-v3.1.1",
+            "apkAsset": "classeviva-expressive-3.1.1.apk",
+            "exeAsset": "",
+            "sizeBytes": 0
+        },
+        "beta": {
+            "version": "3.1.1",
+            "releaseDate": "2026-03-28",
+            "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.1. Asset rilevati: classeviva-expressive-3.1.1-release.apk.",
+            "releaseTag": "stable-classeviva-expressive-v3.1.1",
+            "apkAsset": "classeviva-expressive-3.1.1.apk",
             "exeAsset": "",
             "sizeBytes": 0
         },
