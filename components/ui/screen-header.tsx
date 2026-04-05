@@ -26,14 +26,18 @@ export function ScreenHeader({
   const colors = useColors();
 
   return (
-    <View className={cn("gap-4", className)}>
+    <View className={cn("gap-3", className)}>
       <View className="flex-row items-start justify-between gap-4">
         <View className="flex-1 gap-2">
           {onBack ? (
             <Pressable
               accessibilityLabel={backLabel}
-              className="flex-row items-center gap-2 self-start rounded-full px-3 py-2.5"
-              style={{ backgroundColor: colors.surfaceContainerHigh ?? colors.surface }}
+              className="flex-row items-center gap-2 self-start rounded-full px-3 py-2"
+              style={{
+                backgroundColor: colors.surface ?? colors.background,
+                borderWidth: 1,
+                borderColor: colors.outlineVariant ?? colors.border,
+              }}
               onPress={onBack}
             >
               <MaterialIcons color={colors.onSurfaceVariant ?? colors.foreground} name="arrow-back" size={18} />
@@ -56,7 +60,7 @@ export function ScreenHeader({
           ) : null}
 
           <Text
-            className="text-[28px] leading-[34px] font-normal tracking-[0px]"
+            className="text-[30px] leading-[36px] font-medium tracking-[-0.2px]"
             style={{ color: colors.foreground }}
           >
             {title}
@@ -64,7 +68,7 @@ export function ScreenHeader({
 
           {subtitle ? (
             <Text
-              className="max-w-[340px] text-sm leading-5 font-normal"
+              className="max-w-[360px] text-sm leading-6 font-normal"
               style={{ color: colors.onSurfaceVariant ?? colors.muted }}
             >
               {subtitle}

@@ -16,15 +16,17 @@ import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardAction
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardActionType
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardAttachment
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
 import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
 import dev.antigravity.classevivaexpressive.core.domain.model.Schoolbook
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolbookCourse
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
 import dev.antigravity.classevivaexpressive.core.domain.model.Subject
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
+import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -34,15 +36,20 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import org.jsoup.Jsoup
 
 private val IsoDateFormatter: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 private const val PortalBaseUrl = "https://web.spaggiari.eu"
 
 internal fun extractArray(payload: JsonObject, vararg keys: String): List<JsonElement> {
   keys.forEach { key ->
-    val candidate = payload[key]
-    if (candidate is JsonArray) {
-      return candidate
+    when (val candidate = payload[key]) {
+      is JsonArray -> return candidate
+      is JsonObject -> {
+        val nested = extractArray(candidate, key, "items", "events", "data")
+        if (nested.isNotEmpty()) return nested
+      }
+      else -> Unit
     }
   }
   return emptyList()
@@ -59,31 +66,38 @@ internal fun normalizeProfile(root: JsonObject, fallbackId: String): StudentProf
 
   return StudentProfile(
     id = normalizeStudentId(data.string("usrId")) ?: normalizeStudentId(data.string("id")) ?: fallbackId,
-    name = data.string("firstName", "name").orEmpty(),
-    surname = data.string("lastName", "surname").orEmpty(),
+    name = sanitizeRegisterText(data.string("firstName", "name")).orEmpty(),
+    surname = sanitizeRegisterText(data.string("lastName", "surname")).orEmpty(),
     email = data.string("email").orEmpty(),
-    schoolClass = data.string("classDesc", "class") ?: data["classe"].obj().string("desc").orEmpty(),
-    section = data["classe"].obj().string("sezione") ?: data.string("section").orEmpty(),
+    schoolClass = sanitizeRegisterText(data.string("classDesc", "class"))
+      ?: sanitizeRegisterText(data["classe"].obj().string("desc")).orEmpty(),
+    section = sanitizeRegisterText(data["classe"].obj().string("sezione"))
+      ?: sanitizeRegisterText(data.string("section")).orEmpty(),
     school = school,
-    schoolYear = data.string("anno", "schoolYear") ?: schoolYearNow(),
+    schoolYear = sanitizeRegisterText(data.string("anno", "schoolYear")) ?: schoolYearNow(),
   )
 }
 
 internal fun normalizeGrade(data: JsonElement): Grade {
   val obj = data.obj()
-  val numeric = obj.double("decimalValue", "votoDecimale", "grade")
+  val numeric = obj.double("decimalValue", "votoDecimale", "grade", "value")
   return Grade(
-    id = obj.string("id", "evtId").orEmpty(),
-    subject = obj.string("subjectDesc", "subject") ?: obj["materia"].obj().string("desc").orEmpty(),
-    valueLabel = numeric?.let(::trimZero) ?: obj.string("displayValue", "grade").orEmpty(),
+    id = obj.string("id", "evtId", "gradeId").orEmpty(),
+    subject = sanitizeRegisterText(obj.string("subjectDesc", "subject"))
+      ?: sanitizeRegisterText(obj["materia"].obj().string("desc")).orEmpty(),
+    valueLabel = numeric?.let(::trimZero) ?: obj.string("displayValue", "grade", "value", "voto").orEmpty(),
     numericValue = numeric,
-    description = obj.string("descrVoto", "description"),
+    description = sanitizeRegisterText(obj.string("descrVoto", "description")),
     date = normalizeDate(obj.string("evtDate", "dataRegistrazione", "date")),
-    type = obj.string("componentDesc", "type") ?: obj["tipo"].obj().string("desc").orEmpty().ifBlank { "Valutazione" },
+    type = sanitizeRegisterText(
+      obj.string("componentDesc", "type", "tipoVoto")
+        ?: obj["tipo"].obj().string("desc").orEmpty().ifBlank { "Valutazione" },
+    ).orEmpty(),
     weight = obj.double("weightFactor", "peso", "weight"),
-    notes = obj.string("notesForFamily", "note", "notes"),
-    period = obj.string("periodDesc", "periodLabel", "period"),
-    teacher = obj.string("teacherName", "teacher"),
+    notes = sanitizeRegisterText(obj.string("notesForFamily", "note", "notes")),
+    period = sanitizeRegisterText(obj.string("periodDesc", "periodLabel", "period")),
+    periodCode = obj.string("periodCode", "periodCd", "periodId"),
+    teacher = sanitizeRegisterText(obj.string("teacherName", "teacher")),
     color = obj.string("color"),
   )
 }
@@ -92,13 +106,14 @@ internal fun normalizeLesson(data: JsonElement): Lesson {
   val obj = data.obj()
   return Lesson(
     id = obj.string("id", "lessonId", "evtId").orEmpty(),
-    subject = obj.string("subjectDesc", "subject") ?: obj["materia"].obj().string("desc").orEmpty(),
-    date = normalizeDate(obj.string("data", "date", "evtDate")),
-    time = normalizeTime(obj.string("lessonHour", "ora", "time", "startTime")) ?: "",
+    subject = sanitizeRegisterText(obj.string("subjectDesc", "subject"))
+      ?: sanitizeRegisterText(obj["materia"].obj().string("desc")).orEmpty(),
+    date = normalizeDate(obj.string("data", "date", "evtDate", "evtDatetimeBegin")),
+    time = normalizeTime(obj.string("lessonHour", "ora", "time", "startTime", "evtDatetimeBegin")).orEmpty(),
     durationMinutes = obj.int("duration", "durata", "evtDuration") ?: 60,
-    topic = obj.string("argomento", "topic", "lessonArg"),
-    teacher = obj.string("teacherName", "authorName", "teacher"),
-    room = obj.string("classroom", "room"),
+    topic = sanitizeRegisterText(obj.string("argomento", "topic", "lessonArg")),
+    teacher = sanitizeRegisterText(obj.string("teacherName", "authorName", "teacher")),
+    room = sanitizeRegisterText(obj.string("classroom", "room")),
   )
 }
 
@@ -106,105 +121,163 @@ internal fun normalizeHomework(data: JsonElement): Homework {
   val obj = data.obj()
   return Homework(
     id = obj.string("id", "hwId", "evtId", "homeworkId").orEmpty(),
-    subject = obj.string("subjectDesc", "subject") ?: obj["materia"].obj().string("desc").orEmpty(),
-    description = obj.string("contenuto", "description", "notes", "title").orEmpty(),
+    subject = sanitizeRegisterText(obj.string("subjectDesc", "subject"))
+      ?: sanitizeRegisterText(obj["materia"].obj().string("desc")).orEmpty(),
+    description = sanitizeRegisterText(obj.string("contenuto", "description", "notes", "title")).orEmpty(),
     dueDate = normalizeDate(obj.string("dataConsegna", "dueDate", "date", "evtDate", "evtDatetimeEnd")),
-    notes = obj.string("note", "notesForFamily", "notes"),
+    notes = sanitizeRegisterText(obj.string("note", "notesForFamily", "notes")),
     attachments = normalizeAttachments(obj["allegati"] ?: obj["attachments"]),
   )
 }
 
 internal fun normalizeAbsence(data: JsonElement): AbsenceRecord {
   val obj = data.obj()
-  val rawType = obj.string("tipo", "evtCode").orEmpty().lowercase()
+  val typeSource = listOfNotNull(
+    obj.string("tipo", "evtCode", "type", "eventType"),
+    obj.string("title", "description", "evtText", "notes"),
+    obj["tipo"].obj().string("desc"),
+  ).joinToString(" ").lowercase()
   val type = when {
-    rawType.contains("rit") -> AbsenceType.LATE
-    rawType.contains("usc") || rawType.contains("exit") -> AbsenceType.EXIT
+    typeSource.contains("ritard") || typeSource.contains("late") || typeSource.contains("ingresso post") -> AbsenceType.LATE
+    typeSource.contains("uscita") || typeSource.contains("exit") || typeSource.contains("permesso") -> AbsenceType.EXIT
     else -> AbsenceType.ABSENCE
   }
   return AbsenceRecord(
     id = obj.string("id", "evtId", "absenceId").orEmpty(),
     date = normalizeDate(obj.string("evtDate", "data", "date")),
     type = type,
-    hours = obj.int("hoursAbsence", "ore", "hours"),
+    hours = obj.int("hoursAbsence", "ore", "hours", "hour", "evtHPos"),
     justified = obj.bool("isJustified", "giustificata", "justified") ?: false,
-    justificationDate = obj.string("dataGiustificazione", "justificationDate"),
-    justificationReason = obj.string("justifReasonDesc", "motivoGiustificazione", "justificationReason"),
+    justificationDate = normalizeDateOrNull(obj.string("dataGiustificazione", "justificationDate")),
+    justificationReason = sanitizeRegisterText(obj.string("justifReasonDesc", "motivoGiustificazione", "justificationReason")),
     justifyUrl = findActionUrl(data, "justify", "giust", "justif"),
-    detailUrl = normalizeUrlCandidate(obj.string("detailUrl", "detailLink"))
-      ?: findActionUrl(data, "detail", "event", "scheda"),
+    detailUrl = normalizeUrlCandidate(obj.string("detailUrl", "detailLink", "detailHref"))
+      ?: findActionUrl(data, "detail", "event", "scheda", "notice"),
   )
 }
 
 internal fun normalizeCommunication(data: JsonElement): Communication {
   val obj = data.obj()
-  val attachments = normalizeAttachments(obj["attachments"] ?: obj["allegati"])
-  val requiresAction = (obj.bool("needSign") ?: false) ||
-    (obj.bool("needReply") ?: false) ||
-    (obj.bool("needJoin") ?: false) ||
-    (obj.bool("needFile") ?: false)
+  val needsAck = obj.bool("needSign", "needsAck") ?: false
+  val needsReply = obj.bool("needReply", "needsReply") ?: false
+  val needsJoin = obj.bool("needJoin", "needsJoin") ?: false
+  val needsFile = obj.bool("needFile", "needsFile") ?: false
+  val noticeboardAttachments = normalizeNoticeboardAttachments(obj["attachments"] ?: obj["allegati"])
+  val attachments = (
+    noticeboardAttachments.map(::toRemoteAttachment) +
+      normalizeAttachments(obj["attachments"] ?: obj["allegati"])
+    ).distinctBy { "${it.id}:${it.url.orEmpty()}" }
+  val actions = buildNoticeboardActions(
+    needsAck = needsAck,
+    needsReply = needsReply,
+    needsJoin = needsJoin,
+    needsFile = needsFile,
+    acknowledgeUrl = findActionUrl(data, "sign", "ack", "presa", "visione", "confirm"),
+    replyUrl = findActionUrl(data, "reply", "response", "risposta"),
+    joinUrl = findActionUrl(data, "join", "ades", "particip"),
+    fileUploadUrl = findActionUrl(data, "upload", "file", "attach", "alleg"),
+  )
   return Communication(
     id = obj.string("id", "pubId", "commId", "evento_id").orEmpty(),
     pubId = obj.string("pubId", "id", "commId", "evento_id").orEmpty(),
     evtCode = obj.string("evtCode", "code").orEmpty(),
-    title = obj.string("cntTitle", "title", "titolo", "evtTitle") ?: "Comunicazione",
-    contentPreview = obj.string("itemText", "texto", "content", "description", "notes", "cntCategory").orEmpty(),
-    sender = obj.string("authorName", "mittente", "sender") ?: "Scuola",
-    date = normalizeDate(obj.string("data", "date", "pubDT")),
+    title = sanitizeRegisterText(obj.string("cntTitle", "title", "titolo", "evtTitle")) ?: "Comunicazione",
+    contentPreview = preview(
+      sanitizeRegisterText(obj.string("itemText", "texto", "content", "description", "notes", "cntCategory")).orEmpty(),
+      "",
+    ),
+    sender = sanitizeRegisterText(obj.string("authorName", "mittente", "sender")) ?: "Scuola",
+    date = normalizeDate(obj.string("evtDate", "data", "date", "pubDT")),
     read = obj.bool("read", "letto", "isRead", "readStatus") ?: false,
     attachments = attachments,
-    category = obj.string("cntCategory", "category"),
-    needsAck = obj.bool("needSign") ?: false,
-    needsReply = obj.bool("needReply") ?: false,
-    needsJoin = obj.bool("needJoin") ?: false,
-    needsFile = obj.bool("needFile") ?: false,
-    capabilityState = if (attachments.isNotEmpty() || requiresAction) {
-      CapabilityState(
-        CapabilityStatus.EXTERNAL_ONLY,
-        "Azioni e allegati disponibili",
-        "La comunicazione puo richiedere conferma, risposta, adesione o file tramite portale.",
-      )
-    } else {
-      CapabilityState(CapabilityStatus.AVAILABLE, "Dettaglio disponibile", "Contenuto testuale leggibile in app.")
-    },
+    category = sanitizeRegisterText(obj.string("cntCategory", "category")),
+    needsAck = needsAck,
+    needsReply = needsReply,
+    needsJoin = needsJoin,
+    needsFile = needsFile,
+    actions = actions,
+    noticeboardAttachments = noticeboardAttachments,
+    capabilityState = communicationCapability(
+      actions = actions,
+      noticeboardAttachments = noticeboardAttachments,
+      attachments = attachments,
+    ),
   )
 }
 
 internal fun normalizeCommunicationDetail(root: JsonObject, base: Communication): CommunicationDetail {
   val item = (root["item"] ?: root["event"]).obj().takeIf { it.isNotEmpty() } ?: root
   val reply = root["reply"].obj()
-  val content = item.string("text", "evtText", "content", "description") ?: base.contentPreview
-  return CommunicationDetail(
-    communication = base.copy(
-      attachments = normalizeAttachments(root["attachments"] ?: root["allegati"]).ifEmpty { base.attachments },
+  val portalDetailUrl = findActionUrl(root, "detail", "notice", "view", "href", "link")
+  val acknowledgeUrl = findActionUrl(root, "sign", "ack", "presa", "visione", "confirm")
+  val replyUrl = findActionUrl(root, "reply", "response", "risposta")
+  val joinUrl = findActionUrl(root, "join", "ades", "particip")
+  val fileUploadUrl = findActionUrl(root, "upload", "file", "attach", "alleg")
+  val actions = buildNoticeboardActions(
+    needsAck = base.needsAck,
+    needsReply = base.needsReply || replyUrl != null,
+    needsJoin = base.needsJoin || joinUrl != null,
+    needsFile = base.needsFile || fileUploadUrl != null,
+    acknowledgeUrl = acknowledgeUrl,
+    replyUrl = replyUrl,
+    joinUrl = joinUrl,
+    fileUploadUrl = fileUploadUrl,
+  )
+  val detailAttachments = normalizeNoticeboardAttachments(root["attachments"] ?: root["allegati"])
+  val mergedAttachments = (detailAttachments.map(::toRemoteAttachment) + base.attachments)
+    .distinctBy { "${it.id}:${it.url.orEmpty()}" }
+  val mergedNoticeboardAttachments = detailAttachments.ifEmpty { base.noticeboardAttachments }
+  val mergedActions = actions.ifEmpty { base.actions }
+  val communication = base.copy(
+    contentPreview = preview(
+      sanitizeRegisterText(item.string("text", "evtText", "content", "description")) ?: base.contentPreview,
+      base.contentPreview,
     ),
-    content = content,
-    replyText = reply.string("text", "replyText", "description"),
-    portalDetailUrl = findActionUrl(root, "detail", "view", "href", "link"),
-    acknowledgeUrl = findActionUrl(root, "sign", "ack", "presa", "visione", "confirm"),
-    replyUrl = findActionUrl(root, "reply", "response", "risposta"),
-    joinUrl = findActionUrl(root, "join", "ades", "particip"),
-    fileUploadUrl = findActionUrl(root, "upload", "file", "attach", "alleg"),
+    attachments = mergedAttachments,
+    actions = mergedActions,
+    noticeboardAttachments = mergedNoticeboardAttachments,
+    capabilityState = communicationCapability(
+      actions = mergedActions,
+      noticeboardAttachments = mergedNoticeboardAttachments,
+      attachments = mergedAttachments,
+    ),
+  )
+  return CommunicationDetail(
+    communication = communication,
+    content = sanitizeRegisterText(item.string("text", "evtText", "content", "description"))
+      ?: base.contentPreview,
+    replyText = sanitizeRegisterText(reply.string("text", "replyText", "description")),
+    portalDetailUrl = portalDetailUrl,
+    acknowledgeUrl = acknowledgeUrl,
+    replyUrl = replyUrl,
+    joinUrl = joinUrl,
+    fileUploadUrl = fileUploadUrl,
+    actions = communication.actions,
   )
 }
 
 internal fun normalizeAgendaItem(data: JsonElement): AgendaItem {
   val obj = data.obj()
-  val title = obj.string("title", "evtTitle", "notes", "description", "content")
+  val rawTitle = obj.string("title", "evtTitle", "notes", "description", "content")
     ?: obj.string("subjectDesc", "subject")
     ?: obj["materia"].obj().string("desc")
     ?: "Evento"
-  val subject = obj.string("subjectDesc", "subject", "classDesc") ?: obj["materia"].obj().string("desc")
-  val typeSource = listOf(obj.string("type", "eventTypeDesc", "evtCode", "eventCode"), title)
-    .filterNotNull()
-    .joinToString(" ")
-    .lowercase()
+  val title = sanitizeRegisterText(rawTitle) ?: "Evento"
+  val subject = sanitizeRegisterText(obj.string("subjectDesc", "subject", "classDesc"))
+    ?: sanitizeRegisterText(obj["materia"].obj().string("desc"))
+  val typeSource = listOfNotNull(
+    obj.string("type", "eventTypeDesc", "evtCode", "eventCode"),
+    obj.string("category", "cntCategory"),
+    title,
+  ).joinToString(" ").lowercase()
   val category = when {
     typeSource.contains("compit") || typeSource.contains("homework") -> AgendaCategory.HOMEWORK
     typeSource.contains("verific") || typeSource.contains("test") || typeSource.contains("interrog") -> AgendaCategory.ASSESSMENT
     typeSource.contains("lezion") || typeSource.contains("lesson") -> AgendaCategory.LESSON
     else -> AgendaCategory.EVENT
   }
+  val detail = sanitizeRegisterText(obj.string("description", "notes", "content"))
+    ?.takeUnless { it.equals(title, ignoreCase = true) }
   val date = normalizeDate(obj.string("date", "evtDate", "data", "evtDatetimeBegin"))
   val time = normalizeTime(obj.string("time", "startTime", "lessonHour", "ora", "evtDatetimeBegin"))
   return AgendaItem(
@@ -213,18 +286,18 @@ internal fun normalizeAgendaItem(data: JsonElement): AgendaItem {
     subtitle = subject.orEmpty(),
     date = date,
     time = time,
-    detail = obj.string("description", "notes", "content"),
+    detail = detail,
     subject = subject,
     category = category,
-    sharePayload = listOf(title, date, time, subject).filterNotNull().joinToString(" - "),
+    sharePayload = listOf(title, subject, date, time, detail).filterNotNull().joinToString(" - "),
   )
 }
 
 internal fun normalizeNote(data: JsonObject, categoryCode: String): Note {
-  val content = data.string("evtText", "content", "description").orEmpty()
+  val content = sanitizeRegisterText(data.string("evtText", "content", "description")).orEmpty()
   val label = when (categoryCode) {
     "NTTE" -> "Nota docente"
-    "NTCL" -> "Nota di classe"
+    "NTCL" -> "Annotazione"
     "NTWN" -> "Richiamo"
     "NTST" -> "Nota disciplinare"
     else -> "Nota"
@@ -236,11 +309,10 @@ internal fun normalizeNote(data: JsonObject, categoryCode: String): Note {
     title = preview(content, label),
     contentPreview = preview(content, "Nessun dettaglio disponibile"),
     date = normalizeDate(data.string("evtDate", "date")),
-    author = data.string("authorName", "author") ?: "Docente",
+    author = sanitizeRegisterText(data.string("authorName", "author")) ?: "Docente",
     read = data.bool("readStatus", "read") ?: false,
     severity = when (categoryCode) {
-      "NTWN" -> "critical"
-      "NTTE" -> "warning"
+      "NTWN", "NTTE" -> "warning"
       else -> "info"
     },
   )
@@ -248,14 +320,44 @@ internal fun normalizeNote(data: JsonObject, categoryCode: String): Note {
 
 internal fun normalizeMaterialFolder(folder: JsonObject, teacherId: String, teacherName: String): List<MaterialItem> {
   val folderId = folder.string("folderId", "id").orEmpty()
-  val folderName = folder.string("folderName", "title") ?: "Materiali"
+  val folderName = sanitizeRegisterText(folder.string("folderName", "title")) ?: "Materiali"
   return extractArray(folder["contents"].obj(), "contents").map { contentElement ->
     val content = contentElement.obj()
     val objectType = content.string("objectType", "type").orEmpty()
-    val capability = if (objectType == "file") {
-      CapabilityState(CapabilityStatus.EXTERNAL_ONLY, "Apribile come documento", "Preview e download nativi disponibili.")
-    } else {
-      CapabilityState(CapabilityStatus.AVAILABLE, "Contenuto disponibile", "Materiale leggibile direttamente o scaricabile.")
+    val sourceUrl = normalizeUrlCandidate(content.string("url", "link", "href", "path"))
+    val attachments = buildList {
+      addAll(normalizeAttachments(content["attachments"] ?: content["allegati"]))
+      if (!sourceUrl.isNullOrBlank()) {
+        add(
+          RemoteAttachment(
+            id = content.string("id", "contentId", "itemId") ?: sourceUrl,
+            name = sanitizeRegisterText(content.string("title", "name")) ?: "Link",
+            url = sourceUrl,
+            mimeType = content.string("mimeType", "contentType"),
+            portalOnly = false,
+          ),
+        )
+      }
+    }.distinctBy { "${it.id}:${it.url.orEmpty()}" }
+    val capability = when {
+      !sourceUrl.isNullOrBlank() && attachments.none { !it.url.isNullOrBlank() && it.url != sourceUrl } ->
+        CapabilityState(
+          status = CapabilityStatus.EXTERNAL_ONLY,
+          label = "Link esterno",
+          detail = "Il materiale apre una risorsa esterna o una pagina del portale.",
+        )
+      attachments.isNotEmpty() ->
+        CapabilityState(
+          status = CapabilityStatus.AVAILABLE,
+          label = "Contenuto disponibile",
+          detail = "Il materiale contiene file o link recuperabili.",
+        )
+      else ->
+        CapabilityState(
+          status = CapabilityStatus.AVAILABLE,
+          label = "Contenuto disponibile",
+          detail = "Il materiale puo essere aperto con il dettaglio nativo.",
+        )
     }
     MaterialItem(
       id = content.string("id", "contentId", "itemId").orEmpty(),
@@ -263,13 +365,14 @@ internal fun normalizeMaterialFolder(folder: JsonObject, teacherId: String, teac
       teacherName = teacherName,
       folderId = folderId,
       folderName = folderName,
-      title = content.string("title", "name").orEmpty(),
+      title = sanitizeRegisterText(content.string("title", "name")).orEmpty(),
       objectId = content.string("objectId", "oid").orEmpty(),
       objectType = objectType,
       sharedAt = normalizeDate(content.string("shareDT", "sharedAt", "lastShareDT")),
       capabilityState = capability,
+      attachments = attachments,
     )
-  }
+  }.sortedByDescending { it.sharedAt }
 }
 
 internal fun normalizeMaterialAsset(
@@ -277,7 +380,31 @@ internal fun normalizeMaterialAsset(
   mimeType: String?,
   base64Content: String?,
   textPreview: String?,
+  sourceUrl: String?,
 ): MaterialAsset {
+  val effectiveSourceUrl = sourceUrl ?: item.attachments.firstOrNull { !it.url.isNullOrBlank() }?.url
+  val capability = when {
+    !base64Content.isNullOrBlank() || !textPreview.isNullOrBlank() -> CapabilityState(
+      status = CapabilityStatus.AVAILABLE,
+      label = when {
+        mimeType == "text/html" -> "Anteprima web"
+        mimeType?.startsWith("text/") == true -> "Anteprima testuale"
+        mimeType?.startsWith("image/") == true -> "Anteprima immagine"
+        else -> "File pronto"
+      },
+      detail = "Il contenuto e disponibile per anteprima o apertura locale.",
+    )
+    !effectiveSourceUrl.isNullOrBlank() -> CapabilityState(
+      status = CapabilityStatus.EXTERNAL_ONLY,
+      label = "Link esterno",
+      detail = "Il materiale richiede apertura esterna o passaggio tramite portale.",
+    )
+    else -> CapabilityState(
+      status = CapabilityStatus.UNAVAILABLE,
+      label = "Preview non disponibile",
+      detail = "Il portale non ha restituito un contenuto apribile.",
+    )
+  }
   return MaterialAsset(
     id = item.id,
     title = item.title,
@@ -286,11 +413,8 @@ internal fun normalizeMaterialAsset(
     mimeType = mimeType,
     base64Content = base64Content,
     textPreview = textPreview,
-    capabilityState = if (base64Content != null) {
-      CapabilityState(CapabilityStatus.EXTERNAL_ONLY, "Documento pronto", "Il contenuto e pronto per preview o download nativo.")
-    } else {
-      CapabilityState(CapabilityStatus.UNAVAILABLE, "Preview non disponibile", "Il portale non ha restituito un contenuto apribile.")
-    },
+    sourceUrl = effectiveSourceUrl,
+    capabilityState = capability,
   )
 }
 
@@ -327,17 +451,31 @@ fun normalizeDocumentAsset(
 
 internal fun normalizeDocument(data: JsonElement): DocumentItem {
   val obj = data.obj()
-  val viewUrl = obj.string("viewLink")
+  val viewUrl = normalizeUrlCandidate(obj.string("viewLink", "viewUrl", "url"))
+  val confirmUrl = normalizeUrlCandidate(obj.string("confirmLink", "confirmUrl", "confirmHref"))
   return DocumentItem(
-    id = obj.string("viewLink", "confirmLink", "desc").orEmpty().ifBlank { obj.string("desc").orEmpty() },
-    title = obj.string("desc", "title") ?: "Documento",
-    detail = if (viewUrl != null) "Documento apribile dal portale autenticato." else "Il portale non ha fornito un link diretto.",
+    id = obj.string("id", "viewLink", "confirmLink", "desc").orEmpty().ifBlank {
+      obj.string("desc", "title").orEmpty()
+    },
+    title = sanitizeRegisterText(obj.string("desc", "title")) ?: "Documento",
+    detail = when {
+      viewUrl != null -> "Documento apribile dal portale autenticato."
+      confirmUrl != null -> "Richiede una conferma tramite portale."
+      else -> "Il portale non ha fornito un link diretto."
+    },
     viewUrl = viewUrl,
-    confirmUrl = obj.string("confirmLink"),
-    capabilityState = if (viewUrl != null) {
-      CapabilityState(CapabilityStatus.EXTERNAL_ONLY, "Apri documento", "Apertura nativa o via portale autenticato.")
-    } else {
-      CapabilityState(CapabilityStatus.UNAVAILABLE, "Documento non disponibile", "Il link diretto non e disponibile.")
+    confirmUrl = confirmUrl,
+    capabilityState = when {
+      viewUrl != null || confirmUrl != null -> CapabilityState(
+        CapabilityStatus.EXTERNAL_ONLY,
+        "Apri documento",
+        "Apertura nativa o via portale autenticato.",
+      )
+      else -> CapabilityState(
+        CapabilityStatus.UNAVAILABLE,
+        "Documento non disponibile",
+        "Il link diretto non e disponibile.",
+      )
     },
   )
 }
@@ -349,25 +487,25 @@ internal fun normalizeSchoolbookCourse(data: JsonElement): SchoolbookCourse {
     Schoolbook(
       id = book.string("bookId", "id").orEmpty(),
       isbn = book.string("isbnCode", "isbn").orEmpty(),
-      title = book.string("title") ?: "Libro",
-      subtitle = book.string("subheading"),
-      volume = book.string("volume"),
-      author = book.string("author"),
-      publisher = book.string("publisher"),
-      subject = book.string("subjectDesc", "subject") ?: "Materia",
+      title = sanitizeRegisterText(book.string("title")) ?: "Libro",
+      subtitle = sanitizeRegisterText(book.string("subheading")),
+      volume = sanitizeRegisterText(book.string("volume")),
+      author = sanitizeRegisterText(book.string("author")),
+      publisher = sanitizeRegisterText(book.string("publisher")),
+      subject = sanitizeRegisterText(book.string("subjectDesc", "subject")) ?: "Materia",
       price = book.double("price"),
-      coverUrl = book.string("coverUrl")?.replace("//", "https://"),
+      coverUrl = normalizeUrlCandidate(book.string("coverUrl")),
       toBuy = book.bool("toBuy") ?: false,
       alreadyOwned = book.bool("alreadyOwned") ?: false,
       alreadyInUse = book.bool("alreadyInUse") ?: false,
       recommended = book.bool("recommended") ?: false,
-      recommendedFor = book.string("recommendedFor"),
+      recommendedFor = sanitizeRegisterText(book.string("recommendedFor")),
       newAdoption = book.bool("newAdoption") ?: false,
     )
   }
   return SchoolbookCourse(
     id = obj.string("courseId", "id").orEmpty(),
-    title = obj.string("courseDesc", "description") ?: "Corso",
+    title = sanitizeRegisterText(obj.string("courseDesc", "description")) ?: "Corso",
     books = books,
   )
 }
@@ -377,8 +515,8 @@ internal fun normalizePeriod(data: JsonElement): Period {
   return Period(
     code = obj.string("periodCode", "code").orEmpty(),
     order = obj.int("periodPos", "order") ?: 0,
-    description = obj.string("periodDesc", "description") ?: "Periodo",
-    label = obj.string("periodLabel", "label", "periodDesc") ?: "Periodo",
+    description = sanitizeRegisterText(obj.string("periodDesc", "description")) ?: "Periodo",
+    label = sanitizeRegisterText(obj.string("periodLabel", "label", "periodDesc")) ?: "Periodo",
     isFinal = obj.bool("isFinal") ?: false,
     startDate = normalizeDate(obj.string("dateStart", "startDate")),
     endDate = normalizeDate(obj.string("dateEnd", "endDate")),
@@ -388,44 +526,50 @@ internal fun normalizePeriod(data: JsonElement): Period {
 internal fun normalizeSubject(data: JsonElement): Subject {
   val obj = data.obj()
   val teachers = extractArray(obj["teachers"].obj(), "teachers").mapNotNull { teacher ->
-    teacher.obj().string("teacherName", "name")
+    sanitizeRegisterText(teacher.obj().string("teacherName", "name"))
   }
   return Subject(
     id = obj.string("id", "subjectId").orEmpty(),
-    description = obj.string("description", "subjectDesc") ?: "Materia",
+    description = sanitizeRegisterText(obj.string("description", "subjectDesc")) ?: "Materia",
     order = obj.int("order", "ord") ?: 0,
     teachers = teachers,
   )
 }
 
 internal fun normalizeAttachments(data: JsonElement?): List<RemoteAttachment> {
-  return when (data) {
-    is JsonArray -> data.mapNotNull { item ->
-      when (item) {
-        is JsonPrimitive -> item.contentOrNull?.takeIf { it.isNotBlank() }?.let {
-          RemoteAttachment(id = it, name = it, portalOnly = true)
-        }
-        is JsonObject -> {
-          val name = item.string("name", "fileName", "attachName", "title") ?: return@mapNotNull null
-          RemoteAttachment(
-            id = item.string("id", "attachId", "uuid") ?: name,
-            name = name,
-            url = normalizeUrlCandidate(item.string("url", "link", "href")),
-            mimeType = item.string("mimeType", "contentType"),
-            portalOnly = item.string("url", "link", "href") == null,
-          )
-        }
-        else -> null
-      }
-    }
+  val items = when (data) {
+    is JsonArray -> data
+    is JsonObject -> extractArray(data, "attachments", "allegati", "files", "items")
     else -> emptyList()
+  }
+  return items.mapNotNull { item ->
+    when (item) {
+      is JsonPrimitive -> item.contentOrNull?.takeIf { it.isNotBlank() }?.let {
+        RemoteAttachment(id = it, name = it, portalOnly = true)
+      }
+      is JsonObject -> {
+        val name = sanitizeRegisterText(item.string("name", "fileName", "attachName", "title", "desc"))
+          ?: return@mapNotNull null
+        val url = normalizeUrlCandidate(item.string("url", "link", "href", "path"))
+          ?: findActionUrl(item, "download", "attach", "alleg", "file")
+        RemoteAttachment(
+          id = item.string("id", "attachId", "uuid") ?: name,
+          name = name,
+          url = url,
+          mimeType = item.string("mimeType", "contentType"),
+          portalOnly = item.bool("portalOnly") ?: url.isNullOrBlank(),
+        )
+      }
+      else -> null
+    }
   }
 }
 
 internal fun JsonObject.string(vararg keys: String): String? {
   keys.forEach { key ->
-    val candidate = (this[key] as? JsonPrimitive)?.primitiveContentOrNull()
-    if (!candidate.isNullOrBlank()) return candidate.trim()
+    val primitive = this[key] as? JsonPrimitive ?: return@forEach
+    val candidate = primitive.contentOrNull?.trim()
+    if (!candidate.isNullOrBlank()) return candidate
   }
   return null
 }
@@ -464,7 +608,107 @@ internal fun JsonElement?.obj(): JsonObject = this as? JsonObject ?: JsonObject(
 
 internal fun JsonElement?.array(): List<JsonElement> = this as? JsonArray ?: emptyList()
 
-private fun JsonPrimitive.primitiveContentOrNull(): String? = if (isString) content else contentOrNull
+private fun normalizeNoticeboardAttachments(data: JsonElement?): List<NoticeboardAttachment> {
+  val items = when (data) {
+    is JsonArray -> data
+    is JsonObject -> extractArray(data, "attachments", "allegati", "files", "items")
+    else -> emptyList()
+  }
+  return items.mapNotNull { element ->
+    when (element) {
+      is JsonPrimitive -> {
+        val name = sanitizeRegisterText(element.contentOrNull) ?: return@mapNotNull null
+        NoticeboardAttachment(
+          id = name,
+          name = name,
+          portalOnly = true,
+        )
+      }
+      is JsonObject -> {
+        val name = sanitizeRegisterText(element.string("name", "fileName", "attachName", "title", "desc"))
+          ?: return@mapNotNull null
+        val url = normalizeUrlCandidate(element.string("url", "link", "href", "path"))
+          ?: findActionUrl(element, "download", "attach", "alleg", "file")
+        val action = url?.let {
+          NoticeboardAction(
+            type = NoticeboardActionType.DOWNLOAD,
+            label = "Scarica allegato",
+            url = it,
+          )
+        }
+        NoticeboardAttachment(
+          id = element.string("id", "attachId", "uuid") ?: name,
+          name = name,
+          url = url,
+          mimeType = element.string("mimeType", "contentType"),
+          portalOnly = element.bool("portalOnly") ?: url.isNullOrBlank(),
+          action = action,
+        )
+      }
+      else -> null
+    }
+  }
+}
+
+private fun toRemoteAttachment(attachment: NoticeboardAttachment): RemoteAttachment {
+  return RemoteAttachment(
+    id = attachment.id,
+    name = attachment.name,
+    url = attachment.url,
+    mimeType = attachment.mimeType,
+    portalOnly = attachment.portalOnly,
+  )
+}
+
+private fun buildNoticeboardActions(
+  needsAck: Boolean = false,
+  needsReply: Boolean = false,
+  needsJoin: Boolean = false,
+  needsFile: Boolean = false,
+  acknowledgeUrl: String? = null,
+  replyUrl: String? = null,
+  joinUrl: String? = null,
+  fileUploadUrl: String? = null,
+): List<NoticeboardAction> {
+  return buildList {
+    if (needsAck || acknowledgeUrl != null) {
+      add(NoticeboardAction(type = NoticeboardActionType.ACKNOWLEDGE, label = "Conferma", url = acknowledgeUrl))
+    }
+    if (needsReply || replyUrl != null) {
+      add(NoticeboardAction(type = NoticeboardActionType.REPLY, label = "Rispondi", url = replyUrl))
+    }
+    if (needsJoin || joinUrl != null) {
+      add(NoticeboardAction(type = NoticeboardActionType.JOIN, label = "Aderisci", url = joinUrl))
+    }
+    if (needsFile || fileUploadUrl != null) {
+      add(NoticeboardAction(type = NoticeboardActionType.UPLOAD, label = "Carica file", url = fileUploadUrl))
+    }
+  }
+}
+
+private fun communicationCapability(
+  actions: List<NoticeboardAction>,
+  noticeboardAttachments: List<NoticeboardAttachment>,
+  attachments: List<RemoteAttachment>,
+): CapabilityState {
+  return when {
+    actions.isNotEmpty() || noticeboardAttachments.any { it.portalOnly } -> CapabilityState(
+      CapabilityStatus.EXTERNAL_ONLY,
+      "Azioni esterne richieste",
+      "La comunicazione richiede conferma, risposta, adesione o passaggi tramite portale.",
+    )
+    noticeboardAttachments.isNotEmpty() || attachments.isNotEmpty() -> CapabilityState(
+      CapabilityStatus.AVAILABLE,
+      "Allegati disponibili",
+      "Il dettaglio e gli allegati esposti dal portale sono disponibili in app.",
+    )
+    else -> CapabilityState(
+      CapabilityStatus.AVAILABLE,
+      "Dettaglio disponibile",
+      "Contenuto testuale leggibile in app.",
+    )
+  }
+}
 
 private fun findActionUrl(root: JsonElement?, vararg keywords: String): String? {
   val loweredKeywords = keywords.map(String::lowercase)
@@ -520,13 +764,17 @@ internal fun normalizeStudentId(value: String?): String? {
 
 internal fun normalizeDate(value: String?): String {
   val raw = value?.trim()?.takeIf { it.isNotEmpty() } ?: return LocalDate.now().format(IsoDateFormatter)
-  return runCatching {
-    when {
-      Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(raw) -> raw
-      Regex("^\\d{8}$").matches(raw) -> LocalDate.parse(raw, DateTimeFormatter.BASIC_ISO_DATE).format(IsoDateFormatter)
-      else -> Instant.parse(raw).atZone(ZoneOffset.UTC).toLocalDate().format(IsoDateFormatter)
-    }
-  }.getOrElse { raw }
+  return when {
+    Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(raw) -> raw
+    Regex("^\\d{8}$").matches(raw) -> LocalDate.parse(raw, DateTimeFormatter.BASIC_ISO_DATE).format(IsoDateFormatter)
+    Regex("^\\d{4}-\\d{2}-\\d{2}T").containsMatchIn(raw) -> raw.take(10)
+    else -> runCatching { OffsetDateTime.parse(raw).toLocalDate().format(IsoDateFormatter) }.getOrElse { raw }
+  }
+}
+
+private fun normalizeDateOrNull(value: String?): String? {
+  val raw = value?.trim()?.takeIf { it.isNotBlank() } ?: return null
+  return normalizeDate(raw)
 }
 
 internal fun normalizeTime(value: String?): String? {
@@ -534,6 +782,7 @@ internal fun normalizeTime(value: String?): String? {
   return when {
     Regex("^\\d{2}:\\d{2}$").matches(raw) -> raw
     Regex("^\\d{1,2}:\\d{2}$").matches(raw) -> raw.padStart(5, '0')
+    Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}").containsMatchIn(raw) -> raw.substring(11, 16)
     else -> raw
   }
 }
@@ -543,6 +792,23 @@ internal fun toApiDateParam(value: String): String = value.replace("-", "")
 internal fun preview(value: String, fallback: String): String {
   val source = value.ifBlank { fallback }
   return if (source.length > 150) "${source.take(147)}..." else source
+}
+
+internal fun sanitizeRegisterText(value: String?): String? {
+  val raw = value?.trim()?.takeIf { it.isNotBlank() } ?: return null
+  val withoutHtml = Jsoup.parse(raw).text()
+    .replace('\u00A0', ' ')
+    .replace(Regex("\\s+"), " ")
+    .trim()
+  val withoutIsoPrefix = withoutHtml
+    .replace(
+      Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d+)?(?:Z|[+-]\\d{2}:\\d{2})?\\s*"),
+      "",
+    )
+    .replace(Regex("^\\d{4}-\\d{2}-\\d{2}\\s+"), "")
+    .trimStart('-', ':', '|', ' ')
+    .trim()
+  return withoutIsoPrefix.takeIf { it.isNotBlank() }
 }
 
 private fun trimZero(value: Double): String = if (value % 1.0 == 0.0) value.toInt().toString() else value.toString()

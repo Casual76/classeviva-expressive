@@ -23,37 +23,37 @@ export function ElegantCard({
   const colors = useColors();
 
   const radiusMap = {
-    sm: "rounded-xl",       // 12dp
-    md: "rounded-2xl",      // 16dp
-    lg: "rounded-[28px]",   // 28dp
-    xl: "rounded-[36px]",   // 36dp
+    sm: "rounded-lg",
+    md: "rounded-[22px]",
+    lg: "rounded-[28px]",
+    xl: "rounded-[34px]",
   } as const;
 
   const tones = {
     neutral: {
-      backgroundColor: colors.surfaceContainerHigh ?? colors.surface,
-      accentBackground: colors.surfaceContainerHigh ?? colors.surface,
+      backgroundColor: colors.surface ?? colors.background,
+      accentBackground: colors.surfaceContainer ?? colors.surface,
       borderColor: colors.outlineVariant ?? colors.border,
     },
     primary: {
-      backgroundColor: colors.primary,
+      backgroundColor: colors.primaryContainer ?? colors.surface,
       accentBackground: colors.primaryContainer ?? withAlpha(colors.primary, 0.12),
-      borderColor: withAlpha(colors.primary, 0.2),
+      borderColor: withAlpha(colors.primary, 0.18),
     },
     success: {
-      backgroundColor: colors.success,
+      backgroundColor: colors.successContainer ?? colors.surface,
       accentBackground: colors.successContainer ?? withAlpha(colors.success, 0.12),
-      borderColor: withAlpha(colors.success, 0.2),
+      borderColor: withAlpha(colors.success, 0.18),
     },
     warning: {
-      backgroundColor: colors.warning,
+      backgroundColor: colors.warningContainer ?? colors.surface,
       accentBackground: colors.warningContainer ?? withAlpha(colors.warning, 0.12),
-      borderColor: withAlpha(colors.warning, 0.2),
+      borderColor: withAlpha(colors.warning, 0.18),
     },
     error: {
-      backgroundColor: colors.error,
+      backgroundColor: colors.errorContainer ?? colors.surface,
       accentBackground: colors.errorContainer ?? withAlpha(colors.error, 0.12),
-      borderColor: withAlpha(colors.error, 0.2),
+      borderColor: withAlpha(colors.error, 0.18),
     },
   } as const;
 
@@ -69,32 +69,32 @@ export function ElegantCard({
 
   const variantStyle: Record<NonNullable<ElegantCardProps["variant"]>, ViewStyle> = {
     elevated: {
-      backgroundColor: colors.surfaceContainer ?? colors.surface,
-      borderColor: "transparent",
-      borderWidth: 0,
+      backgroundColor: colors.surface ?? colors.background,
+      borderColor: colors.outlineVariant ?? colors.border,
+      borderWidth: 1,
       shadowColor: colors.foreground,
-      shadowOpacity: 0.08,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.06,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 6 },
       elevation: 2,
     },
     filled: {
       backgroundColor: selectedTone.accentBackground,
-      borderColor: "transparent",
-      borderWidth: 0,
+      borderColor: selectedTone.borderColor,
+      borderWidth: 1,
     },
     outlined: {
-      backgroundColor: "transparent",
+      backgroundColor: colors.surface ?? colors.background,
       borderColor: colors.outlineVariant ?? colors.border,
       borderWidth: 1,
     },
     gradient: {
       backgroundColor: colors.primaryContainer ?? gradientTone.accentBackground,
-      borderColor: "transparent",
-      borderWidth: 0,
+      borderColor: gradientTone.borderColor,
+      borderWidth: 1,
       shadowColor: colors.primary,
-      shadowOpacity: 0.12,
-      shadowRadius: 16,
+      shadowOpacity: 0.08,
+      shadowRadius: 20,
       shadowOffset: { width: 0, height: 6 },
       elevation: 3,
     },

@@ -1,37 +1,43 @@
-import { useRouter } from "expo-router";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { AnimatedListItem } from "@/components/ui/animated-list-item";
-import { EmptyState } from "@/components/ui/empty-state";
+import { ElegantButton } from "@/components/ui/elegant-button";
 import { ElegantCard } from "@/components/ui/elegant-card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingState } from "@/components/ui/loading-state";
 import { M3Chip } from "@/components/ui/m3-chip";
+import { MetricTile } from "@/components/ui/metric-tile";
+import { RegisterListRow } from "@/components/ui/register-list-row";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SectionTitle } from "@/components/ui/section-title";
-import { useReturnToMoreOnHardwareBack } from "@/hooks/use-return-to-more-on-hardware-back";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { useColors } from "@/hooks/use-colors";
 import type { NoticeboardItemDetail } from "@/lib/classeviva-client";
+import { openExternalContent } from "@/lib/open-content";
 import {
+  acknowledgeCommunicationView,
+  joinCommunicationView,
   loadCommunicationDetailView,
   loadCommunicationsView,
   type CommunicationRowViewModel,
 } from "@/lib/student-data";
 
+type ReadFilter = "all" | "read" | "unread";
+
 export default function CommunicationsScreen() {
   const colors = useColors();
-  const router = useRouter();
-  useReturnToMoreOnHardwareBack();
   const [items, setItems] = useState<CommunicationRowViewModel[]>([]);
   const [selectedItem, setSelectedItem] = useState<CommunicationRowViewModel | null>(null);
   const [detail, setDetail] = useState<NoticeboardItemDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState<"ack" | "join" | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const deferredQuery = useDeferredValue(searchQuery);
-  const [filter, setFilter] = useState<"all" | "read" | "unread">("all");
+  const [filter, setFilter] = useState<ReadFilter>("all");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,22 +65,69 @@ export default function CommunicationsScreen() {
     setDetail(null);
     setDetailError(null);
     setIsDetailLoading(true);
+
     try {
       const nextDetail = await loadCommunicationDetailView(item);
       setDetail(nextDetail);
+      setItems((current) =>
+        current.map((entry) =>
+          entry.id === item.id
+            ? {
+                ...entry,
+                statusLabel: "Letta",
+                tone: "neutral",
+              }
+            : entry,
+        ),
+      );
     } catch (loadError) {
       console.error("Communication detail failed", loadError);
-      setDetailError(loadError instanceof Error ? loadError.message : "Non riesco a caricare il contenuto.");
+      setDetailError(loadError instanceof Error ? loadError.message : "Non riesco a caricare il contenuto completo.");
     } finally {
       setIsDetailLoading(false);
     }
   }, []);
 
+  const handleAction = useCallback(
+    async (action: "ack" | "join") => {
+      if (!selectedItem) {
+        return;
+      }
+
+      setIsActionLoading(action);
+      setDetailError(null);
+
+      try {
+        const nextDetail =
+          action === "ack"
+            ? await acknowledgeCommunicationView(selectedItem)
+            : await joinCommunicationView(selectedItem);
+        setDetail(nextDetail);
+        await loadData();
+      } catch (actionError) {
+        console.error("Communication action failed", actionError);
+        setDetailError(
+          actionError instanceof Error ? actionError.message : "Non sono riuscito a completare l'azione richiesta.",
+        );
+      } finally {
+        setIsActionLoading(null);
+      }
+    },
+    [loadData, selectedItem],
+  );
+
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
-      if (filter === "read" && item.statusLabel !== "Letta") return false;
-      if (filter === "unread" && item.statusLabel === "Letta") return false;
-      if (!deferredQuery.trim()) return true;
+      if (filter === "read" && item.statusLabel !== "Letta") {
+        return false;
+      }
+      if (filter === "unread" && item.statusLabel === "Letta") {
+        return false;
+      }
+      if (!deferredQuery.trim()) {
+        return true;
+      }
+
       const query = deferredQuery.toLowerCase();
       return (
         item.title.toLowerCase().includes(query) ||
@@ -85,11 +138,19 @@ export default function CommunicationsScreen() {
   }, [items, filter, deferredQuery]);
 
   const unreadCount = useMemo(() => items.filter((item) => item.statusLabel !== "Letta").length, [items]);
+  const actionableCount = useMemo(
+    () => items.filter((item) => item.needsAck || item.needsJoin || item.needsReply).length,
+    [items],
+  );
+  const withAttachmentsCount = useMemo(() => items.filter((item) => item.hasAttachments).length, [items]);
 
   if (isLoading) {
     return (
       <ScreenContainer className="flex-1 bg-background">
-        <LoadingState title="Sto caricando le comunicazioni" detail="Recupero circolari, contenuti e stato di lettura." />
+        <LoadingState
+          detail="Sto preparando bacheca, dettaglio e azioni operative."
+          title="Carico le comunicazioni"
+        />
       </ScreenContainer>
     );
   }
@@ -97,107 +158,195 @@ export default function CommunicationsScreen() {
   return (
     <ScreenContainer className="flex-1 bg-background">
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 100 }}
-        refreshControl={<RefreshControl onRefresh={() => { setIsRefreshing(true); void loadData(); }} refreshing={isRefreshing} />}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        refreshControl={
+          <RefreshControl
+            onRefresh={() => {
+              setIsRefreshing(true);
+              void loadData();
+            }}
+            refreshing={isRefreshing}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-5 px-5 py-6">
+        <View className="gap-6 px-5 py-6">
           <AnimatedListItem index={0}>
             <ScreenHeader
-              backLabel="Altro"
               eyebrow="Bacheca"
-              onBack={() => router.replace("/(tabs)/more")}
-              subtitle="Circolari, allegati e contenuti completi con stato di lettura."
+              subtitle="Apri il testo completo, conferma, aderisci e scarica gli allegati disponibili."
               title="Comunicazioni"
             />
           </AnimatedListItem>
 
           {error ? (
-            <ElegantCard className="gap-2 p-4" tone="warning" variant="filled" radius="md">
-              <Text className="text-sm font-medium" style={{ color: colors.foreground }}>Aggiornamento parziale</Text>
-              <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{error}</Text>
-            </ElegantCard>
+            <AnimatedListItem index={1}>
+              <RegisterListRow
+                detail={error}
+                meta="Sincronizzazione"
+                title="Aggiornamento parziale"
+                tone="warning"
+              />
+            </AnimatedListItem>
           ) : null}
 
-          <AnimatedListItem index={1}>
-            <View className="flex-row gap-3">
-              <ElegantCard className="flex-1 gap-1.5 p-4" tone="warning" variant="filled" radius="md">
-                <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Non lette</Text>
-                <Text className="text-3xl font-light" style={{ color: colors.foreground }}>{unreadCount}</Text>
-              </ElegantCard>
-              <ElegantCard className="flex-1 gap-1.5 p-4" variant="filled" radius="md">
-                <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Totale</Text>
-                <Text className="text-3xl font-light" style={{ color: colors.foreground }}>{items.length}</Text>
-              </ElegantCard>
+          <AnimatedListItem index={2}>
+            <View className="flex-row flex-wrap gap-3">
+              <MetricTile detail="Messaggi non ancora letti." label="Non lette" tone={unreadCount > 0 ? "warning" : "success"} value={String(unreadCount)} />
+              <MetricTile detail="Comunicazioni con un'azione richiesta." label="Da confermare" tone={actionableCount > 0 ? "primary" : "neutral"} value={String(actionableCount)} />
+              <MetricTile detail="Voci con allegati o file." label="Allegati" tone="primary" value={String(withAttachmentsCount)} />
             </View>
           </AnimatedListItem>
 
-          <SearchBar onChangeText={setSearchQuery} onClear={() => setSearchQuery("")} placeholder="Cerca titolo, contenuto o mittente" value={searchQuery} />
+          <AnimatedListItem index={3}>
+            <SearchBar
+              onChangeText={setSearchQuery}
+              onClear={() => setSearchQuery("")}
+              placeholder="Cerca titolo, mittente o contenuto"
+              value={searchQuery}
+            />
+          </AnimatedListItem>
 
-          <View className="gap-3">
-            <SectionTitle eyebrow="Filtro" title="Stato lettura" />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <AnimatedListItem index={4}>
+            <View className="gap-3">
+              <SectionTitle eyebrow="Filtro" title="Stato di lettura" />
               <View className="flex-row gap-2">
-                <M3Chip label="Tutte" selected={filter === "all"} onPress={() => setFilter("all")} />
-                <M3Chip label="Non lette" selected={filter === "unread"} onPress={() => setFilter("unread")} />
-                <M3Chip label="Lette" selected={filter === "read"} onPress={() => setFilter("read")} />
+                <M3Chip label="Tutte" onPress={() => setFilter("all")} selected={filter === "all"} />
+                <M3Chip label="Non lette" onPress={() => setFilter("unread")} selected={filter === "unread"} />
+                <M3Chip label="Lette" onPress={() => setFilter("read")} selected={filter === "read"} />
               </View>
-            </ScrollView>
-          </View>
+            </View>
+          </AnimatedListItem>
 
           <View className="gap-3">
-            <SectionTitle eyebrow="Dettaglio" title="Comunicazione selezionata" />
+            <SectionTitle eyebrow="Dettaglio" title="Comunicazione selezionata" detail="Il contenuto completo resta visibile qui, insieme alle azioni del portale." />
             {selectedItem ? (
-              <ElegantCard className="gap-4 p-5" tone="primary" variant="filled" radius="lg">
-                <View className="gap-0.5">
-                  <Text className="text-base font-medium" style={{ color: colors.foreground }}>{selectedItem.title}</Text>
-                  <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
-                    {selectedItem.metadataLabel} — {selectedItem.dateLabel}
+              <ElegantCard className="gap-4 p-5" radius="lg" variant="elevated">
+                <View className="gap-2">
+                  <View className="flex-row flex-wrap gap-2">
+                    <StatusBadge label={selectedItem.statusLabel === "Letta" ? "Letta" : "Da leggere"} tone={selectedItem.statusLabel === "Letta" ? "neutral" : "primary"} />
+                    <StatusBadge label={selectedItem.metadataLabel} tone="neutral" />
+                    {selectedItem.hasAttachments ? <StatusBadge label="Con allegati" tone="primary" /> : null}
+                  </View>
+                  <Text className="text-lg font-medium" style={{ color: colors.foreground }}>
+                    {selectedItem.title}
+                  </Text>
+                  <Text className="text-sm leading-6" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
+                    {selectedItem.sender} / {selectedItem.dateLabel}
                   </Text>
                 </View>
+
                 {isDetailLoading ? (
                   <View className="flex-row items-center gap-3">
                     <ActivityIndicator color={colors.primary} size="small" />
-                    <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>Sto caricando il contenuto completo.</Text>
+                    <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
+                      Sto recuperando il contenuto completo.
+                    </Text>
                   </View>
                 ) : null}
-                {detailError ? <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{detailError}</Text> : null}
-                {detail ? <Text className="text-sm leading-6" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{detail.content}</Text> : null}
+
+                {detailError ? (
+                  <RegisterListRow detail={detailError} meta="Dettaglio" title="Operazione non completata" tone="warning" />
+                ) : null}
+
+                {detail ? (
+                  <View className="gap-4">
+                    <Text className="text-sm leading-7" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
+                      {detail.content}
+                    </Text>
+
+                    {detail.replyText ? (
+                      <RegisterListRow
+                        detail={detail.replyText}
+                        meta="Risposta richiesta"
+                        title="Indicazioni del portale"
+                        tone="primary"
+                      />
+                    ) : null}
+
+                    {detail.actions.some((action) => action.type === "ack" || action.type === "join") ? (
+                      <View className="flex-row flex-wrap gap-3">
+                        {detail.actions.some((action) => action.type === "ack") ? (
+                          <ElegantButton disabled={isActionLoading !== null} onPress={() => void handleAction("ack")} variant="primary">
+                            {isActionLoading === "ack" ? "Confermo..." : "Conferma"}
+                          </ElegantButton>
+                        ) : null}
+                        {detail.actions.some((action) => action.type === "join") ? (
+                          <ElegantButton disabled={isActionLoading !== null} onPress={() => void handleAction("join")} variant="secondary">
+                            {isActionLoading === "join" ? "Aderisco..." : "Aderisci"}
+                          </ElegantButton>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {detail.attachments.length > 0 ? (
+                      <View className="gap-3">
+                        <SectionTitle eyebrow="Allegati" title="File disponibili" />
+                        <View className="gap-3">
+                          {detail.attachments.map((attachment) => (
+                            <Pressable
+                              key={attachment.id}
+                              disabled={!attachment.url}
+                              onPress={() => {
+                                if (attachment.url) {
+                                  void openExternalContent(attachment.url);
+                                }
+                              }}
+                            >
+                              <RegisterListRow
+                                detail={attachment.capabilityState.detail}
+                                meta={attachment.mimeType || attachment.fileName}
+                                title={attachment.title}
+                                tone={attachment.url ? "primary" : "warning"}
+                                trailing={
+                                  <StatusBadge
+                                    label={attachment.url ? "Apri / scarica" : "Link mancante"}
+                                    tone={attachment.url ? "primary" : "warning"}
+                                  />
+                                }
+                              />
+                            </Pressable>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
               </ElegantCard>
             ) : (
-              <EmptyState detail="Seleziona una comunicazione per leggere il contenuto completo." title="Nessuna comunicazione selezionata" />
+              <EmptyState detail="Seleziona una comunicazione dalla lista per aprire il testo completo e le eventuali azioni." title="Nessuna comunicazione selezionata" />
             )}
           </View>
 
           <View className="gap-3">
-            <SectionTitle eyebrow="Elenco" title="Tutte le comunicazioni" />
+            <SectionTitle eyebrow="Elenco" title="Tutte le comunicazioni" detail="La lista mette in evidenza conferme, adesioni e allegati da aprire." />
             {filteredItems.length > 0 ? (
               <View className="gap-3">
-                {filteredItems.map((item, i) => {
+                {filteredItems.map((item, index) => {
                   const isSelected = selectedItem?.id === item.id;
                   return (
-                    <AnimatedListItem key={item.id} index={4 + i}>
+                    <AnimatedListItem key={item.id} index={5 + index}>
                       <Pressable onPress={() => void handleSelect(item)}>
-                        <ElegantCard className="gap-3 p-4" tone={isSelected ? "primary" : item.tone} variant={isSelected ? "elevated" : "filled"} radius="md">
-                          <View className="flex-row items-start justify-between gap-3">
-                            <View className="flex-1 gap-0.5">
-                              <Text className="text-sm font-medium" style={{ color: colors.foreground }}>{item.title}</Text>
-                              <Text className="text-xs" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.metadataLabel}</Text>
-                            </View>
-                            <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
-                              {item.statusLabel === "Letta" ? "Letta" : "Nuova"}
-                            </Text>
-                          </View>
-                          <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.preview}</Text>
-                          <Text className="text-[11px] font-medium uppercase tracking-[1.5px]" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{item.dateLabel}</Text>
-                        </ElegantCard>
+                        <RegisterListRow
+                          detail={item.preview}
+                          meta={`${item.dateLabel} / ${item.sender}`}
+                          subtitle={item.metadataLabel}
+                          title={item.title}
+                          tone={isSelected ? "primary" : item.tone}
+                          trailing={
+                            <StatusBadge
+                              label={item.statusLabel === "Letta" ? "Letta" : "Nuova"}
+                              tone={item.statusLabel === "Letta" ? "neutral" : "primary"}
+                            />
+                          }
+                        />
                       </Pressable>
                     </AnimatedListItem>
                   );
                 })}
               </View>
             ) : (
-              <EmptyState detail="Modifica filtro o ricerca per trovare altre comunicazioni." title="Nessuna comunicazione trovata" />
+              <EmptyState detail="Modifica filtri o ricerca per trovare altre comunicazioni." title="Nessuna comunicazione trovata" />
             )}
           </View>
         </View>

@@ -13,6 +13,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { useColors } from "@/hooks/use-colors";
+import { withAlpha } from "@/lib/utils";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -50,14 +51,14 @@ export function M3Chip({
         animatedStyle,
         {
           backgroundColor: selected
-            ? (colors.secondaryContainer ?? colors.primary)
-            : "transparent",
-          borderWidth: selected ? 0 : 1,
-          borderColor: colors.outline ?? colors.border,
+            ? (colors.primaryContainer ?? withAlpha(colors.primary, 0.12))
+            : (colors.surface ?? colors.background),
+          borderWidth: 1,
+          borderColor: selected ? withAlpha(colors.primary, 0.24) : (colors.outlineVariant ?? colors.border),
         },
         paddingStyle,
       ]}
-      className="flex-row items-center gap-1.5 rounded-lg"
+      className="flex-row items-center gap-1.5 rounded-full"
       onPress={onPress}
       onPressIn={() => {
         scale.value = withSpring(0.95, { damping: 15, stiffness: 400 });
@@ -82,9 +83,10 @@ export function M3Chip({
       )}
       <Text
         className="text-sm font-medium"
+        numberOfLines={1}
         style={{
           color: selected
-            ? (colors.onSecondaryContainer ?? colors.foreground)
+            ? (colors.onPrimaryContainer ?? colors.primary)
             : (colors.onSurfaceVariant ?? colors.foreground),
         }}
       >

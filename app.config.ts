@@ -30,9 +30,9 @@ const env = {
   // App branding - update these values directly (do not use env vars)
   appName: "Classeviva Expressive",
   appSlug: "classeviva-expressive",
-  appVersion: "1.0.2",
-  androidVersionCode: 2026031902,
-  iosBuildNumber: "2026031902",
+  appVersion: "4.0.0",
+  androidVersionCode: 2026040501,
+  iosBuildNumber: "2026040501",
   // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
   // Leave empty to use the default icon from assets/images/icon.png
   logoUrl:

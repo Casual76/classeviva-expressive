@@ -28,14 +28,18 @@ export function CalendarGrid({
 
   return (
     <View
-      className="gap-3 rounded-[28px] p-4"
-      style={{ backgroundColor: colors.surfaceContainer ?? colors.surface }}
+      className="gap-3 rounded-[28px] p-3"
+      style={{
+        backgroundColor: colors.surface ?? colors.background,
+        borderWidth: 1,
+        borderColor: colors.outlineVariant ?? colors.border,
+      }}
     >
-      <View className="flex-row justify-between">
+      <View className="flex-row justify-between px-1">
         {WEEK_LABELS.map((label) => (
           <Text
             key={label}
-            className="w-10 text-center text-[11px] font-medium uppercase tracking-[1px]"
+            className="w-9 text-center text-[11px] font-medium uppercase tracking-[1px]"
             style={{ color: colors.onSurfaceVariant ?? colors.muted }}
           >
             {label}
@@ -43,16 +47,16 @@ export function CalendarGrid({
         ))}
       </View>
 
-      <View className="flex-row flex-wrap gap-y-2">
+      <View className="flex-row flex-wrap gap-y-1.5">
         {days.map((day) => {
           const isSelected = selectedDate === day.isoDate;
           const backgroundColor = isSelected
-            ? colors.primary
+            ? colors.primaryContainer ?? colors.surfaceContainerHigh
             : day.isToday
-              ? colors.primaryContainer ?? withAlpha(colors.primary, 0.12)
-              : "transparent";
+              ? colors.surfaceContainerHigh ?? withAlpha(colors.primary, 0.12)
+              : colors.surface;
           const textColor = isSelected
-            ? (colors.onPrimary ?? "#FFFFFF")
+            ? (colors.onPrimaryContainer ?? colors.primary)
             : day.isCurrentMonth
               ? colors.foreground
               : (colors.onSurfaceVariant ?? colors.muted);
@@ -60,14 +64,22 @@ export function CalendarGrid({
           return (
             <Pressable
               key={day.id}
-              className="w-[14.28%] items-center"
+              className="w-[14.28%] items-center py-0.5"
               onPress={() => onSelectDate?.(day.isoDate)}
             >
               <View
-                className="h-11 w-10 items-center justify-center rounded-full"
-                style={{ backgroundColor }}
+                className="h-10 w-9 items-center justify-center rounded-full"
+                style={{
+                  backgroundColor,
+                  borderWidth: 1,
+                  borderColor: isSelected
+                    ? withAlpha(colors.primary, 0.24)
+                    : day.isToday
+                      ? colors.outlineVariant ?? colors.border
+                      : "transparent",
+                }}
               >
-                <Text style={{ color: textColor, fontWeight: day.isToday || isSelected ? "600" : "400", fontSize: 14 }}>
+                <Text style={{ color: textColor, fontWeight: day.isToday || isSelected ? "600" : "400", fontSize: 13 }}>
                   {day.dayLabel}
                 </Text>
               </View>

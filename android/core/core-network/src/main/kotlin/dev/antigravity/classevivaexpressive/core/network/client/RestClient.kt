@@ -174,6 +174,7 @@ class ClassevivaRestClient @Inject constructor(
 
   suspend fun getMaterialAsset(item: MaterialItem): MaterialAsset = withContext(Dispatchers.IO) {
     ensureSession()
+    val sourceUrl = item.attachments.firstOrNull { !it.url.isNullOrBlank() }?.url
     val request = Request.Builder()
       .url("$ApiBaseUrl/students/${activeSession!!.studentId}/didactics/item/${item.id}")
       .headers(defaultHeaders(includeAuth = true))
@@ -181,6 +182,9 @@ class ClassevivaRestClient @Inject constructor(
       .build()
     httpClient.newCall(request).execute().use { response ->
       if (!response.isSuccessful) {
+        sourceUrl?.let {
+          return@use normalizeMaterialAsset(item, null, null, null, it)
+        }
         throw ClassevivaNetworkException("Impossibile aprire il materiale: ${response.code}")
       }
       val bytes = response.body?.bytes() ?: ByteArray(0)
@@ -189,7 +193,7 @@ class ClassevivaRestClient @Inject constructor(
       val textPreview = mimeType?.takeIf { it.startsWith("text/") }?.let {
         bytes.copyOfRange(0, bytes.size.coerceAtMost(512)).decodeToString().trim().takeIf(String::isNotBlank)
       }
-      normalizeMaterialAsset(item, mimeType, base64Content, textPreview)
+      normalizeMaterialAsset(item, mimeType, base64Content, textPreview, sourceUrl)
     }
   }
 

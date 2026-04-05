@@ -5,128 +5,123 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { AnimatedListItem } from "@/components/ui/animated-list-item";
 import { ElegantCard } from "@/components/ui/elegant-card";
+import { RegisterListRow } from "@/components/ui/register-list-row";
 import { ScreenHeader } from "@/components/ui/screen-header";
+import { SectionTitle } from "@/components/ui/section-title";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/lib/auth-context";
 
-function ModuleCard({
-  title,
-  detail,
-  icon,
-  onPress,
-}: {
+type ModuleHref =
+  | "/(tabs)/absences"
+  | "/(tabs)/notes"
+  | "/(tabs)/materials"
+  | "/(tabs)/schoolbooks"
+  | "/(tabs)/report-cards"
+  | "/(tabs)/profile"
+  | "/(tabs)/schedule";
+
+type ModuleGroup = {
   title: string;
   detail: string;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  onPress: () => void;
-}) {
-  const colors = useColors();
-
-  return (
-    <Pressable onPress={onPress}>
-      <ElegantCard className="gap-4 p-5" variant="elevated" radius="md">
-        <View className="flex-row items-start justify-between gap-4">
-          <View className="flex-1 gap-1.5">
-            <Text className="text-base font-medium" style={{ color: colors.foreground }}>{title}</Text>
-            <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>{detail}</Text>
-          </View>
-          <View
-            className="h-11 w-11 items-center justify-center rounded-full"
-            style={{ backgroundColor: colors.primaryContainer ?? colors.surface }}
-          >
-            <MaterialIcons color={colors.onPrimaryContainer ?? colors.primary} name={icon} size={20} />
-          </View>
-        </View>
-      </ElegantCard>
-    </Pressable>
-  );
-}
+  items: {
+    title: string;
+    detail: string;
+    badge: string;
+    tone?: "neutral" | "primary" | "success" | "warning" | "error";
+    icon: keyof typeof MaterialIcons.glyphMap;
+    href: ModuleHref;
+  }[];
+};
 
 export default function MoreScreen() {
   const colors = useColors();
   const router = useRouter();
   const { user } = useAuth();
 
-  const modules: {
-    title: string;
-    detail: string;
-    icon: keyof typeof MaterialIcons.glyphMap;
-    href:
-      | "/(tabs)/absences"
-      | "/(tabs)/communications"
-      | "/(tabs)/notes"
-      | "/(tabs)/materials"
-      | "/(tabs)/schoolbooks"
-      | "/(tabs)/report-cards"
-      | "/(tabs)/profile";
-  }[] = [
-    { title: "Assenze", detail: "Storico assenze, ritardi e stato delle giustificazioni.", icon: "fact-check", href: "/(tabs)/absences" },
-    { title: "Comunicazioni", detail: "Circolari, bacheca, allegati e contenuti completi in lettura.", icon: "campaign", href: "/(tabs)/communications" },
-    { title: "Note", detail: "Richiami, note docente e dettaglio completo per ogni evento.", icon: "edit-note", href: "/(tabs)/notes" },
-    { title: "Materiale didattico", detail: "Cartelle, contenuti condivisi e apertura controllata di file e PDF.", icon: "folder-copy", href: "/(tabs)/materials" },
-    { title: "Libri", detail: "Elenco testi per corso, stato di acquisto e riepilogo materia.", icon: "menu-book", href: "/(tabs)/schoolbooks" },
-    { title: "Pagelle", detail: "Documenti pubblicati dal portale con apertura esterna quando disponibile.", icon: "description", href: "/(tabs)/report-cards" },
-    { title: "Profilo", detail: "Anagrafica studente, materie, periodi e gestione della sessione.", icon: "person-outline", href: "/(tabs)/profile" },
+  const groups: ModuleGroup[] = [
+    {
+      title: "In evidenza",
+      detail: "Le sezioni secondarie che devono restare piu vicine alla navigazione principale.",
+      items: [
+        { title: "Note", detail: "Annotazioni, richiami e note disciplinari con filtri chiari.", badge: "Prioritario", tone: "warning", icon: "edit-note", href: "/(tabs)/notes" },
+        { title: "Orario", detail: "Lezioni del giorno e settimana con fallback sulle ore.", badge: "Lezioni", icon: "view-week", href: "/(tabs)/schedule" },
+        { title: "Profilo e impostazioni", detail: "Anagrafica, sessione, notifiche e test canali.", badge: "Profilo", icon: "person-outline", href: "/(tabs)/profile" },
+      ],
+    },
+    {
+      title: "Didattica",
+      detail: "Materiali e strumenti utili fuori dal flusso rapido quotidiano.",
+      items: [
+        { title: "Materiale didattico", detail: "Cartelle, file, PDF, link e contenuti condivisi.", badge: "Materiali", icon: "folder-copy", href: "/(tabs)/materials" },
+        { title: "Libri", detail: "Elenco testi per corso e stato di acquisto.", badge: "Libri", icon: "menu-book", href: "/(tabs)/schoolbooks" },
+      ],
+    },
+    {
+      title: "Registro",
+      detail: "Storico presenze e documenti pubblicati dal portale.",
+      items: [
+        { title: "Assenze", detail: "Assenze, ritardi e uscite sempre separati nei conteggi.", badge: "Presenze", icon: "fact-check", href: "/(tabs)/absences" },
+        { title: "Pagelle e documenti", detail: "Documenti pubblicati, con apertura esterna se richiesta.", badge: "Documenti", icon: "description", href: "/(tabs)/report-cards" },
+      ],
+    },
   ];
 
   return (
     <ScreenContainer className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-        <View className="gap-5 px-5 py-6">
+      <ScrollView contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+        <View className="gap-6 px-5 py-6">
           <AnimatedListItem index={0}>
             <ScreenHeader
               eyebrow="Hub secondario"
-              subtitle="Tutte le sezioni meno frequenti restano vicine, ma senza appesantire la navigazione primaria."
+              subtitle="Le sezioni fuori dalla barra principale restano ordinate per compito, con Note e Orario piu in vista."
               title="Altro"
             />
           </AnimatedListItem>
 
           <AnimatedListItem index={1}>
-            <ElegantCard className="gap-4 p-6" variant="gradient" radius="lg">
-              <Text
-                className="text-[11px] font-medium uppercase tracking-[1.5px]"
-                style={{ color: colors.onPrimaryContainer ? `${colors.onPrimaryContainer}BB` : colors.muted }}
-              >
-                Sessione attiva
-              </Text>
-              <Text
-                className="text-[28px] leading-[34px]"
-                style={{ color: colors.onPrimaryContainer ?? colors.foreground }}
-              >
-                {[user?.name, user?.surname].filter(Boolean).join(" ") || "Studente"}
-              </Text>
-              <Text
-                className="text-sm leading-5"
-                style={{ color: colors.onPrimaryContainer ? `${colors.onPrimaryContainer}CC` : colors.muted }}
-              >
-                {[user?.school, [user?.class, user?.section].filter(Boolean).join(" "), user?.schoolYear]
-                  .filter(Boolean)
-                  .join(" — ") || "Profilo Classeviva sincronizzato"}
-              </Text>
+            <ElegantCard className="gap-3 p-5" radius="lg" variant="gradient">
+              <StatusBadge icon="school" label="Sessione attiva" tone="primary" />
+              <View className="gap-1.5">
+                <Text className="text-[24px] leading-[30px] font-medium" style={{ color: colors.foreground }}>
+                  {[user?.name, user?.surname].filter(Boolean).join(" ") || "Studente"}
+                </Text>
+                <Text className="text-sm leading-6" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
+                  {[user?.school, [user?.class, user?.section].filter(Boolean).join(" "), user?.schoolYear]
+                    .filter(Boolean)
+                    .join(" / ") || "Profilo sincronizzato dal portale"}
+                </Text>
+              </View>
             </ElegantCard>
           </AnimatedListItem>
 
-          <View className="gap-3">
-            {modules.map((module, i) => (
-              <AnimatedListItem key={module.title} index={2 + i}>
-                <ModuleCard
-                  detail={module.detail}
-                  icon={module.icon}
-                  onPress={() => router.push(module.href)}
-                  title={module.title}
-                />
-              </AnimatedListItem>
-            ))}
-          </View>
-
-          <AnimatedListItem index={9}>
-            <ElegantCard className="gap-2 p-5" variant="filled" radius="md">
-              <Text className="text-sm font-medium" style={{ color: colors.foreground }}>Architettura più pulita</Text>
-              <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
-                Home, Voti, Agenda e Orario restano sempre in tab. Il resto vive qui con schermate dedicate complete.
-              </Text>
-            </ElegantCard>
-          </AnimatedListItem>
+          {groups.map((group, groupIndex) => (
+            <View key={group.title} className="gap-3">
+              <SectionTitle eyebrow={group.title} title={group.title} detail={group.detail} />
+              <View className="gap-3">
+                {group.items.map((item, itemIndex) => (
+                  <AnimatedListItem key={item.title} index={2 + groupIndex * 4 + itemIndex}>
+                    <Pressable onPress={() => router.push(item.href)}>
+                      <RegisterListRow
+                        detail={item.detail}
+                        leading={
+                          <View
+                            className="h-10 w-10 items-center justify-center rounded-full"
+                            style={{ backgroundColor: colors.surfaceContainerHigh ?? colors.surface }}
+                          >
+                            <MaterialIcons color={colors.primary} name={item.icon} size={20} />
+                          </View>
+                        }
+                        title={item.title}
+                        tone={item.tone ?? "neutral"}
+                        trailing={<StatusBadge label={item.badge} tone={item.tone ?? "neutral"} />}
+                      />
+                    </Pressable>
+                  </AnimatedListItem>
+                ))}
+              </View>
+            </View>
+          ))}
         </View>
       </ScrollView>
     </ScreenContainer>

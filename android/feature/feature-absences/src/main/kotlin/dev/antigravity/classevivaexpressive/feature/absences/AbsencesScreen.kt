@@ -1,11 +1,10 @@
 package dev.antigravity.classevivaexpressive.feature.absences
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -14,19 +13,18 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -34,16 +32,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveColorTile
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveEditorialCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveMiniChart
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveScoreRing
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsencesRepository
 import java.time.LocalDate
-import java.time.Month
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,11 +51,14 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
+
 data class AbsencesUiState(
   val absences: List<AbsenceRecord> = emptyList(),
   val selectedAbsence: AbsenceRecord? = null,
   val lastMessage: String? = null,
   val isSubmitting: Boolean = false,
+  val isRefreshing: Boolean = false,
 )
 
 @HiltViewModel
@@ -66,27 +68,30 @@ class AbsencesViewModel @Inject constructor(
   private val selectedAbsence = MutableStateFlow<AbsenceRecord?>(null)
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isSubmitting = MutableStateFlow(false)
+  private val isRefreshing = MutableStateFlow(false)
 
   val state = combine(
     absencesRepository.observeAbsences(),
     selectedAbsence,
     lastMessage,
     isSubmitting,
-  ) { absences, selected, message, submitting ->
+    isRefreshing,
+  ) { absences, selected, message, submitting, refreshing ->
     AbsencesUiState(
       absences = absences,
       selectedAbsence = selected,
       lastMessage = message,
       isSubmitting = submitting,
+      isRefreshing = refreshing,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AbsencesUiState())
 
   init {
-    viewModelScope.launch { absencesRepository.refreshAbsences() }
+    requestRefresh(force = false, showIndicator = false)
   }
 
   fun refresh() {
-    viewModelScope.launch { absencesRepository.refreshAbsences(force = true) }
+    requestRefresh(force = true, showIndicator = true)
   }
 
   fun requestJustification(absence: AbsenceRecord) {
@@ -116,8 +121,20 @@ class AbsencesViewModel @Inject constructor(
   fun clearMessage() {
     lastMessage.value = null
   }
+
+  private fun requestRefresh(force: Boolean, showIndicator: Boolean) {
+    viewModelScope.launch {
+      if (showIndicator) {
+        isRefreshing.value = true
+      }
+      absencesRepository.refreshAbsences(force = force)
+        .onFailure { lastMessage.value = it.message ?: "Impossibile aggiornare le assenze." }
+      isRefreshing.value = false
+    }
+  }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AbsencesRoute(
   modifier: Modifier = Modifier,
@@ -129,40 +146,69 @@ fun AbsencesRoute(
   val lateCount = remember(state.absences) { state.absences.count { it.type == AbsenceType.LATE } }
   val exitCount = remember(state.absences) { state.absences.count { it.type == AbsenceType.EXIT } }
   val pending = remember(state.absences) { state.absences.filter { !it.justified }.sortedByDescending { it.date } }
-  val justified = remember(state.absences) { state.absences.filter { it.justified }.sortedByDescending { it.date } }
-  val trend = remember(state.absences) { buildAbsenceTrend(state.absences) }
+  val history = remember(state.absences) { state.absences.sortedByDescending { it.date } }
 
-  LazyColumn(
-    modifier = modifier,
-    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-    verticalArrangement = Arrangement.spacedBy(18.dp),
+  PullToRefreshBox(
+    modifier = modifier.fillMaxSize(),
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
   ) {
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+      verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
     item {
       ExpressiveTopHeader(
-        title = "Absences",
+        title = "Assenze",
+        subtitle = "Situazione sintetica, giustificazioni pendenti e cronologia ordinata.",
         onBack = onBack,
         actions = {
           IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
+            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
           }
         },
       )
     }
     item {
-      ExpressiveEditorialCard {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-        ) {
-          AbsenceMetric(label = "Absences", value = absenceCount, color = Color(0xFFFF4338))
-          AbsenceMetric(label = "Early exits", value = exitCount, color = Color(0xFFFFC83D))
-          AbsenceMetric(label = "Delay", value = lateCount, color = Color(0xFF2196F3))
-        }
-        ExpressiveMiniChart(
-          points = trend,
-          color = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.height(144.dp),
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        MetricTile(
+          label = "Assenze",
+          value = absenceCount.toString(),
+          detail = "Assenze registrate",
+          tone = if (pending.any { it.type == AbsenceType.ABSENCE }) ExpressiveTone.Danger else ExpressiveTone.Neutral,
+          modifier = Modifier.weight(1f),
+        )
+        MetricTile(
+          label = "Ritardi",
+          value = lateCount.toString(),
+          detail = "Ingressi dopo l'orario",
+          tone = if (pending.any { it.type == AbsenceType.LATE }) ExpressiveTone.Warning else ExpressiveTone.Neutral,
+          modifier = Modifier.weight(1f),
+        )
+      }
+    }
+    item {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        MetricTile(
+          label = "Uscite",
+          value = exitCount.toString(),
+          detail = "Uscite anticipate registrate",
+          tone = if (pending.any { it.type == AbsenceType.EXIT }) ExpressiveTone.Warning else ExpressiveTone.Neutral,
+          modifier = Modifier.weight(1f),
+        )
+        MetricTile(
+          label = "Da giustificare",
+          value = pending.size.toString(),
+          detail = if (pending.isEmpty()) "Situazione allineata" else "Richiede una verifica rapida",
+          tone = if (pending.isEmpty()) ExpressiveTone.Neutral else ExpressiveTone.Warning,
+          modifier = Modifier.weight(1f),
         )
       }
     }
@@ -171,53 +217,41 @@ fun AbsencesRoute(
         LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
       }
     }
-    if (pending.isNotEmpty()) {
+    item { ExpressiveAccentLabel("Da giustificare") }
+    if (pending.isEmpty()) {
       item {
-        Text(
-          text = "Not justified",
-          style = MaterialTheme.typography.titleLarge,
-          color = MaterialTheme.colorScheme.onBackground,
+        EmptyState(
+          title = "Nessuna giustificazione in sospeso",
+          detail = "Assenze, ritardi e uscite risultano gia allineati con lo stato corrente.",
         )
       }
+    } else {
       items(pending, key = { it.id }) { absence ->
-        AbsenceCard(
+        AbsenceRow(
           absence = absence,
-          color = absenceCardColor(absence),
           onJustify = { viewModel.requestJustification(absence) },
         )
       }
     }
-    if (justified.isNotEmpty()) {
-      item {
-        Text(
-          text = "Justified",
-          style = MaterialTheme.typography.titleLarge,
-          color = MaterialTheme.colorScheme.onBackground,
-        )
-      }
-      items(justified, key = { it.id }) { absence ->
-        AbsenceCard(
-          absence = absence,
-          color = absenceCardColor(absence),
-          onJustify = null,
-        )
-      }
-    }
-    if (state.absences.isEmpty()) {
+    item { ExpressiveAccentLabel("Storico") }
+    if (history.isEmpty()) {
       item {
         EmptyState(
-          title = "No absence records yet",
-          detail = "Quando il registro sincronizza assenze, ritardi e uscite li vedrai qui divisi in modo molto più leggibile.",
+          title = "Nessuna registrazione disponibile",
+          detail = "Quando il portale sincronizza presenze e uscite, qui trovi una cronologia leggibile.",
+        )
+      }
+    } else {
+      items(history.take(20), key = { it.id }) { absence ->
+        AbsenceRow(
+          absence = absence,
+          onJustify = if (!absence.justified) ({ viewModel.requestJustification(absence) }) else null,
         )
       }
     }
-    state.lastMessage?.let { message ->
+    if (!state.lastMessage.isNullOrBlank()) {
       item {
-        Text(
-          text = message,
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.primary,
-        )
+        Text(text = state.lastMessage.orEmpty())
       }
       item {
         TextButton(onClick = viewModel::clearMessage) {
@@ -225,13 +259,14 @@ fun AbsencesRoute(
         }
       }
     }
+    }
   }
 
   state.selectedAbsence?.let { absence ->
     var reason by rememberSaveable(absence.id) { mutableStateOf(absence.justificationReason.orEmpty()) }
     AlertDialog(
       onDismissRequest = viewModel::dismissJustification,
-      title = { Text("Giustifica ${absence.type.name.lowercase()}") },
+      title = { Text("Giustifica ${absenceLabel(absence.type).lowercase(italianLocale)}") },
       text = {
         OutlinedTextField(
           value = reason,
@@ -262,98 +297,65 @@ fun AbsencesRoute(
 }
 
 @Composable
-private fun AbsenceMetric(
-  label: String,
-  value: Int,
-  color: Color,
-) {
-  Column(
-    horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(10.dp),
-  ) {
-    ExpressiveScoreRing(
-      valueText = value.toString(),
-      progress = (value.coerceAtMost(10) / 10f),
-      color = color,
-      size = 74.dp,
-    )
-    Text(
-      text = label,
-      style = MaterialTheme.typography.titleMedium,
-      color = MaterialTheme.colorScheme.onSurface,
-    )
-  }
-}
-
-@Composable
-private fun AbsenceCard(
+private fun AbsenceRow(
   absence: AbsenceRecord,
-  color: Color,
   onJustify: (() -> Unit)?,
 ) {
-  ExpressiveColorTile(
-    title = absence.date.toHumanDate(),
-    subtitle = absenceTypeLabel(absence),
-    detail = listOfNotNull(
-      absence.hours?.let { "You entered at hour $it" },
+  RegisterListRow(
+    title = absence.date.toReadableDate(),
+    subtitle = absenceLabel(absence.type),
+    eyebrow = if (absence.justified) "Giustificata" else "Da controllare",
+    meta = listOfNotNull(
+      absence.hours?.let { hoursLabel(absence.type, it) },
       absence.justificationReason,
-      absence.justificationDate?.let { "Justified on $it" },
-    ).joinToString("\n").ifBlank { if (absence.justified) "Already justified" else "Tap to justify from the app" },
-    badge = absenceBadge(absence),
-    color = color,
+      absence.justificationDate?.let { "Giustificata il ${it.toReadableDate()}" },
+    ).joinToString(" / ").ifBlank {
+      if (absence.justified) "Stato gia confermato." else "Tocca per inviare la giustificazione."
+    },
+    tone = absenceTone(absence),
+    badge = {
+      StatusBadge(
+        label = badgeLabel(absence.type),
+        tone = absenceTone(absence),
+      )
+    },
     onClick = onJustify,
   )
 }
 
-private fun absenceBadge(absence: AbsenceRecord): String {
-  return when (absence.type) {
+private fun absenceLabel(type: AbsenceType): String {
+  return when (type) {
+    AbsenceType.ABSENCE -> "Assenza"
+    AbsenceType.LATE -> "Ritardo"
+    AbsenceType.EXIT -> "Uscita anticipata"
+  }
+}
+
+private fun badgeLabel(type: AbsenceType): String {
+  return when (type) {
     AbsenceType.ABSENCE -> "A"
-    AbsenceType.LATE -> "L"
-    AbsenceType.EXIT -> "E"
+    AbsenceType.LATE -> "R"
+    AbsenceType.EXIT -> "U"
   }
 }
 
-private fun absenceTypeLabel(absence: AbsenceRecord): String {
-  return when (absence.type) {
-    AbsenceType.ABSENCE -> "Full-day absence"
-    AbsenceType.LATE -> "Late entry"
-    AbsenceType.EXIT -> "Early exit"
+private fun hoursLabel(type: AbsenceType, hour: Int): String {
+  return when (type) {
+    AbsenceType.ABSENCE -> "Ora $hour"
+    AbsenceType.LATE -> "Ingresso alla $hour"
+    AbsenceType.EXIT -> "Uscita alla $hour"
   }
 }
 
-private fun absenceCardColor(absence: AbsenceRecord): Color {
-  return when (absence.type) {
-    AbsenceType.ABSENCE -> Color(0xFFFF4338)
-    AbsenceType.LATE -> Color(0xFF3493E8)
-    AbsenceType.EXIT -> Color(0xFFFFC83D)
+private fun absenceTone(absence: AbsenceRecord): ExpressiveTone {
+  return when {
+    absence.justified -> ExpressiveTone.Neutral
+    absence.type == AbsenceType.ABSENCE -> ExpressiveTone.Danger
+    else -> ExpressiveTone.Warning
   }
 }
 
-private fun buildAbsenceTrend(absences: List<AbsenceRecord>): List<Float> {
-  val months = listOf(
-    Month.SEPTEMBER,
-    Month.OCTOBER,
-    Month.NOVEMBER,
-    Month.DECEMBER,
-    Month.JANUARY,
-    Month.FEBRUARY,
-    Month.MARCH,
-    Month.APRIL,
-    Month.MAY,
-    Month.JUNE,
-  )
-  return months.map { month ->
-    absences.count { record ->
-      record.date.toLocalDateOrNull()?.month == month
-    }.toFloat()
-  }
-}
-
-private fun String.toLocalDateOrNull(): LocalDate? {
-  return runCatching { LocalDate.parse(this) }.getOrNull()
-}
-
-private fun String.toHumanDate(): String {
-  val parsed = toLocalDateOrNull() ?: return this
-  return parsed.format(java.time.format.DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.ENGLISH))
+private fun String.toReadableDate(): String {
+  val parsed = runCatching { LocalDate.parse(this) }.getOrNull() ?: return this
+  return parsed.format(DateTimeFormatter.ofPattern("d MMM yyyy", italianLocale))
 }

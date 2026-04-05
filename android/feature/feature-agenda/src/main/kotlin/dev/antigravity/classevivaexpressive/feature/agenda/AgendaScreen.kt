@@ -8,11 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -26,9 +26,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat.startActivity
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -49,11 +49,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveMiniChart
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveStatusDot
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.eventColor
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
@@ -70,33 +70,34 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-private const val CATEGORY_ALL = "All"
-private const val CATEGORY_HOMEWORK = "Homework"
-private const val CATEGORY_TESTS = "Tests"
-private const val CATEGORY_EVENTS = "Events"
+private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
 
 data class AgendaUiState(
   val items: List<AgendaItem> = emptyList(),
   val customEvents: List<CustomEvent> = emptyList(),
+  val isRefreshing: Boolean = false,
 )
 
 @HiltViewModel
 class AgendaViewModel @Inject constructor(
   private val agendaRepository: AgendaRepository,
 ) : ViewModel() {
+  private val isRefreshing = kotlinx.coroutines.flow.MutableStateFlow(false)
+
   val state = combine(
     agendaRepository.observeAgenda(),
     agendaRepository.observeCustomEvents(),
-  ) { items, customEvents ->
-    AgendaUiState(items = items, customEvents = customEvents)
+    isRefreshing,
+  ) { items, customEvents, refreshing ->
+    AgendaUiState(items = items, customEvents = customEvents, isRefreshing = refreshing)
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgendaUiState())
 
   init {
-    viewModelScope.launch { agendaRepository.refreshAgenda() }
+    requestRefresh(force = false, showIndicator = false)
   }
 
   fun refresh() {
-    viewModelScope.launch { agendaRepository.refreshAgenda(force = true) }
+    requestRefresh(force = true, showIndicator = true)
   }
 
   fun addCustomEvent(
@@ -120,8 +121,19 @@ class AgendaViewModel @Inject constructor(
       )
     }
   }
+
+  private fun requestRefresh(force: Boolean, showIndicator: Boolean) {
+    viewModelScope.launch {
+      if (showIndicator) {
+        isRefreshing.value = true
+      }
+      agendaRepository.refreshAgenda(force = force)
+      isRefreshing.value = false
+    }
+  }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgendaRoute(
   modifier: Modifier = Modifier,
@@ -130,7 +142,6 @@ fun AgendaRoute(
   val state by viewModel.state.collectAsStateWithLifecycle()
   val context = LocalContext.current
   var showDialog by rememberSaveable { mutableStateOf(false) }
-  var selectedCategory by rememberSaveable { mutableStateOf(CATEGORY_ALL) }
   var selectedMonthText by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
   var selectedDateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
 
@@ -166,109 +177,91 @@ fun AgendaRoute(
       })
     }.filter { it.date != null }.sortedWith(compareBy<AgendaEntry> { it.date }.thenBy { it.time ?: "" })
   }
-  val filteredEntries = remember(entries, selectedCategory, selectedDate) {
-    entries.filter { entry ->
-      val categoryMatches = when (selectedCategory) {
-        CATEGORY_HOMEWORK -> entry.category == AgendaCategory.HOMEWORK
-        CATEGORY_TESTS -> entry.category == AgendaCategory.ASSESSMENT
-        CATEGORY_EVENTS -> entry.category == AgendaCategory.EVENT || entry.category == AgendaCategory.CUSTOM
-        else -> true
-      }
-      categoryMatches && entry.date == selectedDate
-    }
+
+  val entriesByDate = remember(entries) {
+    entries.mapNotNull { entry -> entry.date?.let { it to entry } }
+      .groupBy({ it.first }, { it.second })
   }
-  val monthEntries = remember(entries, selectedMonth) { entries.filter { YearMonth.from(it.date) == selectedMonth } }
-  val monthChart = remember(monthEntries, selectedMonth) {
-    (1..selectedMonth.lengthOfMonth()).map { day ->
-      monthEntries.count { it.date?.dayOfMonth == day }.toFloat()
-    }.ifEmpty { listOf(0f) }
+  val monthEntriesByDate = remember(entriesByDate, selectedMonth) {
+    entriesByDate.filterKeys { YearMonth.from(it) == selectedMonth }
+  }
+  val selectedDayEntries = remember(entriesByDate, selectedDate) {
+    entriesByDate[selectedDate].orEmpty()
   }
 
-  Box(modifier = modifier) {
-    LazyColumn(
-      contentPadding = PaddingValues(horizontal = 18.dp, vertical = 20.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-      item {
-        ExpressiveTopHeader(
-          title = "Agenda",
-          actions = {
-            IconButton(onClick = viewModel::refresh) {
-              Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
-            }
-          },
-        )
-      }
-      item {
-        MonthHeader(
-          month = selectedMonth,
-          onPrevious = {
-            val previous = selectedMonth.minusMonths(1)
-            selectedMonthText = previous.toString()
-            selectedDateText = previous.atDay(1).toString()
-          },
-          onNext = {
-            val next = selectedMonth.plusMonths(1)
-            selectedMonthText = next.toString()
-            selectedDateText = next.atDay(1).toString()
-          },
-        )
-      }
-      item {
-        ExpressivePillTabs(
-          options = listOf(CATEGORY_ALL, CATEGORY_HOMEWORK, CATEGORY_TESTS, CATEGORY_EVENTS),
-          selected = selectedCategory,
-          onSelect = { selectedCategory = it },
-        )
-      }
-      item {
-        ExpressiveMiniChart(
-          points = monthChart,
-          color = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.height(96.dp),
-        )
-      }
-      item {
-        MonthGrid(
-          month = selectedMonth,
-          entries = monthEntries,
-          selectedDate = selectedDate,
-          onSelectDate = { selectedDateText = it.toString() },
-        )
-      }
-      if (filteredEntries.isEmpty()) {
+  PullToRefreshBox(
+    modifier = modifier.fillMaxSize(),
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+  ) {
+    Box(modifier = Modifier.fillMaxSize()) {
+      LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+      ) {
         item {
-          EmptyState(
-            title = "No events for ${selectedDate.dayOfMonth}",
-            detail = "Homework, tests and custom events will appear here for the selected day.",
-          )
-        }
-      } else {
-        items(filteredEntries, key = { it.id }) { entry ->
-          AgendaEventCard(
-            entry = entry,
-            onClick = {
-              entry.sharePayload?.takeIf { it.isNotBlank() }?.let { payload ->
-                val intent = Intent(Intent.ACTION_SEND)
-                  .setType("text/plain")
-                  .putExtra(Intent.EXTRA_TEXT, payload)
-                startActivity(context, Intent.createChooser(intent, "Share event"), null)
+          ExpressiveTopHeader(
+            title = "Agenda",
+            subtitle = "Calendario compatto e lista del giorno selezionato, senza riepiloghi mensili ridondanti.",
+            actions = {
+              IconButton(onClick = viewModel::refresh) {
+                Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
               }
             },
           )
         }
+        item {
+          MonthHeader(
+            month = selectedMonth,
+            onPrevious = {
+              val previous = selectedMonth.minusMonths(1)
+              selectedMonthText = previous.toString()
+              selectedDateText = previous.atDay(selectedDate.dayOfMonth.coerceAtMost(previous.lengthOfMonth())).toString()
+            },
+            onNext = {
+              val next = selectedMonth.plusMonths(1)
+              selectedMonthText = next.toString()
+              selectedDateText = next.atDay(selectedDate.dayOfMonth.coerceAtMost(next.lengthOfMonth())).toString()
+            },
+          )
+        }
+        item {
+          MonthGrid(
+            month = selectedMonth,
+            entriesByDate = monthEntriesByDate,
+            selectedDate = selectedDate,
+            onSelectDate = { selectedDateText = it.toString() },
+          )
+        }
+        item { ExpressiveAccentLabel(selectedDate.format(DateTimeFormatter.ofPattern("EEEE d MMMM", italianLocale)).replaceFirstChar { it.uppercase() }) }
+        if (selectedDayEntries.isEmpty()) {
+          item {
+            EmptyState(
+              title = "Nessun evento per il giorno selezionato",
+              detail = "Compiti, verifiche, lezioni ed eventi compariranno qui solo per la data che stai guardando.",
+            )
+          }
+        } else {
+          items(selectedDayEntries, key = { it.id }) { entry ->
+            AgendaEntryRow(
+              entry = entry,
+              onClick = { shareEntry(context, entry) },
+            )
+          }
+        }
       }
-    }
 
-    FloatingActionButton(
-      onClick = { showDialog = true },
-      modifier = Modifier
-        .align(Alignment.BottomEnd)
-        .padding(24.dp),
-      containerColor = MaterialTheme.colorScheme.primary,
-      contentColor = MaterialTheme.colorScheme.onPrimary,
-    ) {
-      Icon(Icons.Rounded.Add, contentDescription = "Add event")
+      FloatingActionButton(
+        onClick = { showDialog = true },
+        modifier = Modifier
+          .align(Alignment.BottomEnd)
+          .padding(24.dp),
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+      ) {
+        Icon(Icons.Rounded.Add, contentDescription = "Nuovo evento")
+      }
     }
   }
 
@@ -295,16 +288,16 @@ private fun MonthHeader(
     verticalAlignment = Alignment.CenterVertically,
   ) {
     IconButton(onClick = onPrevious) {
-      Icon(Icons.Rounded.ChevronLeft, contentDescription = "Previous month")
+      Icon(Icons.Rounded.ChevronLeft, contentDescription = "Mese precedente")
     }
     Text(
-      text = month.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)),
+      text = month.format(DateTimeFormatter.ofPattern("MMMM yyyy", italianLocale)).replaceFirstChar { it.uppercase() },
       style = MaterialTheme.typography.titleLarge,
       color = MaterialTheme.colorScheme.onBackground,
-      fontWeight = FontWeight.Medium,
+      fontWeight = FontWeight.SemiBold,
     )
     IconButton(onClick = onNext) {
-      Icon(Icons.Rounded.ChevronRight, contentDescription = "Next month")
+      Icon(Icons.Rounded.ChevronRight, contentDescription = "Mese successivo")
     }
   }
 }
@@ -312,21 +305,21 @@ private fun MonthHeader(
 @Composable
 private fun MonthGrid(
   month: YearMonth,
-  entries: List<AgendaEntry>,
+  entriesByDate: Map<LocalDate, List<AgendaEntry>>,
   selectedDate: LocalDate,
   onSelectDate: (LocalDate) -> Unit,
 ) {
   val cells = remember(month) { buildCalendarCells(month) }
-  val weekdayLabels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+  val today = remember { LocalDate.now() }
+  val weekdayLabels = listOf("Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom")
 
-  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
       weekdayLabels.forEach { label ->
         Text(
           text = label,
           modifier = Modifier.weight(1f),
-          style = MaterialTheme.typography.bodyMedium,
-          color = if (label == "Sun") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+          color = if (label == "Dom") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
       }
     }
@@ -336,12 +329,12 @@ private fun MonthGrid(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
         week.forEach { day ->
-          val dayEntries = entries.filter { it.date == day }
           CalendarDayCell(
             date = day,
             inMonth = day.month == month.month,
+            isToday = day == today,
             selected = day == selectedDate,
-            dots = dayEntries.take(4).map { eventColor(it.category.name) },
+            entries = entriesByDate[day].orEmpty(),
             onClick = { onSelectDate(day) },
             modifier = Modifier.weight(1f),
           )
@@ -355,123 +348,76 @@ private fun MonthGrid(
 private fun CalendarDayCell(
   date: LocalDate,
   inMonth: Boolean,
+  isToday: Boolean,
   selected: Boolean,
-  dots: List<Color>,
+  entries: List<AgendaEntry>,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val weekend = date.dayOfWeek == DayOfWeek.SUNDAY
+  val isSunday = date.dayOfWeek == DayOfWeek.SUNDAY
+  val tone = entries.firstOrNull()?.let { categoryTone(it.category) } ?: ExpressiveTone.Neutral
+  val containerColor = when {
+    selected -> MaterialTheme.colorScheme.primary
+    isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+    else -> Color.Transparent
+  }
   val textColor = when {
     selected -> MaterialTheme.colorScheme.onPrimary
-    weekend -> MaterialTheme.colorScheme.primary
+    isSunday -> MaterialTheme.colorScheme.primary
     !inMonth -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
     else -> MaterialTheme.colorScheme.onBackground
   }
 
   Column(
     modifier = modifier
-      .height(60.dp)
+      .height(70.dp)
       .clickable(onClick = onClick),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(6.dp),
   ) {
     Box(
       modifier = Modifier
-        .size(36.dp)
+        .size(38.dp)
         .background(
-          color = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+          color = containerColor,
           shape = MaterialTheme.shapes.extraLarge,
         ),
       contentAlignment = Alignment.Center,
     ) {
       Text(
         text = date.dayOfMonth.toString(),
-        style = MaterialTheme.typography.titleMedium,
         color = textColor,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.SemiBold,
       )
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-      dots.forEach { dot ->
-        ExpressiveStatusDot(color = dot, modifier = Modifier.size(8.dp))
-      }
+    if (entries.isNotEmpty()) {
+      StatusBadge(
+        label = entries.size.toString(),
+        tone = tone,
+      )
     }
   }
 }
 
 @Composable
-private fun AgendaEventCard(
+private fun AgendaEntryRow(
   entry: AgendaEntry,
   onClick: () -> Unit,
 ) {
-  val cardColor = eventColor(entry.category.name)
-  val headline = entry.subject?.takeIf { it.isNotBlank() } ?: entry.title
-  val subheadline = entry.title.takeIf { it.isNotBlank() && it != headline }
-  val supporting = listOfNotNull(
-    entry.subtitle.takeIf { it.isNotBlank() && it != headline && it != subheadline },
-    entry.detail.takeIf { it?.isNotBlank() == true && it != headline && it != subheadline },
-  ).joinToString(" - ").ifBlank { null }
-
-  Surface(
-    modifier = Modifier
-      .fillMaxWidth()
-      .clickable(onClick = onClick),
-    shape = MaterialTheme.shapes.extraLarge,
-    color = cardColor,
-  ) {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(16.dp),
-      horizontalArrangement = Arrangement.spacedBy(14.dp),
-      verticalAlignment = Alignment.Top,
-    ) {
-      Column(
-        modifier = Modifier
-          .width(56.dp)
-          .height(60.dp),
-        verticalArrangement = Arrangement.Center,
-      ) {
-        Text(
-          text = entry.time?.let { "hour\n$it" } ?: "All\nday",
-          style = MaterialTheme.typography.titleMedium,
-          color = Color.White.copy(alpha = 0.94f),
-          fontWeight = FontWeight.Medium,
-        )
-      }
-      Column(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-      ) {
-        Text(
-          text = headline,
-          style = MaterialTheme.typography.titleLarge,
-          color = Color.White,
-          fontWeight = FontWeight.SemiBold,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-        )
-        subheadline?.let {
-          Text(
-            text = it,
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(alpha = 0.96f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-          )
-        }
-        supporting?.let {
-          Text(
-            text = it,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.9f),
-            maxLines = 4,
-            overflow = TextOverflow.Ellipsis,
-          )
-        }
-      }
-    }
-  }
+  RegisterListRow(
+    title = entry.title,
+    subtitle = entry.subject ?: entry.subtitle,
+    eyebrow = entry.time ?: entry.date?.format(DateTimeFormatter.ofPattern("d MMM", italianLocale)) ?: "Data",
+    meta = entry.detail,
+    tone = categoryTone(entry.category),
+    badge = {
+      StatusBadge(
+        label = categoryLabel(entry.category),
+        tone = categoryTone(entry.category),
+      )
+    },
+    onClick = onClick,
+  )
 }
 
 @Composable
@@ -511,7 +457,7 @@ private fun AddEventDialog(
             value = date,
             onValueChange = { date = it },
             label = { Text("Data ISO") },
-            supportingText = { Text("Esempio: 2026-03-27") },
+            supportingText = { Text("Esempio: 2026-03-31") },
             singleLine = true,
           )
         }
@@ -567,6 +513,36 @@ private fun buildCalendarCells(month: YearMonth): List<LocalDate> {
   val leading = (firstDay.dayOfWeek.value + 6) % 7
   val start = firstDay.minusDays(leading.toLong())
   return (0 until 42).map { start.plusDays(it.toLong()) }
+}
+
+private fun categoryTone(category: AgendaCategory): ExpressiveTone {
+  return when (category) {
+    AgendaCategory.HOMEWORK -> ExpressiveTone.Primary
+    AgendaCategory.ASSESSMENT -> ExpressiveTone.Warning
+    AgendaCategory.LESSON -> ExpressiveTone.Neutral
+    AgendaCategory.EVENT,
+    AgendaCategory.CUSTOM,
+    -> ExpressiveTone.Success
+  }
+}
+
+private fun categoryLabel(category: AgendaCategory): String {
+  return when (category) {
+    AgendaCategory.LESSON -> "Lezione"
+    AgendaCategory.HOMEWORK -> "Compito"
+    AgendaCategory.ASSESSMENT -> "Verifica"
+    AgendaCategory.EVENT -> "Evento"
+    AgendaCategory.CUSTOM -> "Personalizzato"
+  }
+}
+
+private fun shareEntry(context: android.content.Context, entry: AgendaEntry) {
+  entry.sharePayload?.takeIf { it.isNotBlank() }?.let { payload ->
+    val intent = Intent(Intent.ACTION_SEND)
+      .setType("text/plain")
+      .putExtra(Intent.EXTRA_TEXT, payload)
+    startActivity(context, Intent.createChooser(intent, "Condividi evento"), null)
+  }
 }
 
 private fun String.toLocalDateOrNull(): LocalDate? {

@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.domain.model
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -52,6 +53,15 @@ enum class AbsenceType {
 }
 
 @Serializable
+enum class NoticeboardActionType {
+  ACKNOWLEDGE,
+  REPLY,
+  JOIN,
+  UPLOAD,
+  DOWNLOAD,
+}
+
+@Serializable
 data class CapabilityState(
   val status: CapabilityStatus = CapabilityStatus.UNAVAILABLE,
   val label: String = "",
@@ -63,6 +73,29 @@ data class SyncStatus(
   val state: SyncState = SyncState.IDLE,
   val lastSuccessfulSyncEpochMillis: Long? = null,
   val message: String? = null,
+)
+
+@Serializable
+data class NotificationPreferences(
+  val enabled: Boolean = true,
+  val homework: Boolean = true,
+  val communications: Boolean = true,
+  val absences: Boolean = true,
+  val test: Boolean = true,
+)
+
+@Serializable
+data class NotificationChannelStatus(
+  val id: String = "",
+  val label: String = "",
+  val enabled: Boolean = false,
+)
+
+@Serializable
+data class NotificationRuntimeState(
+  val permissionGranted: Boolean = false,
+  val appNotificationsEnabled: Boolean = false,
+  val channels: List<NotificationChannelStatus> = emptyList(),
 )
 
 @Serializable
@@ -98,6 +131,7 @@ data class Grade(
   val weight: Double? = null,
   val notes: String? = null,
   val period: String? = null,
+  val periodCode: String? = null,
   val teacher: String? = null,
   val color: String? = null,
 )
@@ -171,6 +205,23 @@ data class RemoteAttachment(
 )
 
 @Serializable
+data class NoticeboardAction(
+  val type: NoticeboardActionType,
+  val label: String,
+  val url: String? = null,
+)
+
+@Serializable
+data class NoticeboardAttachment(
+  val id: String,
+  val name: String,
+  val url: String? = null,
+  val mimeType: String? = null,
+  val portalOnly: Boolean = false,
+  val action: NoticeboardAction? = null,
+)
+
+@Serializable
 data class Communication(
   val id: String,
   val pubId: String,
@@ -186,6 +237,8 @@ data class Communication(
   val needsReply: Boolean = false,
   val needsJoin: Boolean = false,
   val needsFile: Boolean = false,
+  val actions: List<NoticeboardAction> = emptyList(),
+  val noticeboardAttachments: List<NoticeboardAttachment> = emptyList(),
   val capabilityState: CapabilityState = CapabilityState(),
 )
 
@@ -199,6 +252,7 @@ data class CommunicationDetail(
   val replyUrl: String? = null,
   val joinUrl: String? = null,
   val fileUploadUrl: String? = null,
+  val actions: List<NoticeboardAction> = emptyList(),
 )
 
 @Serializable
@@ -244,6 +298,7 @@ data class MaterialAsset(
   val mimeType: String? = null,
   val base64Content: String? = null,
   val textPreview: String? = null,
+  val sourceUrl: String? = null,
   val capabilityState: CapabilityState = CapabilityState(),
 )
 
@@ -358,6 +413,7 @@ data class DashboardSnapshot(
   val stats: List<DashboardStat> = emptyList(),
   val todayLessons: List<AgendaItem> = emptyList(),
   val recentGrades: List<Grade> = emptyList(),
+  val unseenGrades: List<Grade> = emptyList(),
   val upcomingItems: List<AgendaItem> = emptyList(),
   val unreadCommunications: List<Communication> = emptyList(),
   val highlightedNotes: List<Note> = emptyList(),
@@ -374,6 +430,21 @@ data class StatsSnapshot(
   val gradeTrend: List<TimelinePoint> = emptyList(),
   val absenceBreakdown: Map<String, Int> = emptyMap(),
   val workloadBreakdown: Map<String, Int> = emptyMap(),
+)
+
+@Serializable
+data class SeenGradeState(
+  val studentId: String,
+  val gradeId: String,
+  val seenAtEpochMillis: Long,
+)
+
+@Serializable
+data class SubjectGoal(
+  val studentId: String,
+  val subject: String,
+  val periodCode: String? = null,
+  val targetAverage: Double,
 )
 
 @Serializable
@@ -426,12 +497,15 @@ data class AppSettings(
   val customAccentName: String = "ember",
   val dynamicColorEnabled: Boolean = true,
   val amoledEnabled: Boolean = false,
-  val notificationsEnabled: Boolean = true,
+  val notificationPreferences: NotificationPreferences = NotificationPreferences(),
   val periodicSyncEnabled: Boolean = true,
-)
+) {
+  val notificationsEnabled: Boolean
+    get() = notificationPreferences.enabled
+}
 
 interface AuthRepository {
-  val session: Flow<UserSession?>
+  val session: StateFlow<UserSession?>
   suspend fun restore(): UserSession?
   suspend fun login(username: String, password: String): Result<UserSession>
   suspend fun logout()
@@ -446,8 +520,12 @@ interface GradesRepository {
   fun observeGrades(): Flow<List<Grade>>
   fun observePeriods(): Flow<List<Period>>
   fun observeSubjects(): Flow<List<Subject>>
-  fun observeStats(): Flow<StatsSnapshot>
+  fun observeSeenGradeStates(): Flow<List<SeenGradeState>>
+  fun observeSubjectGoals(): Flow<List<SubjectGoal>>
   suspend fun refreshGrades(force: Boolean = false): Result<List<Grade>>
+  suspend fun markGradeSeen(gradeId: String)
+  suspend fun saveSubjectGoal(subject: String, periodCode: String?, targetAverage: Double)
+  suspend fun removeSubjectGoal(subject: String, periodCode: String?)
 }
 
 interface AgendaRepository {
@@ -524,6 +602,7 @@ interface SimulationRepository {
 
 interface SettingsRepository {
   fun observeSettings(): Flow<AppSettings>
+  fun observeNotificationRuntimeState(): Flow<NotificationRuntimeState>
   suspend fun updateThemeMode(mode: ThemeMode)
   suspend fun updateAccentMode(mode: AccentMode)
   suspend fun updateCustomAccent(name: String)
@@ -531,4 +610,8 @@ interface SettingsRepository {
   suspend fun setAmoledEnabled(enabled: Boolean)
   suspend fun setNotificationsEnabled(enabled: Boolean)
   suspend fun setPeriodicSyncEnabled(enabled: Boolean)
+  suspend fun updateNotificationPreferences(preferences: NotificationPreferences)
+  suspend fun setNotificationCategoryEnabled(channelId: String, enabled: Boolean)
+  suspend fun refreshNotificationRuntimeState()
+  suspend fun sendTestNotification(): Result<Unit>
 }

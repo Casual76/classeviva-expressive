@@ -59,6 +59,24 @@ data class DownloadRecordEntity(
   val updatedAtEpochMillis: Long,
 )
 
+@Entity(tableName = "seen_grades")
+data class SeenGradeEntity(
+  @PrimaryKey val id: String,
+  val studentId: String,
+  val gradeId: String,
+  val seenAtEpochMillis: Long,
+)
+
+@Entity(tableName = "subject_goals")
+data class SubjectGoalEntity(
+  @PrimaryKey val id: String,
+  val studentId: String,
+  val subject: String,
+  val periodCode: String?,
+  val targetAverage: Double,
+  val updatedAtEpochMillis: Long,
+)
+
 @Dao
 interface SnapshotCacheDao {
   @Query("SELECT * FROM snapshot_cache WHERE cacheKey = :key LIMIT 1")
@@ -119,6 +137,27 @@ interface DownloadRecordDao {
   suspend fun upsert(entity: DownloadRecordEntity)
 }
 
+@Dao
+interface SeenGradeDao {
+  @Query("SELECT * FROM seen_grades WHERE studentId = :studentId ORDER BY seenAtEpochMillis DESC")
+  fun observeByStudent(studentId: String): Flow<List<SeenGradeEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsert(entity: SeenGradeEntity)
+}
+
+@Dao
+interface SubjectGoalDao {
+  @Query("SELECT * FROM subject_goals WHERE studentId = :studentId ORDER BY subject ASC, periodCode ASC")
+  fun observeByStudent(studentId: String): Flow<List<SubjectGoalEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsert(entity: SubjectGoalEntity)
+
+  @Query("DELETE FROM subject_goals WHERE studentId = :studentId AND subject = :subject AND ((periodCode IS NULL AND :periodCode IS NULL) OR periodCode = :periodCode)")
+  suspend fun delete(studentId: String, subject: String, periodCode: String?)
+}
+
 @Database(
   entities = [
     SnapshotCacheEntity::class,
@@ -126,8 +165,10 @@ interface DownloadRecordDao {
     SimulatedGradeEntity::class,
     StudentScoreSnapshotEntity::class,
     DownloadRecordEntity::class,
+    SeenGradeEntity::class,
+    SubjectGoalEntity::class,
   ],
-  version = 1,
+  version = 2,
   exportSchema = false,
 )
 abstract class SchoolDatabase : RoomDatabase() {
@@ -136,6 +177,8 @@ abstract class SchoolDatabase : RoomDatabase() {
   abstract fun simulationDao(): SimulationDao
   abstract fun studentScoreDao(): StudentScoreDao
   abstract fun downloadRecordDao(): DownloadRecordDao
+  abstract fun seenGradeDao(): SeenGradeDao
+  abstract fun subjectGoalDao(): SubjectGoalDao
 }
 
 @Module
@@ -164,4 +207,10 @@ object DatabaseModule {
 
   @Provides
   fun provideDownloadRecordDao(database: SchoolDatabase): DownloadRecordDao = database.downloadRecordDao()
+
+  @Provides
+  fun provideSeenGradeDao(database: SchoolDatabase): SeenGradeDao = database.seenGradeDao()
+
+  @Provides
+  fun provideSubjectGoalDao(database: SchoolDatabase): SubjectGoalDao = database.subjectGoalDao()
 }
