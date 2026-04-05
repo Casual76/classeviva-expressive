@@ -145,7 +145,7 @@ fun AbsencesRoute(
   val absenceCount = remember(state.absences) { state.absences.count { it.type == AbsenceType.ABSENCE } }
   val lateCount = remember(state.absences) { state.absences.count { it.type == AbsenceType.LATE } }
   val exitCount = remember(state.absences) { state.absences.count { it.type == AbsenceType.EXIT } }
-  val pending = remember(state.absences) { state.absences.filter { !it.justified }.sortedByDescending { it.date } }
+  val pending = remember(state.absences) { state.absences.filter { !it.justified && it.canJustify }.sortedByDescending { it.date } }
   val history = remember(state.absences) { state.absences.sortedByDescending { it.date } }
 
   PullToRefreshBox(
@@ -238,14 +238,14 @@ fun AbsencesRoute(
       item {
         EmptyState(
           title = "Nessuna registrazione disponibile",
-          detail = "Quando il portale sincronizza presenze e uscite, qui trovi una cronologia leggibile.",
+          detail = "Quando le API ufficiali sincronizzano presenze e uscite, qui trovi una cronologia leggibile.",
         )
       }
     } else {
       items(history.take(20), key = { it.id }) { absence ->
         AbsenceRow(
           absence = absence,
-          onJustify = if (!absence.justified) ({ viewModel.requestJustification(absence) }) else null,
+          onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
         )
       }
     }
@@ -310,7 +310,11 @@ private fun AbsenceRow(
       absence.justificationReason,
       absence.justificationDate?.let { "Giustificata il ${it.toReadableDate()}" },
     ).joinToString(" / ").ifBlank {
-      if (absence.justified) "Stato gia confermato." else "Tocca per inviare la giustificazione."
+      when {
+        absence.justified -> "Stato gia confermato."
+        absence.canJustify -> "Tocca per inviare la giustificazione."
+        else -> "Nessun endpoint ufficiale disponibile per la giustificazione."
+      }
     },
     tone = absenceTone(absence),
     badge = {

@@ -187,7 +187,7 @@ class CommunicationsViewModel @Inject constructor(
 
   fun upload(detail: CommunicationDetail, fileName: String, mimeType: String?, bytes: ByteArray) {
     runCommunicationAction(
-      successMessage = "File inviato al portale.",
+      successMessage = "File inviato alla comunicazione.",
       errorMessage = "Non sono riuscito a caricare il file richiesto.",
     ) {
       communicationsRepository.uploadCommunicationFile(detail, fileName, mimeType, bytes)
@@ -289,7 +289,7 @@ fun CommunicationsRoute(
     item {
       ExpressiveTopHeader(
         title = "Bacheca",
-        subtitle = "Comunicazioni del portale e note scolastiche in una vista unica, con azioni e allegati disponibili.",
+        subtitle = "Comunicazioni e note scolastiche in una vista unica, con azioni ufficiali e allegati disponibili.",
         onBack = onBack,
         actions = {
           IconButton(onClick = viewModel::refresh) {
@@ -399,7 +399,7 @@ fun CommunicationsRoute(
               RegisterListRow(
                 title = attachment.name,
                 subtitle = attachment.mimeType ?: "Allegato",
-                meta = if (attachment.portalOnly) "Apertura tramite portale" else "Download diretto",
+                meta = if (attachment.portalOnly) "Endpoint non ufficiale non disponibile" else "Download diretto",
                 tone = ExpressiveTone.Neutral,
                 badge = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
                 onClick = {

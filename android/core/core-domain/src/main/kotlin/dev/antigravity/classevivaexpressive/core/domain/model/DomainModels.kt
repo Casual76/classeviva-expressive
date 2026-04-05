@@ -62,8 +62,88 @@ enum class NoticeboardActionType {
 }
 
 @Serializable
+enum class FeatureCapabilityMode {
+  DIRECT_REST,
+  GATEWAY,
+  TENANT_OPTIONAL,
+  UNSUPPORTED,
+}
+
+@Serializable
+enum class RegistroFeature {
+  LOGIN_SESSION,
+  PROFILE,
+  GRADES,
+  PERIODS,
+  SUBJECTS,
+  AGENDA,
+  HOMEWORKS,
+  LESSONS,
+  ABSENCES,
+  ABSENCE_JUSTIFICATIONS,
+  NOTICEBOARD,
+  NOTICEBOARD_REPLY,
+  NOTICEBOARD_JOIN,
+  NOTICEBOARD_UPLOAD,
+  NOTES,
+  MATERIALS,
+  DOCUMENTS,
+  SCHOOLBOOKS,
+  MEETINGS,
+  NOTIFICATIONS,
+  PREVIOUS_SCHOOL_YEAR,
+  SPORTELLO,
+  QUESTIONNAIRES,
+}
+
+@Serializable
+enum class GatewayActionState {
+  IDLE,
+  REQUIRES_CONFIGURATION,
+  IN_PROGRESS,
+  SUCCESS,
+  FAILED,
+}
+
+@Serializable
+enum class AbsenceJustificationMode {
+  AUTO,
+  TEXT_ONLY,
+  ATTACHMENT_ONLY,
+  TEXT_AND_ATTACHMENT,
+}
+
+@Serializable
 data class CapabilityState(
   val status: CapabilityStatus = CapabilityStatus.UNAVAILABLE,
+  val label: String = "",
+  val detail: String? = null,
+)
+
+@Serializable
+data class SchoolYearRef(
+  val startYear: Int,
+  val endYear: Int,
+) {
+  val id: String
+    get() = "$startYear-$endYear"
+
+  val label: String
+    get() = "$startYear/${endYear.toString().takeLast(2)}"
+
+  companion object {
+    fun current(nowYear: Int, nowMonth: Int): SchoolYearRef {
+      val start = if (nowMonth >= 8) nowYear else nowYear - 1
+      return SchoolYearRef(start, start + 1)
+    }
+  }
+}
+
+@Serializable
+data class FeatureCapability(
+  val feature: RegistroFeature,
+  val mode: FeatureCapabilityMode,
+  val enabled: Boolean = true,
   val label: String = "",
   val detail: String? = null,
 )
@@ -115,7 +195,6 @@ data class UserSession(
   val token: String,
   val studentId: String,
   val username: String,
-  val password: String,
   val profile: StudentProfile,
 )
 
@@ -159,6 +238,38 @@ data class Homework(
 )
 
 @Serializable
+data class AttachmentPayload(
+  val fileName: String,
+  val mimeType: String? = null,
+  val base64Content: String,
+)
+
+@Serializable
+data class HomeworkDetail(
+  val homework: Homework,
+  val fullText: String,
+  val assignedDate: String? = null,
+  val teacher: String? = null,
+  val capability: FeatureCapability? = null,
+)
+
+@Serializable
+data class HomeworkSubmission(
+  val homeworkId: String,
+  val text: String? = null,
+  val attachments: List<AttachmentPayload> = emptyList(),
+)
+
+@Serializable
+data class HomeworkSubmissionReceipt(
+  val homeworkId: String,
+  val state: GatewayActionState,
+  val submittedAt: String? = null,
+  val message: String? = null,
+  val remoteReference: String? = null,
+)
+
+@Serializable
 data class AgendaItem(
   val id: String,
   val title: String,
@@ -189,10 +300,21 @@ data class AbsenceRecord(
   val type: AbsenceType,
   val hours: Int? = null,
   val justified: Boolean,
+  val canJustify: Boolean = false,
   val justificationDate: String? = null,
   val justificationReason: String? = null,
   val justifyUrl: String? = null,
   val detailUrl: String? = null,
+)
+
+@Serializable
+data class AbsenceJustificationRequest(
+  val absenceId: String,
+  val reasonText: String? = null,
+  val attachment: AttachmentPayload? = null,
+  val justifyUrl: String? = null,
+  val detailUrl: String? = null,
+  val submissionMode: AbsenceJustificationMode = AbsenceJustificationMode.AUTO,
 )
 
 @Serializable
@@ -349,6 +471,47 @@ data class SchoolbookCourse(
   val id: String,
   val title: String,
   val books: List<Schoolbook> = emptyList(),
+)
+
+@Serializable
+data class MeetingTeacher(
+  val id: String,
+  val name: String,
+  val subject: String? = null,
+)
+
+@Serializable
+data class MeetingSlot(
+  val id: String,
+  val teacherId: String,
+  val date: String,
+  val startTime: String,
+  val endTime: String? = null,
+  val location: String? = null,
+  val available: Boolean = true,
+  val joinUrl: String? = null,
+)
+
+@Serializable
+data class MeetingBooking(
+  val id: String,
+  val teacher: MeetingTeacher,
+  val slot: MeetingSlot,
+  val status: String,
+  val bookingPosition: String? = null,
+)
+
+@Serializable
+data class MeetingJoinLink(
+  val bookingId: String,
+  val url: String,
+)
+
+@Serializable
+data class MeetingCancellation(
+  val bookingId: String,
+  val cancelledAt: String,
+  val message: String? = null,
 )
 
 @Serializable
@@ -541,6 +704,14 @@ interface LessonsRepository {
   suspend fun refreshLessons(force: Boolean = false): Result<List<Lesson>>
 }
 
+interface HomeworkRepository {
+  fun observeHomeworks(): Flow<List<Homework>>
+  suspend fun refreshHomeworks(force: Boolean = false): Result<List<Homework>>
+  suspend fun getHomeworkDetail(id: String): Result<HomeworkDetail>
+  suspend fun submitHomework(submission: HomeworkSubmission): Result<HomeworkSubmissionReceipt>
+  suspend fun queueAttachmentDownload(attachment: RemoteAttachment): Result<Long>
+}
+
 interface CommunicationsRepository {
   fun observeCommunications(): Flow<List<Communication>>
   fun observeNotes(): Flow<List<Note>>
@@ -577,7 +748,32 @@ interface DocumentsRepository {
 interface AbsencesRepository {
   fun observeAbsences(): Flow<List<AbsenceRecord>>
   suspend fun refreshAbsences(force: Boolean = false): Result<List<AbsenceRecord>>
-  suspend fun justifyAbsence(record: AbsenceRecord, reason: String? = null): Result<List<AbsenceRecord>>
+  suspend fun justifyAbsence(
+    record: AbsenceRecord,
+    reason: String? = null,
+    request: AbsenceJustificationRequest = AbsenceJustificationRequest(absenceId = record.id, reasonText = reason),
+  ): Result<List<AbsenceRecord>>
+}
+
+interface MeetingsRepository {
+  fun observeMeetingTeachers(): Flow<List<MeetingTeacher>>
+  fun observeMeetingSlots(): Flow<List<MeetingSlot>>
+  fun observeMeetingBookings(): Flow<List<MeetingBooking>>
+  suspend fun refreshMeetings(force: Boolean = false): Result<List<MeetingBooking>>
+  suspend fun bookMeeting(slot: MeetingSlot): Result<MeetingBooking>
+  suspend fun cancelMeeting(booking: MeetingBooking): Result<List<MeetingBooking>>
+  suspend fun joinMeeting(booking: MeetingBooking): Result<MeetingJoinLink>
+}
+
+interface SchoolYearRepository {
+  fun observeSelectedSchoolYear(): Flow<SchoolYearRef>
+  fun observeAvailableSchoolYears(): Flow<List<SchoolYearRef>>
+  suspend fun selectSchoolYear(year: SchoolYearRef)
+}
+
+interface CapabilityResolver {
+  fun observeCapabilityMatrix(): Flow<List<FeatureCapability>>
+  fun observeCapability(feature: RegistroFeature): Flow<FeatureCapability>
 }
 
 interface StatsRepository {

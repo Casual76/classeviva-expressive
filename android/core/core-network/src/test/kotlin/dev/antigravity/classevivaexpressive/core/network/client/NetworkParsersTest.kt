@@ -14,7 +14,7 @@ import org.junit.Test
 
 class NetworkParsersTest {
   @Test
-  fun normalizeCommunicationDetail_extractsActionUrlsAndAttachments() {
+  fun normalizeCommunicationDetail_preservesPortalUrlsForGateway() {
     val payload = Json.parseToJsonElement(
       """
       {
@@ -55,11 +55,64 @@ class NetworkParsersTest {
     assertEquals("https://web.spaggiari.eu/sgv/app/default/join.php?id=99", detail.joinUrl)
     assertEquals("https://web.spaggiari.eu/home/app/default/upload.php?id=99", detail.fileUploadUrl)
     assertEquals(1, detail.communication.attachments.size)
-    assertEquals("https://web.spaggiari.eu/files/circolare.pdf", detail.communication.attachments.first().url)
+    assertNull(detail.communication.attachments.first().url)
+    assertTrue(detail.communication.attachments.first().portalOnly)
+    assertEquals(CapabilityStatus.AVAILABLE, detail.communication.capabilityState.status)
   }
 
   @Test
-  fun normalizeAbsence_extractsJustificationUrls() {
+  fun normalizeCommunicationDetail_keepsOfficialRestUrls() {
+    val payload = Json.parseToJsonElement(
+      """
+      {
+        "item": { "text": "Dettaglio completo della circolare" },
+        "confirmAction": { "href": "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/read/CIR/99/101" },
+        "replyAction": { "url": "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/reply/CIR/99/101" },
+        "attachments": [
+          {
+            "id": "pdf",
+            "name": "circolare.pdf",
+            "link": "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/attach/CIR/99/101",
+            "mimeType": "application/pdf"
+          }
+        ]
+      }
+      """.trimIndent(),
+    ).obj()
+
+    val base = Communication(
+      id = "99",
+      pubId = "99",
+      evtCode = "CIR",
+      title = "Circolare",
+      contentPreview = "Preview",
+      sender = "Scuola",
+      date = "2026-03-20",
+      read = false,
+      needsAck = true,
+      needsReply = true,
+    )
+
+    val detail = normalizeCommunicationDetail(payload, base)
+
+    assertEquals(
+      "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/read/CIR/99/101",
+      detail.acknowledgeUrl,
+    )
+    assertEquals(
+      "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/reply/CIR/99/101",
+      detail.replyUrl,
+    )
+    assertEquals(
+      "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/attach/CIR/99/101",
+      detail.communication.attachments.first().url,
+    )
+    assertFalse(detail.communication.attachments.first().portalOnly)
+    assertEquals(CapabilityStatus.AVAILABLE, detail.communication.capabilityState.status)
+  }
+
+  @Test
+  fun normalizeAbsence_preservesPortalJustificationUrlsForGateway() {
     val absence = normalizeAbsence(
       Json.parseToJsonElement(
         """
@@ -77,12 +130,13 @@ class NetworkParsersTest {
 
     assertFalse(absence.justified)
     assertEquals("2026-03-25", absence.date)
+    assertTrue(absence.canJustify)
     assertEquals("https://web.spaggiari.eu/sgv/app/default/justify.php?id=44", absence.justifyUrl)
     assertEquals("https://web.spaggiari.eu/sgv/app/default/absence.php?id=44", absence.detailUrl)
   }
 
   @Test
-  fun normalizeCommunication_marksActionDrivenItemsAsExternal() {
+  fun normalizeCommunication_marksAckActionsAsAvailableWhenHandledInApp() {
     val communication = normalizeCommunication(
       Json.parseToJsonElement(
         """
@@ -102,7 +156,8 @@ class NetworkParsersTest {
 
     assertTrue(communication.needsAck)
     assertEquals(NoticeboardActionType.ACKNOWLEDGE, communication.actions.first().type)
-    assertEquals(CapabilityStatus.EXTERNAL_ONLY, communication.capabilityState.status)
+    assertNull(communication.actions.first().url)
+    assertEquals(CapabilityStatus.AVAILABLE, communication.capabilityState.status)
   }
 
   @Test
@@ -157,6 +212,37 @@ class NetworkParsersTest {
   }
 
   @Test
+  fun normalizeAbsence_prefersEvtCodeMappingOverText() {
+    val late = normalizeAbsence(
+      Json.parseToJsonElement(
+        """
+        {
+          "evtId": "1",
+          "evtDate": "20260325",
+          "evtCode": "RTD",
+          "tipo": "assenza"
+        }
+        """.trimIndent(),
+      ),
+    )
+    val exit = normalizeAbsence(
+      Json.parseToJsonElement(
+        """
+        {
+          "evtId": "2",
+          "evtDate": "20260326",
+          "evtCode": "USC",
+          "tipo": "assenza"
+        }
+        """.trimIndent(),
+      ),
+    )
+
+    assertEquals(AbsenceType.LATE, late.type)
+    assertEquals(AbsenceType.EXIT, exit.type)
+  }
+
+  @Test
   fun normalizeNote_mapsCategoryCodesToProductLabels() {
     val note = normalizeNote(
       Json.parseToJsonElement(
@@ -190,7 +276,7 @@ class NetworkParsersTest {
   }
 
   @Test
-  fun normalizeMaterialAsset_keepsExternalSourceWhenPreviewIsMissing() {
+  fun normalizeMaterialAsset_marksNonOfficialSourceAsUnavailable() {
     val asset = normalizeMaterialAsset(
       item = dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem(
         id = "m1",
@@ -210,8 +296,33 @@ class NetworkParsersTest {
       sourceUrl = "https://example.com/materiale",
     )
 
-    assertEquals(CapabilityStatus.EXTERNAL_ONLY, asset.capabilityState.status)
+    assertEquals(CapabilityStatus.UNAVAILABLE, asset.capabilityState.status)
     assertEquals("https://example.com/materiale", asset.sourceUrl)
+  }
+
+  @Test
+  fun normalizeMaterialAsset_keepsOfficialSourceWhenPreviewIsMissing() {
+    val asset = normalizeMaterialAsset(
+      item = dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem(
+        id = "m1",
+        teacherId = "t1",
+        teacherName = "Docente",
+        folderId = "f1",
+        folderName = "Cartella",
+        title = "Download ufficiale",
+        objectId = "obj",
+        objectType = "link",
+        sharedAt = "2026-03-20",
+        capabilityState = dev.antigravity.classevivaexpressive.core.domain.model.CapabilityState(),
+      ),
+      mimeType = null,
+      base64Content = null,
+      textPreview = null,
+      sourceUrl = "https://web.spaggiari.eu/rest/v1/students/55/didactics/item/10",
+    )
+
+    assertEquals(CapabilityStatus.EXTERNAL_ONLY, asset.capabilityState.status)
+    assertEquals("https://web.spaggiari.eu/rest/v1/students/55/didactics/item/10", asset.sourceUrl)
   }
 
   @Test

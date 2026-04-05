@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,14 +40,20 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SectionTitle
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveAccentPresets
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityResolver
+import dev.antigravity.classevivaexpressive.core.domain.model.FeatureCapability
+import dev.antigravity.classevivaexpressive.core.domain.model.FeatureCapabilityMode
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationChannelStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
@@ -61,6 +68,9 @@ data class SettingsUiState(
   val settings: AppSettings = AppSettings(),
   val runtimeState: NotificationRuntimeState = NotificationRuntimeState(),
   val session: UserSession? = null,
+  val selectedSchoolYear: SchoolYearRef = SchoolYearRef.current(java.time.LocalDate.now().year, java.time.LocalDate.now().monthValue),
+  val availableSchoolYears: List<SchoolYearRef> = emptyList(),
+  val capabilities: List<FeatureCapability> = emptyList(),
   val lastMessage: String? = null,
   val isRefreshing: Boolean = false,
 )
@@ -69,21 +79,46 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
   private val settingsRepository: SettingsRepository,
   private val authRepository: AuthRepository,
+  private val schoolYearRepository: SchoolYearRepository,
+  private val capabilityResolver: CapabilityResolver,
 ) : ViewModel() {
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isRefreshing = MutableStateFlow(false)
 
-  val state = combine(
+  private val contentState = combine(
     settingsRepository.observeSettings(),
     settingsRepository.observeNotificationRuntimeState(),
     authRepository.session,
-    lastMessage,
-    isRefreshing,
-  ) { settings, runtimeState, session, message, refreshing ->
+    schoolYearRepository.observeSelectedSchoolYear(),
+  ) { settings, runtimeState, session, selectedSchoolYear ->
     SettingsUiState(
       settings = settings,
       runtimeState = runtimeState,
       session = session,
+      selectedSchoolYear = selectedSchoolYear,
+    )
+  }
+
+  private val registryState = combine(
+    schoolYearRepository.observeAvailableSchoolYears(),
+    capabilityResolver.observeCapabilityMatrix(),
+  ) { availableSchoolYears, capabilities ->
+    availableSchoolYears to capabilities
+  }
+
+  val state = combine(
+    contentState,
+    registryState,
+    lastMessage,
+    isRefreshing,
+  ) { content, registry, message, refreshing ->
+    SettingsUiState(
+      settings = content.settings,
+      runtimeState = content.runtimeState,
+      session = content.session,
+      selectedSchoolYear = content.selectedSchoolYear,
+      availableSchoolYears = registry.first,
+      capabilities = registry.second,
       lastMessage = message,
       isRefreshing = refreshing,
     )
@@ -156,6 +191,13 @@ class SettingsViewModel @Inject constructor(
 
   fun logout() {
     viewModelScope.launch { authRepository.logout() }
+  }
+
+  fun selectSchoolYear(year: SchoolYearRef) {
+    viewModelScope.launch {
+      schoolYearRepository.selectSchoolYear(year)
+      lastMessage.value = "Anno scolastico impostato su ${year.label}."
+    }
   }
 }
 
@@ -239,6 +281,39 @@ fun SettingsRoute(
             }
           },
         )
+      }
+      item {
+        SectionTitle(
+          eyebrow = "Registro",
+          title = "Anno scolastico e capability",
+        )
+      }
+      item {
+        ExpressiveCard {
+          Text("Anno scolastico attivo")
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+          ) {
+            state.availableSchoolYears.forEach { year ->
+              FilterChip(
+                selected = state.selectedSchoolYear.id == year.id,
+                onClick = { viewModel.selectSchoolYear(year) },
+                label = { Text(year.label) },
+              )
+            }
+          }
+        }
+      }
+      if (state.capabilities.isNotEmpty()) {
+        item {
+          ExpressiveCard {
+            Text("Matrice funzionale")
+          }
+        }
+        items(state.capabilities, key = { it.feature.name }) { capability ->
+          CapabilityRow(capability = capability)
+        }
       }
       state.lastMessage?.let { message ->
         item {
@@ -464,4 +539,21 @@ private fun channelSubtitle(
   val local = if (channelEnabledInSettings(channel.id, settings)) "attivo" else "disattivo"
   val system = if (channel.enabled) "abilitato" else "disabilitato"
   return "Canale locale $local, canale Android $system."
+}
+
+@Composable
+private fun CapabilityRow(capability: FeatureCapability) {
+  val tone = when {
+    !capability.enabled -> ExpressiveTone.Warning
+    capability.mode == FeatureCapabilityMode.GATEWAY -> ExpressiveTone.Info
+    capability.mode == FeatureCapabilityMode.TENANT_OPTIONAL -> ExpressiveTone.Neutral
+    else -> ExpressiveTone.Success
+  }
+  RegisterListRow(
+    title = capability.feature.name.replace('_', ' '),
+    subtitle = capability.detail ?: "Nessun dettaglio disponibile.",
+    eyebrow = capability.label.ifBlank { "Capability" },
+    tone = tone,
+    badge = { StatusBadge(capability.mode.name.replace('_', ' '), tone = tone) },
+  )
 }

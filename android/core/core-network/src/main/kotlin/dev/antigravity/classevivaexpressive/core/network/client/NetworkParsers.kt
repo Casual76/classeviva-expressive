@@ -132,27 +132,36 @@ internal fun normalizeHomework(data: JsonElement): Homework {
 
 internal fun normalizeAbsence(data: JsonElement): AbsenceRecord {
   val obj = data.obj()
+  val evtCode = obj.string("evtCode", "code", "eventCode", "type").orEmpty().uppercase()
   val typeSource = listOfNotNull(
-    obj.string("tipo", "evtCode", "type", "eventType"),
+    obj.string("tipo", "eventType"),
     obj.string("title", "description", "evtText", "notes"),
     obj["tipo"].obj().string("desc"),
   ).joinToString(" ").lowercase()
   val type = when {
+    evtCode == "RTD" -> AbsenceType.LATE
+    evtCode in setOf("UXC", "USC") -> AbsenceType.EXIT
+    evtCode in setOf("ABA", "AB0") -> AbsenceType.ABSENCE
     typeSource.contains("ritard") || typeSource.contains("late") || typeSource.contains("ingresso post") -> AbsenceType.LATE
     typeSource.contains("uscita") || typeSource.contains("exit") || typeSource.contains("permesso") -> AbsenceType.EXIT
     else -> AbsenceType.ABSENCE
   }
+  val justifyUrl = findActionUrl(data, "justify", "giust", "justif")
+  val detailUrl = (
+    normalizeUrlCandidate(obj.string("detailUrl", "detailLink", "detailHref"))
+      ?: findActionUrl(data, "detail", "event", "scheda", "notice")
+    )
   return AbsenceRecord(
     id = obj.string("id", "evtId", "absenceId").orEmpty(),
     date = normalizeDate(obj.string("evtDate", "data", "date")),
     type = type,
     hours = obj.int("hoursAbsence", "ore", "hours", "hour", "evtHPos"),
     justified = obj.bool("isJustified", "giustificata", "justified") ?: false,
+    canJustify = justifyUrl != null,
     justificationDate = normalizeDateOrNull(obj.string("dataGiustificazione", "justificationDate")),
     justificationReason = sanitizeRegisterText(obj.string("justifReasonDesc", "motivoGiustificazione", "justificationReason")),
-    justifyUrl = findActionUrl(data, "justify", "giust", "justif"),
-    detailUrl = normalizeUrlCandidate(obj.string("detailUrl", "detailLink", "detailHref"))
-      ?: findActionUrl(data, "detail", "event", "scheda", "notice"),
+    justifyUrl = justifyUrl,
+    detailUrl = detailUrl,
   )
 }
 
@@ -332,21 +341,21 @@ internal fun normalizeMaterialFolder(folder: JsonObject, teacherId: String, teac
           RemoteAttachment(
             id = content.string("id", "contentId", "itemId") ?: sourceUrl,
             name = sanitizeRegisterText(content.string("title", "name")) ?: "Link",
-            url = sourceUrl,
+            url = sourceUrl.takeIf(::isOfficialApiUrl),
             mimeType = content.string("mimeType", "contentType"),
-            portalOnly = false,
+            portalOnly = !isOfficialApiUrl(sourceUrl),
           ),
         )
       }
     }.distinctBy { "${it.id}:${it.url.orEmpty()}" }
     val capability = when {
-      !sourceUrl.isNullOrBlank() && attachments.none { !it.url.isNullOrBlank() && it.url != sourceUrl } ->
+      !sourceUrl.isNullOrBlank() && !isOfficialApiUrl(sourceUrl) ->
         CapabilityState(
-          status = CapabilityStatus.EXTERNAL_ONLY,
-          label = "Link esterno",
-          detail = "Il materiale apre una risorsa esterna o una pagina del portale.",
+          status = CapabilityStatus.UNAVAILABLE,
+          label = "Endpoint non ufficiale",
+          detail = "Questa risorsa richiede ancora un URL non REST e viene esclusa dal flusso nativo.",
         )
-      attachments.isNotEmpty() ->
+      attachments.any { !it.portalOnly } ->
         CapabilityState(
           status = CapabilityStatus.AVAILABLE,
           label = "Contenuto disponibile",
@@ -394,15 +403,20 @@ internal fun normalizeMaterialAsset(
       },
       detail = "Il contenuto e disponibile per anteprima o apertura locale.",
     )
-    !effectiveSourceUrl.isNullOrBlank() -> CapabilityState(
+    !effectiveSourceUrl.isNullOrBlank() && isOfficialApiUrl(effectiveSourceUrl) -> CapabilityState(
       status = CapabilityStatus.EXTERNAL_ONLY,
-      label = "Link esterno",
-      detail = "Il materiale richiede apertura esterna o passaggio tramite portale.",
+      label = "Download disponibile",
+      detail = "Il materiale e disponibile tramite endpoint REST ufficiale.",
+    )
+    !effectiveSourceUrl.isNullOrBlank() -> CapabilityState(
+      status = CapabilityStatus.UNAVAILABLE,
+      label = "Endpoint non ufficiale",
+      detail = "La preview via endpoint non ufficiale non viene usata nel flusso nativo.",
     )
     else -> CapabilityState(
       status = CapabilityStatus.UNAVAILABLE,
       label = "Preview non disponibile",
-      detail = "Il portale non ha restituito un contenuto apribile.",
+      detail = "L'API ufficiale non ha restituito un contenuto apribile.",
     )
   }
   return MaterialAsset(
@@ -451,25 +465,25 @@ fun normalizeDocumentAsset(
 
 internal fun normalizeDocument(data: JsonElement): DocumentItem {
   val obj = data.obj()
-  val viewUrl = normalizeUrlCandidate(obj.string("viewLink", "viewUrl", "url"))
-  val confirmUrl = normalizeUrlCandidate(obj.string("confirmLink", "confirmUrl", "confirmHref"))
+  val viewUrl = normalizeUrlCandidate(obj.string("viewLink", "viewUrl", "url")).takeIf(::isOfficialApiUrl)
+  val confirmUrl = normalizeUrlCandidate(obj.string("confirmLink", "confirmUrl", "confirmHref")).takeIf(::isOfficialApiUrl)
   return DocumentItem(
     id = obj.string("id", "viewLink", "confirmLink", "desc").orEmpty().ifBlank {
       obj.string("desc", "title").orEmpty()
     },
     title = sanitizeRegisterText(obj.string("desc", "title")) ?: "Documento",
     detail = when {
-      viewUrl != null -> "Documento apribile dal portale autenticato."
-      confirmUrl != null -> "Richiede una conferma tramite portale."
-      else -> "Il portale non ha fornito un link diretto."
+      viewUrl != null -> "Documento disponibile tramite endpoint REST ufficiale."
+      confirmUrl != null -> "Documento verificabile tramite endpoint REST ufficiale."
+      else -> "Nessun link REST diretto esposto nella lista documenti."
     },
     viewUrl = viewUrl,
     confirmUrl = confirmUrl,
     capabilityState = when {
       viewUrl != null || confirmUrl != null -> CapabilityState(
-        CapabilityStatus.EXTERNAL_ONLY,
+        CapabilityStatus.AVAILABLE,
         "Apri documento",
-        "Apertura nativa o via portale autenticato.",
+        "Apertura e download gestiti dal client nativo.",
       )
       else -> CapabilityState(
         CapabilityStatus.UNAVAILABLE,
@@ -555,9 +569,9 @@ internal fun normalizeAttachments(data: JsonElement?): List<RemoteAttachment> {
         RemoteAttachment(
           id = item.string("id", "attachId", "uuid") ?: name,
           name = name,
-          url = url,
+          url = url?.takeIf(::isOfficialApiUrl),
           mimeType = item.string("mimeType", "contentType"),
-          portalOnly = item.bool("portalOnly") ?: url.isNullOrBlank(),
+          portalOnly = item.bool("portalOnly") ?: !isOfficialApiUrl(url),
         )
       }
       else -> null
@@ -629,7 +643,7 @@ private fun normalizeNoticeboardAttachments(data: JsonElement?): List<Noticeboar
           ?: return@mapNotNull null
         val url = normalizeUrlCandidate(element.string("url", "link", "href", "path"))
           ?: findActionUrl(element, "download", "attach", "alleg", "file")
-        val action = url?.let {
+        val action = url?.takeIf(::isOfficialApiUrl)?.let {
           NoticeboardAction(
             type = NoticeboardActionType.DOWNLOAD,
             label = "Scarica allegato",
@@ -639,9 +653,9 @@ private fun normalizeNoticeboardAttachments(data: JsonElement?): List<Noticeboar
         NoticeboardAttachment(
           id = element.string("id", "attachId", "uuid") ?: name,
           name = name,
-          url = url,
+          url = url?.takeIf(::isOfficialApiUrl),
           mimeType = element.string("mimeType", "contentType"),
-          portalOnly = element.bool("portalOnly") ?: url.isNullOrBlank(),
+          portalOnly = element.bool("portalOnly") ?: !isOfficialApiUrl(url),
           action = action,
         )
       }
@@ -672,15 +686,21 @@ private fun buildNoticeboardActions(
 ): List<NoticeboardAction> {
   return buildList {
     if (needsAck || acknowledgeUrl != null) {
-      add(NoticeboardAction(type = NoticeboardActionType.ACKNOWLEDGE, label = "Conferma", url = acknowledgeUrl))
+      add(
+        NoticeboardAction(
+          type = NoticeboardActionType.ACKNOWLEDGE,
+          label = "Conferma",
+          url = acknowledgeUrl,
+        ),
+      )
     }
-    if (needsReply || replyUrl != null) {
+    if (needsReply || !replyUrl.isNullOrBlank()) {
       add(NoticeboardAction(type = NoticeboardActionType.REPLY, label = "Rispondi", url = replyUrl))
     }
-    if (needsJoin || joinUrl != null) {
+    if (needsJoin || !joinUrl.isNullOrBlank()) {
       add(NoticeboardAction(type = NoticeboardActionType.JOIN, label = "Aderisci", url = joinUrl))
     }
-    if (needsFile || fileUploadUrl != null) {
+    if (needsFile || !fileUploadUrl.isNullOrBlank()) {
       add(NoticeboardAction(type = NoticeboardActionType.UPLOAD, label = "Carica file", url = fileUploadUrl))
     }
   }
@@ -692,15 +712,25 @@ private fun communicationCapability(
   attachments: List<RemoteAttachment>,
 ): CapabilityState {
   return when {
-    actions.isNotEmpty() || noticeboardAttachments.any { it.portalOnly } -> CapabilityState(
-      CapabilityStatus.EXTERNAL_ONLY,
-      "Azioni esterne richieste",
-      "La comunicazione richiede conferma, risposta, adesione o passaggi tramite portale.",
+    actions.any { requiresGatewayUrl(it.url) } -> CapabilityState(
+      CapabilityStatus.AVAILABLE,
+      "Gateway richiesto",
+      "Le azioni avanzate della comunicazione passano dal gateway controllato.",
+    )
+    noticeboardAttachments.any { it.portalOnly } || attachments.any { it.portalOnly } -> CapabilityState(
+      CapabilityStatus.UNAVAILABLE,
+      "Endpoint non ufficiale",
+      "Alcuni allegati richiedono ancora URL non REST e vengono esclusi dal flusso nativo.",
+    )
+    actions.isNotEmpty() -> CapabilityState(
+      CapabilityStatus.AVAILABLE,
+      "Azioni disponibili",
+      "La comunicazione espone azioni gestibili dal client nativo.",
     )
     noticeboardAttachments.isNotEmpty() || attachments.isNotEmpty() -> CapabilityState(
       CapabilityStatus.AVAILABLE,
       "Allegati disponibili",
-      "Il dettaglio e gli allegati esposti dal portale sono disponibili in app.",
+      "Il dettaglio e gli allegati ufficiali sono disponibili in app.",
     )
     else -> CapabilityState(
       CapabilityStatus.AVAILABLE,
@@ -708,6 +738,10 @@ private fun communicationCapability(
       "Contenuto testuale leggibile in app.",
     )
   }
+}
+
+private fun requiresGatewayUrl(value: String?): Boolean {
+  return !value.isNullOrBlank() && !isOfficialApiUrl(value)
 }
 
 private fun findActionUrl(root: JsonElement?, vararg keywords: String): String? {
@@ -754,6 +788,10 @@ private fun normalizeUrlCandidate(value: String?): String? {
     raw.startsWith("home/") || raw.startsWith("sgv/") || raw.contains(".php") -> "$PortalBaseUrl/$raw"
     else -> null
   }
+}
+
+private fun isOfficialApiUrl(value: String?): Boolean {
+  return value?.contains("/rest/", ignoreCase = true) == true
 }
 
 internal fun normalizeStudentId(value: String?): String? {

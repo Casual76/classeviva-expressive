@@ -32,8 +32,10 @@ import dev.antigravity.classevivaexpressive.core.database.database.SubjectGoalEn
 import dev.antigravity.classevivaexpressive.core.database.database.StudentScoreDao
 import dev.antigravity.classevivaexpressive.core.database.database.StudentScoreSnapshotEntity
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
+import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
 import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
+import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceJustificationRequest
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsencesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
@@ -41,6 +43,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityResolver
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
@@ -56,18 +59,30 @@ import dev.antigravity.classevivaexpressive.core.domain.model.GradeDistribution
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
+import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkDetail
+import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSubmission
+import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSubmissionReceipt
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.MeetingBooking
+import dev.antigravity.classevivaexpressive.core.domain.model.MeetingJoinLink
+import dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot
+import dev.antigravity.classevivaexpressive.core.domain.model.MeetingTeacher
+import dev.antigravity.classevivaexpressive.core.domain.model.MeetingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPreferences
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
 import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
+import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolbookCourse
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SeenGradeState
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SimulatedGrade
@@ -86,6 +101,8 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import dev.antigravity.classevivaexpressive.core.domain.model.TimelinePoint
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
+import dev.antigravity.classevivaexpressive.core.network.client.ApiSessionManager
+import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaGatewayClient
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
@@ -104,38 +121,25 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-private const val ProfileKey = "profile"
-private const val GradesKey = "grades"
-private const val PeriodsKey = "periods"
-private const val SubjectsKey = "subjects"
-private const val LessonsKey = "lessons"
-private const val HomeworkKey = "homeworks"
-private const val AgendaKey = "agenda"
-private const val AbsencesKey = "absences"
-private const val CommunicationsKey = "communications"
-private const val NotesKey = "notes"
-private const val MaterialsKey = "materials"
-private const val DocumentsKey = "documents"
-private const val SchoolbooksKey = "schoolbooks"
-
 @Singleton
 class SchoolAuthRepository @Inject constructor(
   private val sessionStore: SessionStore,
   private val syncCoordinator: SchoolSyncCoordinator,
+  private val apiSessionManager: ApiSessionManager,
 ) : AuthRepository {
   override val session: StateFlow<UserSession?> = sessionStore.session
 
   override suspend fun restore(): UserSession? {
-    val restored = sessionStore.readCurrentSession()
+    val restored = apiSessionManager.restoreValidSession()
     syncCoordinator.attachSession(restored)
-    restored?.let { syncCoordinator.bootstrapPortal(it) }
     return restored
   }
 
   override suspend fun login(username: String, password: String): Result<UserSession> = runCatching {
-    val session = syncCoordinator.login(username, password)
-    sessionStore.writeSession(session)
-    session
+    syncCoordinator.login(username, password)
+  }.onFailure {
+    sessionStore.clear()
+    syncCoordinator.attachSession(null)
   }
 
   override suspend fun logout() {
@@ -210,15 +214,21 @@ class SchoolDataRepository @Inject constructor(
   private val syncCoordinator: SchoolSyncCoordinator,
   private val downloadManager: DownloadManager,
   private val sessionStore: SessionStore,
+  private val schoolYearStore: SchoolYearStore,
+  private val capabilityResolver: CapabilityResolver,
+  private val gatewayClient: ClassevivaGatewayClient,
   @ApplicationContext private val context: Context,
 ) : DashboardRepository,
   GradesRepository,
   AgendaRepository,
   LessonsRepository,
+  HomeworkRepository,
   CommunicationsRepository,
   MaterialsRepository,
   DocumentsRepository,
   AbsencesRepository,
+  MeetingsRepository,
+  SchoolYearRepository,
   StatsRepository,
   StudentScoreRepository,
   SimulationRepository {
@@ -251,7 +261,7 @@ class SchoolDataRepository @Inject constructor(
       )
     }
     return combine(
-      observeValue(ProfileKey, StudentProfile()),
+      observeGlobalValue(ProfileSection, StudentProfile()),
       academicFlow,
       schoolFlow,
       syncCoordinator.syncStatus,
@@ -297,9 +307,9 @@ class SchoolDataRepository @Inject constructor(
     observeDashboard().firstValue()
   }
 
-  override fun observeGrades(): Flow<List<Grade>> = observeValue(GradesKey, emptyList())
-  override fun observePeriods(): Flow<List<Period>> = observeValue(PeriodsKey, emptyList())
-  override fun observeSubjects(): Flow<List<Subject>> = observeValue(SubjectsKey, emptyList())
+  override fun observeGrades(): Flow<List<Grade>> = observeYearScopedValue(GradesSection, emptyList())
+  override fun observePeriods(): Flow<List<Period>> = observeYearScopedValue(PeriodsSection, emptyList())
+  override fun observeSubjects(): Flow<List<Subject>> = observeYearScopedValue(SubjectsSection, emptyList())
   override fun observeSeenGradeStates(): Flow<List<SeenGradeState>> {
     return sessionStore.session.flatMapLatest { session ->
       val studentId = session?.studentId
@@ -388,12 +398,13 @@ class SchoolDataRepository @Inject constructor(
 
   override fun observeAgenda(): Flow<List<AgendaItem>> {
     return combine(
-      observeValue(AgendaKey, emptyList<AgendaItem>()),
-      observeValue(HomeworkKey, emptyList<Homework>()),
+      observeYearScopedValue(AgendaSection, emptyList<AgendaItem>()),
+      observeHomeworks(),
+      observeSelectedSchoolYear(),
       customEventDao.observeAll().map { entities ->
         entities.map { json.decodeFromString<CustomEvent>(it.payload) }
       },
-    ) { agenda, homeworks, customEvents ->
+    ) { agenda, homeworks, schoolYear, customEvents ->
       (agenda + homeworks.map { homework ->
         AgendaItem(
           id = "homework-${homework.id}",
@@ -406,7 +417,9 @@ class SchoolDataRepository @Inject constructor(
           category = AgendaCategory.HOMEWORK,
           sharePayload = "${homework.subject} - ${homework.description} - ${homework.dueDate}",
         )
-      } + customEvents.map { event ->
+      } + customEvents.filter { event ->
+        isInSchoolYear(event.date, schoolYear)
+      }.map { event ->
         AgendaItem(
           id = event.id,
           title = event.title,
@@ -441,8 +454,8 @@ class SchoolDataRepository @Inject constructor(
 
   override fun observeLessons(): Flow<List<Lesson>> {
     return combine(
-      observeValue(LessonsKey, emptyList<Lesson>()),
-      observeValue(AgendaKey, emptyList<AgendaItem>()),
+      observeYearScopedValue(LessonsSection, emptyList<Lesson>()),
+      observeYearScopedValue(AgendaSection, emptyList<AgendaItem>()),
     ) { lessons, agenda ->
       buildLessonsWithFallback(lessons, agenda)
     }
@@ -452,8 +465,34 @@ class SchoolDataRepository @Inject constructor(
     observeLessons().firstValue()
   }
 
-  override fun observeCommunications(): Flow<List<Communication>> = observeValue(CommunicationsKey, emptyList())
-  override fun observeNotes(): Flow<List<Note>> = observeValue(NotesKey, emptyList())
+  override fun observeHomeworks(): Flow<List<Homework>> = observeYearScopedValue(HomeworkSection, emptyList())
+  override suspend fun refreshHomeworks(force: Boolean): Result<List<Homework>> = runCatching {
+    syncCoordinator.refreshHomeworks(force)
+  }
+
+  override suspend fun getHomeworkDetail(id: String): Result<HomeworkDetail> = runCatching {
+    val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
+    if (gatewayClient.isConfigured()) {
+      runCatching { gatewayClient.getHomeworkDetail(id, selectedYear) }.getOrNull()?.let { return@runCatching it }
+    }
+    val homework = observeHomeworks().firstValue().firstOrNull { it.id == id }
+      ?: syncCoordinator.refreshHomeworks(force = false).firstOrNull { it.id == id }
+      ?: error("Compito non trovato.")
+    HomeworkDetail(
+      homework = homework,
+      fullText = listOfNotNull(homework.description, homework.notes).joinToString("\n\n").ifBlank { homework.description },
+      assignedDate = homework.dueDate,
+      capability = capabilityResolver.observeCapability(RegistroFeature.HOMEWORKS).first(),
+    )
+  }
+
+  override suspend fun submitHomework(submission: HomeworkSubmission): Result<HomeworkSubmissionReceipt> =
+    syncCoordinator.submitHomework(submission)
+
+  override suspend fun queueAttachmentDownload(attachment: RemoteAttachment): Result<Long> = queueDownload(attachment)
+
+  override fun observeCommunications(): Flow<List<Communication>> = observeYearScopedValue(CommunicationsSection, emptyList())
+  override fun observeNotes(): Flow<List<Note>> = observeYearScopedValue(NotesSection, emptyList())
   override suspend fun refreshCommunications(force: Boolean): Result<List<Communication>> = runCatching {
     syncCoordinator.refreshAll(force)
     observeCommunications().firstValue()
@@ -493,7 +532,7 @@ class SchoolDataRepository @Inject constructor(
     return syncCoordinator.uploadCommunicationFile(detail, fileName, mimeType, bytes)
   }
 
-  override fun observeMaterials(): Flow<List<MaterialItem>> = observeValue(MaterialsKey, emptyList())
+  override fun observeMaterials(): Flow<List<MaterialItem>> = observeYearScopedValue(MaterialsSection, emptyList())
   override suspend fun refreshMaterials(force: Boolean): Result<List<MaterialItem>> = runCatching {
     syncCoordinator.refreshAll(force)
     observeMaterials().firstValue()
@@ -501,8 +540,8 @@ class SchoolDataRepository @Inject constructor(
 
   override suspend fun openAsset(item: MaterialItem): Result<MaterialAsset> = syncCoordinator.openMaterial(item)
 
-  override fun observeDocuments(): Flow<List<DocumentItem>> = observeValue(DocumentsKey, emptyList())
-  override fun observeSchoolbooks(): Flow<List<SchoolbookCourse>> = observeValue(SchoolbooksKey, emptyList())
+  override fun observeDocuments(): Flow<List<DocumentItem>> = observeYearScopedValue(DocumentsSection, emptyList())
+  override fun observeSchoolbooks(): Flow<List<SchoolbookCourse>> = observeYearScopedValue(SchoolbooksSection, emptyList())
   override suspend fun refreshDocuments(force: Boolean): Result<List<DocumentItem>> = runCatching {
     syncCoordinator.refreshAll(force)
     observeDocuments().firstValue()
@@ -515,15 +554,52 @@ class SchoolDataRepository @Inject constructor(
     queueDownloadInternal(url, document.title, null)
   }
 
-  override fun observeAbsences(): Flow<List<AbsenceRecord>> = observeValue(AbsencesKey, emptyList())
+  override fun observeAbsences(): Flow<List<AbsenceRecord>> = observeYearScopedValue(AbsencesSection, emptyList())
   override suspend fun refreshAbsences(force: Boolean): Result<List<AbsenceRecord>> = runCatching {
     syncCoordinator.refreshAll(force)
     observeAbsences().firstValue()
   }
 
-  override suspend fun justifyAbsence(record: AbsenceRecord, reason: String?): Result<List<AbsenceRecord>> {
-    return syncCoordinator.justifyAbsence(record, reason)
+  override suspend fun justifyAbsence(
+    record: AbsenceRecord,
+    reason: String?,
+    request: AbsenceJustificationRequest,
+  ): Result<List<AbsenceRecord>> {
+    return syncCoordinator.justifyAbsence(
+      record = record,
+      reason = reason,
+      request = request.copy(
+        absenceId = record.id,
+        reasonText = request.reasonText ?: reason,
+        justifyUrl = request.justifyUrl ?: record.justifyUrl,
+        detailUrl = request.detailUrl ?: record.detailUrl,
+      ),
+    )
   }
+
+  override fun observeMeetingTeachers(): Flow<List<MeetingTeacher>> = observeYearScopedValue(MeetingTeachersSection, emptyList())
+  override fun observeMeetingSlots(): Flow<List<MeetingSlot>> = observeYearScopedValue(MeetingSlotsSection, emptyList())
+  override fun observeMeetingBookings(): Flow<List<MeetingBooking>> = observeYearScopedValue(MeetingBookingsSection, emptyList())
+
+  override suspend fun refreshMeetings(force: Boolean): Result<List<MeetingBooking>> = runCatching {
+    syncCoordinator.refreshMeetings(force)
+  }
+
+  override suspend fun bookMeeting(slot: MeetingSlot): Result<MeetingBooking> {
+    return syncCoordinator.bookMeeting(slot)
+  }
+
+  override suspend fun cancelMeeting(booking: MeetingBooking): Result<List<MeetingBooking>> {
+    return syncCoordinator.cancelMeeting(booking)
+  }
+
+  override suspend fun joinMeeting(booking: MeetingBooking): Result<MeetingJoinLink> {
+    return syncCoordinator.joinMeeting(booking)
+  }
+
+  override fun observeSelectedSchoolYear(): Flow<SchoolYearRef> = schoolYearStore.observeSelectedSchoolYear()
+  override fun observeAvailableSchoolYears(): Flow<List<SchoolYearRef>> = schoolYearStore.observeAvailableSchoolYears()
+  override suspend fun selectSchoolYear(year: SchoolYearRef) = schoolYearStore.selectSchoolYear(year)
 
   override fun observeCurrentScore(): Flow<StudentScoreSnapshot?> {
     return combine(observeStats(), observeAbsences(), studentScoreDao.observeLatest()) { stats, absences, cached ->
@@ -590,9 +666,10 @@ class SchoolDataRepository @Inject constructor(
       .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
       .setMimeType(mimeType)
       .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, sanitizeFileName(title))
-      .addRequestHeader("User-Agent", "Classeviva Expressive Native")
-    syncCoordinator.portalCookieHeader(url)?.let { cookie ->
-      request.addRequestHeader("Cookie", cookie)
+      .addRequestHeader("User-Agent", dev.antigravity.classevivaexpressive.core.network.client.UserAgent)
+      .addRequestHeader("Z-Dev-ApiKey", dev.antigravity.classevivaexpressive.core.network.client.DevApiKey)
+    syncCoordinator.authToken()?.let { token ->
+      request.addRequestHeader("Z-Auth-Token", token)
     }
     val downloadId = downloadManager.enqueue(request)
     downloadRecordDao.upsert(
@@ -608,13 +685,28 @@ class SchoolDataRepository @Inject constructor(
     return downloadId
   }
 
-  private inline fun <reified T> observeValue(key: String, default: T): Flow<T> {
+  private inline fun <reified T> observeGlobalValue(key: String, default: T): Flow<T> {
     return snapshotCacheDao.observeByKey(key).map { entity ->
       entity?.payload?.let { runCatching { json.decodeFromString<T>(it) }.getOrDefault(default) } ?: default
     }
   }
 
+  private inline fun <reified T> observeYearScopedValue(section: String, default: T): Flow<T> {
+    return schoolYearStore.observeSelectedSchoolYear().flatMapLatest { schoolYear ->
+      snapshotCacheDao.observeByKey(yearScopedCacheKey(section, schoolYear)).map { entity ->
+        entity?.payload?.let { runCatching { json.decodeFromString<T>(it) }.getOrDefault(default) } ?: default
+      }
+    }
+  }
+
   private fun todayIso(): String = java.time.LocalDate.now().toString()
+
+  private fun isInSchoolYear(date: String, schoolYear: SchoolYearRef): Boolean {
+    val parsed = runCatching { java.time.LocalDate.parse(date) }.getOrNull() ?: return false
+    val start = java.time.LocalDate.of(schoolYear.startYear, 9, 1)
+    val end = java.time.LocalDate.of(schoolYear.endYear, 8, 31)
+    return !parsed.isBefore(start) && !parsed.isAfter(end)
+  }
 
   private fun sanitizeFileName(source: String): String {
     return source.replace(Regex("[^a-zA-Z0-9._-]+"), "_").ifBlank { "download.bin" }
@@ -800,12 +892,15 @@ abstract class RepositoryModule {
   @Binds abstract fun bindGradesRepository(impl: SchoolDataRepository): GradesRepository
   @Binds abstract fun bindAgendaRepository(impl: SchoolDataRepository): AgendaRepository
   @Binds abstract fun bindLessonsRepository(impl: SchoolDataRepository): LessonsRepository
+  @Binds abstract fun bindHomeworkRepository(impl: SchoolDataRepository): HomeworkRepository
   @Binds abstract fun bindCommunicationsRepository(impl: SchoolDataRepository): CommunicationsRepository
   @Binds abstract fun bindMaterialsRepository(impl: SchoolDataRepository): MaterialsRepository
   @Binds abstract fun bindDocumentsRepository(impl: SchoolDataRepository): DocumentsRepository
   @Binds abstract fun bindAbsencesRepository(impl: SchoolDataRepository): AbsencesRepository
+  @Binds abstract fun bindMeetingsRepository(impl: SchoolDataRepository): MeetingsRepository
   @Binds abstract fun bindStatsRepository(impl: SchoolDataRepository): StatsRepository
   @Binds abstract fun bindStudentScoreRepository(impl: SchoolDataRepository): StudentScoreRepository
   @Binds abstract fun bindSimulationRepository(impl: SchoolDataRepository): SimulationRepository
   @Binds abstract fun bindSettingsRepository(impl: SchoolSettingsRepository): SettingsRepository
+  @Binds abstract fun bindCapabilityResolver(impl: DefaultCapabilityResolver): CapabilityResolver
 }
