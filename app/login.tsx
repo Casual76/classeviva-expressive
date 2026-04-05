@@ -123,7 +123,7 @@ export default function LoginScreen() {
                   title="Autofill e password manager"
                 />
                 <FeatureRow
-                  detail="Home, voti, agenda, assenze e funzioni secondarie organizzate per priorità."
+                  detail="Oggi, voti, agenda, assenze e sezioni secondarie organizzate per priorita."
                   icon="dashboard"
                   title="Esperienza mobile-first"
                 />
@@ -176,11 +176,15 @@ export default function LoginScreen() {
                       accessibilityLabel="Username Classeviva"
                       autoCapitalize="none"
                       autoComplete="username"
+                      autoFocus
                       autoCorrect={false}
                       blurOnSubmit={false}
                       className="text-base"
+                      clearButtonMode="while-editing"
                       editable={!isLoading}
                       importantForAutofill="yes"
+                      inputMode="text"
+                      nativeID="classeviva-username"
                       onChangeText={(value) => {
                         clearError();
                         setUsername(value);
@@ -189,6 +193,7 @@ export default function LoginScreen() {
                       placeholder="Inserisci username"
                       placeholderTextColor={colors.onSurfaceVariant ?? colors.muted}
                       returnKeyType="next"
+                      spellCheck={false}
                       style={{ color: colors.foreground }}
                       textContentType="username"
                       value={username}
@@ -216,17 +221,21 @@ export default function LoginScreen() {
                       autoComplete="current-password"
                       autoCorrect={false}
                       className="flex-1 text-base"
+                      clearButtonMode="while-editing"
                       editable={!isLoading}
                       importantForAutofill="yes"
+                      nativeID="classeviva-password"
                       onChangeText={(value) => {
                         clearError();
                         setPassword(value);
                       }}
                       onSubmitEditing={() => void handleLogin()}
+                      passwordRules={Platform.OS === "ios" ? "minlength: 1;" : undefined}
                       placeholder="Inserisci password"
                       placeholderTextColor={colors.onSurfaceVariant ?? colors.muted}
                       returnKeyType="go"
                       secureTextEntry={!showPassword}
+                      spellCheck={false}
                       style={{ color: colors.foreground }}
                       textContentType="password"
                       value={password}

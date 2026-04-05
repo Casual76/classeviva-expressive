@@ -117,22 +117,27 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   suspend fun getCommunicationDetail(pubId: String, evtCode: String) = runCatching {
-    restClient.getCommunicationDetail(pubId, evtCode)
+    restClient.getCommunicationDetail(pubId, evtCode).also {
+      refreshCommunicationsSnapshot()
+    }
   }
 
   suspend fun acknowledgeCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = runCatching {
+    ensurePortalSession()
     portalClient.submitCommunicationAction(detail, PortalActionType.ACKNOWLEDGE).getOrThrow()
     refreshCommunicationsSnapshot()
     restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode)
   }
 
   suspend fun replyToCommunication(detail: CommunicationDetail, text: String): Result<CommunicationDetail> = runCatching {
+    ensurePortalSession()
     portalClient.submitCommunicationAction(detail, PortalActionType.REPLY, replyText = text).getOrThrow()
     refreshCommunicationsSnapshot()
     restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode)
   }
 
   suspend fun joinCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = runCatching {
+    ensurePortalSession()
     portalClient.submitCommunicationAction(detail, PortalActionType.JOIN).getOrThrow()
     refreshCommunicationsSnapshot()
     restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode)
@@ -144,6 +149,7 @@ class SchoolSyncCoordinator @Inject constructor(
     mimeType: String?,
     bytes: ByteArray,
   ): Result<CommunicationDetail> = runCatching {
+    ensurePortalSession()
     portalClient.submitCommunicationAction(
       detail = detail,
       actionType = PortalActionType.FILE_UPLOAD,
@@ -154,7 +160,9 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   suspend fun getNoteDetail(id: String, categoryCode: String): Result<NoteDetail> = runCatching {
-    restClient.getNoteDetail(id, categoryCode)
+    restClient.getNoteDetail(id, categoryCode).also {
+      refreshNotesSnapshot()
+    }
   }
 
   suspend fun openMaterial(item: MaterialItem): Result<MaterialAsset> = runCatching {
@@ -162,6 +170,7 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   suspend fun openDocument(item: DocumentItem): Result<DocumentAsset> = runCatching {
+    ensurePortalSession()
     val url = item.viewUrl ?: item.confirmUrl ?: error("Il documento non ha un URL apribile.")
     val file = portalClient.downloadAuthenticated(url).getOrThrow()
     val mimeType = guessMimeType(item.title, file.fileName, file.mimeType, file.bytes)
@@ -194,6 +203,7 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   suspend fun justifyAbsence(record: AbsenceRecord, reason: String? = null): Result<List<AbsenceRecord>> = runCatching {
+    ensurePortalSession()
     portalClient.justifyAbsence(record, reason).getOrThrow()
     refreshAbsencesSnapshot()
   }
@@ -221,6 +231,16 @@ class SchoolSyncCoordinator @Inject constructor(
     )
   }
 
+  private suspend fun refreshNotesSnapshot() {
+    snapshotCacheDao.upsert(
+      SnapshotCacheEntity(
+        NotesKey,
+        json.encodeToString(restClient.getNotes()),
+        System.currentTimeMillis(),
+      ),
+    )
+  }
+
   private suspend fun refreshAbsencesSnapshot(): List<AbsenceRecord> {
     val absences = restClient.getAbsences()
     snapshotCacheDao.upsert(
@@ -237,6 +257,11 @@ class SchoolSyncCoordinator @Inject constructor(
     val now = LocalDate.now()
     val year = if (now.monthValue >= 8) now.year else now.year - 1
     return LocalDate.of(year, 9, 1)
+  }
+
+  private suspend fun ensurePortalSession() {
+    val session = activeSession ?: return
+    bootstrapPortal(session)
   }
 
   private fun guessMimeType(

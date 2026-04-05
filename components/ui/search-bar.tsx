@@ -24,9 +24,11 @@ export function SearchBar({
 
   return (
     <View
-      className={cn("flex-row items-center gap-3 rounded-full px-4 py-3.5", className)}
+      className={cn("flex-row items-center gap-3 rounded-[22px] px-4 py-3.5", className)}
       style={{
-        backgroundColor: colors.surfaceContainerHigh ?? colors.surface,
+        backgroundColor: colors.surface ?? colors.background,
+        borderWidth: 1,
+        borderColor: colors.outlineVariant ?? colors.border,
       }}
     >
       <MaterialIcons color={colors.onSurfaceVariant ?? colors.muted} name="search" size={20} />
@@ -46,7 +48,7 @@ export function SearchBar({
         <Pressable
           className="h-8 w-8 items-center justify-center rounded-full"
           onPress={onClear}
-          style={{ backgroundColor: colors.surfaceContainerHighest ?? colors.surfaceAlt ?? colors.background }}
+          style={{ backgroundColor: colors.surfaceContainerHigh ?? colors.surfaceAlt ?? colors.background }}
         >
           <MaterialIcons color={colors.onSurfaceVariant ?? colors.muted} name="close" size={18} />
         </Pressable>

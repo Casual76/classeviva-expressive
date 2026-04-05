@@ -53,8 +53,10 @@ function RootLayoutNav() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: "fade_from_bottom",
-        animationDuration: 300,
+        animation: Platform.OS === "ios" ? "simple_push" : "fade_from_bottom",
+        animationDuration: 360,
+        gestureEnabled: true,
+        fullScreenGestureEnabled: true,
       }}
     >
       {isSignedIn ? <Stack.Screen name="(tabs)" /> : <Stack.Screen name="login" />}

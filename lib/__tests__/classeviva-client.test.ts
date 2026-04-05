@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   ClassevivaClient,
   normalizeAbsence,
+  normalizeCommunication,
   normalizeGrade,
+  normalizeLesson,
+  normalizeNote,
+  normalizeNoticeboardItemDetail,
   normalizeProfile,
 } from "../classeviva-client";
 
@@ -104,6 +108,81 @@ describe("ClassevivaClient", () => {
 
       expect(ritardo.type).toBe("ritardo");
       expect(uscita.type).toBe("uscita");
+    });
+  });
+
+  describe("Lesson mapping", () => {
+    it("derives end time and slot information", () => {
+      const mapped = normalizeLesson({
+        evtId: 400,
+        evtDate: "2026-03-18",
+        subjectDesc: "Matematica",
+        lessonHour: "08:00",
+        duration: 50,
+        lessonNum: 2,
+      });
+
+      expect(mapped.time).toBe("08:00");
+      expect(mapped.endTime).toBe("08:50");
+      expect(mapped.slot).toBe(2);
+    });
+  });
+
+  describe("Communication mapping", () => {
+    it("maps typed attachments and available noticeboard actions", () => {
+      const communication = normalizeCommunication({
+        id: "comm-1",
+        pubId: "pub-1",
+        evtCode: "EVT101",
+        title: "Circolare",
+        content: "Dettaglio sintetico",
+        fileUrl: "https://example.com/allegato.pdf",
+        needSign: true,
+        needJoin: true,
+        needReply: true,
+      });
+
+      const detail = normalizeNoticeboardItemDetail(
+        {
+          item: { content: "Testo completo" },
+          reply: { text: "Rispondi tramite il portale." },
+        },
+        communication,
+      );
+
+      expect(communication.attachments).toHaveLength(1);
+      expect(communication.attachments[0]?.fileName).toContain("Allegato");
+      expect(communication.hasAttachments).toBe(true);
+      expect(detail.actions.map((action) => action.type)).toEqual(
+        expect.arrayContaining(["ack", "join", "reply", "download"]),
+      );
+      expect(detail.replyText).toBe("Rispondi tramite il portale.");
+    });
+  });
+
+  describe("Notes mapping", () => {
+    it("remaps category codes into clearer labels and severity", () => {
+      const disciplinary = normalizeNote(
+        {
+          evtId: "note-1",
+          evtDate: "2026-03-18",
+          evtText: "Comportamento scorretto durante la lezione",
+        },
+        "NTST",
+      );
+      const annotation = normalizeNote(
+        {
+          evtId: "note-2",
+          evtDate: "2026-03-19",
+          evtText: "Compito non consegnato",
+        },
+        "NTCL",
+      );
+
+      expect(disciplinary.categoryLabel).toBe("Nota disciplinare");
+      expect(disciplinary.severity).toBe("critical");
+      expect(annotation.categoryLabel).toBe("Annotazione");
+      expect(annotation.severity).toBe("info");
     });
   });
 

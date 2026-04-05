@@ -1,0 +1,21 @@
+[project]
+name = "classeviva-expressive-backend"
+version = "0.1.0"
+description = "FastAPI backend scaffold for the native Classeviva Expressive app"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116,<1.0",
+  "uvicorn[standard]>=0.35,<1.0",
+  "pydantic-settings>=2.10,<3.0",
+  "httpx>=0.28,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9.0",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+pythonpath = ["."]

@@ -11,13 +11,24 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinator
+import dev.antigravity.classevivaexpressive.core.data.notifications.CommunicationsChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.AppNotificationChannels
+import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.readNotificationRuntimeState
+import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNotification
 import dev.antigravity.classevivaexpressive.core.database.database.CustomEventDao
 import dev.antigravity.classevivaexpressive.core.database.database.CustomEventEntity
 import dev.antigravity.classevivaexpressive.core.database.database.DownloadRecordDao
 import dev.antigravity.classevivaexpressive.core.database.database.DownloadRecordEntity
+import dev.antigravity.classevivaexpressive.core.database.database.SeenGradeDao
+import dev.antigravity.classevivaexpressive.core.database.database.SeenGradeEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SimulationDao
 import dev.antigravity.classevivaexpressive.core.database.database.SimulatedGradeEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao
+import dev.antigravity.classevivaexpressive.core.database.database.SubjectGoalDao
+import dev.antigravity.classevivaexpressive.core.database.database.SubjectGoalEntity
 import dev.antigravity.classevivaexpressive.core.database.database.StudentScoreDao
 import dev.antigravity.classevivaexpressive.core.database.database.StudentScoreSnapshotEntity
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
@@ -52,9 +63,12 @@ import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
+import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPreferences
+import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
 import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolbookCourse
+import dev.antigravity.classevivaexpressive.core.domain.model.SeenGradeState
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SimulatedGrade
 import dev.antigravity.classevivaexpressive.core.domain.model.SimulationRepository
@@ -66,6 +80,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreCompon
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.Subject
+import dev.antigravity.classevivaexpressive.core.domain.model.SubjectGoal
 import dev.antigravity.classevivaexpressive.core.domain.model.SubjectSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
@@ -74,12 +89,16 @@ import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
+import java.time.LocalTime
 import java.util.Base64
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -128,18 +147,57 @@ class SchoolAuthRepository @Inject constructor(
 @Singleton
 class SchoolSettingsRepository @Inject constructor(
   private val settingsStore: SettingsStore,
+  @ApplicationContext private val context: Context,
 ) : SettingsRepository {
+  private val notificationRuntimeState = MutableStateFlow(readNotificationRuntimeState(context))
+
+  init {
+    AppNotificationChannels.create(context)
+  }
+
   override fun observeSettings(): Flow<AppSettings> = settingsStore.settings
+  override fun observeNotificationRuntimeState(): Flow<NotificationRuntimeState> = notificationRuntimeState
   override suspend fun updateThemeMode(mode: ThemeMode) = settingsStore.update { it.copy(themeMode = mode) }
   override suspend fun updateAccentMode(mode: AccentMode) = settingsStore.update { it.copy(accentMode = mode) }
   override suspend fun updateCustomAccent(name: String) = settingsStore.update { it.copy(customAccentName = name) }
   override suspend fun setDynamicColorEnabled(enabled: Boolean) = settingsStore.update { it.copy(dynamicColorEnabled = enabled) }
   override suspend fun setAmoledEnabled(enabled: Boolean) = settingsStore.update { it.copy(amoledEnabled = enabled) }
-  override suspend fun setNotificationsEnabled(enabled: Boolean) = settingsStore.update { it.copy(notificationsEnabled = enabled) }
+  override suspend fun setNotificationsEnabled(enabled: Boolean) = settingsStore.update {
+    it.copy(notificationPreferences = it.notificationPreferences.copy(enabled = enabled))
+  }
   override suspend fun setPeriodicSyncEnabled(enabled: Boolean) = settingsStore.update { it.copy(periodicSyncEnabled = enabled) }
+
+  override suspend fun updateNotificationPreferences(preferences: NotificationPreferences) {
+    settingsStore.update { it.copy(notificationPreferences = preferences) }
+  }
+
+  override suspend fun setNotificationCategoryEnabled(channelId: String, enabled: Boolean) {
+    settingsStore.update { current ->
+      current.copy(
+        notificationPreferences = when (channelId) {
+          HomeworkChannelId -> current.notificationPreferences.copy(homework = enabled)
+          CommunicationsChannelId -> current.notificationPreferences.copy(communications = enabled)
+          AbsencesChannelId -> current.notificationPreferences.copy(absences = enabled)
+          TestChannelId -> current.notificationPreferences.copy(test = enabled)
+          else -> current.notificationPreferences
+        },
+      )
+    }
+  }
+
+  override suspend fun refreshNotificationRuntimeState() {
+    notificationRuntimeState.value = readNotificationRuntimeState(context)
+  }
+
+  override suspend fun sendTestNotification(): Result<Unit> {
+    val result = sendTestNotification(context, settingsStore.settings.first().notificationPreferences)
+    refreshNotificationRuntimeState()
+    return result
+  }
 }
 
 @Singleton
+@OptIn(ExperimentalCoroutinesApi::class)
 class SchoolDataRepository @Inject constructor(
   private val json: Json,
   private val snapshotCacheDao: SnapshotCacheDao,
@@ -147,8 +205,11 @@ class SchoolDataRepository @Inject constructor(
   private val simulationDao: SimulationDao,
   private val studentScoreDao: StudentScoreDao,
   private val downloadRecordDao: DownloadRecordDao,
+  private val seenGradeDao: SeenGradeDao,
+  private val subjectGoalDao: SubjectGoalDao,
   private val syncCoordinator: SchoolSyncCoordinator,
   private val downloadManager: DownloadManager,
+  private val sessionStore: SessionStore,
   @ApplicationContext private val context: Context,
 ) : DashboardRepository,
   GradesRepository,
@@ -167,15 +228,27 @@ class SchoolDataRepository @Inject constructor(
       observeGrades(),
       observeAgenda(),
       observeAbsences(),
-    ) { grades, agenda, absences ->
-      Triple(grades, agenda, absences)
+      observeLessons(),
+      observeSeenGradeStates(),
+    ) { grades, agenda, absences, lessons, seenGradeStates ->
+      DashboardAcademicState(
+        grades = grades,
+        agenda = agenda,
+        absences = absences,
+        lessons = lessons,
+        seenGradeStates = seenGradeStates,
+      )
     }
     val schoolFlow = combine(
       observeCommunications(),
       observeNotes(),
       observeDocuments(),
     ) { communications, notes, documents ->
-      Triple(communications, notes, documents)
+      DashboardSchoolState(
+        communications = communications,
+        notes = notes,
+        documents = documents,
+      )
     }
     return combine(
       observeValue(ProfileKey, StudentProfile()),
@@ -183,29 +256,37 @@ class SchoolDataRepository @Inject constructor(
       schoolFlow,
       syncCoordinator.syncStatus,
     ) { profile, academic, school, syncStatus ->
-      val (grades, agenda, absences) = academic
-      val (communications, notes, documents) = school
-      val average = grades.mapNotNull { it.numericValue }.takeIf { it.isNotEmpty() }?.average()
-      val upcoming = agenda.filter { it.date >= todayIso() }.sortedBy { "${it.date}-${it.time.orEmpty()}" }
+      val average = academic.grades.mapNotNull { it.numericValue }.takeIf { it.isNotEmpty() }?.average()
+      val todayLessons = academic.lessons
+        .filter { it.date == todayIso() }
+        .sortedBy { it.time }
+        .map { it.toDashboardAgendaItem() }
+      val unseenGradeIds = academic.seenGradeStates.map { it.gradeId }.toSet()
+      val recentGrades = academic.grades.sortedByDescending { it.date }
+      val unseenGrades = recentGrades.filterNot { unseenGradeIds.contains(it.id) }
+      val unreadCommunications = school.communications.filter { !it.read }.sortedByDescending { it.date }
+      val upcoming = academic.agenda
+        .filter { it.category != AgendaCategory.LESSON && it.date >= todayIso() }
+        .sortedBy { "${it.date}-${it.time.orEmpty()}" }
       DashboardSnapshot(
         profile = profile,
-        headline = "Ciao, ${profile.name.ifBlank { "studente" }}",
-        subheadline = "Registro quotidiano offline-first, rapido da leggere e coerente in ogni sezione.",
+        headline = "Oggi",
+        subheadline = "Lezioni, voti da aprire e comunicazioni da leggere restano al centro.",
         averageLabel = average?.let { "%.1f".format(it) } ?: "--",
         averageNumeric = average,
         stats = listOf(
-          DashboardStat("avg", "Media", average?.let { "%.1f".format(it) } ?: "--", "${grades.size} valutazioni sincronizzate"),
-          DashboardStat("agenda", "Scadenze", upcoming.count { it.category != AgendaCategory.LESSON }.toString(), "Compiti, verifiche ed eventi in arrivo"),
-          DashboardStat("absences", "Assenze", absences.count { it.type.name == "ABSENCE" }.toString(), "${absences.count { !it.justified }} da giustificare"),
-          DashboardStat("messages", "Novita", communications.count { !it.read }.toString(), "${documents.count()} documenti e circolari recenti"),
+          DashboardStat("lessons", "Lezioni", todayLessons.size.toString(), "Lezioni visibili oggi"),
+          DashboardStat("grades", "Voti non visti", unseenGrades.size.toString(), "Valutazioni da aprire"),
+          DashboardStat("messages", "Comunicazioni", unreadCommunications.size.toString(), "Messaggi non letti"),
         ),
-        todayLessons = upcoming.filter { it.category == AgendaCategory.LESSON && it.date == todayIso() },
-        recentGrades = grades.sortedByDescending { it.date }.take(4),
-        upcomingItems = upcoming.take(6),
-        unreadCommunications = communications.filter { !it.read }.take(3),
-        highlightedNotes = notes.take(2),
-        recentAbsences = absences.sortedByDescending { it.date }.take(3),
-        schoolDocuments = documents.take(2),
+        todayLessons = todayLessons,
+        recentGrades = recentGrades.take(6),
+        unseenGrades = unseenGrades.take(6),
+        upcomingItems = upcoming.take(8),
+        unreadCommunications = unreadCommunications,
+        highlightedNotes = school.notes.filter { !it.read }.ifEmpty { school.notes }.take(3),
+        recentAbsences = academic.absences.sortedByDescending { it.date }.take(3),
+        schoolDocuments = school.documents.take(2),
         syncStatus = syncStatus,
       )
     }
@@ -219,9 +300,79 @@ class SchoolDataRepository @Inject constructor(
   override fun observeGrades(): Flow<List<Grade>> = observeValue(GradesKey, emptyList())
   override fun observePeriods(): Flow<List<Period>> = observeValue(PeriodsKey, emptyList())
   override fun observeSubjects(): Flow<List<Subject>> = observeValue(SubjectsKey, emptyList())
+  override fun observeSeenGradeStates(): Flow<List<SeenGradeState>> {
+    return sessionStore.session.flatMapLatest { session ->
+      val studentId = session?.studentId
+      if (studentId.isNullOrBlank()) {
+        flowOf(emptyList())
+      } else {
+        seenGradeDao.observeByStudent(studentId).map { entities ->
+          entities.map { entity ->
+            SeenGradeState(
+              studentId = entity.studentId,
+              gradeId = entity.gradeId,
+              seenAtEpochMillis = entity.seenAtEpochMillis,
+            )
+          }
+        }
+      }
+    }
+  }
+
+  override fun observeSubjectGoals(): Flow<List<SubjectGoal>> {
+    return sessionStore.session.flatMapLatest { session ->
+      val studentId = session?.studentId
+      if (studentId.isNullOrBlank()) {
+        flowOf(emptyList())
+      } else {
+        subjectGoalDao.observeByStudent(studentId).map { entities ->
+          entities.map { entity ->
+            SubjectGoal(
+              studentId = entity.studentId,
+              subject = entity.subject,
+              periodCode = entity.periodCode,
+              targetAverage = entity.targetAverage,
+            )
+          }
+        }
+      }
+    }
+  }
+
   override suspend fun refreshGrades(force: Boolean): Result<List<Grade>> = runCatching {
     syncCoordinator.refreshAll(force)
     observeGrades().firstValue()
+  }
+
+  override suspend fun markGradeSeen(gradeId: String) {
+    val session = sessionStore.readCurrentSession() ?: return
+    seenGradeDao.upsert(
+      SeenGradeEntity(
+        id = "${session.studentId}::$gradeId",
+        studentId = session.studentId,
+        gradeId = gradeId,
+        seenAtEpochMillis = System.currentTimeMillis(),
+      ),
+    )
+  }
+
+  override suspend fun saveSubjectGoal(subject: String, periodCode: String?, targetAverage: Double) {
+    val session = sessionStore.readCurrentSession() ?: return
+    subjectGoalDao.upsert(
+      SubjectGoalEntity(
+        id = "${session.studentId}::$subject::${periodCode.orEmpty()}",
+        studentId = session.studentId,
+        subject = subject,
+        periodCode = periodCode,
+        targetAverage = targetAverage,
+        updatedAtEpochMillis = System.currentTimeMillis(),
+      ),
+    )
+  }
+
+  override suspend fun removeSubjectGoal(subject: String, periodCode: String?) {
+    val session = sessionStore.readCurrentSession() ?: return
+    subjectGoalDao.delete(session.studentId, subject, periodCode)
   }
 
   override fun observeStats(): Flow<StatsSnapshot> {
@@ -288,7 +439,14 @@ class SchoolDataRepository @Inject constructor(
     observeAgenda().firstValue()
   }
 
-  override fun observeLessons(): Flow<List<Lesson>> = observeValue(LessonsKey, emptyList())
+  override fun observeLessons(): Flow<List<Lesson>> {
+    return combine(
+      observeValue(LessonsKey, emptyList<Lesson>()),
+      observeValue(AgendaKey, emptyList<AgendaItem>()),
+    ) { lessons, agenda ->
+      buildLessonsWithFallback(lessons, agenda)
+    }
+  }
   override suspend fun refreshLessons(force: Boolean): Result<List<Lesson>> = runCatching {
     syncCoordinator.refreshAll(force)
     observeLessons().firstValue()
@@ -498,6 +656,103 @@ private fun buildStats(grades: List<Grade>, absences: List<AbsenceRecord>, agend
     workloadBreakdown = agenda.groupingBy { it.category.name }.eachCount(),
   )
 }
+
+private data class DashboardAcademicState(
+  val grades: List<Grade>,
+  val agenda: List<AgendaItem>,
+  val absences: List<AbsenceRecord>,
+  val lessons: List<Lesson>,
+  val seenGradeStates: List<SeenGradeState>,
+)
+
+private data class DashboardSchoolState(
+  val communications: List<Communication>,
+  val notes: List<Note>,
+  val documents: List<DocumentItem>,
+)
+
+internal fun buildLessonsWithFallback(
+  lessons: List<Lesson>,
+  agenda: List<AgendaItem>,
+): List<Lesson> {
+  val agendaLessons = agenda
+    .filter { it.category == AgendaCategory.LESSON }
+    .map { item ->
+      Lesson(
+        id = "agenda-${item.id}",
+        subject = item.subject ?: item.subtitle.ifBlank { item.title },
+        date = item.date,
+        time = item.time.orEmpty(),
+        durationMinutes = 60,
+        topic = item.detail ?: item.title,
+      )
+    }
+
+  val commonTimes = lessons
+    .mapNotNull { it.time.takeIf(String::isNotBlank) }
+    .distinct()
+    .sorted()
+
+  val dates = (lessons.map { it.date } + agendaLessons.map { it.date })
+    .distinct()
+    .sorted()
+
+  return dates.flatMap { date ->
+    val dayLessons = lessons.filter { it.date == date }
+    val source = dayLessons.ifEmpty { agendaLessons.filter { it.date == date } }
+    assignLessonSlots(source, commonTimes)
+  }.sortedBy { "${it.date}-${it.time}" }
+}
+
+private fun assignLessonSlots(
+  lessons: List<Lesson>,
+  commonTimes: List<String>,
+): List<Lesson> {
+  if (lessons.isEmpty()) return emptyList()
+  val sorted = lessons.sortedWith(compareBy<Lesson> { it.time.isBlank() }.thenBy { it.time })
+  val usedTimes = sorted.mapNotNull { it.time.takeIf(String::isNotBlank) }.toMutableSet()
+  val fallbackTimes = commonTimes.filterNot { usedTimes.contains(it) }.toMutableList()
+  var generated = LocalTime.of(8, 0)
+
+  fun nextTime(): String {
+    val preset = fallbackTimes.firstOrNull()
+    if (preset != null) {
+      fallbackTimes.removeAt(0)
+      usedTimes += preset
+      return preset
+    }
+    while (generated.formatTime() in usedTimes) {
+      generated = generated.plusHours(1)
+    }
+    return generated.formatTime().also {
+      usedTimes += it
+      generated = generated.plusHours(1)
+    }
+  }
+
+  return sorted.map { lesson ->
+    lesson.copy(
+      time = lesson.time.takeIf(String::isNotBlank) ?: nextTime(),
+      durationMinutes = lesson.durationMinutes.takeIf { it > 0 } ?: 60,
+    )
+  }
+}
+
+private fun Lesson.toDashboardAgendaItem(): AgendaItem {
+  return AgendaItem(
+    id = id,
+    title = subject,
+    subtitle = topic ?: "Lezione del giorno",
+    date = date,
+    time = time.takeIf { it.isNotBlank() },
+    detail = listOfNotNull(teacher, room).joinToString(" / ").ifBlank { null },
+    subject = subject,
+    category = AgendaCategory.LESSON,
+    sharePayload = listOf(subject, date, time, topic).filterNotNull().joinToString(" - "),
+  )
+}
+
+private fun LocalTime.formatTime(): String = "%02d:%02d".format(hour, minute)
 
 internal fun computeStudentScore(stats: StatsSnapshot, absences: List<AbsenceRecord>): StudentScoreSnapshot {
   val averageScore = ((stats.overallAverage ?: 6.0) / 10.0) * 60.0

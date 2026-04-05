@@ -153,6 +153,10 @@ class ClassevivaPortalClient @Inject constructor(
         if (!response.isSuccessful) {
           throw IOException("Download portale fallito: ${response.code}")
         }
+        val finalUrl = response.request.url.toString()
+        if (isLoginRedirect(finalUrl)) {
+          throw IOException("Sessione portale scaduta. Riprova dopo un nuovo accesso.")
+        }
         PortalFile(
           bytes = response.body?.bytes() ?: ByteArray(0),
           mimeType = response.header("Content-Type")?.substringBefore(";"),
@@ -272,7 +276,12 @@ class ClassevivaPortalClient @Inject constructor(
       if (!response.isSuccessful) {
         throw IOException("Richiesta portale fallita: ${response.code}")
       }
-      response.body?.string().orEmpty()
+      val payload = response.body?.string().orEmpty()
+      val finalUrl = response.request.url.toString()
+      if (isLoginRedirect(finalUrl) || looksLikeLoginPage(payload)) {
+        throw IOException("Sessione portale scaduta o pagina di login restituita al posto dell'azione richiesta.")
+      }
+      payload
     }
   }
 
@@ -400,6 +409,17 @@ class ClassevivaPortalClient @Inject constructor(
       }
     }
     webCookieManager.flush()
+  }
+
+  private fun isLoginRedirect(url: String): Boolean {
+    return url.contains("login.php", ignoreCase = true) || url.contains("/login", ignoreCase = true)
+  }
+
+  private fun looksLikeLoginPage(payload: String): Boolean {
+    val normalized = payload.lowercase()
+    return normalized.contains("name=\"password\"") &&
+      normalized.contains("form") &&
+      normalized.contains("login")
   }
 }
 

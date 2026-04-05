@@ -1,40 +1,28 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -42,288 +30,266 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveEditorialCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveSimpleListRow
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.subjectPalette
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-private val hourHeight = 78.dp
-private const val scheduleStartHour = 7
-private const val scheduleEndHour = 17
+private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
+
+data class LessonsUiState(
+  val lessons: List<Lesson> = emptyList(),
+  val lastMessage: String? = null,
+  val isRefreshing: Boolean = false,
+)
+
+private data class DayOption(
+  val date: String,
+  val label: String,
+)
 
 @HiltViewModel
 class LessonsViewModel @Inject constructor(
   private val lessonsRepository: LessonsRepository,
 ) : ViewModel() {
-  val lessons = lessonsRepository.observeLessons()
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+  private val lastMessage = MutableStateFlow<String?>(null)
+  private val isRefreshing = MutableStateFlow(false)
+
+  val state = combine(
+    lessonsRepository.observeLessons(),
+    lastMessage,
+    isRefreshing,
+  ) { lessons, message, refreshing ->
+    LessonsUiState(
+      lessons = lessons,
+      lastMessage = message,
+      isRefreshing = refreshing,
+    )
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LessonsUiState())
 
   init {
-    viewModelScope.launch { lessonsRepository.refreshLessons() }
+    requestRefresh(force = false, showIndicator = false)
   }
 
   fun refresh() {
-    viewModelScope.launch { lessonsRepository.refreshLessons(force = true) }
+    requestRefresh(force = true, showIndicator = true)
+  }
+
+  fun clearMessage() {
+    lastMessage.value = null
+  }
+
+  private fun requestRefresh(force: Boolean, showIndicator: Boolean) {
+    viewModelScope.launch {
+      if (showIndicator) {
+        isRefreshing.value = true
+      }
+      lessonsRepository.refreshLessons(force = force)
+        .onFailure { lastMessage.value = it.message ?: "Impossibile aggiornare l'orario." }
+      isRefreshing.value = false
+    }
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LessonsRoute(
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
   viewModel: LessonsViewModel = hiltViewModel(),
 ) {
-  val lessons by viewModel.lessons.collectAsStateWithLifecycle()
-  var selectedDay by rememberSaveable { mutableStateOf<String?>(null) }
-
-  val groupedByDay = remember(lessons) {
-    lessons.groupBy { it.date }.toSortedMap()
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val groupedByDay = remember(state.lessons) {
+    state.lessons
+      .groupBy { it.date }
+      .toSortedMap()
   }
-  val week = remember(groupedByDay) { groupedByDay.keys.take(5) }
-  val selectedDayLessons = remember(groupedByDay, selectedDay, week) {
-    val fallback = selectedDay ?: week.firstOrNull()
-    fallback?.let { groupedByDay[it].orEmpty().sortedBy(Lesson::time) }.orEmpty()
-  }
-
-  LazyColumn(
-    modifier = modifier,
-    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 20.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp),
-  ) {
-    item {
-      ExpressiveTopHeader(
-        title = "Timetable",
-        onBack = onBack,
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
-          }
-        },
+  val dayOptions = remember(groupedByDay) {
+    groupedByDay.keys.map { date ->
+      DayOption(
+        date = date,
+        label = date.toLessonDayLabel(),
       )
     }
-    if (week.isEmpty()) {
+  }
+  var selectedDay by rememberSaveable { mutableStateOf<String?>(null) }
+
+  LaunchedEffect(dayOptions) {
+    if (selectedDay == null || dayOptions.none { it.date == selectedDay }) {
+      selectedDay = dayOptions.firstOrNull()?.date
+    }
+  }
+
+  val selectedLessons = remember(groupedByDay, selectedDay) {
+    selectedDay?.let { day ->
+      groupedByDay[day].orEmpty().sortedBy { it.time }
+    }.orEmpty()
+  }
+  val teacherCount = remember(state.lessons) {
+    state.lessons.mapNotNull { it.teacher?.takeIf(String::isNotBlank) }.distinct().size
+  }
+  val currentDayLabel = remember(dayOptions, selectedDay) {
+    dayOptions.firstOrNull { it.date == selectedDay }?.date?.toLessonDayTitle() ?: "Settimana"
+  }
+
+  PullToRefreshBox(
+    modifier = modifier.fillMaxSize(),
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+  ) {
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+      verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
       item {
-        EmptyState(
-          title = "Timetable unavailable",
-          detail = "Lessons will appear here as soon as the weekly schedule is available.",
+        ExpressiveTopHeader(
+          title = "Orario",
+          subtitle = "Lezioni giornaliere ricostruite anche con fallback dagli eventi agenda, con refresh manuale sempre disponibile.",
+          onBack = onBack,
+          actions = {
+            IconButton(onClick = viewModel::refresh) {
+              Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
+            }
+          },
         )
       }
-    } else {
-      item {
-        TimetableGrid(
-          week = week,
-          lessonsByDay = groupedByDay,
-          selectedDay = selectedDay ?: week.first(),
-          onSelectDay = { selectedDay = it },
-        )
+      if (!state.lastMessage.isNullOrBlank()) {
+        item {
+          RegisterListRow(
+            title = "Aggiornamento orario",
+            subtitle = state.lastMessage.orEmpty(),
+            tone = ExpressiveTone.Warning,
+            badge = { StatusBadge("AVVISO", tone = ExpressiveTone.Warning) },
+          )
+        }
+        item {
+          TextButton(onClick = viewModel::clearMessage) {
+            Text("Nascondi messaggio")
+          }
+        }
       }
       item {
-        Text(
-          text = "Selected day",
-          style = MaterialTheme.typography.titleLarge,
-          color = MaterialTheme.colorScheme.primary,
-          fontWeight = FontWeight.Medium,
-        )
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          MetricTile(
+            label = "Lezioni",
+            value = state.lessons.size.toString(),
+            detail = "Voci trovate in settimana.",
+            modifier = Modifier.fillMaxWidth(),
+          )
+          MetricTile(
+            label = "Giorni",
+            value = dayOptions.size.toString(),
+            detail = "Date con orario disponibile.",
+            modifier = Modifier.fillMaxWidth(),
+            tone = ExpressiveTone.Info,
+          )
+          MetricTile(
+            label = "Docenti",
+            value = teacherCount.toString(),
+            detail = "Nomi distinti rilevati.",
+            modifier = Modifier.fillMaxWidth(),
+            tone = ExpressiveTone.Success,
+          )
+        }
       }
-      if (selectedDayLessons.isEmpty()) {
+      if (dayOptions.isEmpty()) {
         item {
           EmptyState(
-            title = "No lessons for this day",
-            detail = "Try another day or refresh the timetable.",
+            title = "Orario non disponibile",
+            detail = "Le lezioni compariranno qui appena la sincronizzazione recupera il planning della settimana.",
           )
         }
       } else {
-        items(selectedDayLessons, key = { it.id }) { lesson ->
-          ExpressiveSimpleListRow(
-            title = lesson.subject,
-            subtitle = lesson.topic ?: "No topic available",
-            meta = listOfNotNull(lesson.time, lesson.teacher, lesson.room).joinToString(" - "),
+        item {
+          ExpressivePillTabs(
+            options = dayOptions.map { it.label },
+            selected = dayOptions.firstOrNull { it.date == selectedDay }?.label ?: dayOptions.first().label,
+            onSelect = { label ->
+              selectedDay = dayOptions.firstOrNull { it.label == label }?.date
+            },
           )
         }
-      }
-    }
-  }
-}
-
-@Composable
-private fun TimetableGrid(
-  week: List<String>,
-  lessonsByDay: Map<String, List<Lesson>>,
-  selectedDay: String,
-  onSelectDay: (String) -> Unit,
-) {
-  val scrollState = rememberScrollState()
-  val gridHeight = hourHeight * (scheduleEndHour - scheduleStartHour)
-
-  Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .horizontalScroll(scrollState),
-      horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-      SpacerTimeColumnHeader()
-      week.forEach { day ->
-        val label = day.toLocalDateOrNull()?.format(DateTimeFormatter.ofPattern("EEEE", Locale.ENGLISH)) ?: day
-        Text(
-          text = label.replaceFirstChar { it.uppercase() },
-          modifier = Modifier
-            .width(160.dp)
-            .padding(horizontal = 4.dp)
-            .background(
-              color = if (day == selectedDay) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
-              shape = MaterialTheme.shapes.large,
-            )
-            .padding(vertical = 8.dp),
-          style = MaterialTheme.typography.titleMedium,
-          color = MaterialTheme.colorScheme.onBackground,
-          fontWeight = FontWeight.Medium,
-        )
-      }
-    }
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .horizontalScroll(scrollState),
-      horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-      TimeColumn(gridHeight = gridHeight)
-      week.forEach { day ->
-        DayScheduleColumn(
-          day = day,
-          lessons = lessonsByDay[day].orEmpty(),
-          gridHeight = gridHeight,
-          selected = day == selectedDay,
-          onSelect = { onSelectDay(day) },
-        )
-      }
-    }
-  }
-}
-
-@Composable
-private fun SpacerTimeColumnHeader() {
-  Box(modifier = Modifier.width(54.dp))
-}
-
-@Composable
-private fun TimeColumn(
-  gridHeight: androidx.compose.ui.unit.Dp,
-) {
-  Box(
-    modifier = Modifier
-      .width(54.dp)
-      .height(gridHeight),
-  ) {
-    Column(
-      modifier = Modifier.fillMaxHeight(),
-      verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-      (scheduleStartHour..scheduleEndHour).forEach { hour ->
-        Text(
-          text = "%02d:00".format(hour),
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.74f),
-        )
-      }
-    }
-  }
-}
-
-@Composable
-private fun DayScheduleColumn(
-  day: String,
-  lessons: List<Lesson>,
-  gridHeight: androidx.compose.ui.unit.Dp,
-  selected: Boolean,
-  onSelect: () -> Unit,
-) {
-  val columnWidth = 160.dp
-  val gridLineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-
-  Surface(
-    modifier = Modifier
-      .width(columnWidth)
-      .height(gridHeight),
-    shape = MaterialTheme.shapes.large,
-    color = MaterialTheme.colorScheme.surfaceContainer,
-    tonalElevation = 0.dp,
-    onClick = onSelect,
-  ) {
-    Box(modifier = Modifier.fillMaxWidth()) {
-      Canvas(modifier = Modifier.fillMaxSize()) {
-        val hourLines = scheduleEndHour - scheduleStartHour
-        repeat(hourLines + 1) { index ->
-          val y = (size.height / hourLines) * index
-          drawLine(
-            color = gridLineColor,
-            start = androidx.compose.ui.geometry.Offset(0f, y),
-            end = androidx.compose.ui.geometry.Offset(size.width, y),
-            strokeWidth = 1.dp.toPx(),
-          )
+        item {
+          ExpressiveAccentLabel(currentDayLabel)
         }
-      }
-      lessons.sortedBy(Lesson::time).forEach { lesson ->
-        val lessonStart = lesson.time.toMinutesOfDay()
-        val topHours = ((lessonStart - scheduleStartHour * 60).coerceAtLeast(0)).toFloat() / 60f
-        val blockHeight = hourHeight * (lesson.durationMinutes / 60f)
-        val subjectColor = subjectPalette(lesson.subject)
-        Surface(
-          modifier = Modifier
-            .padding(horizontal = 4.dp)
-            .fillMaxWidth()
-            .offset(y = hourHeight * topHours)
-            .height(blockHeight),
-          shape = MaterialTheme.shapes.medium,
-          color = subjectColor,
-          contentColor = Color.White,
-        ) {
-          Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-          ) {
-            Text(
-              text = lesson.subject.uppercase(Locale.getDefault()),
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Medium,
+        if (selectedLessons.isEmpty()) {
+          item {
+            EmptyState(
+              title = "Nessuna lezione in questa giornata",
+              detail = "Prova un altro giorno oppure aggiorna l'orario dal portale.",
             )
-            lesson.topic?.takeIf { it.isNotBlank() }?.let {
-              Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 3,
-              )
-            }
+          }
+        } else {
+          items(selectedLessons, key = { it.id }) { lesson ->
+            RegisterListRow(
+              title = lesson.subject,
+              subtitle = lesson.topic?.takeIf(String::isNotBlank) ?: "Argomento non disponibile",
+              eyebrow = lesson.timeRangeLabel(),
+              meta = lesson.metaLabel(),
+              tone = if (lesson.topic.isNullOrBlank()) ExpressiveTone.Neutral else ExpressiveTone.Primary,
+              badge = {
+                StatusBadge(
+                  label = "${lesson.durationMinutes} min",
+                  tone = ExpressiveTone.Info,
+                )
+              },
+            )
           }
         }
       }
-      if (selected) {
-        Box(
-          modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent),
-        )
-      }
     }
   }
 }
 
-private fun String.toMinutesOfDay(): Int {
-  val parts = split(":")
-  val hour = parts.getOrNull(0)?.toIntOrNull() ?: 0
-  val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
-  return hour * 60 + minute
+private fun Lesson.timeRangeLabel(): String {
+  val start = time.toLocalTimeOrNull() ?: return time
+  val end = start.plusMinutes(durationMinutes.toLong())
+  return "${start.format(DateTimeFormatter.ofPattern("HH:mm"))} - ${end.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+}
+
+private fun Lesson.metaLabel(): String {
+  return listOfNotNull(
+    teacher?.takeIf(String::isNotBlank),
+    room?.takeIf(String::isNotBlank),
+    date.toLocalDateOrNull()?.format(DateTimeFormatter.ofPattern("d MMM yyyy", italianLocale)),
+  ).joinToString(" / ")
+}
+
+private fun String.toLessonDayLabel(): String {
+  val date = toLocalDateOrNull() ?: return this
+  return date.format(DateTimeFormatter.ofPattern("EEE d", italianLocale))
+    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(italianLocale) else it.toString() }
+}
+
+private fun String.toLessonDayTitle(): String {
+  val date = toLocalDateOrNull() ?: return this
+  return date.format(DateTimeFormatter.ofPattern("EEEE d MMMM", italianLocale))
+    .replaceFirstChar { if (it.isLowerCase()) it.titlecase(italianLocale) else it.toString() }
 }
 
 private fun String.toLocalDateOrNull(): LocalDate? {
   return runCatching { LocalDate.parse(this) }.getOrNull()
+}
+
+private fun String.toLocalTimeOrNull(): LocalTime? {
+  return runCatching { LocalTime.parse(this) }.getOrNull()
 }

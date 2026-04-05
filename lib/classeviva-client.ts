@@ -1,5 +1,7 @@
 import axios, { AxiosError, AxiosInstance, isAxiosError } from "axios";
 
+import { addDays, formatTimeLabel, toLocalIsoDate } from "./date-utils";
+
 const API_BASE_URL = "https://web.spaggiari.eu/rest/v1";
 const API_KEY = "Tg1NWEwNGIgIC0K";
 const USER_AGENT = "CVVS/std/4.2.3 Android/12";
@@ -52,6 +54,10 @@ export interface Lesson {
   topic?: string;
   teacher?: string;
   room?: string;
+  endTime?: string;
+  slot?: number;
+  rawDate?: string;
+  rawTime?: string;
 }
 
 export interface Homework {
@@ -82,7 +88,7 @@ export interface Communication {
   sender: string;
   date: string;
   read: boolean;
-  attachments: string[];
+  attachments: NoticeboardAttachment[];
   category?: string;
   needsAck: boolean;
   needsReply: boolean;
@@ -97,6 +103,23 @@ export interface CapabilityState {
   detail?: string;
 }
 
+export interface NoticeboardAttachment {
+  id: string;
+  title: string;
+  fileName: string;
+  url: string | null;
+  mimeType: string | null;
+  capabilityState: CapabilityState;
+}
+
+export interface NoticeboardAction {
+  id: string;
+  type: "ack" | "join" | "reply" | "download";
+  label: string;
+  enabled: boolean;
+  detail?: string;
+}
+
 export interface NoticeboardItemDetail {
   id: string;
   pubId: string;
@@ -104,7 +127,8 @@ export interface NoticeboardItemDetail {
   title: string;
   content: string;
   replyText?: string;
-  attachments: string[];
+  attachments: NoticeboardAttachment[];
+  actions: NoticeboardAction[];
   capabilityState: CapabilityState;
 }
 
@@ -134,6 +158,7 @@ export interface DidacticContent {
   objectId: string;
   objectType: string;
   sharedAt: string;
+  sourceUrl?: string | null;
   capabilityState: CapabilityState;
 }
 
@@ -152,6 +177,7 @@ export interface DidacticAsset {
   objectType: string;
   mimeType: string | null;
   dataUrl: string | null;
+  sourceUrl: string | null;
   textPreview: string | null;
   capabilityState: CapabilityState;
 }
@@ -214,6 +240,9 @@ export interface AgendaEvent {
   subject: string;
   category: "lesson" | "homework" | "assessment" | "event";
   time?: string;
+  rawDate?: string;
+  rawDescription?: string;
+  slot?: number;
 }
 
 export interface ApiError {
@@ -314,11 +343,11 @@ function normalizeStudentId(value: unknown): string | undefined {
 function normalizeDate(value: unknown): string {
   const parsed = pickString(value);
   if (!parsed) {
-    return new Date().toISOString().slice(0, 10);
+    return toLocalIsoDate();
   }
 
   const date = new Date(parsed);
-  return Number.isNaN(date.getTime()) ? parsed : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime()) ? toLocalIsoDate() : toLocalIsoDate(date);
 }
 
 function normalizeTime(value: unknown): string | undefined {
@@ -331,16 +360,40 @@ function normalizeTime(value: unknown): string | undefined {
     return raw;
   }
 
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) {
-    return raw;
+  return formatTimeLabel(raw, "Orario da confermare");
+}
+
+function deriveSlot(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const numeric = pickNumber(value);
+    if (typeof numeric === "number" && Number.isFinite(numeric)) {
+      return Math.max(1, Math.round(numeric));
+    }
   }
 
-  return new Intl.DateTimeFormat("it-IT", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
+  return undefined;
+}
+
+function deriveEndTime(startTime: string | undefined, durationMinutes?: number): string | undefined {
+  if (!startTime || !durationMinutes) {
+    return undefined;
+  }
+
+  const match = startTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) {
+    return undefined;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+    return undefined;
+  }
+
+  const totalMinutes = hours * 60 + minutes + durationMinutes;
+  const endHours = Math.floor(totalMinutes / 60);
+  const endMinutes = totalMinutes % 60;
+  return `${String(endHours).padStart(2, "0")}:${String(endMinutes).padStart(2, "0")}`;
 }
 
 function toApiDateParam(value: string): string {
@@ -459,21 +512,139 @@ function createCapabilityState(
   return { status, label, detail };
 }
 
-function normalizeAttachmentNames(value: unknown): string[] {
+function toAbsoluteUrl(value: unknown): string | null {
+  const raw = pickString(value);
+  if (!raw) {
+    return null;
+  }
+
+  if (/^(https?:|data:)/i.test(raw)) {
+    return raw;
+  }
+
+  try {
+    return new URL(raw, `${API_BASE_URL}/`).toString();
+  } catch {
+    return raw.startsWith("/") ? `https://web.spaggiari.eu${raw}` : null;
+  }
+}
+
+function normalizeAttachment(value: unknown, index: number): NoticeboardAttachment | null {
+  if (typeof value === "string") {
+    const url = toAbsoluteUrl(value);
+    const fileName = value.trim() || `Allegato ${index + 1}`;
+
+    return {
+      id: `attachment-${index}-${fileName}`,
+      title: fileName,
+      fileName,
+      url,
+      mimeType: null,
+      capabilityState: url
+        ? createCapabilityState("external_only", "Apribile esternamente", "Il file verra aperto fuori dall'app.")
+        : createCapabilityState("unavailable", "Link mancante", "Il portale non ha restituito un link scaricabile."),
+    };
+  }
+
+  const record = toRecord(value);
+  const fileName =
+    pickString(record.name, record.fileName, record.attachName, record.title, record.description) ??
+    `Allegato ${index + 1}`;
+  const url = toAbsoluteUrl(
+    pickString(
+      record.url,
+      record.href,
+      record.downloadUrl,
+      record.downloadLink,
+      record.viewUrl,
+      record.link,
+      record.path,
+      record.src,
+    ),
+  );
+  const mimeType = pickString(record.mimeType, record.contentType, record.type) ?? null;
+
+  return {
+    id: pickString(record.id, record.attachId, record.objectId) ?? `attachment-${index}-${fileName}`,
+    title: fileName,
+    fileName,
+    url,
+    mimeType,
+    capabilityState: url
+      ? createCapabilityState("external_only", "Apribile esternamente", "Il file verra aperto o scaricato fuori dall'app.")
+      : createCapabilityState("unavailable", "Link mancante", "Il portale non ha restituito un link scaricabile."),
+  };
+}
+
+function normalizeAttachments(value: unknown): NoticeboardAttachment[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
   return value
-    .map((item) => {
-      if (typeof item === "string") {
-        return item;
-      }
+    .map((item, index) => normalizeAttachment(item, index))
+    .filter((item): item is NoticeboardAttachment => Boolean(item));
+}
 
-      const record = toRecord(item);
-      return pickString(record.name, record.fileName, record.attachName, record.title);
-    })
-    .filter((item): item is string => Boolean(item));
+function collectAttachments(...values: unknown[]): NoticeboardAttachment[] {
+  const attachments = values.flatMap((value) => normalizeAttachments(value));
+  const seen = new Set<string>();
+
+  return attachments.filter((attachment) => {
+    const key = `${attachment.fileName}:${attachment.url ?? "missing"}`;
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function buildNoticeboardActions(base: Pick<Communication, "needsAck" | "needsJoin" | "needsReply">, attachments: NoticeboardAttachment[]): NoticeboardAction[] {
+  const actions: NoticeboardAction[] = [];
+
+  if (base.needsAck) {
+    actions.push({
+      id: "ack",
+      type: "ack",
+      label: "Conferma",
+      enabled: true,
+      detail: "Invia la conferma richiesta dal portale.",
+    });
+  }
+
+  if (base.needsJoin) {
+    actions.push({
+      id: "join",
+      type: "join",
+      label: "Aderisci",
+      enabled: true,
+      detail: "Registra l'adesione richiesta dalla comunicazione.",
+    });
+  }
+
+  if (base.needsReply) {
+    actions.push({
+      id: "reply",
+      type: "reply",
+      label: "Risposta",
+      enabled: false,
+      detail: "Il portale richiede una risposta: se il testo e gia disponibile lo mostro nel dettaglio.",
+    });
+  }
+
+  if (attachments.some((attachment) => attachment.url)) {
+    actions.push({
+      id: "download",
+      type: "download",
+      label: "Scarica file",
+      enabled: true,
+      detail: "Apri o scarica gli allegati disponibili.",
+    });
+  }
+
+  return actions;
 }
 
 function normalizeReadStatus(value: unknown): boolean {
@@ -483,13 +654,13 @@ function normalizeReadStatus(value: unknown): boolean {
 function getNoteCategoryLabel(code: string): string {
   switch (code) {
     case "NTTE":
-      return "Nota docente";
+      return "Annotazione docente";
     case "NTCL":
-      return "Nota di classe";
+      return "Annotazione";
     case "NTWN":
       return "Richiamo";
     case "NTST":
-      return "Statistica";
+      return "Nota disciplinare";
     default:
       return "Nota";
   }
@@ -497,8 +668,10 @@ function getNoteCategoryLabel(code: string): string {
 
 function getNoteSeverity(code: string): Note["severity"] {
   switch (code) {
-    case "NTWN":
+    case "NTST":
       return "critical";
+    case "NTWN":
+      return "warning";
     case "NTTE":
       return "warning";
     default:
@@ -595,16 +768,22 @@ export function normalizeGrade(payload: unknown): Grade {
 
 export function normalizeLesson(payload: unknown): Lesson {
   const data = toRecord(payload);
+  const time = normalizeTime(data.lessonHour ?? data.ora ?? data.time ?? data.startTime);
+  const duration = pickNumber(data.duration, data.durata, data.evtDuration) ?? 60;
 
   return {
     id: pickString(data.id, data.lessonId, data.evtId) ?? "",
     subject: pickString(data.subjectDesc, toRecord(data.materia).desc, data.subject) ?? "",
     date: normalizeDate(data.data ?? data.date ?? data.evtDate),
-    time: normalizeTime(data.lessonHour ?? data.ora ?? data.time ?? data.startTime) ?? "",
-    duration: pickNumber(data.duration, data.durata, data.evtDuration) ?? 60,
+    time: time ?? "",
+    duration,
     topic: pickString(data.argomento, data.topic, data.lessonArg),
     teacher: pickString(data.teacherName, data.authorName, data.teacher),
     room: pickString(data.classroom, data.room),
+    endTime: deriveEndTime(time, duration),
+    slot: deriveSlot(data.evtHPos, data.lessonNum, data.lessonPos, data.hour, data.order),
+    rawDate: pickString(data.data, data.date, data.evtDate),
+    rawTime: pickString(data.lessonHour, data.ora, data.time, data.startTime),
   };
 }
 
@@ -619,7 +798,7 @@ export function normalizeHomework(payload: unknown): Homework {
       data.dataConsegna ?? data.dueDate ?? data.date ?? data.evtDate ?? data.evtDatetimeEnd,
     ),
     notes: pickString(data.note, data.notesForFamily, data.notes),
-    attachments: normalizeAttachmentNames(data.allegati ?? data.attachments),
+    attachments: collectAttachments(data.allegati, data.attachments).map((attachment) => attachment.fileName),
   };
 }
 
@@ -631,7 +810,7 @@ export function normalizeAbsence(payload: unknown): Absence {
     date: normalizeDate(data.evtDate ?? data.data ?? data.date),
     type: normalizeAbsenceType(data.tipo, data.evtCode),
     hours: deriveAbsenceHours(data.hoursAbsence ?? data.ore ?? data.hours),
-    justified: Boolean(data.isJustified ?? data.giustificata ?? data.justified),
+    justified: pickBoolean(data.isJustified, data.giustificata, data.justified) ?? false,
     justificationDate: pickString(data.dataGiustificazione, data.justificationDate),
     justificationReason: pickString(data.justifReasonDesc, data.motivoGiustificazione, data.justificationReason),
   };
@@ -639,7 +818,27 @@ export function normalizeAbsence(payload: unknown): Absence {
 
 export function normalizeCommunication(payload: unknown): Communication {
   const data = toRecord(payload);
-  const attachments = normalizeAttachmentNames(data.attachments);
+  const attachments = collectAttachments(data.attachments, data.allegati, data.files);
+  const fallbackAttachmentUrl = toAbsoluteUrl(
+    pickString(data.fileUrl, data.downloadUrl, data.downloadLink, data.attachUrl, data.link),
+  );
+  const enrichedAttachments =
+    attachments.length > 0 || !fallbackAttachmentUrl
+      ? attachments
+      : [
+          {
+            id: `attachment-${pickString(data.id, data.pubId) ?? "noticeboard"}`,
+            title: "Allegato",
+            fileName: "Allegato",
+            url: fallbackAttachmentUrl,
+            mimeType: null,
+            capabilityState: createCapabilityState(
+              "external_only",
+              "Apribile esternamente",
+              "Il file verra aperto o scaricato fuori dall'app.",
+            ),
+          },
+        ];
 
   return {
     id: pickString(data.id, data.pubId, data.commId, data.evento_id) ?? "",
@@ -651,13 +850,13 @@ export function normalizeCommunication(payload: unknown): Communication {
     sender: pickString(data.authorName, data.mittente, data.sender) ?? "Scuola",
     date: normalizeDate(data.data ?? data.date ?? data.pubDT),
     read: normalizeReadStatus(data.read ?? data.letto ?? data.isRead ?? data.readStatus),
-    attachments,
+    attachments: enrichedAttachments,
     category: pickString(data.cntCategory, data.category),
-    needsAck: Boolean(data.needSign),
-    needsReply: Boolean(data.needReply),
-    needsJoin: Boolean(data.needJoin),
-    needsFile: Boolean(data.needFile),
-    hasAttachments: Boolean(data.cntHasAttach) || attachments.length > 0,
+    needsAck: pickBoolean(data.needSign) ?? false,
+    needsReply: pickBoolean(data.needReply) ?? false,
+    needsJoin: pickBoolean(data.needJoin) ?? false,
+    needsFile: pickBoolean(data.needFile) ?? false,
+    hasAttachments: (pickBoolean(data.cntHasAttach) ?? false) || enrichedAttachments.length > 0,
   };
 }
 
@@ -669,6 +868,16 @@ export function normalizeNoticeboardItemDetail(
   const item = toRecord(root.item ?? root.event ?? root);
   const reply = toRecord(root.reply);
   const content = pickString(item.text, item.evtText, item.content, item.description) ?? base.content;
+  const attachments = collectAttachments(
+    item.attachments,
+    item.allegati,
+    item.files,
+    root.attachments,
+    root.allegati,
+    root.files,
+    base.attachments,
+  );
+  const actions = buildNoticeboardActions(base, attachments);
 
   return {
     id: base.id,
@@ -677,7 +886,8 @@ export function normalizeNoticeboardItemDetail(
     title: pickString(item.title, base.title) ?? "Comunicazione",
     content,
     replyText: pickString(reply.text, reply.replyText, reply.description),
-    attachments: base.attachments,
+    attachments,
+    actions,
     capabilityState: content
       ? createCapabilityState("available", "Dettaglio disponibile", "Testo completo disponibile in app.")
       : createCapabilityState("empty", "Nessun testo disponibile", "Il portale non ha restituito un contenuto testuale."),
@@ -721,6 +931,9 @@ export function normalizeDidacticContent(
 ): DidacticContent {
   const data = toRecord(payload);
   const objectType = pickString(data.objectType) ?? "unknown";
+  const sourceUrl = toAbsoluteUrl(
+    pickString(data.url, data.href, data.link, data.contentUrl, data.downloadUrl, data.viewUrl),
+  );
 
   return {
     id: pickString(data.contentId, data.id) ?? "",
@@ -732,9 +945,12 @@ export function normalizeDidacticContent(
     objectId: pickString(data.objectId, data.id) ?? "",
     objectType,
     sharedAt: normalizeDate(data.shareDT ?? data.sharedAt),
+    sourceUrl,
     capabilityState:
       objectType === "file"
         ? createCapabilityState("external_only", "Apribile come documento", "Il materiale verra aperto in una preview esterna.")
+        : sourceUrl
+          ? createCapabilityState("external_only", "Apribile come collegamento", "Il materiale verra aperto fuori dall'app.")
         : createCapabilityState("available", "Contenuto disponibile", "Il materiale puo essere letto direttamente."),
   };
 }
@@ -851,6 +1067,9 @@ export function normalizeAgendaEvent(payload: unknown): AgendaEvent {
     subject,
     category: normalizeAgendaCategory(typeSource, title),
     time: normalizeTime(data.time ?? data.startTime ?? data.lessonHour ?? data.ora ?? data.evtDatetimeBegin),
+    rawDate: pickString(data.date, data.evtDate, data.data, data.evtDatetimeBegin),
+    rawDescription: pickString(data.description, data.notes, data.content),
+    slot: deriveSlot(data.evtHPos, data.hour, data.order),
   };
 }
 
@@ -969,10 +1188,8 @@ export class ClassevivaClient {
     try {
       this.ensureStudentId();
 
-      const today = startDate ?? new Date().toISOString().slice(0, 10);
-      const until =
-        endDate ??
-        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const today = startDate ?? toLocalIsoDate();
+      const until = endDate ?? toLocalIsoDate(addDays(new Date(), 14));
 
       const response = await this.apiClient.get(
         `/students/${this.studentId}/lessons/${toApiDateParam(today)}/${toApiDateParam(until)}`,
@@ -1018,20 +1235,9 @@ export class ClassevivaClient {
   async getCommunicationDetail(communication: Pick<Communication, "pubId" | "evtCode">): Promise<NoticeboardItemDetail> {
     try {
       this.ensureStudentId();
-      const base = await this.getCommunications().then((items) =>
-        items.find((item) => item.pubId === communication.pubId && item.evtCode === communication.evtCode),
-      );
+      const base = await this.getCommunicationBase(communication);
 
-      if (!base) {
-        throw new ClassevivaApiError({
-          code: "NOT_FOUND",
-          message: "Comunicazione non trovata.",
-        });
-      }
-
-      const response = await this.apiClient.post(
-        `/students/${this.studentId}/noticeboard/read/${communication.evtCode}/${communication.pubId}/101`,
-      );
+      const response = await this.apiClient.post(`/students/${this.studentId}/noticeboard/read/${communication.evtCode}/${communication.pubId}/101`);
 
       return normalizeNoticeboardItemDetail(response.data, base);
     } catch (error) {
@@ -1039,14 +1245,20 @@ export class ClassevivaClient {
     }
   }
 
+  async acknowledgeCommunication(communication: Pick<Communication, "pubId" | "evtCode">): Promise<NoticeboardItemDetail> {
+    return this.performCommunicationAction(communication, "ack");
+  }
+
+  async joinCommunication(communication: Pick<Communication, "pubId" | "evtCode">): Promise<NoticeboardItemDetail> {
+    return this.performCommunicationAction(communication, "join");
+  }
+
   async getAgenda(startDate?: string, endDate?: string): Promise<AgendaEvent[]> {
     try {
       this.ensureStudentId();
 
-      const today = startDate ?? new Date().toISOString().slice(0, 10);
-      const until =
-        endDate ??
-        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const today = startDate ?? toLocalIsoDate();
+      const until = endDate ?? toLocalIsoDate(addDays(new Date(), 14));
 
       const response = await this.apiClient.get(
         `/students/${this.studentId}/agenda/all/${toApiDateParam(today)}/${toApiDateParam(until)}`,
@@ -1127,9 +1339,27 @@ export class ClassevivaClient {
     }
   }
 
-  async getDidacticAsset(content: Pick<DidacticContent, "id" | "title" | "objectType">): Promise<DidacticAsset> {
+  async getDidacticAsset(content: Pick<DidacticContent, "id" | "title" | "objectType" | "sourceUrl">): Promise<DidacticAsset> {
     try {
       this.ensureStudentId();
+
+      if (content.sourceUrl && content.objectType.toLowerCase().includes("link")) {
+        return {
+          id: content.id,
+          title: content.title,
+          objectType: content.objectType,
+          mimeType: null,
+          dataUrl: null,
+          sourceUrl: content.sourceUrl,
+          textPreview: null,
+          capabilityState: createCapabilityState(
+            "external_only",
+            "Apri collegamento",
+            "Il materiale verra aperto nel browser esterno.",
+          ),
+        };
+      }
+
       const response = await this.apiClient.get<ArrayBuffer>(`/students/${this.studentId}/didactics/item/${content.id}`, {
         responseType: "arraybuffer",
       });
@@ -1159,10 +1389,28 @@ export class ClassevivaClient {
         objectType: content.objectType,
         mimeType,
         dataUrl,
+        sourceUrl: content.sourceUrl ?? null,
         textPreview,
         capabilityState,
       };
     } catch (error) {
+      if (content.sourceUrl) {
+        return {
+          id: content.id,
+          title: content.title,
+          objectType: content.objectType,
+          mimeType: null,
+          dataUrl: null,
+          sourceUrl: content.sourceUrl,
+          textPreview: null,
+          capabilityState: createCapabilityState(
+            "external_only",
+            "Apri contenuto",
+            "Il file non e leggibile inline ma il portale ha restituito un collegamento esterno.",
+          ),
+        };
+      }
+
       throw this.handleError(error, "Errore nel caricamento del materiale");
     }
   }
@@ -1205,6 +1453,72 @@ export class ClassevivaClient {
     } catch (error) {
       throw this.handleError(error, "Errore nel caricamento delle materie");
     }
+  }
+
+  private async getCommunicationBase(communication: Pick<Communication, "pubId" | "evtCode">): Promise<Communication> {
+    const base = await this.getCommunications().then((items) =>
+      items.find((item) => item.pubId === communication.pubId && item.evtCode === communication.evtCode),
+    );
+
+    if (!base) {
+      throw new ClassevivaApiError({
+        code: "NOT_FOUND",
+        message: "Comunicazione non trovata.",
+      });
+    }
+
+    return base;
+  }
+
+  private async performCommunicationAction(
+    communication: Pick<Communication, "pubId" | "evtCode">,
+    action: "ack" | "join",
+  ): Promise<NoticeboardItemDetail> {
+    try {
+      this.ensureStudentId();
+      const studentId = this.studentId as string;
+      const actionCandidates =
+        action === "ack"
+          ? ["sign", "ack", "confirm"]
+          : ["join", "adhere", "accept"];
+      const paths = actionCandidates.flatMap((candidate) => [
+        `/students/${studentId}/noticeboard/${candidate}/${communication.evtCode}/${communication.pubId}`,
+        `/students/${studentId}/noticeboard/${candidate}/${communication.evtCode}/${communication.pubId}/101`,
+      ]);
+
+      await this.tryPostCandidates(paths);
+      return this.getCommunicationDetail(communication);
+    } catch (error) {
+      throw this.handleError(
+        error,
+        action === "ack"
+          ? "Errore durante la conferma della comunicazione"
+          : "Errore durante l'adesione alla comunicazione",
+      );
+    }
+  }
+
+  private async tryPostCandidates(paths: string[]): Promise<void> {
+    let lastError: unknown = null;
+
+    for (const path of paths) {
+      try {
+        await this.apiClient.post(path);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (!isAxiosError(error)) {
+          break;
+        }
+
+        const status = error.response?.status;
+        if (![400, 404, 405, 422].includes(status ?? -1)) {
+          break;
+        }
+      }
+    }
+
+    throw lastError ?? new Error("Azione comunicazione non disponibile.");
   }
 
   private ensureStudentId(): void {

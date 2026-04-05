@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.theme
 
 import android.os.Build
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -51,9 +52,9 @@ data class AccentPreset(
 )
 
 val expressiveAccentPresets = listOf(
-  AccentPreset("ember", Color(0xFFE84C3D), Color(0xFF26272F), Color(0xFFFF8A65)),
-  AccentPreset("ocean", Color(0xFF006CFF), Color(0xFF0E1A2B), Color(0xFF00C2FF)),
-  AccentPreset("jade", Color(0xFF1AA574), Color(0xFF111B17), Color(0xFFFFB454)),
+  AccentPreset("ember", Color(0xFF176B63), Color(0xFF233239), Color(0xFFC48A3A)),
+  AccentPreset("ocean", Color(0xFF275F7A), Color(0xFF223541), Color(0xFFD0A15B)),
+  AccentPreset("jade", Color(0xFF3F6D58), Color(0xFF27352F), Color(0xFFB98A5F)),
 )
 
 private fun presetFor(name: String): AccentPreset {
@@ -96,53 +97,53 @@ fun ClassevivaExpressiveTheme(
 private fun lightBrandScheme(accent: AccentPreset): ColorScheme = lightColorScheme(
   primary = accent.primary,
   onPrimary = Color.White,
-  primaryContainer = accent.primary.copy(alpha = 0.12f),
-  onPrimaryContainer = Color(0xFF1F1615),
+  primaryContainer = Color(0xFFDCECE8),
+  onPrimaryContainer = Color(0xFF133C39),
   secondary = accent.secondary,
   onSecondary = Color.White,
-  secondaryContainer = Color(0xFFF2F2F6),
-  onSecondaryContainer = Color(0xFF1A1B20),
+  secondaryContainer = Color(0xFFE9EEEC),
+  onSecondaryContainer = Color(0xFF182228),
   tertiary = accent.tertiary,
-  background = Color(0xFFF5F6FA),
+  background = Color(0xFFF4F5F2),
   surface = Color.White,
-  surfaceContainer = Color(0xFFF0F2F7),
-  surfaceContainerHigh = Color(0xFFE7EAF1),
-  surfaceContainerHighest = Color(0xFFDEE3EC),
-  onSurface = Color(0xFF14161C),
-  onSurfaceVariant = Color(0xFF585D69),
-  error = Color(0xFFD23636),
-  outline = Color(0xFFD0D4DE),
+  surfaceContainer = Color(0xFFEFF1EC),
+  surfaceContainerHigh = Color(0xFFE7EAE3),
+  surfaceContainerHighest = Color(0xFFDEE3DB),
+  onSurface = Color(0xFF141917),
+  onSurfaceVariant = Color(0xFF5A625E),
+  error = Color(0xFFB42318),
+  outline = Color(0xFFD1D8D1),
 )
 
 private fun darkBrandScheme(accent: AccentPreset): ColorScheme = darkColorScheme(
   primary = accent.primary,
   onPrimary = Color.White,
-  primaryContainer = Color(0xFF2E1716),
-  onPrimaryContainer = Color(0xFFFFDAD5),
-  secondary = Color(0xFFCAC7D0),
-  onSecondary = Color(0xFF1A1B22),
-  secondaryContainer = Color(0xFF23242D),
-  onSecondaryContainer = Color(0xFFF3F0F8),
+  primaryContainer = Color(0xFF113632),
+  onPrimaryContainer = Color(0xFFDCECE8),
+  secondary = Color(0xFFC7D0CC),
+  onSecondary = Color(0xFF172026),
+  secondaryContainer = Color(0xFF1E2624),
+  onSecondaryContainer = Color(0xFFE8EEEB),
   tertiary = accent.tertiary,
-  background = Color(0xFF0D0E11),
-  surface = Color(0xFF121317),
-  surfaceContainer = Color(0xFF17191D),
-  surfaceContainerHigh = Color(0xFF1D2025),
-  surfaceContainerHighest = Color(0xFF25292F),
-  onSurface = Color(0xFFF1F2F6),
-  onSurfaceVariant = Color(0xFFB9BEC9),
+  background = Color(0xFF0E1110),
+  surface = Color(0xFF131716),
+  surfaceContainer = Color(0xFF191D1C),
+  surfaceContainerHigh = Color(0xFF1F2523),
+  surfaceContainerHighest = Color(0xFF272E2B),
+  onSurface = Color(0xFFF0F3F1),
+  onSurfaceVariant = Color(0xFFB8C1BC),
   error = Color(0xFFFFB4AB),
-  outline = Color(0xFF3D414C),
+  outline = Color(0xFF3F4844),
 )
 
 private fun amoledScheme(accent: AccentPreset): ColorScheme = darkColorScheme(
   primary = accent.primary,
   onPrimary = Color.White,
-  primaryContainer = Color(0xFF220F10),
-  onPrimaryContainer = Color(0xFFFFDAD5),
+  primaryContainer = Color(0xFF0B2824),
+  onPrimaryContainer = Color(0xFFDCECE8),
   secondary = Color(0xFFE4E1E8),
   onSecondary = Color.Black,
-  secondaryContainer = Color(0xFF101114),
+  secondaryContainer = Color(0xFF0D0F0E),
   onSecondaryContainer = Color(0xFFF4F4F8),
   tertiary = accent.tertiary,
   background = Color.Black,
@@ -150,10 +151,10 @@ private fun amoledScheme(accent: AccentPreset): ColorScheme = darkColorScheme(
   surfaceContainer = Color.Black,
   surfaceContainerHigh = Color(0xFF020202),
   surfaceContainerHighest = Color(0xFF060606),
-  onSurface = Color(0xFFF2F3F8),
-  onSurfaceVariant = Color(0xFFBBC1CC),
+  onSurface = Color(0xFFF0F3F1),
+  onSurfaceVariant = Color(0xFFB8C1BC),
   error = Color(0xFFFFB4AB),
-  outline = Color(0xFF15171B),
+  outline = Color(0xFF141817),
 )
 
 private fun expressiveTypography(): Typography {
@@ -235,7 +236,9 @@ fun ExpressiveCard(
   content: @Composable ColumnScope.() -> Unit,
 ) {
   Card(
-    modifier = modifier.fillMaxWidth(),
+    modifier = modifier
+      .fillMaxWidth()
+      .animateContentSize(),
     shape = RoundedCornerShape(20.dp),
     colors = CardDefaults.cardColors(
       containerColor = if (highlighted) {

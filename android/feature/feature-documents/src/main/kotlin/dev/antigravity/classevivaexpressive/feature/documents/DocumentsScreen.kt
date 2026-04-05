@@ -1,12 +1,16 @@
 package dev.antigravity.classevivaexpressive.feature.documents
 
+import android.content.Intent
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -23,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -30,9 +36,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat.startActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,8 +50,13 @@ import dev.antigravity.classevivaexpressive.core.data.preview.openPreviewFile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveEditorialCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveSimpleListRow
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
+import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityState
+import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentsRepository
@@ -63,6 +75,14 @@ data class DocumentsUiState(
   val selectedAsset: DocumentAsset? = null,
   val lastMessage: String? = null,
   val isLoadingPreview: Boolean = false,
+  val isRefreshing: Boolean = false,
+)
+
+private data class PreviewBundle(
+  val documents: List<DocumentItem>,
+  val schoolbooks: List<SchoolbookCourse>,
+  val document: DocumentItem?,
+  val asset: DocumentAsset?,
 )
 
 @HiltViewModel
@@ -73,6 +93,7 @@ class DocumentsViewModel @Inject constructor(
   private val selectedAsset = MutableStateFlow<DocumentAsset?>(null)
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isLoadingPreview = MutableStateFlow(false)
+  private val isRefreshing = MutableStateFlow(false)
 
   private val contentState = combine(
     documentsRepository.observeDocuments(),
@@ -87,7 +108,8 @@ class DocumentsViewModel @Inject constructor(
     contentState,
     lastMessage,
     isLoadingPreview,
-  ) { content, message, loading ->
+    isRefreshing,
+  ) { content, message, loading, refreshing ->
     DocumentsUiState(
       documents = content.documents,
       schoolbooks = content.schoolbooks,
@@ -95,28 +117,27 @@ class DocumentsViewModel @Inject constructor(
       selectedAsset = content.asset,
       lastMessage = message,
       isLoadingPreview = loading,
+      isRefreshing = refreshing,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DocumentsUiState())
 
   init {
-    viewModelScope.launch { documentsRepository.refreshDocuments() }
+    requestRefresh(force = false, showIndicator = false)
   }
 
   fun refresh() {
-    viewModelScope.launch { documentsRepository.refreshDocuments(force = true) }
+    requestRefresh(force = true, showIndicator = true)
   }
 
   fun preview(document: DocumentItem) {
     viewModelScope.launch {
       isLoadingPreview.value = true
+      selectedDocument.value = document
+      selectedAsset.value = null
+      lastMessage.value = null
       documentsRepository.openDocument(document)
-        .onSuccess {
-          selectedDocument.value = document
-          selectedAsset.value = it
-        }
-        .onFailure {
-          lastMessage.value = it.message ?: "Impossibile aprire il documento."
-        }
+        .onSuccess { selectedAsset.value = it }
+        .onFailure { lastMessage.value = it.message ?: "Impossibile aprire il documento selezionato." }
       isLoadingPreview.value = false
     }
   }
@@ -142,14 +163,19 @@ class DocumentsViewModel @Inject constructor(
     lastMessage.value = message
   }
 
-  private data class PreviewBundle(
-    val documents: List<DocumentItem>,
-    val schoolbooks: List<SchoolbookCourse>,
-    val document: DocumentItem?,
-    val asset: DocumentAsset?,
-  )
+  private fun requestRefresh(force: Boolean, showIndicator: Boolean) {
+    viewModelScope.launch {
+      if (showIndicator) {
+        isRefreshing.value = true
+      }
+      documentsRepository.refreshDocuments(force = force)
+        .onFailure { lastMessage.value = it.message ?: "Impossibile aggiornare documenti e pagelle." }
+      isRefreshing.value = false
+    }
+  }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DocumentsRoute(
   modifier: Modifier = Modifier,
@@ -158,68 +184,154 @@ fun DocumentsRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   val context = LocalContext.current
+  val schoolbookCount = remember(state.schoolbooks) { state.schoolbooks.sumOf { it.books.size } }
+  val selectedAssetBytes = remember(state.selectedAsset?.base64Content) {
+    state.selectedAsset?.base64Content?.let(::decodePreviewContent)
+  }
 
-  LazyColumn(
-    modifier = modifier,
-    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-    verticalArrangement = Arrangement.spacedBy(18.dp),
+  PullToRefreshBox(
+    modifier = modifier.fillMaxSize(),
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
   ) {
-    item {
-      ExpressiveTopHeader(
-        title = "Final grades",
-        onBack = onBack,
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+      verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+      item {
+        ExpressiveTopHeader(
+          title = "Documenti",
+          subtitle = "Pagelle, documenti autenticati e libri di testo con preview locale o apertura esterna quando serve.",
+          onBack = onBack,
+          actions = {
+            IconButton(onClick = viewModel::refresh) {
+              Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
+            }
+          },
+        )
+      }
+      if (state.isLoadingPreview) {
+        item {
+          LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+      }
+      if (!state.lastMessage.isNullOrBlank()) {
+        item {
+          RegisterListRow(
+            title = "Stato documenti",
+            subtitle = state.lastMessage.orEmpty(),
+            tone = ExpressiveTone.Warning,
+            badge = { StatusBadge("AVVISO", tone = ExpressiveTone.Warning) },
+          )
+        }
+        item {
+          TextButton(onClick = viewModel::clearMessage) {
+            Text("Nascondi messaggio")
           }
-        },
-      )
-    }
-    if (state.isLoadingPreview) {
+        }
+      }
       item {
-        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        Column(
+          modifier = Modifier.fillMaxWidth(),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          MetricTile(
+            label = "Documenti",
+            value = state.documents.size.toString(),
+            detail = "Voci recuperate dal portale.",
+            modifier = Modifier.fillMaxWidth(),
+          )
+          MetricTile(
+            label = "Corsi",
+            value = state.schoolbooks.size.toString(),
+            detail = "Raggruppamenti libri disponibili.",
+            modifier = Modifier.fillMaxWidth(),
+            tone = ExpressiveTone.Info,
+          )
+          MetricTile(
+            label = "Libri",
+            value = schoolbookCount.toString(),
+            detail = "Testi associati ai corsi.",
+            modifier = Modifier.fillMaxWidth(),
+            tone = ExpressiveTone.Success,
+          )
+        }
       }
-    }
-    item {
-      ExpressiveAccentLabel("School reports")
-    }
-    if (state.documents.isEmpty()) {
       item {
-        EmptyState(
-          title = "No documents available",
-          detail = "Pagelle, modulistica e allegati compariranno qui appena il portale o l’API li espongono.",
-        )
+        ExpressiveAccentLabel("Pagelle e documenti")
       }
-    } else {
-      items(state.documents, key = { it.id }) { document ->
-        ExpressiveSimpleListRow(
-          title = document.title,
-          subtitle = document.detail,
-          meta = document.capabilityState.label.takeIf { it.isNotBlank() },
-          onClick = { viewModel.preview(document) },
-          trailing = { Icon(Icons.Rounded.Description, contentDescription = null) },
-        )
+      if (state.documents.isEmpty()) {
+        item {
+          EmptyState(
+            title = "Nessun documento disponibile",
+            detail = "Pagelle, moduli e documenti compariranno qui appena il portale li espone in modo leggibile.",
+          )
+        }
+      } else {
+        items(state.documents, key = { it.id }) { document ->
+          RegisterListRow(
+            title = document.title,
+            subtitle = document.detail.ifBlank { document.capabilityState.detail ?: "Documento del portale" },
+            meta = document.capabilityState.detail,
+            tone = capabilityTone(document.capabilityState),
+            onClick = { viewModel.preview(document) },
+            badge = {
+              StatusBadge(
+                label = capabilityBadgeLabel(document.capabilityState),
+                tone = capabilityTone(document.capabilityState),
+              )
+            },
+            leading = {
+              Icon(
+                Icons.Rounded.Description,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+              )
+            },
+          )
+        }
       }
-    }
-    if (state.schoolbooks.isNotEmpty()) {
-      item {
-        ExpressiveAccentLabel("Documents")
-      }
-      items(state.schoolbooks, key = { it.id }) { course ->
-        ExpressiveSimpleListRow(
-          title = course.title,
-          subtitle = "${course.books.size} books",
-          meta = course.books.joinToString(" • ") { it.title },
-        )
-      }
-    }
-    if (!state.lastMessage.isNullOrBlank()) {
-      item {
-        Text(
-          text = state.lastMessage.orEmpty(),
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.primary,
-        )
+      if (state.schoolbooks.isNotEmpty()) {
+        item {
+          ExpressiveAccentLabel("Libri di testo")
+        }
+        items(state.schoolbooks, key = { it.id }) { course ->
+          ExpressiveEditorialCard {
+            Text(
+              text = course.title,
+              style = MaterialTheme.typography.titleMedium,
+              color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+              text = "${course.books.size} libri associati",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            course.books.take(4).forEach { book ->
+              Text(
+                text = buildString {
+                  append(book.subject.ifBlank { "Materia" })
+                  append(" / ")
+                  append(book.title)
+                  book.author?.takeIf(String::isNotBlank)?.let {
+                    append(" / ")
+                    append(it)
+                  }
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+            if (course.books.size > 4) {
+              Text(
+                text = "+${course.books.size - 4} altri libri",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+              )
+            }
+          }
+        }
       }
     }
   }
@@ -227,13 +339,12 @@ fun DocumentsRoute(
   val selectedDocument = state.selectedDocument
   val selectedAsset = state.selectedAsset
   if (selectedDocument != null && selectedAsset != null) {
-    val bytes = remember(selectedAsset.base64Content) { decodePreviewContent(selectedAsset.base64Content) }
     DocumentPreviewDialog(
       asset = selectedAsset,
       onDismiss = viewModel::dismissPreview,
       onDownload = { viewModel.download(selectedDocument) },
       onOpenFile = {
-        val payload = bytes ?: return@DocumentPreviewDialog
+        val payload = selectedAssetBytes ?: return@DocumentPreviewDialog
         openPreviewFile(
           context = context,
           displayName = selectedAsset.fileName ?: selectedDocument.title,
@@ -241,6 +352,11 @@ fun DocumentsRoute(
           bytes = payload,
         ).onFailure { error ->
           viewModel.showMessage(error.message ?: "Non riesco ad aprire questo file sul dispositivo.")
+        }
+      },
+      onOpenLink = {
+        selectedAsset.sourceUrl?.let { url ->
+          startActivity(context, Intent(Intent.ACTION_VIEW, Uri.parse(url)), null)
         }
       },
     )
@@ -253,6 +369,7 @@ private fun DocumentPreviewDialog(
   onDismiss: () -> Unit,
   onDownload: () -> Unit,
   onOpenFile: () -> Unit,
+  onOpenLink: () -> Unit,
 ) {
   val bytes = remember(asset.base64Content) { decodePreviewContent(asset.base64Content) }
 
@@ -273,14 +390,21 @@ private fun DocumentPreviewDialog(
         item {
           ExpressiveTopHeader(
             title = asset.title,
-            subtitle = asset.capabilityState.detail ?: "Documento autenticato pronto per preview o apertura.",
+            subtitle = asset.capabilityState.detail ?: "Documento autenticato pronto per preview, apertura o download.",
+            actions = {
+              TextButton(onClick = onDismiss) {
+                Text("Chiudi")
+              }
+            },
           )
         }
         item {
-          RowActions(
+          PreviewActions(
             onOpenFile = onOpenFile,
+            onOpenLink = onOpenLink,
             onDownload = onDownload,
-            canOpen = bytes != null,
+            canOpenFile = bytes != null,
+            canOpenLink = !asset.sourceUrl.isNullOrBlank(),
           )
         }
         item {
@@ -292,21 +416,22 @@ private fun DocumentPreviewDialog(
 }
 
 @Composable
-private fun RowActions(
+private fun PreviewActions(
   onOpenFile: () -> Unit,
+  onOpenLink: () -> Unit,
   onDownload: () -> Unit,
-  canOpen: Boolean,
+  canOpenFile: Boolean,
+  canOpenLink: Boolean,
 ) {
-  LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    item {
-      TextButton(onClick = onOpenFile, enabled = canOpen) {
-        Text("Apri file")
-      }
+  Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    TextButton(onClick = onOpenFile, enabled = canOpenFile) {
+      Text("Apri file")
     }
-    item {
-      TextButton(onClick = onDownload) {
-        Text("Scarica")
-      }
+    TextButton(onClick = onOpenLink, enabled = canOpenLink) {
+      Text("Apri link")
+    }
+    TextButton(onClick = onDownload) {
+      Text("Scarica")
     }
   }
 }
@@ -353,8 +478,8 @@ private fun DocumentPreviewBody(
         }
       } else {
         EmptyState(
-          title = "Image preview unavailable",
-          detail = "Il file è disponibile ma l’anteprima non è stata generata correttamente.",
+          title = "Anteprima immagine non disponibile",
+          detail = "Il documento e stato scaricato, ma il dispositivo non ha generato correttamente la preview.",
         )
       }
     }
@@ -371,16 +496,38 @@ private fun DocumentPreviewBody(
 
     asset.mimeType == "application/pdf" && bytes != null -> {
       EmptyState(
-        title = "PDF ready to open",
-        detail = "Il documento è stato recuperato correttamente. Usa 'Apri file' per visualizzarlo con la tua app PDF.",
+        title = "PDF pronto",
+        detail = "Il documento e disponibile: usa 'Apri file' per visualizzarlo con un lettore PDF del dispositivo.",
       )
     }
 
     else -> {
       EmptyState(
-        title = "Preview unavailable",
-        detail = "Il file è pronto per apertura esterna o download locale, ma il formato non ha una preview inline affidabile.",
+        title = "Preview non disponibile",
+        detail = if (!asset.sourceUrl.isNullOrBlank()) {
+          "Il portale ha restituito un'apertura esterna. Puoi continuare con 'Apri link'."
+        } else {
+          "Il documento e pronto per il download locale, ma questo formato non offre una preview inline affidabile."
+        },
       )
     }
+  }
+}
+
+private fun capabilityTone(state: CapabilityState): ExpressiveTone {
+  return when (state.status) {
+    CapabilityStatus.AVAILABLE -> ExpressiveTone.Success
+    CapabilityStatus.EXTERNAL_ONLY -> ExpressiveTone.Info
+    CapabilityStatus.EMPTY -> ExpressiveTone.Warning
+    CapabilityStatus.UNAVAILABLE -> ExpressiveTone.Danger
+  }
+}
+
+private fun capabilityBadgeLabel(state: CapabilityState): String {
+  return when (state.status) {
+    CapabilityStatus.AVAILABLE -> "PRONTO"
+    CapabilityStatus.EXTERNAL_ONLY -> "ESTERNO"
+    CapabilityStatus.EMPTY -> "VUOTO"
+    CapabilityStatus.UNAVAILABLE -> "BLOCCATO"
   }
 }

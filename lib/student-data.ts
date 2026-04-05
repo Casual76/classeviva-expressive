@@ -18,8 +18,19 @@ import {
   Subject,
   classeviva,
   type CapabilityState,
+  type NoticeboardAction,
+  type NoticeboardAttachment,
   type Schoolbook,
 } from "./classeviva-client";
+import {
+  markGradeSeen,
+  readSeenGradeIds,
+  readSubjectGoals,
+  type SubjectGoal,
+} from "./app-preferences";
+import { addDays, compareDateValues, compareTimeLabels, formatDateLabel as formatDate, toLocalIsoDate } from "./date-utils";
+
+export { compareTimeLabels, toLocalIsoDate } from "./date-utils";
 
 export type CardTone = "neutral" | "primary" | "success" | "warning" | "error";
 const DATA_REQUEST_TIMEOUT_MS = 12000;
@@ -29,6 +40,7 @@ export interface GradeRowViewModel {
   subject: string;
   valueLabel: string;
   numericValue: number | null;
+  weight: number;
   date: string;
   dateLabel: string;
   typeLabel: string;
@@ -43,10 +55,16 @@ export interface GradeSubjectSummaryViewModel {
   subject: string;
   averageLabel: string;
   averageNumeric: number | null;
+  weightedAverageLabel: string;
+  weightedAverageNumeric: number | null;
   count: number;
   teacherLabel: string;
   recentValues: number[];
   typeBreakdown: string;
+  targetAverage: number | null;
+  targetAverageLabel: string;
+  goalMessage: string;
+  goalStatus: "missing" | "required" | "minimum" | "encouraging" | "unreachable";
   tone: CardTone;
 }
 
@@ -67,6 +85,7 @@ export interface AgendaItemViewModel {
   category: "lesson" | "homework" | "assessment" | "event";
   detail: string;
   timeLabel: string;
+  slot?: number;
   tone: CardTone;
 }
 
@@ -109,6 +128,11 @@ export interface CommunicationRowViewModel {
   dateLabel: string;
   statusLabel: string;
   metadataLabel: string;
+  needsAck: boolean;
+  needsReply: boolean;
+  needsJoin: boolean;
+  hasAttachments: boolean;
+  attachments: NoticeboardAttachment[];
   tone: CardTone;
 }
 
@@ -192,95 +216,27 @@ export interface DashboardViewModel {
   averageLabel: string;
   averageNumeric: number | null;
   warning: string | null;
-  stats: DashboardStat[];
   todayLessons: AgendaItemViewModel[];
-  recentGrades: GradeRowViewModel[];
-  upcomingAssessments: AgendaItemViewModel[];
-  upcomingItems: AgendaItemViewModel[];
-  recentAbsences: AbsenceRecordViewModel[];
+  unseenGrades: GradeRowViewModel[];
   unreadCommunications: CommunicationRowViewModel[];
-  highlightedNotes: NoteRowViewModel[];
-  gradeTrend: GradeTrendPoint[];
-  schoolReports: SchoolReportViewModel[];
+}
+
+export interface GradeSelectionSummary {
+  rows: GradeRowViewModel[];
+  summaries: GradeSummariesViewModel;
+  currentPeriodCode: string | null;
+  periods: Period[];
+  goals: Record<string, SubjectGoal>;
+}
+
+export interface CommunicationDetailViewModel extends NoticeboardItemDetail {
+  actions: NoticeboardAction[];
 }
 
 export interface ProfileSnapshotViewModel {
   profile: StudentProfile;
   subjects: Subject[];
   periods: Period[];
-}
-
-const LOCAL_ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-function parseDateValue(value: string): Date {
-  if (LOCAL_ISO_DATE_RE.test(value)) {
-    const [year, month, day] = value.split("-").map(Number);
-    return new Date(year, month - 1, day);
-  }
-
-  return new Date(value);
-}
-
-export function toLocalIsoDate(date = new Date()): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function compareDateValues(left: string, right: string): number {
-  if (LOCAL_ISO_DATE_RE.test(left) && LOCAL_ISO_DATE_RE.test(right)) {
-    return left.localeCompare(right);
-  }
-
-  return parseDateValue(left).getTime() - parseDateValue(right).getTime();
-}
-
-function parseTimeValue(value: string): number | null {
-  const match = value.match(/(\d{1,2}):(\d{2})/);
-  if (!match) {
-    return null;
-  }
-
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
-    return null;
-  }
-
-  return hours * 60 + minutes;
-}
-
-export function compareTimeLabels(left: string, right: string): number {
-  const leftValue = parseTimeValue(left);
-  const rightValue = parseTimeValue(right);
-
-  if (leftValue !== null && rightValue !== null) {
-    return leftValue - rightValue;
-  }
-  if (leftValue !== null) {
-    return -1;
-  }
-  if (rightValue !== null) {
-    return 1;
-  }
-
-  return left.localeCompare(right, "it-IT");
-}
-
-function formatDate(value: string, options: Intl.DateTimeFormatOptions) {
-  const date = parseDateValue(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("it-IT", options).format(date);
 }
 
 function formatCurrency(value?: number): string {
@@ -354,15 +310,15 @@ function getGradeTone(value: number | null): CardTone {
     return "neutral";
   }
 
-  if (value >= 8) {
+  if (value > 6) {
     return "success";
   }
 
-  if (value >= 6) {
-    return "primary";
+  if (value >= 5) {
+    return "warning";
   }
 
-  return "error";
+  return value < 5 ? "error" : "primary";
 }
 
 function normalizePeriodKey(value?: string | null): string {
@@ -404,38 +360,207 @@ function getAgendaTone(category: AgendaItemViewModel["category"]): CardTone {
 }
 
 function getAbsenceTone(absence: Absence): CardTone {
-  if (!absence.justified) {
+  if (!absence.justified && absence.type === "assenza") {
     return "error";
   }
 
-  if (absence.type === "ritardo") {
+  if (!absence.justified) {
     return "warning";
-  }
-
-  if (absence.type === "uscita") {
-    return "primary";
   }
 
   return "neutral";
 }
 
+function formatHoursLabel(hours?: number): string {
+  if (!hours) {
+    return "Nessun dettaglio aggiuntivo";
+  }
+
+  return `${hours} ${hours === 1 ? "ora" : "ore"} registrate`;
+}
+
+function formatDidacticObjectType(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return "Contenuto";
+  }
+  if (normalized.includes("link")) {
+    return "Collegamento";
+  }
+  if (normalized.includes("file") || normalized.includes("pdf")) {
+    return "File";
+  }
+  if (normalized.includes("video")) {
+    return "Video";
+  }
+
+  return value;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function formatAverageLabel(value: number | null): string {
+  return value === null ? "--" : value.toFixed(1).replace(".", ",");
+}
+
+function isWithinDateRange(date: string, start: string, end: string): boolean {
+  return compareDateValues(date, start) >= 0 && compareDateValues(date, end) <= 0;
+}
+
+function sanitizeAgendaText(value: string | undefined, fallback: string, candidates: string[] = []): string {
+  if (!value) {
+    return fallback;
+  }
+
+  let output = value
+    .replace(/^\s*\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})\s*/i, "")
+    .replace(/^\s*\d{4}-\d{2}-\d{2}\s*/i, "")
+    .trim();
+
+  for (const candidate of candidates.filter(Boolean)) {
+    output = output.replace(new RegExp(`^${escapeRegExp(candidate)}\\s*[:\\-./)]?\\s*`, "i"), "").trim();
+  }
+
+  output = output.replace(/\s+/g, " ").trim();
+  return output || fallback;
+}
+
+function calculateWeightedAverage(rows: GradeRowViewModel[]): number | null {
+  const weighted = rows
+    .filter((row) => row.numericValue !== null)
+    .map((row) => ({
+      value: row.numericValue as number,
+      weight: row.weight > 0 ? row.weight : 1,
+    }));
+
+  if (weighted.length === 0) {
+    return null;
+  }
+
+  const totalWeight = weighted.reduce((sum, row) => sum + row.weight, 0);
+  if (totalWeight <= 0) {
+    return null;
+  }
+
+  const totalValue = weighted.reduce((sum, row) => sum + row.value * row.weight, 0);
+  return Number((totalValue / totalWeight).toFixed(1));
+}
+
+function resolveGoalSummary(
+  rows: GradeRowViewModel[],
+  targetAverage: number | null,
+): Pick<
+  GradeSubjectSummaryViewModel,
+  "targetAverage" | "targetAverageLabel" | "goalMessage" | "goalStatus" | "weightedAverageLabel" | "weightedAverageNumeric"
+> {
+  const weightedAverage = calculateWeightedAverage(rows);
+
+  if (targetAverage === null) {
+    return {
+      weightedAverageNumeric: weightedAverage,
+      weightedAverageLabel: formatAverageLabel(weightedAverage),
+      targetAverage: null,
+      targetAverageLabel: "--",
+      goalMessage: "Imposta una media obiettivo per ricevere il calcolo del prossimo voto utile.",
+      goalStatus: "missing",
+    };
+  }
+
+  const numericRows = rows.filter((row) => row.numericValue !== null);
+  const currentTotal = numericRows.reduce((sum, row) => sum + (row.numericValue as number) * row.weight, 0);
+  const currentWeight = numericRows.reduce((sum, row) => sum + row.weight, 0);
+  const requiredValue = Number((targetAverage * (currentWeight + 1) - currentTotal).toFixed(1));
+
+  if (requiredValue <= 0) {
+    return {
+      weightedAverageNumeric: weightedAverage,
+      weightedAverageLabel: formatAverageLabel(weightedAverage),
+      targetAverage,
+      targetAverageLabel: formatAverageLabel(targetAverage),
+      goalMessage: "Non ti preoccupare!",
+      goalStatus: "encouraging",
+    };
+  }
+
+  if (requiredValue > 10) {
+    return {
+      weightedAverageNumeric: weightedAverage,
+      weightedAverageLabel: formatAverageLabel(weightedAverage),
+      targetAverage,
+      targetAverageLabel: formatAverageLabel(targetAverage),
+      goalMessage: "Media non raggiungibile con un singolo voto",
+      goalStatus: "unreachable",
+    };
+  }
+
+  if (weightedAverage !== null && weightedAverage >= targetAverage) {
+    return {
+      weightedAverageNumeric: weightedAverage,
+      weightedAverageLabel: formatAverageLabel(weightedAverage),
+      targetAverage,
+      targetAverageLabel: formatAverageLabel(targetAverage),
+      goalMessage: `Non prendere meno di ${requiredValue.toFixed(1).replace(".", ",")}`,
+      goalStatus: "minimum",
+    };
+  }
+
+  return {
+    weightedAverageNumeric: weightedAverage,
+    weightedAverageLabel: formatAverageLabel(weightedAverage),
+    targetAverage,
+    targetAverageLabel: formatAverageLabel(targetAverage),
+    goalMessage: `Devi prendere almeno ${requiredValue.toFixed(1).replace(".", ",")} per raggiungere la media desiderata`,
+    goalStatus: "required",
+  };
+}
+
+export function getCurrentPeriod(periods: Period[], referenceDate = toLocalIsoDate()): Period | null {
+  const sortedPeriods = [...periods].sort((left, right) => left.order - right.order);
+  const current =
+    sortedPeriods.find(
+      (period) =>
+        compareDateValues(period.startDate, referenceDate) <= 0 &&
+        compareDateValues(period.endDate, referenceDate) >= 0,
+    ) ?? null;
+
+  if (current) {
+    return current;
+  }
+
+  const future = sortedPeriods.find((period) => compareDateValues(period.startDate, referenceDate) >= 0);
+  return future ?? sortedPeriods[sortedPeriods.length - 1] ?? null;
+}
+
+export async function markGradeRowAsSeen(studentId: string, row: Pick<GradeRowViewModel, "id">): Promise<void> {
+  await markGradeSeen(studentId, row.id);
+}
+
 export function toGradeRowViewModel(grade: Grade): GradeRowViewModel {
   const numericValue = getNumericGrade(grade.grade);
   const periodLabel = grade.period || "Periodo non indicato";
+  const valueLabel =
+    numericValue !== null
+      ? Number.isInteger(numericValue)
+        ? String(numericValue)
+        : numericValue.toFixed(1).replace(".", ",")
+      : String(grade.grade || "--");
 
   return {
     id: grade.id,
-    subject: grade.subject || "Materia",
-    valueLabel: String(grade.grade || "--"),
+    subject: grade.subject || "Materia non indicata",
+    valueLabel,
     numericValue,
     date: grade.date,
     dateLabel: formatDate(grade.date, {
       day: "2-digit",
       month: "short",
       year: "numeric",
-    }),
+    }, "Data non disponibile"),
+    weight: grade.weight ?? 1,
     typeLabel: grade.type || "Valutazione",
-    detail: grade.notes || grade.description || "Senza note aggiuntive",
+    detail: grade.notes || grade.description || "Nessuna nota disponibile",
     teacherLabel: grade.teacher || "Docente non indicato",
     periodLabel,
     periodKey: normalizePeriodKey(periodLabel),
@@ -443,7 +568,10 @@ export function toGradeRowViewModel(grade: Grade): GradeRowViewModel {
   };
 }
 
-export function summarizeGrades(rows: GradeRowViewModel[]): GradeSummariesViewModel {
+export function summarizeGrades(
+  rows: GradeRowViewModel[],
+  goals: Record<string, SubjectGoal> = {},
+): GradeSummariesViewModel {
   const numericValues = rows
     .map((row) => row.numericValue)
     .filter((value): value is number => value !== null);
@@ -493,14 +621,22 @@ export function summarizeGrades(rows: GradeRowViewModel[]): GradeSummariesViewMo
         parts.push(`${other} ${other === 1 ? "altro" : "altri"}`);
       }
 
+      const goalSummary = resolveGoalSummary(items, goals[subject]?.targetAverage ?? null);
+
       return {
         subject,
-        averageLabel: subjectAverage === null ? "--" : subjectAverage.toFixed(1),
+        averageLabel: formatAverageLabel(subjectAverage),
         averageNumeric: subjectAverage,
         count: items.length,
         teacherLabel: items[0]?.teacherLabel ?? "Docente non indicato",
         recentValues,
-        typeBreakdown: parts.join(" · ") || `${items.length} valutazioni`,
+        typeBreakdown: parts.length > 0 ? parts.join(" / ") : `${items.length} valutazioni`,
+        weightedAverageLabel: goalSummary.weightedAverageLabel,
+        weightedAverageNumeric: goalSummary.weightedAverageNumeric,
+        targetAverage: goalSummary.targetAverage,
+        targetAverageLabel: goalSummary.targetAverageLabel,
+        goalMessage: goalSummary.goalMessage,
+        goalStatus: goalSummary.goalStatus,
         tone: getGradeTone(subjectAverage),
       } satisfies GradeSubjectSummaryViewModel;
     })
@@ -518,7 +654,7 @@ export function summarizeGrades(rows: GradeRowViewModel[]): GradeSummariesViewMo
 
   return {
     averageNumeric,
-    averageLabel: averageNumeric === null ? "--" : averageNumeric.toFixed(1),
+    averageLabel: formatAverageLabel(averageNumeric),
     subjectSummaries,
     trend,
     gradeDistribution: {
@@ -532,65 +668,86 @@ export function summarizeGrades(rows: GradeRowViewModel[]): GradeSummariesViewMo
 }
 
 export function lessonToAgendaItem(lesson: Lesson): AgendaItemViewModel {
+  const title = lesson.topic || lesson.subject || "Lezione";
+  const subtitle = lesson.subject || "Lezione";
+
   return {
     id: `lesson-${lesson.id}`,
-    title: lesson.topic || lesson.subject || "Lezione",
-    subtitle: lesson.subject || "Lezione",
+    title,
+    subtitle,
     date: lesson.date,
     dateLabel: formatDate(lesson.date, {
       weekday: "long",
       day: "numeric",
       month: "long",
-    }),
-    shortDateLabel: formatDate(lesson.date, { day: "2-digit", month: "short" }),
+    }, "Data non disponibile"),
+    shortDateLabel: formatDate(lesson.date, { day: "2-digit", month: "short" }, "Data"),
     category: "lesson",
-    detail: lesson.teacher || lesson.room || "Programma lezione",
-    timeLabel: lesson.time || "Da definire",
+    detail: sanitizeAgendaText(
+      [lesson.teacher, lesson.room].filter(Boolean).join(" / "),
+      "Dettagli lezione non disponibili",
+      [title, subtitle],
+    ),
+    timeLabel:
+      lesson.time && lesson.endTime
+        ? `${lesson.time} - ${lesson.endTime}`
+        : lesson.time || (lesson.slot ? `${lesson.slot}a ora` : "Orario da confermare"),
+    slot: lesson.slot,
     tone: "neutral",
   };
 }
 
 export function homeworkToAgendaItem(homework: Homework): AgendaItemViewModel {
+  const title = sanitizeAgendaText(homework.description, "Scadenza");
+  const subtitle = homework.subject || "Compito";
+
   return {
     id: `homework-${homework.id}`,
-    title: homework.description || "Scadenza",
-    subtitle: homework.subject || "Compito",
+    title,
+    subtitle,
     date: homework.dueDate,
     dateLabel: formatDate(homework.dueDate, {
       weekday: "long",
       day: "numeric",
       month: "long",
-    }),
-    shortDateLabel: formatDate(homework.dueDate, { day: "2-digit", month: "short" }),
+    }, "Data non disponibile"),
+    shortDateLabel: formatDate(homework.dueDate, { day: "2-digit", month: "short" }, "Data"),
     category: "homework",
-    detail: homework.notes || "Da completare",
+    detail: sanitizeAgendaText(homework.notes, "Da completare", [title, subtitle]),
     timeLabel: "In giornata",
     tone: "primary",
   };
 }
 
 export function agendaEventToAgendaItem(event: AgendaEvent): AgendaItemViewModel {
+  const title = sanitizeAgendaText(event.title, "Evento");
+  const subtitle = event.subject || "Agenda";
+
   return {
     id: `agenda-${event.id}`,
-    title: event.title || "Evento",
-    subtitle: event.subject || "Agenda",
+    title,
+    subtitle,
     date: event.date,
     dateLabel: formatDate(event.date, {
       weekday: "long",
       day: "numeric",
       month: "long",
-    }),
-    shortDateLabel: formatDate(event.date, { day: "2-digit", month: "short" }),
+    }, "Data non disponibile"),
+    shortDateLabel: formatDate(event.date, { day: "2-digit", month: "short" }, "Data"),
     category: event.category,
-    detail: event.description || "Dettaglio non disponibile",
-    timeLabel: event.time || "In giornata",
+    detail: sanitizeAgendaText(event.rawDescription ?? event.description, "Dettaglio non disponibile", [
+      title,
+      subtitle,
+    ]),
+    timeLabel: event.time || (event.slot ? `${event.slot}a ora` : "In giornata"),
+    slot: event.slot,
     tone: getAgendaTone(event.category),
   };
 }
 
 export function toAbsenceRecordViewModel(absence: Absence): AbsenceRecordViewModel {
   const typeLabel =
-    absence.type === "ritardo" ? "Ritardo" : absence.type === "uscita" ? "Uscita" : "Assenza";
+    absence.type === "ritardo" ? "Ritardo" : absence.type === "uscita" ? "Uscita anticipata" : "Assenza";
 
   return {
     id: absence.id,
@@ -599,19 +756,23 @@ export function toAbsenceRecordViewModel(absence: Absence): AbsenceRecordViewMod
       weekday: "long",
       day: "numeric",
       month: "long",
-    }),
+    }, "Data non disponibile"),
     type: absence.type,
     typeLabel,
     justified: absence.justified,
     statusLabel: absence.justified ? "Giustificata" : "Da giustificare",
-    detail:
-      absence.justificationReason ||
-      (absence.hours ? `${absence.hours} ore registrate` : "Nessun dettaglio aggiuntivo"),
+    detail: absence.justificationReason || formatHoursLabel(absence.hours),
     tone: getAbsenceTone(absence),
   };
 }
 
 export function toCommunicationRowViewModel(communication: Communication): CommunicationRowViewModel {
+  const actionLabels = [
+    communication.needsAck ? "Conferma" : null,
+    communication.needsJoin ? "Adesione" : null,
+    communication.needsReply ? "Risposta" : null,
+  ].filter(Boolean);
+
   return {
     id: communication.id,
     pubId: communication.pubId,
@@ -624,13 +785,19 @@ export function toCommunicationRowViewModel(communication: Communication): Commu
       day: "2-digit",
       month: "short",
       year: "numeric",
-    }),
+    }, "Data non disponibile"),
     statusLabel: communication.read ? "Letta" : "Da leggere",
-    metadataLabel: communication.hasAttachments
-      ? "Con allegati"
-      : communication.needsAck || communication.needsReply
-        ? "Richiede attenzione"
-        : "Comunicazione",
+    metadataLabel:
+      actionLabels.length > 0
+        ? actionLabels.join(" / ")
+        : communication.hasAttachments
+          ? "Con allegati"
+          : communication.sender || "Comunicazione",
+    needsAck: communication.needsAck,
+    needsReply: communication.needsReply,
+    needsJoin: communication.needsJoin,
+    hasAttachments: communication.hasAttachments,
+    attachments: communication.attachments,
     tone: communication.read ? "neutral" : "primary",
   };
 }
@@ -647,7 +814,7 @@ export function toNoteRowViewModel(note: Note): NoteRowViewModel {
       day: "2-digit",
       month: "short",
       year: "numeric",
-    }),
+    }, "Data non disponibile"),
     badgeLabel: note.categoryLabel,
     tone: note.severity === "critical" ? "error" : note.severity === "warning" ? "warning" : "neutral",
   };
@@ -663,8 +830,8 @@ export function toMaterialContentViewModel(content: DidacticContent): MaterialCo
       day: "2-digit",
       month: "short",
       year: "numeric",
-    }),
-    objectType: content.objectType,
+    }, "Data non disponibile"),
+    objectType: formatDidacticObjectType(content.objectType),
     capabilityState: content.capabilityState,
     tone: content.capabilityState.status === "external_only" ? "primary" : "neutral",
   };
@@ -674,7 +841,7 @@ export function toSchoolbookViewModel(book: Schoolbook): SchoolbookViewModel {
   const statusLabel = book.toBuy
     ? "Da acquistare"
     : book.alreadyOwned
-      ? "Gia tuo"
+      ? "Gia in possesso"
       : book.recommended
         ? "Consigliato"
         : "In uso";
@@ -727,7 +894,10 @@ export function groupAgendaByDate(items: AgendaItemViewModel[]): AgendaSectionVi
       day: "numeric",
       month: "long",
     }),
-    items: sectionItems,
+    items: [...sectionItems].sort((left, right) => {
+      const slotDiff = (left.slot ?? Number.MAX_SAFE_INTEGER) - (right.slot ?? Number.MAX_SAFE_INTEGER);
+      return slotDiff !== 0 ? slotDiff : compareTimeLabels(left.timeLabel, right.timeLabel);
+    }),
   }));
 }
 
@@ -773,6 +943,24 @@ export async function loadGradesView(): Promise<GradeRowViewModel[]> {
   return sortByDateDescending(grades).map(toGradeRowViewModel);
 }
 
+export async function loadGradeSelectionSummary(studentId: string): Promise<GradeSelectionSummary> {
+  const [rows, periods, goals] = await Promise.all([
+    loadGradesView(),
+    withDataTimeout(classeviva.getPeriods(), "periodi").catch(() => [] as Period[]),
+    readSubjectGoals(studentId),
+  ]);
+  const sortedPeriods = [...periods].sort((left, right) => left.order - right.order);
+  const currentPeriod = getCurrentPeriod(sortedPeriods);
+
+  return {
+    rows,
+    summaries: summarizeGrades(rows, goals),
+    currentPeriodCode: currentPeriod?.code ?? null,
+    periods: sortedPeriods,
+    goals,
+  };
+}
+
 export async function loadAgendaView(startDate?: string, endDate?: string): Promise<AgendaItemViewModel[]> {
   const safeStart = startDate ?? toLocalIsoDate();
   const safeEnd = endDate ?? toLocalIsoDate(addDays(new Date(), 21));
@@ -811,6 +999,10 @@ export async function loadAgendaView(startDate?: string, endDate?: string): Prom
   const seen = new Set<string>();
   return sortByDateAscending(
     items.filter((item) => {
+      if (!isWithinDateRange(item.date, safeStart, safeEnd)) {
+        return false;
+      }
+
       const key = `${item.category}:${item.date}:${item.title}:${item.subtitle}`;
       if (seen.has(key)) {
         return false;
@@ -841,6 +1033,18 @@ export async function loadCommunicationDetailView(
   );
 }
 
+export async function acknowledgeCommunicationView(
+  communication: Pick<CommunicationRowViewModel, "pubId" | "evtCode">,
+): Promise<NoticeboardItemDetail> {
+  return withDataTimeout(classeviva.acknowledgeCommunication(communication), "conferma comunicazione");
+}
+
+export async function joinCommunicationView(
+  communication: Pick<CommunicationRowViewModel, "pubId" | "evtCode">,
+): Promise<NoticeboardItemDetail> {
+  return withDataTimeout(classeviva.joinCommunication(communication), "adesione comunicazione");
+}
+
 export async function loadNotesView(): Promise<NoteRowViewModel[]> {
   const notes = await withDataTimeout(classeviva.getNotes(), "note");
   return notes.map(toNoteRowViewModel);
@@ -854,7 +1058,9 @@ export async function loadMaterialsView(): Promise<DidacticFolder[]> {
   return withDataTimeout(classeviva.getDidactics(), "materiale didattico");
 }
 
-export async function loadMaterialAssetView(content: Pick<DidacticContent, "id" | "title" | "objectType">): Promise<DidacticAsset> {
+export async function loadMaterialAssetView(
+  content: Pick<DidacticContent, "id" | "title" | "objectType" | "sourceUrl">,
+): Promise<DidacticAsset> {
   return withDataTimeout(classeviva.getDidacticAsset(content), "materiale");
 }
 
@@ -886,15 +1092,12 @@ export async function loadDashboardView(providedProfile?: StudentProfile | null)
   const warnings: string[] = [];
   const todayIso = toLocalIsoDate();
 
-  const [profileResult, gradesResult, agendaResult, absencesResult, communicationsResult, notesResult, reportsResult] =
+  const [profileResult, gradesResult, agendaResult, communicationsResult] =
     await Promise.allSettled([
       providedProfile ? Promise.resolve(providedProfile) : loadStudentProfile(),
       loadGradesView(),
       loadAgendaView(),
-      loadAbsencesView(),
       loadCommunicationsView(),
-      loadNotesView(),
-      loadReportCardsView(),
     ]);
 
   const profile =
@@ -913,83 +1116,32 @@ export async function loadDashboardView(providedProfile?: StudentProfile | null)
     agendaResult.status === "fulfilled"
       ? agendaResult.value
       : (warnings.push(toErrorMessage(agendaResult.reason, "Non riesco a caricare l'agenda.")), []);
-  const absences =
-    absencesResult.status === "fulfilled"
-      ? absencesResult.value
-      : (warnings.push(toErrorMessage(absencesResult.reason, "Non riesco a caricare le assenze.")), []);
   const communications =
     communicationsResult.status === "fulfilled"
       ? communicationsResult.value
       : (warnings.push(toErrorMessage(communicationsResult.reason, "Non riesco a caricare le comunicazioni.")), []);
-  const notes =
-    notesResult.status === "fulfilled"
-      ? notesResult.value
-      : (warnings.push(toErrorMessage(notesResult.reason, "Non riesco a caricare le note.")), []);
-  const reports =
-    reportsResult.status === "fulfilled"
-      ? reportsResult.value
-      : (warnings.push(toErrorMessage(reportsResult.reason, "Non riesco a caricare le pagelle.")), []);
 
   if (!profile) {
     throw new Error(summarizeWarnings(warnings) ?? "Non riesco a preparare la dashboard.");
   }
 
-  const gradeSummary = summarizeGrades(grades);
+  const [seenGradeIds, goals] = await Promise.all([readSeenGradeIds(profile.id), readSubjectGoals(profile.id)]);
+  const seenGradeSet = new Set(seenGradeIds);
+  const gradeSummary = summarizeGrades(grades, goals);
   const todayLessons = agenda
     .filter((item) => item.category === "lesson" && item.date === todayIso)
     .sort((left, right) => compareTimeLabels(left.timeLabel, right.timeLabel));
-  const upcomingAssessments = agenda
-    .filter((item) => item.category === "assessment" && compareDateValues(item.date, todayIso) >= 0)
-    .slice(0, 3);
-  const upcomingItems = agenda.filter((item) => compareDateValues(item.date, todayIso) >= 0).slice(0, 4);
-  const unjustified = absences.filter((absence) => !absence.justified).length;
+  const unseenGrades = grades.filter((grade) => !seenGradeSet.has(grade.id)).slice(0, 6);
   const unreadCommunications = communications.filter((item) => item.statusLabel === "Da leggere");
-  const booksToBuy = reports.length > 0 ? "Pagelle disponibili" : "Nessun documento recente";
 
   return {
     headline: `Ciao, ${profile.name || "studente"}`,
-    subheadline: "Registro live, leggibile e organizzato per uso quotidiano.",
+    subheadline: "Solo cio che ti serve adesso: lezioni di oggi, nuovi voti e bacheca non letta.",
     averageLabel: gradeSummary.averageLabel,
     averageNumeric: gradeSummary.averageNumeric,
     warning: summarizeWarnings(warnings),
-    stats: [
-      {
-        id: "avg",
-        label: "Media",
-        value: gradeSummary.averageLabel,
-        detail: grades.length > 0 ? `${grades.length} valutazioni sincronizzate` : "Nessun voto disponibile",
-        tone: gradeSummary.averageNumeric !== null && gradeSummary.averageNumeric >= 6 ? "success" : "warning",
-      },
-      {
-        id: "agenda",
-        label: "Scadenze",
-        value: String(upcomingItems.filter((item) => item.category !== "lesson").length),
-        detail: upcomingItems.length > 0 ? "Compiti, verifiche o eventi in arrivo" : "Nessuna urgenza oggi",
-        tone: upcomingItems.some((item) => item.category === "assessment") ? "warning" : "primary",
-      },
-      {
-        id: "absences",
-        label: "Assenze",
-        value: String(absences.filter((item) => item.type === "assenza").length),
-        detail: unjustified > 0 ? `${unjustified} da giustificare` : "Situazione allineata",
-        tone: unjustified > 0 ? "error" : "neutral",
-      },
-      {
-        id: "messages",
-        label: "Novita",
-        value: String(unreadCommunications.length),
-        detail: booksToBuy,
-        tone: unreadCommunications.length > 0 ? "primary" : "neutral",
-      },
-    ],
     todayLessons,
-    recentGrades: grades.slice(0, 4),
-    upcomingAssessments,
-    upcomingItems,
-    recentAbsences: absences.slice(0, 3),
+    unseenGrades,
     unreadCommunications: unreadCommunications.slice(0, 3),
-    highlightedNotes: notes.slice(0, 2),
-    gradeTrend: gradeSummary.trend,
-    schoolReports: reports.slice(0, 2),
   };
 }

@@ -63,6 +63,26 @@ function parseLessonTimeRange(timeLabel: string): { start: number; end: number }
   return { start, end };
 }
 
+function parseLessonSlot(lesson: AgendaItemViewModel): { start: number; end: number } | null {
+  if (typeof lesson.slot === "number" && Number.isFinite(lesson.slot) && lesson.slot > 0) {
+    const start = DEFAULT_START_HOUR + lesson.slot - 1;
+    return { start, end: start + 1 };
+  }
+
+  const slotMatch = lesson.timeLabel.match(/(\d{1,2})a ora/i);
+  if (!slotMatch) {
+    return null;
+  }
+
+  const slot = Number(slotMatch[1]);
+  if (!Number.isFinite(slot) || slot <= 0) {
+    return null;
+  }
+
+  const start = DEFAULT_START_HOUR + slot - 1;
+  return { start, end: start + 1 };
+}
+
 function deriveVisibleRange(parsedLessons: ParsedLesson[], startHour?: number, endHour?: number) {
   if (typeof startHour === "number" && typeof endHour === "number" && endHour > startHour) {
     return {
@@ -102,7 +122,7 @@ export function DayScheduleGrid({ lessons, startHour, endHour }: DayScheduleGrid
 
   const parsedLessons = lessons
     .map((lesson) => {
-      const parsedRange = parseLessonTimeRange(lesson.timeLabel);
+      const parsedRange = parseLessonTimeRange(lesson.timeLabel) ?? parseLessonSlot(lesson);
       if (!parsedRange) {
         return null;
       }
@@ -114,7 +134,9 @@ export function DayScheduleGrid({ lessons, startHour, endHour }: DayScheduleGrid
       } satisfies ParsedLesson;
     })
     .filter((lesson): lesson is ParsedLesson => lesson !== null);
-  const untimedLessons = lessons.filter((lesson) => parseLessonTimeRange(lesson.timeLabel) === null);
+  const untimedLessons = lessons.filter(
+    (lesson) => parseLessonTimeRange(lesson.timeLabel) === null && parseLessonSlot(lesson) === null,
+  );
   const visibleRange = deriveVisibleRange(parsedLessons, startHour, endHour);
   const totalHours = Math.max(visibleRange.end - visibleRange.start, 1);
   const gridHeight = totalHours * SLOT_HEIGHT;
@@ -159,7 +181,7 @@ export function DayScheduleGrid({ lessons, startHour, endHour }: DayScheduleGrid
                   right: 0,
                   height: 1,
                   backgroundColor: colors.outlineVariant ?? colors.border,
-                  opacity: 0.45,
+                  opacity: 0.38,
                 }}
               />
             ))}
@@ -187,7 +209,7 @@ export function DayScheduleGrid({ lessons, startHour, endHour }: DayScheduleGrid
                     right: 2,
                     height,
                     backgroundColor: palette.background,
-                    borderRadius: 16,
+                    borderRadius: 18,
                     borderWidth: 1,
                     borderColor: palette.border,
                     borderLeftWidth: 4,
@@ -228,9 +250,9 @@ export function DayScheduleGrid({ lessons, startHour, endHour }: DayScheduleGrid
             {untimedLessons.map((lesson) => (
               <View
                 key={lesson.id}
-                className="gap-1 rounded-2xl p-3"
+                className="gap-1 rounded-[20px] p-3"
                 style={{
-                  backgroundColor: colors.surfaceContainerHighest ?? colors.surfaceContainerHigh ?? colors.surface,
+                  backgroundColor: colors.surface ?? colors.background,
                   borderWidth: 1,
                   borderColor: colors.outlineVariant ?? colors.border,
                 }}

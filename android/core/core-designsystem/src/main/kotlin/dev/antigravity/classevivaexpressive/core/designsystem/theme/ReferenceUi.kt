@@ -10,12 +10,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,10 +35,18 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.max
 import kotlin.math.min
+
+enum class ExpressiveTone {
+  Primary,
+  Success,
+  Warning,
+  Danger,
+  Info,
+  Neutral,
+}
 
 @Composable
 fun ExpressiveTopHeader(
@@ -66,18 +72,13 @@ fun ExpressiveTopHeader(
       ) {
         if (onBack != null) {
           IconButton(onClick = onBack) {
-            Icon(
-              imageVector = Icons.Rounded.ArrowBack,
-              contentDescription = "Back",
-              tint = MaterialTheme.colorScheme.onBackground,
-            )
+            Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
           }
         }
         Text(
           text = title,
           style = MaterialTheme.typography.displaySmall,
           fontWeight = FontWeight.SemiBold,
-          color = MaterialTheme.colorScheme.onBackground,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
@@ -88,9 +89,9 @@ fun ExpressiveTopHeader(
         content = actions,
       )
     }
-    if (subtitle != null) {
+    subtitle?.let {
       Text(
-        text = subtitle,
+        text = it,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -170,42 +171,6 @@ fun ExpressiveEditorialCard(
 }
 
 @Composable
-fun ExpressiveScoreRing(
-  valueText: String,
-  progress: Float,
-  color: Color,
-  modifier: Modifier = Modifier,
-  size: Dp = 76.dp,
-  trackColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
-) {
-  Box(
-    modifier = modifier.size(size),
-    contentAlignment = Alignment.Center,
-  ) {
-    Canvas(modifier = Modifier.fillMaxSize()) {
-      val strokeWidth = this.size.minDimension * 0.12f
-      drawCircle(
-        color = trackColor,
-        style = Stroke(width = strokeWidth),
-      )
-      drawArc(
-        color = color,
-        startAngle = -90f,
-        sweepAngle = 360f * progress.coerceIn(0f, 1f),
-        useCenter = false,
-        style = Stroke(width = strokeWidth, pathEffect = PathEffect.cornerPathEffect(strokeWidth / 2f)),
-      )
-    }
-    Text(
-      text = valueText,
-      style = MaterialTheme.typography.titleMedium,
-      fontWeight = FontWeight.SemiBold,
-      color = MaterialTheme.colorScheme.onSurface,
-    )
-  }
-}
-
-@Composable
 fun ExpressiveMiniChart(
   points: List<Float>,
   color: Color,
@@ -227,26 +192,16 @@ fun ExpressiveMiniChart(
     val safeMax = max(points.maxOrNull() ?: 1f, 1f)
     val safeMin = min(points.minOrNull() ?: 0f, threshold ?: 0f)
     val range = max(safeMax - safeMin, 1f)
-    val xStep = if (points.size == 1) 0f else size.width / (points.lastIndex.coerceAtLeast(1))
+    val xStep = if (points.size == 1) 0f else size.width / points.lastIndex.coerceAtLeast(1)
 
     for (index in 0..4) {
       val y = size.height * index / 4f
-      drawLine(
-        color = gridColor,
-        start = Offset(0f, y),
-        end = Offset(size.width, y),
-        strokeWidth = 1.dp.toPx(),
-      )
+      drawLine(gridColor, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
     }
 
     threshold?.let { level ->
       val y = size.height - ((level - safeMin) / range) * size.height
-      drawLine(
-        color = thresholdColor,
-        start = Offset(0f, y),
-        end = Offset(size.width, y),
-        strokeWidth = 1.5.dp.toPx(),
-      )
+      drawLine(thresholdColor, Offset(0f, y), Offset(size.width, y), 1.5.dp.toPx())
     }
 
     val linePath = Path()
@@ -270,10 +225,7 @@ fun ExpressiveMiniChart(
     drawPath(
       path = fillPath,
       brush = Brush.verticalGradient(
-        colors = listOf(
-          color.copy(alpha = fillAlpha),
-          color.copy(alpha = 0.02f),
-        ),
+        colors = listOf(color.copy(alpha = fillAlpha), color.copy(alpha = 0.02f)),
       ),
     )
     drawPath(
@@ -285,222 +237,136 @@ fun ExpressiveMiniChart(
       val x = index * xStep
       val normalized = (value - safeMin) / range
       val y = size.height - normalized * size.height
-      drawCircle(
-        color = color,
-        radius = 4.dp.toPx(),
-        center = Offset(x, y),
-      )
-      drawCircle(
-        color = centerColor,
-        radius = 2.dp.toPx(),
-        center = Offset(x, y),
-      )
+      drawCircle(color = color, radius = 4.dp.toPx(), center = Offset(x, y))
+      drawCircle(color = centerColor, radius = 2.dp.toPx(), center = Offset(x, y))
     }
   }
 }
 
 @Composable
-fun ExpressiveStatusDot(
-  color: Color,
+fun StatusBadge(
+  label: String,
   modifier: Modifier = Modifier,
+  tone: ExpressiveTone = ExpressiveTone.Neutral,
 ) {
-  Box(
-    modifier = modifier
-      .size(14.dp)
-      .clip(CircleShape)
-      .background(color),
-  )
+  val colors = toneColors(tone)
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(999.dp),
+    color = colors.container,
+    contentColor = colors.content,
+  ) {
+    Text(
+      text = label,
+      modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+      style = MaterialTheme.typography.labelSmall,
+      fontWeight = FontWeight.Bold,
+    )
+  }
 }
 
 @Composable
-fun ExpressiveColorTile(
+fun MetricTile(
+  label: String,
+  value: String,
+  detail: String,
+  modifier: Modifier = Modifier,
+  tone: ExpressiveTone = ExpressiveTone.Neutral,
+) {
+  val colors = toneColors(tone)
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(20.dp),
+    color = MaterialTheme.colorScheme.surfaceContainer,
+    border = BorderStroke(1.dp, colors.container.copy(alpha = 0.45f)),
+  ) {
+    Column(
+      modifier = Modifier.padding(14.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+      Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = colors.content)
+      Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+  }
+}
+
+@Composable
+fun RegisterListRow(
   title: String,
   subtitle: String,
   modifier: Modifier = Modifier,
-  detail: String? = null,
-  badge: String? = null,
-  color: Color,
+  eyebrow: String? = null,
+  meta: String? = null,
+  tone: ExpressiveTone = ExpressiveTone.Neutral,
+  badge: (@Composable () -> Unit)? = null,
+  leading: (@Composable () -> Unit)? = null,
   onClick: (() -> Unit)? = null,
 ) {
+  val colors = toneColors(tone)
   Surface(
-    modifier = if (onClick != null) {
-      modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(18.dp))
-        .clickable(onClick = onClick)
-    } else {
-      modifier.fillMaxWidth()
-    },
-    shape = RoundedCornerShape(18.dp),
-    color = color,
+    modifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier,
+    shape = RoundedCornerShape(20.dp),
+    color = MaterialTheme.colorScheme.surfaceContainer,
+    border = BorderStroke(1.dp, colors.container.copy(alpha = 0.32f)),
   ) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
         .padding(16.dp),
-      horizontalArrangement = Arrangement.spacedBy(14.dp),
-      verticalAlignment = Alignment.Top,
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+      verticalAlignment = Alignment.CenterVertically,
     ) {
-      if (badge != null) {
-        Box(
-          modifier = Modifier
-            .size(64.dp)
-            .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.96f)),
-          contentAlignment = Alignment.Center,
-        ) {
-          Text(
-            text = badge,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color = Color.Black,
-          )
-        }
-      }
+      leading?.invoke()
       Column(
         modifier = Modifier.weight(1f),
         verticalArrangement = Arrangement.spacedBy(4.dp),
       ) {
-        Text(
-          text = title,
-          style = MaterialTheme.typography.titleLarge,
-          color = Color.White,
-          fontWeight = FontWeight.Medium,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-          text = subtitle,
-          style = MaterialTheme.typography.bodyMedium,
-          color = Color.White.copy(alpha = 0.96f),
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-        )
-        if (detail != null) {
-          Text(
-            text = detail,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(alpha = 0.92f),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-          )
+        eyebrow?.let {
+          Text(it, style = MaterialTheme.typography.labelSmall, color = colors.content, fontWeight = FontWeight.Bold)
+        }
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        meta?.takeIf { it.isNotBlank() }?.let {
+          Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
       }
+      badge?.invoke()
     }
   }
 }
 
 @Composable
-fun ExpressiveSimpleListRow(
-  title: String,
-  subtitle: String,
+fun GradePill(
+  value: String,
+  numericValue: Double? = null,
   modifier: Modifier = Modifier,
-  meta: String? = null,
-  trailing: (@Composable () -> Unit)? = null,
-  onClick: (() -> Unit)? = null,
 ) {
-  Row(
-    modifier = if (onClick != null) {
-      modifier
-        .fillMaxWidth()
-        .clip(RoundedCornerShape(16.dp))
-        .clickable(onClick = onClick)
-        .padding(horizontal = 2.dp, vertical = 6.dp)
-    } else {
-      modifier
-        .fillMaxWidth()
-        .padding(horizontal = 2.dp, vertical = 6.dp)
-    },
-    horizontalArrangement = Arrangement.spacedBy(14.dp),
-    verticalAlignment = Alignment.Top,
-  ) {
-    Column(
-      modifier = Modifier.weight(1f),
-      verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-      Text(
-        text = title,
-        style = MaterialTheme.typography.titleLarge,
-        color = MaterialTheme.colorScheme.onBackground,
-        fontWeight = FontWeight.Medium,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-      )
-      Text(
-        text = subtitle,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 3,
-        overflow = TextOverflow.Ellipsis,
-      )
-      if (meta != null) {
-      Text(
-        text = meta,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.84f),
-      )
-      }
-    }
-    trailing?.invoke()
+  StatusBadge(label = value, modifier = modifier, tone = gradeTone(numericValue))
+}
+
+fun gradeTone(score: Double?): ExpressiveTone {
+  return when {
+    score == null -> ExpressiveTone.Neutral
+    score >= 6.0 -> ExpressiveTone.Success
+    score >= 5.0 -> ExpressiveTone.Warning
+    else -> ExpressiveTone.Danger
   }
 }
+
+private data class ToneColors(
+  val container: Color,
+  val content: Color,
+)
 
 @Composable
-fun ExpressiveEnvelopeBadge(
-  color: Color,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    modifier = modifier.size(width = 40.dp, height = 32.dp),
-    shape = RoundedCornerShape(10.dp),
-    color = color,
-  ) {
-    Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 10.dp)) {
-      val path = Path().apply {
-        moveTo(0f, 0f)
-        lineTo(size.width, 0f)
-        lineTo(size.width, size.height)
-        lineTo(0f, size.height)
-        close()
-        moveTo(0f, 0f)
-        lineTo(size.width / 2f, size.height / 2f)
-        lineTo(size.width, 0f)
-      }
-      drawPath(path = path, color = Color.Black.copy(alpha = 0.74f), style = Stroke(width = 2.dp.toPx()))
-    }
-  }
-}
-
-fun scoreColor(score: Double?): Color {
-  return when {
-    score == null -> Color(0xFF8A8D98)
-    score >= 8.0 -> Color(0xFF4CAF50)
-    score >= 6.0 -> Color(0xFFFFC83D)
-    else -> Color(0xFFFF4338)
-  }
-}
-
-fun subjectPalette(subject: String): Color {
-  val palette = listOf(
-    Color(0xFF9C27B0),
-    Color(0xFFFF9800),
-    Color(0xFF4CAF50),
-    Color(0xFF2196F3),
-    Color(0xFF3F51B5),
-    Color(0xFF69F0AE),
-    Color(0xFFFF4338),
-    Color(0xFF26C6DA),
-  )
-  val index = subject.uppercase().fold(0) { acc, char -> acc + char.code }.mod(palette.size)
-  return palette[index]
-}
-
-fun eventColor(label: String): Color {
-  val normalized = label.uppercase()
-  return when {
-    normalized.contains("VERIF") || normalized.contains("ASSESS") -> Color(0xFFFF4338)
-    normalized.contains("COMPIT") || normalized.contains("HOMEWORK") -> Color(0xFF4CAF50)
-    normalized.contains("CUSTOM") || normalized.contains("EVENT") -> Color(0xFFFFC83D)
-    else -> Color(0xFF4CAF50)
+private fun toneColors(tone: ExpressiveTone): ToneColors {
+  return when (tone) {
+    ExpressiveTone.Primary -> ToneColors(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary)
+    ExpressiveTone.Success -> ToneColors(Color(0x1F2E7D32), Color(0xFF2E7D32))
+    ExpressiveTone.Warning -> ToneColors(Color(0x1FFF8F00), Color(0xFFB26A00))
+    ExpressiveTone.Danger -> ToneColors(Color(0x1FC62828), Color(0xFFC62828))
+    ExpressiveTone.Info -> ToneColors(Color(0x1F1565C0), Color(0xFF1565C0))
+    ExpressiveTone.Neutral -> ToneColors(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }

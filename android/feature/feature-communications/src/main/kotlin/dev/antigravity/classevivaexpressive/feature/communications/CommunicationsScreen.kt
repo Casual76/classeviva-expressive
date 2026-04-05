@@ -6,9 +6,8 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,20 +16,21 @@ import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -38,17 +38,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveEditorialCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveEnvelopeBadge
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveSimpleListRow
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardAction
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardActionType
 import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -56,8 +62,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-private const val TAB_BOARD = "Notice board"
-private const val TAB_NOTES = "Notes"
+private const val TAB_BOARD = "Bacheca"
+private const val TAB_NOTES = "Note"
+private const val FILTER_ALL = "Tutte"
+private const val FILTER_UNREAD = "Non lette"
+private const val FILTER_ACTION = "Da gestire"
+private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
 
 data class CommunicationsUiState(
   val communications: List<Communication> = emptyList(),
@@ -66,6 +76,7 @@ data class CommunicationsUiState(
   val selectedNote: NoteDetail? = null,
   val lastMessage: String? = null,
   val isSubmittingAction: Boolean = false,
+  val isRefreshing: Boolean = false,
 )
 
 @HiltViewModel
@@ -76,6 +87,7 @@ class CommunicationsViewModel @Inject constructor(
   private val selectedNote = MutableStateFlow<NoteDetail?>(null)
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isSubmittingAction = MutableStateFlow(false)
+  private val isRefreshing = MutableStateFlow(false)
 
   private val contentState = combine(
     communicationsRepository.observeCommunications(),
@@ -90,7 +102,8 @@ class CommunicationsViewModel @Inject constructor(
     selectedNote,
     lastMessage,
     isSubmittingAction,
-  ) { content, note, message, submitting ->
+    isRefreshing,
+  ) { content, note, message, submitting, refreshing ->
     val (communications, notes, communication) = content
     CommunicationsUiState(
       communications = communications,
@@ -99,15 +112,16 @@ class CommunicationsViewModel @Inject constructor(
       selectedNote = note,
       lastMessage = message,
       isSubmittingAction = submitting,
+      isRefreshing = refreshing,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CommunicationsUiState())
 
   init {
-    viewModelScope.launch { communicationsRepository.refreshCommunications() }
+    requestRefresh(force = false, showIndicator = false)
   }
 
   fun refresh() {
-    viewModelScope.launch { communicationsRepository.refreshCommunications(force = true) }
+    requestRefresh(force = true, showIndicator = true)
   }
 
   fun openCommunication(pubId: String, evtCode: String) {
@@ -207,18 +221,37 @@ class CommunicationsViewModel @Inject constructor(
       isSubmittingAction.value = false
     }
   }
+
+  private fun requestRefresh(force: Boolean, showIndicator: Boolean) {
+    viewModelScope.launch {
+      if (showIndicator) {
+        isRefreshing.value = true
+      }
+      communicationsRepository.refreshCommunications(force = force)
+        .onFailure { lastMessage.value = it.message ?: "Impossibile aggiornare la bacheca." }
+      isRefreshing.value = false
+    }
+  }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommunicationsRoute(
+  initialTab: String = "board",
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
   viewModel: CommunicationsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  val context = LocalContext.current
-  var selectedTab by rememberSaveable { mutableStateOf(TAB_BOARD) }
+  val context = androidx.compose.ui.platform.LocalContext.current
+  var selectedTab by rememberSaveable { mutableStateOf(tabFromRoute(initialTab)) }
+  var selectedFilter by rememberSaveable { mutableStateOf(FILTER_ALL) }
   var pendingUploadDetail by remember { mutableStateOf<CommunicationDetail?>(null) }
+
+  LaunchedEffect(initialTab) {
+    selectedTab = tabFromRoute(initialTab)
+  }
+
   val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
     val detail = pendingUploadDetail ?: return@rememberLauncherForActivityResult
     pendingUploadDetail = null
@@ -230,23 +263,37 @@ fun CommunicationsRoute(
         mimeType = picked.mimeType,
         bytes = picked.bytes,
       )
-    } else {
-      viewModel.clearMessage()
     }
   }
 
-  LazyColumn(
-    modifier = modifier,
-    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-    verticalArrangement = Arrangement.spacedBy(18.dp),
+  val filteredCommunications = remember(state.communications, selectedFilter) {
+    state.communications.filter { communication ->
+      when (selectedFilter) {
+        FILTER_UNREAD -> !communication.read
+        FILTER_ACTION -> communication.actions.isNotEmpty()
+        else -> true
+      }
+    }
+  }
+
+  PullToRefreshBox(
+    modifier = modifier.fillMaxSize(),
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
   ) {
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+      verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
     item {
       ExpressiveTopHeader(
-        title = if (selectedTab == TAB_BOARD) "Notice board" else "Notes",
+        title = "Bacheca",
+        subtitle = "Comunicazioni del portale e note scolastiche in una vista unica, con azioni e allegati disponibili.",
         onBack = onBack,
         actions = {
           IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
+            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
           }
         },
       )
@@ -259,17 +306,34 @@ fun CommunicationsRoute(
       )
     }
     if (selectedTab == TAB_BOARD) {
-      if (state.communications.isEmpty()) {
+      item {
+        ExpressivePillTabs(
+          options = listOf(FILTER_ALL, FILTER_UNREAD, FILTER_ACTION),
+          selected = selectedFilter,
+          onSelect = { selectedFilter = it },
+        )
+      }
+      if (filteredCommunications.isEmpty()) {
         item {
           EmptyState(
-            title = "No communications",
-            detail = "Quando la scuola pubblica nuove circolari le troverai qui con stato di lettura, allegati e azioni portale.",
+            title = "Nessuna comunicazione visibile",
+            detail = "Nuove circolari e messaggi compariranno qui con stato di lettura, allegati e azioni richieste.",
           )
         }
       } else {
-        items(state.communications, key = { it.id }) { communication ->
-          CommunicationCard(
-            communication = communication,
+        items(filteredCommunications, key = { it.id }) { communication ->
+          RegisterListRow(
+            title = communication.title,
+            subtitle = communication.sender.ifBlank { "Bacheca scuola" },
+            eyebrow = communication.date.toReadableDate(),
+            meta = communication.contentPreview.takeIf { it.isNotBlank() },
+            tone = communicationTone(communication),
+            badge = {
+              StatusBadge(
+                label = communicationBadgeLabel(communication),
+                tone = communicationTone(communication),
+              )
+            },
             onClick = { viewModel.openCommunication(communication.pubId, communication.evtCode) },
           )
         }
@@ -278,29 +342,32 @@ fun CommunicationsRoute(
       if (state.notes.isEmpty()) {
         item {
           EmptyState(
-            title = "No notes",
-            detail = "Le note disciplinari e i richiami docenti verranno mostrati qui in una vista molto più asciutta.",
+            title = "Nessuna nota disponibile",
+            detail = "Note disciplinari, annotazioni e richiami compariranno qui in forma sintetica e chiara.",
           )
         }
       } else {
         items(state.notes, key = { it.id }) { note ->
-          ExpressiveSimpleListRow(
-            title = note.author.uppercase(),
-            subtitle = "${note.categoryLabel} - ${note.date}",
+          RegisterListRow(
+            title = note.title.ifBlank { note.author.uppercase(italianLocale) },
+            subtitle = note.categoryLabel,
+            eyebrow = note.date.toReadableDate(),
             meta = note.contentPreview.takeIf { it.isNotBlank() },
+            tone = noteTone(note),
+            badge = {
+              StatusBadge(
+                label = if (note.read) "LETTA" else "NOTA",
+                tone = noteTone(note),
+              )
+            },
             onClick = { viewModel.openNote(note.id, note.categoryCode) },
           )
         }
       }
     }
     if (!state.lastMessage.isNullOrBlank()) {
-      item {
-        Text(
-          text = state.lastMessage.orEmpty(),
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.primary,
-        )
-      }
+      item { Text(text = state.lastMessage.orEmpty()) }
+    }
     }
   }
 
@@ -313,26 +380,39 @@ fun CommunicationsRoute(
       title = { Text(detail.communication.title) },
       text = {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-          item { Text(detail.content) }
-          if (detail.communication.needsReply || detail.replyText != null) {
+          item { Text(text = detail.content) }
+          if (detail.actions.any { it.type == NoticeboardActionType.REPLY } || detail.replyText != null) {
+            item { ExpressiveAccentLabel("Risposta") }
             item {
               OutlinedTextField(
                 value = replyDraft,
                 onValueChange = { replyDraft = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text(if (detail.replyText != null) "Risposta inviata" else "Risposta") },
+                label = { Text(if (detail.replyText != null) "Risposta inviata" else "Scrivi una risposta") },
                 minLines = 3,
               )
             }
           }
-          if (detail.communication.attachments.isNotEmpty()) {
-            items(detail.communication.attachments, key = { it.id }) { attachment ->
-              ExpressiveSimpleListRow(
+          if (detail.communication.noticeboardAttachments.isNotEmpty()) {
+            item { ExpressiveAccentLabel("Allegati") }
+            items(detail.communication.noticeboardAttachments, key = { it.id }) { attachment ->
+              RegisterListRow(
                 title = attachment.name,
-                subtitle = attachment.mimeType ?: "Attachment",
-                meta = if (attachment.portalOnly) "Portale integrato" else "Download nativo",
-                onClick = { viewModel.downloadAttachment(attachment) },
-                trailing = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
+                subtitle = attachment.mimeType ?: "Allegato",
+                meta = if (attachment.portalOnly) "Apertura tramite portale" else "Download diretto",
+                tone = ExpressiveTone.Neutral,
+                badge = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
+                onClick = {
+                  viewModel.downloadAttachment(
+                    RemoteAttachment(
+                      id = attachment.id,
+                      name = attachment.name,
+                      url = attachment.url,
+                      mimeType = attachment.mimeType,
+                      portalOnly = attachment.portalOnly,
+                    ),
+                  )
+                },
               )
             }
           }
@@ -349,7 +429,7 @@ fun CommunicationsRoute(
       },
       dismissButton = {
         CommunicationActions(
-          detail = detail,
+          actions = detail.actions,
           replyDraft = replyDraft,
           onAcknowledge = { viewModel.acknowledge(detail) },
           onReply = { viewModel.reply(detail, replyDraft) },
@@ -366,7 +446,7 @@ fun CommunicationsRoute(
   state.selectedNote?.let { detail ->
     AlertDialog(
       onDismissRequest = viewModel::dismissDetail,
-      title = { Text(detail.note.title) },
+      title = { Text(detail.note.title.ifBlank { detail.note.categoryLabel }) },
       text = { Text(detail.content) },
       confirmButton = {
         TextButton(onClick = viewModel::dismissDetail) {
@@ -378,53 +458,8 @@ fun CommunicationsRoute(
 }
 
 @Composable
-private fun CommunicationCard(
-  communication: Communication,
-  onClick: () -> Unit,
-) {
-  ExpressiveEditorialCard(
-    modifier = Modifier.fillMaxWidth(),
-    color = MaterialTheme.colorScheme.surfaceContainer,
-  ) {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-      Column(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        Text(
-          text = communication.title,
-          style = MaterialTheme.typography.headlineSmall,
-          color = MaterialTheme.colorScheme.onSurface,
-          maxLines = 4,
-        )
-        Text(
-          text = communication.date,
-          style = MaterialTheme.typography.titleMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (communication.contentPreview.isNotBlank()) {
-          Text(
-            text = communication.contentPreview,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
-            maxLines = 4,
-          )
-        }
-      }
-      ExpressiveEnvelopeBadge(color = communicationEnvelopeColor(communication))
-    }
-    TextButton(onClick = onClick) {
-      Text("Apri")
-    }
-  }
-}
-
-@Composable
 private fun CommunicationActions(
-  detail: CommunicationDetail,
+  actions: List<NoticeboardAction>,
   replyDraft: String,
   onAcknowledge: () -> Unit,
   onReply: () -> Unit,
@@ -432,42 +467,56 @@ private fun CommunicationActions(
   onUpload: () -> Unit,
 ) {
   LazyColumn {
-    if (detail.communication.needsAck) {
-      item {
-        TextButton(onClick = onAcknowledge) {
-          Text("Conferma")
+    actions.distinctBy { it.type }.forEach { action ->
+      when (action.type) {
+        NoticeboardActionType.ACKNOWLEDGE -> item {
+          TextButton(onClick = onAcknowledge) {
+            Text(action.label)
+          }
         }
-      }
-    }
-    if (detail.communication.needsReply) {
-      item {
-        TextButton(onClick = onReply, enabled = replyDraft.isNotBlank()) {
-          Text("Invia risposta")
+        NoticeboardActionType.REPLY -> item {
+          TextButton(onClick = onReply, enabled = replyDraft.isNotBlank()) {
+            Text("Invia risposta")
+          }
         }
-      }
-    }
-    if (detail.communication.needsJoin) {
-      item {
-        TextButton(onClick = onJoin) {
-          Text("Aderisci")
+        NoticeboardActionType.JOIN -> item {
+          TextButton(onClick = onJoin) {
+            Text(action.label)
+          }
         }
-      }
-    }
-    if (detail.communication.needsFile) {
-      item {
-        TextButton(onClick = onUpload) {
-          Text("Carica file")
+        NoticeboardActionType.UPLOAD -> item {
+          TextButton(onClick = onUpload) {
+            Text(action.label)
+          }
         }
+        NoticeboardActionType.DOWNLOAD -> Unit
       }
     }
   }
 }
 
-private fun communicationEnvelopeColor(communication: Communication): androidx.compose.ui.graphics.Color {
-  return if (communication.read && !communication.needsAck && !communication.needsReply) {
-    androidx.compose.ui.graphics.Color(0xFF59C95A)
-  } else {
-    androidx.compose.ui.graphics.Color(0xFFFF4338)
+private fun communicationTone(communication: Communication): ExpressiveTone {
+  return when {
+    communication.actions.isNotEmpty() -> ExpressiveTone.Warning
+    !communication.read -> ExpressiveTone.Danger
+    else -> ExpressiveTone.Neutral
+  }
+}
+
+private fun communicationBadgeLabel(communication: Communication): String {
+  return when {
+    communication.actions.isNotEmpty() -> "AZIONE"
+    !communication.read -> "NUOVA"
+    else -> "LETTA"
+  }
+}
+
+private fun noteTone(note: Note): ExpressiveTone {
+  val normalized = note.severity.uppercase(italianLocale)
+  return when {
+    normalized.contains("HIGH") || normalized.contains("GRAVE") || normalized.contains("CRIT") -> ExpressiveTone.Danger
+    normalized.contains("MED") || normalized.contains("WARN") -> ExpressiveTone.Warning
+    else -> ExpressiveTone.Neutral
   }
 }
 
@@ -488,3 +537,10 @@ private fun readPickedDocument(context: Context, uri: Uri): PickedDocument? {
   val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
   return PickedDocument(fileName = fileName, mimeType = mimeType, bytes = bytes)
 }
+
+private fun String.toReadableDate(): String {
+  val parsed = runCatching { LocalDate.parse(this) }.getOrNull() ?: return this
+  return parsed.format(DateTimeFormatter.ofPattern("d MMM yyyy", italianLocale))
+}
+
+private fun tabFromRoute(value: String): String = if (value.equals("notes", ignoreCase = true)) TAB_NOTES else TAB_BOARD

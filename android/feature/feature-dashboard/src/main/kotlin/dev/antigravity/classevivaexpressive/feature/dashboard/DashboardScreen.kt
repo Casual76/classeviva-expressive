@@ -1,33 +1,23 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -35,314 +25,246 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveEditorialCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveMiniChart
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveStatusDot
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.scoreColor
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.subjectPalette
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+data class DashboardUiState(
+  val snapshot: DashboardSnapshot = DashboardSnapshot(),
+  val isRefreshing: Boolean = false,
+)
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
   private val dashboardRepository: DashboardRepository,
 ) : ViewModel() {
-  val state = dashboardRepository.observeDashboard()
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardSnapshot())
+  private val isRefreshing = MutableStateFlow(false)
+
+  val state = combine(
+    dashboardRepository.observeDashboard(),
+    isRefreshing,
+  ) { snapshot, refreshing ->
+    DashboardUiState(snapshot = snapshot, isRefreshing = refreshing)
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardUiState())
 
   init {
-    viewModelScope.launch { dashboardRepository.refreshDashboard() }
+    requestRefresh(force = false, showIndicator = false)
+  }
+
+  fun refresh() {
+    requestRefresh(force = true, showIndicator = true)
+  }
+
+  private fun requestRefresh(force: Boolean, showIndicator: Boolean) {
+    viewModelScope.launch {
+      if (showIndicator) {
+        isRefreshing.value = true
+      }
+      dashboardRepository.refreshDashboard(force = force)
+      isRefreshing.value = false
+    }
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardRoute(
   onNavigateGrades: () -> Unit,
   onNavigateAgenda: () -> Unit,
   onNavigateLessons: () -> Unit,
-  onNavigateMore: () -> Unit,
+  onNavigateCommunications: () -> Unit,
+  onOpenGrade: (String) -> Unit,
   modifier: Modifier = Modifier,
   viewModel: DashboardViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  val chartPoints = remember(state) {
-    state.recentGrades.mapNotNull { it.numericValue?.toFloat() }.take(6).takeIf { it.size >= 4 } ?: run {
-      listOf(
-        state.todayLessons.size.toFloat(),
-        state.upcomingItems.size.toFloat(),
-        state.unreadCommunications.size.toFloat(),
-        state.highlightedNotes.size.toFloat(),
-        state.recentAbsences.size.toFloat(),
-        state.schoolDocuments.size.toFloat(),
-      )
-    }.ifEmpty { listOf(3f, 1f, 4f, 4f, 3f, 0f) }
-  }
+  val snapshot = state.snapshot
+  val recentGrades = remember(snapshot.recentGrades) { snapshot.recentGrades.take(4) }
+  val upcomingItems = remember(snapshot.upcomingItems) { snapshot.upcomingItems.take(4) }
+  val unreadCommunications = remember(snapshot.unreadCommunications) { snapshot.unreadCommunications.take(3) }
 
-  LazyColumn(
-    modifier = modifier,
-    contentPadding = PaddingValues(bottom = 20.dp),
-    verticalArrangement = Arrangement.spacedBy(16.dp),
+  PullToRefreshBox(
+    modifier = modifier.fillMaxSize(),
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
   ) {
-    item {
-      DashboardHero(
-        headline = state.headline.ifBlank { "Good evening, ${state.profile.name.ifBlank { "Alessio" }}." },
-        dateLabel = state.subheadline.ifBlank { state.profile.schoolYear.ifBlank { "Today" } },
-        points = chartPoints,
-      )
-    }
-    item { SectionTitle("Last grades") }
-    if (state.recentGrades.isEmpty()) {
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+      verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
       item {
-        EmptyState(
-          title = "No recent grades",
-          detail = "Recent grades will appear here after sync.",
-          modifier = Modifier.padding(horizontal = 20.dp),
+        ExpressiveTopHeader(
+          title = snapshot.headline.ifBlank { "Oggi" },
+          subtitle = snapshot.subheadline.ifBlank { "Lezioni, voti e bacheca restano in primo piano." },
+          actions = {
+            IconButton(onClick = viewModel::refresh) {
+              Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
+            }
+          },
         )
       }
-    } else {
-      items(state.recentGrades.take(3), key = { it.id }) { grade ->
-        Surface(
-          modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp),
-          shape = MaterialTheme.shapes.extraLarge,
-          color = MaterialTheme.colorScheme.surfaceContainer,
+      item {
+        ExpressiveHeroCard(
+          title = snapshot.profile.name.ifBlank { "Classeviva Expressive" },
+          subtitle = snapshot.averageNumeric?.let { "Media attuale ${snapshot.averageLabel}" }
+            ?: "Media non ancora disponibile",
+        )
+      }
+      item {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          MetricTile(
+            label = "Lezioni oggi",
+            value = snapshot.todayLessons.size.toString(),
+            detail = "Tocca per aprire l'orario",
+            tone = ExpressiveTone.Info,
+            modifier = Modifier.weight(1f),
+          )
+          MetricTile(
+            label = "Voti nuovi",
+            value = snapshot.unseenGrades.size.toString(),
+            detail = "Valutazioni non ancora aperte",
+            tone = if (snapshot.unseenGrades.isNotEmpty()) ExpressiveTone.Primary else ExpressiveTone.Neutral,
+            modifier = Modifier.weight(1f),
+          )
+          MetricTile(
+            label = "Bacheca",
+            value = snapshot.unreadCommunications.size.toString(),
+            detail = "Comunicazioni da leggere",
+            tone = if (snapshot.unreadCommunications.isNotEmpty()) ExpressiveTone.Warning else ExpressiveTone.Neutral,
+            modifier = Modifier.weight(1f),
+          )
+        }
+      }
+      item { ExpressiveAccentLabel("Scorciatoie") }
+      item {
+        RegisterListRow(
+          title = "Apri voti",
+          subtitle = "Vai subito alle valutazioni recenti e non viste.",
+          eyebrow = "Voti",
+          tone = ExpressiveTone.Primary,
           onClick = onNavigateGrades,
-        ) {
-          Row(
-            modifier = Modifier
-              .fillMaxWidth()
-              .padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            ExpressiveStatusDot(color = scoreColor(grade.numericValue), modifier = Modifier.size(18.dp))
-            Column(modifier = Modifier.weight(1f)) {
-              Text(
-                text = grade.subject,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-              )
-              Text(
-                text = grade.date,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-              )
-            }
-            Text(
-              text = grade.valueLabel,
-              style = MaterialTheme.typography.headlineSmall,
-              color = MaterialTheme.colorScheme.onSurface,
-              fontWeight = FontWeight.Medium,
-            )
-          }
-        }
+          badge = { StatusBadge("VOTI", tone = ExpressiveTone.Primary) },
+        )
       }
-    }
-    item { SectionTitle("Last lessons") }
-    item {
-      LazyRow(
-        contentPadding = PaddingValues(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-      ) {
-        items(state.todayLessons.take(4), key = { it.id }) { lesson ->
-          LessonHighlightCard(
-            title = lesson.subject ?: lesson.title,
-            subtitle = lesson.title,
-            detail = lesson.time ?: "1H",
-            onClick = onNavigateLessons,
+      item {
+        RegisterListRow(
+          title = "Apri agenda",
+          subtitle = "Compiti, verifiche ed eventi del giorno selezionato.",
+          eyebrow = "Agenda",
+          tone = ExpressiveTone.Success,
+          onClick = onNavigateAgenda,
+          badge = { StatusBadge("AGENDA", tone = ExpressiveTone.Success) },
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Apri orario",
+          subtitle = "Lezioni del giorno e settimana corrente.",
+          eyebrow = "Lezioni",
+          tone = ExpressiveTone.Info,
+          onClick = onNavigateLessons,
+          badge = { StatusBadge("ORARIO", tone = ExpressiveTone.Info) },
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Apri bacheca",
+          subtitle = "Comunicazioni, note e azioni da completare.",
+          eyebrow = "Bacheca",
+          tone = ExpressiveTone.Warning,
+          onClick = onNavigateCommunications,
+          badge = { StatusBadge("BACHECA", tone = ExpressiveTone.Warning) },
+        )
+      }
+      item { ExpressiveAccentLabel("Voti recenti") }
+      if (recentGrades.isEmpty()) {
+        item {
+          EmptyState(
+            title = "Nessun voto disponibile",
+            detail = "I voti recenti appariranno qui dopo la prossima sincronizzazione.",
+          )
+        }
+      } else {
+        items(recentGrades, key = { it.id }) { grade ->
+          RegisterListRow(
+            title = grade.subject,
+            subtitle = grade.type.ifBlank { "Valutazione" },
+            eyebrow = grade.date,
+            meta = grade.description ?: grade.notes,
+            tone = if (snapshot.unseenGrades.any { it.id == grade.id }) ExpressiveTone.Primary else ExpressiveTone.Neutral,
+            onClick = { onOpenGrade(grade.id) },
+            badge = {
+              StatusBadge(
+                label = grade.valueLabel,
+                tone = if (snapshot.unseenGrades.any { it.id == grade.id }) ExpressiveTone.Primary else ExpressiveTone.Neutral,
+              )
+            },
           )
         }
       }
-    }
-    item { SectionTitle("Next events") }
-    if (state.upcomingItems.isEmpty()) {
-      item {
-        EmptyState(
-          title = "Nothing urgent right now",
-          detail = "Homework, tests and events will appear here in priority order.",
-          modifier = Modifier.padding(horizontal = 20.dp),
-        )
-      }
-    } else {
-      items(state.upcomingItems.take(4), key = { it.id }) { item ->
-        ExpressiveEditorialCard(
-          modifier = Modifier.padding(horizontal = 20.dp),
-        ) {
-          Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            IconBadge()
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-              Text(
-                text = item.title,
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-              )
-              Text(
-                text = item.detail ?: item.subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-              )
-            }
-          }
+      item { ExpressiveAccentLabel("In arrivo") }
+      if (upcomingItems.isEmpty()) {
+        item {
+          EmptyState(
+            title = "Nessun elemento imminente",
+            detail = "I prossimi compiti, verifiche o eventi appariranno qui.",
+          )
         }
-      }
-    }
-    if (!state.syncStatus.message.isNullOrBlank()) {
-      item {
-        Text(
-          text = state.syncStatus.message.orEmpty(),
-          modifier = Modifier.padding(horizontal = 20.dp),
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.primary,
-        )
-      }
-    }
-  }
-}
-
-@Composable
-private fun DashboardHero(
-  headline: String,
-  dateLabel: String,
-  points: List<Float>,
-) {
-  Box(
-    modifier = Modifier
-      .fillMaxWidth()
-      .height(264.dp)
-      .background(MaterialTheme.colorScheme.primary),
-  ) {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 20.dp, vertical = 22.dp),
-      verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-      Text(
-        text = headline,
-        style = MaterialTheme.typography.displaySmall,
-        color = MaterialTheme.colorScheme.onPrimary,
-        fontWeight = FontWeight.Medium,
-      )
-      Text(
-        text = dateLabel,
-        style = MaterialTheme.typography.titleLarge,
-        color = MaterialTheme.colorScheme.onPrimary,
-      )
-    }
-    ExpressiveEditorialCard(
-      modifier = Modifier
-        .padding(horizontal = 20.dp)
-        .align(Alignment.BottomCenter),
-    ) {
-      ExpressiveMiniChart(
-        points = points,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.height(148.dp),
-      )
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-      ) {
-        listOf("MON", "TUE", "WED", "THU", "FRI", "SAT").forEach { label ->
-          Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+      } else {
+        items(upcomingItems, key = { it.id }) { item ->
+          RegisterListRow(
+            title = item.title,
+            subtitle = item.subtitle,
+            eyebrow = item.date,
+            meta = item.detail,
+            tone = ExpressiveTone.Success,
+            onClick = onNavigateAgenda,
+            badge = { StatusBadge("AGENDA", tone = ExpressiveTone.Success) },
           )
         }
       }
-    }
-  }
-}
-
-@Composable
-private fun SectionTitle(
-  title: String,
-) {
-  Text(
-    text = title,
-    modifier = Modifier.padding(horizontal = 20.dp),
-    style = MaterialTheme.typography.titleLarge,
-    color = MaterialTheme.colorScheme.onBackground,
-    fontWeight = FontWeight.Medium,
-  )
-}
-
-@Composable
-private fun LessonHighlightCard(
-  title: String,
-  subtitle: String,
-  detail: String,
-  onClick: () -> Unit,
-) {
-  Surface(
-    modifier = Modifier
-      .width(210.dp)
-      .height(136.dp),
-    shape = MaterialTheme.shapes.extraLarge,
-    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.92f),
-    onClick = onClick,
-  ) {
-    Column(
-      modifier = Modifier.padding(16.dp),
-      verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-      Box(
-        modifier = Modifier
-          .size(48.dp)
-          .background(Color.White.copy(alpha = 0.96f), shape = MaterialTheme.shapes.extraLarge),
-        contentAlignment = Alignment.Center,
-      ) {
-        ExpressiveStatusDot(color = subjectPalette(title), modifier = Modifier.size(20.dp))
+      item { ExpressiveAccentLabel("Bacheca") }
+      if (unreadCommunications.isEmpty()) {
+        item {
+          EmptyState(
+            title = "Nessuna comunicazione urgente",
+            detail = "I nuovi avvisi della scuola appariranno qui.",
+          )
+        }
+      } else {
+        items(unreadCommunications, key = { it.id }) { communication ->
+          RegisterListRow(
+            title = communication.title,
+            subtitle = communication.sender,
+            eyebrow = communication.date,
+            meta = communication.contentPreview,
+            tone = ExpressiveTone.Warning,
+            onClick = onNavigateCommunications,
+            badge = { StatusBadge("NUOVA", tone = ExpressiveTone.Warning) },
+          )
+        }
       }
-      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-          text = title,
-          style = MaterialTheme.typography.titleLarge,
-          color = Color.White,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-          text = subtitle,
-          style = MaterialTheme.typography.bodyMedium,
-          color = Color.White.copy(alpha = 0.92f),
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-        )
+      if (!snapshot.syncStatus.message.isNullOrBlank()) {
+        item {
+          Text(text = snapshot.syncStatus.message.orEmpty())
+        }
       }
-      Text(
-        text = detail,
-        style = MaterialTheme.typography.bodyMedium,
-        color = Color.White.copy(alpha = 0.86f),
-      )
     }
-  }
-}
-
-@Composable
-private fun IconBadge() {
-  Box(
-    modifier = Modifier
-      .size(44.dp)
-      .background(MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.large),
-    contentAlignment = Alignment.Center,
-  ) {
-    Icon(
-      imageVector = Icons.Rounded.CalendarMonth,
-      contentDescription = null,
-      tint = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
   }
 }

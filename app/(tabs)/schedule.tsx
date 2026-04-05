@@ -1,5 +1,5 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useNavigation, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 
@@ -10,8 +10,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { ElegantCard } from "@/components/ui/elegant-card";
 import { LoadingState } from "@/components/ui/loading-state";
 import { M3Chip } from "@/components/ui/m3-chip";
+import { RegisterListRow } from "@/components/ui/register-list-row";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { SectionTitle } from "@/components/ui/section-title";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { useReturnToMoreOnHardwareBack } from "@/hooks/use-return-to-more-on-hardware-back";
 import { useColors } from "@/hooks/use-colors";
 import {
   compareTimeLabels,
@@ -30,12 +33,17 @@ function startOfWeek(date: Date) {
 }
 
 function buildWeekDays(weekStart: Date) {
+  const todayIso = toLocalIsoDate();
+
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + index);
+
     return {
       isoDate: toLocalIsoDate(date),
-      label: new Intl.DateTimeFormat("it-IT", { weekday: "short", day: "numeric" }).format(date),
+      shortLabel: new Intl.DateTimeFormat("it-IT", { weekday: "short" }).format(date),
+      numericLabel: new Intl.DateTimeFormat("it-IT", { day: "numeric" }).format(date),
+      isToday: toLocalIsoDate(date) === todayIso,
     };
   });
 }
@@ -46,10 +54,19 @@ function shiftWeek(date: Date, amount: number) {
   return next;
 }
 
+function sortLessons(left: AgendaItemViewModel, right: AgendaItemViewModel) {
+  const slotDiff = (left.slot ?? Number.MAX_SAFE_INTEGER) - (right.slot ?? Number.MAX_SAFE_INTEGER);
+  if (slotDiff !== 0) {
+    return slotDiff;
+  }
+
+  return compareTimeLabels(left.timeLabel, right.timeLabel);
+}
+
 export default function ScheduleScreen() {
   const colors = useColors();
   const router = useRouter();
-  const navigation = useNavigation();
+  useReturnToMoreOnHardwareBack();
   const [currentWeekStart, setCurrentWeekStart] = useState(() => startOfWeek(new Date()));
   const [selectedDate, setSelectedDate] = useState(() => toLocalIsoDate(new Date()));
   const [lessons, setLessons] = useState<AgendaItemViewModel[]>([]);
@@ -70,8 +87,7 @@ export default function ScheduleScreen() {
         const nextSelectedDate =
           lessonOnly.find((item) => item.date === selectedDate)?.date ??
           lessonOnly.find((item) => item.date === todayIso)?.date ??
-          lessonOnly[0]?.date ??
-          weekDates.find((date) => date === selectedDate) ??
+          weekDates.find((date) => date === todayIso) ??
           weekDates[0] ??
           toLocalIsoDate(weekStart);
 
@@ -94,10 +110,7 @@ export default function ScheduleScreen() {
 
   const weekDays = useMemo(() => buildWeekDays(currentWeekStart), [currentWeekStart]);
   const selectedDayItems = useMemo(
-    () =>
-      lessons
-        .filter((item) => item.date === selectedDate)
-        .sort((left, right) => compareTimeLabels(left.timeLabel, right.timeLabel)),
+    () => lessons.filter((item) => item.date === selectedDate).sort(sortLessons),
     [lessons, selectedDate],
   );
   const sections = useMemo(() => groupAgendaByDate(lessons), [lessons]);
@@ -106,14 +119,22 @@ export default function ScheduleScreen() {
     weekEnd.setDate(weekEnd.getDate() - 1);
     return `${currentWeekStart.toLocaleDateString("it-IT", { day: "numeric", month: "short" })} - ${weekEnd.toLocaleDateString("it-IT", { day: "numeric", month: "short" })}`;
   }, [currentWeekStart]);
-  const canGoBack = navigation.canGoBack();
+  const selectedDayLabel = useMemo(() => {
+    const [year, month, day] = selectedDate.split("-").map(Number);
+    const date = new Date(year, (month ?? 1) - 1, day ?? 1);
+    return new Intl.DateTimeFormat("it-IT", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    }).format(date);
+  }, [selectedDate]);
 
   if (isLoading) {
     return (
       <ScreenContainer className="flex-1 bg-background">
         <LoadingState
-          detail="Recupero le lezioni della settimana corrente."
-          title="Sto caricando l'orario"
+          detail="Sto ricostruendo la settimana usando lezioni reali e fallback dall'agenda."
+          title="Carico l'orario"
           variant="skeleton"
         />
       </ScreenContainer>
@@ -123,7 +144,7 @@ export default function ScheduleScreen() {
   return (
     <ScreenContainer className="flex-1 bg-background">
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 100 }}
+        contentContainerStyle={{ paddingBottom: 120 }}
         refreshControl={
           <RefreshControl
             onRefresh={() => {
@@ -135,34 +156,42 @@ export default function ScheduleScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <View className="gap-5 px-5 py-6">
+        <View className="gap-6 px-5 py-6">
           <AnimatedListItem index={0}>
             <ScreenHeader
-              {...(canGoBack ? { backLabel: "Indietro", onBack: () => router.back() } : {})}
-              subtitle="Vista settimanale concentrata sulle lezioni, con griglia giornaliera e panoramica completa."
+              backLabel="Altro"
+              eyebrow="Lezioni"
+              onBack={() => router.replace("/(tabs)/more")}
+              subtitle="La griglia usa gli orari reali quando ci sono, altrimenti ricostruisce la sequenza delle ore."
               title="Orario"
             />
           </AnimatedListItem>
 
           {error ? (
             <AnimatedListItem index={1}>
-              <ElegantCard className="gap-2 p-4" tone="warning" variant="filled" radius="md">
-                <Text className="text-sm font-medium" style={{ color: colors.foreground }}>
-                  Aggiornamento parziale
-                </Text>
-                <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
-                  {error}
-                </Text>
-              </ElegantCard>
+              <RegisterListRow
+                detail={error}
+                meta="Se alcune lezioni non arrivano complete, il resto della settimana resta consultabile."
+                title="Aggiornamento parziale"
+                tone="warning"
+              />
             </AnimatedListItem>
           ) : null}
 
           <AnimatedListItem index={2}>
-            <ElegantCard className="gap-4 p-5" variant="elevated" radius="lg">
+            <ElegantCard className="gap-4 p-5" radius="lg" variant="elevated">
               <View className="flex-row items-center justify-between gap-4">
-                <Text className="text-base font-medium" style={{ color: colors.foreground }}>
-                  {weekLabel}
-                </Text>
+                <View className="gap-1">
+                  <Text
+                    className="text-[11px] font-medium uppercase tracking-[1.2px]"
+                    style={{ color: colors.onSurfaceVariant ?? colors.muted }}
+                  >
+                    Settimana
+                  </Text>
+                  <Text className="text-[24px] leading-[30px] font-medium" style={{ color: colors.foreground }}>
+                    {weekLabel}
+                  </Text>
+                </View>
                 <View className="flex-row gap-2">
                   <Pressable
                     className="h-10 w-10 items-center justify-center rounded-full"
@@ -181,103 +210,105 @@ export default function ScheduleScreen() {
                 </View>
               </View>
 
-              <View className="flex-row gap-3">
-                <ElegantCard className="flex-1 gap-1.5 p-4" tone="primary" variant="filled" radius="md">
-                  <Text
-                    className="text-[11px] font-medium uppercase tracking-[1.5px]"
-                    style={{ color: colors.onSurfaceVariant ?? colors.muted }}
-                  >
-                    Lezioni
-                  </Text>
-                  <Text className="text-3xl font-light" style={{ color: colors.foreground }}>
-                    {lessons.length}
-                  </Text>
-                </ElegantCard>
-                <ElegantCard className="flex-1 gap-1.5 p-4" variant="filled" radius="md">
-                  <Text
-                    className="text-[11px] font-medium uppercase tracking-[1.5px]"
-                    style={{ color: colors.onSurfaceVariant ?? colors.muted }}
-                  >
-                    Giorni attivi
-                  </Text>
-                  <Text className="text-3xl font-light" style={{ color: colors.foreground }}>
-                    {sections.length}
-                  </Text>
-                </ElegantCard>
+              <View className="flex-row flex-wrap gap-2">
+                <M3Chip
+                  label="Questa settimana"
+                  onPress={() => {
+                    setCurrentWeekStart(startOfWeek(new Date()));
+                    setSelectedDate(toLocalIsoDate(new Date()));
+                  }}
+                  selected={toLocalIsoDate(currentWeekStart) === toLocalIsoDate(startOfWeek(new Date()))}
+                />
+                <StatusBadge label={`${selectedDayItems.length} lezioni nel giorno`} tone={selectedDayItems.length > 0 ? "primary" : "neutral"} />
               </View>
-
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View className="flex-row gap-2">
-                  {weekDays.map((day) => {
-                    const isSelected = selectedDate === day.isoDate;
-                    const count = lessons.filter((item) => item.date === day.isoDate).length;
-
-                    return (
-                      <M3Chip
-                        key={day.isoDate}
-                        label={`${day.label} (${count})`}
-                        onPress={() => setSelectedDate(day.isoDate)}
-                        selected={isSelected}
-                        size="sm"
-                      />
-                    );
-                  })}
-                </View>
-              </ScrollView>
             </ElegantCard>
           </AnimatedListItem>
 
           <AnimatedListItem index={3}>
             <View className="gap-3">
-              <SectionTitle eyebrow="Giorno selezionato" title="Lezioni del giorno" />
+              <SectionTitle eyebrow="Giorni" title="Seleziona il giorno" />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View className="flex-row gap-3">
+                  {weekDays.map((day) => {
+                    const count = lessons.filter((item) => item.date === day.isoDate).length;
+                    const isSelected = selectedDate === day.isoDate;
+
+                    return (
+                      <Pressable key={day.isoDate} onPress={() => setSelectedDate(day.isoDate)}>
+                        <ElegantCard
+                          className="min-w-[86px] items-center gap-1.5 px-4 py-3"
+                          radius="md"
+                          tone={isSelected ? "primary" : "neutral"}
+                          variant={isSelected ? "filled" : "elevated"}
+                        >
+                          <Text
+                            className="text-[11px] font-medium uppercase tracking-[1.2px]"
+                            style={{ color: colors.onSurfaceVariant ?? colors.muted }}
+                          >
+                            {day.shortLabel}
+                          </Text>
+                          <Text className="text-xl font-medium" style={{ color: colors.foreground }}>
+                            {day.numericLabel}
+                          </Text>
+                          <StatusBadge label={day.isToday ? "Oggi" : `${count} lezioni`} tone={day.isToday ? "primary" : "neutral"} />
+                        </ElegantCard>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            </View>
+          </AnimatedListItem>
+
+          <AnimatedListItem index={4}>
+            <View className="gap-3">
+              <SectionTitle
+                eyebrow="Giorno selezionato"
+                title={selectedDayLabel}
+                detail="Se il portale non espone un orario preciso, la griglia usa l'ordine delle ore per non lasciare buchi."
+              />
               {selectedDayItems.length > 0 ? (
-                <ElegantCard className="p-4" variant="elevated" radius="lg">
-                  <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
-                    <DayScheduleGrid lessons={selectedDayItems} />
-                  </ScrollView>
+                <ElegantCard className="gap-4 p-4" radius="lg" variant="elevated">
+                  <DayScheduleGrid lessons={selectedDayItems} />
+                  <View className="gap-3">
+                    {selectedDayItems.map((item) => (
+                      <RegisterListRow
+                        key={item.id}
+                        detail={item.detail}
+                        meta={item.timeLabel}
+                        subtitle={item.title !== item.subtitle ? item.title : undefined}
+                        title={item.subtitle}
+                        tone="neutral"
+                      />
+                    ))}
+                  </View>
                 </ElegantCard>
               ) : (
-                <EmptyState
-                  detail="Per questa giornata non risultano lezioni nel calendario corrente."
-                  title="Nessuna lezione nel giorno scelto"
-                />
+                <EmptyState detail="Per il giorno selezionato non risultano lezioni nel portale." title="Nessuna lezione registrata" />
               )}
             </View>
           </AnimatedListItem>
 
           <View className="gap-3">
-            <SectionTitle eyebrow="Settimana" title="Panoramica completa" />
+            <SectionTitle eyebrow="Settimana" title="Panoramica compatta" detail="Una lettura di sicurezza quando vuoi controllare tutta la settimana in sequenza." />
             {sections.length > 0 ? (
-              <View className="gap-4">
+              <View className="gap-5">
                 {sections.map((section, index) => (
-                  <AnimatedListItem key={section.id} index={4 + index}>
+                  <AnimatedListItem key={section.id} index={10 + index}>
                     <View className="gap-3">
                       <Text className="text-sm font-medium" style={{ color: colors.foreground }}>
                         {section.label}
                       </Text>
                       <View className="gap-3">
                         {section.items.map((item) => (
-                          <ElegantCard key={item.id} className="gap-3 p-4" variant="filled" radius="md">
-                            <View className="flex-row items-start justify-between gap-3">
-                              <View className="flex-1 gap-0.5">
-                                <Text className="text-sm font-medium" style={{ color: colors.foreground }}>
-                                  {item.title}
-                                </Text>
-                                <Text className="text-sm" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
-                                  {item.subtitle}
-                                </Text>
-                              </View>
-                              <Text
-                                className="text-[11px] font-medium uppercase tracking-[1.5px]"
-                                style={{ color: colors.onSurfaceVariant ?? colors.muted }}
-                              >
-                                {item.timeLabel}
-                              </Text>
-                            </View>
-                            <Text className="text-sm leading-5" style={{ color: colors.onSurfaceVariant ?? colors.muted }}>
-                              {item.detail}
-                            </Text>
-                          </ElegantCard>
+                          <RegisterListRow
+                            key={item.id}
+                            detail={item.detail}
+                            meta={item.timeLabel}
+                            subtitle={item.title !== item.subtitle ? item.title : undefined}
+                            title={item.subtitle}
+                            tone="neutral"
+                          />
                         ))}
                       </View>
                     </View>
@@ -285,7 +316,7 @@ export default function ScheduleScreen() {
                 ))}
               </View>
             ) : (
-              <EmptyState detail="Non risultano lezioni per la settimana selezionata." title="Orario vuoto" />
+              <EmptyState detail="Nessuna lezione trovata per la settimana selezionata." title="Orario vuoto" />
             )}
           </View>
         </View>
