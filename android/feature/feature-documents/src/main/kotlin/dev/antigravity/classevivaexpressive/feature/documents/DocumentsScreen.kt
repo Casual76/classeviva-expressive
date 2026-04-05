@@ -239,7 +239,7 @@ fun DocumentsRoute(
           MetricTile(
             label = "Documenti",
             value = state.documents.size.toString(),
-            detail = "Voci recuperate dal portale.",
+            detail = "Voci recuperate dalle API ufficiali.",
             modifier = Modifier.fillMaxWidth(),
           )
           MetricTile(
@@ -265,14 +265,14 @@ fun DocumentsRoute(
         item {
           EmptyState(
             title = "Nessun documento disponibile",
-            detail = "Pagelle, moduli e documenti compariranno qui appena il portale li espone in modo leggibile.",
+            detail = "Pagelle, moduli e documenti compariranno qui appena le API ufficiali li espongono in modo leggibile.",
           )
         }
       } else {
         items(state.documents, key = { it.id }) { document ->
           RegisterListRow(
             title = document.title,
-            subtitle = document.detail.ifBlank { document.capabilityState.detail ?: "Documento del portale" },
+            subtitle = document.detail.ifBlank { document.capabilityState.detail ?: "Documento ufficiale" },
             meta = document.capabilityState.detail,
             tone = capabilityTone(document.capabilityState),
             onClick = { viewModel.preview(document) },
@@ -505,7 +505,7 @@ private fun DocumentPreviewBody(
       EmptyState(
         title = "Preview non disponibile",
         detail = if (!asset.sourceUrl.isNullOrBlank()) {
-          "Il portale ha restituito un'apertura esterna. Puoi continuare con 'Apri link'."
+          "L'API ufficiale ha restituito un'apertura esterna. Puoi continuare con 'Apri link'."
         } else {
           "Il documento e pronto per il download locale, ma questo formato non offre una preview inline affidabile."
         },

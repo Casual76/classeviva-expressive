@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: classeviva-expressive-gateway
+Version: 0.1.0
+Summary: Controlled gateway for unsupported Classeviva student/family flows
+Requires-Python: >=3.11
+Requires-Dist: beautifulsoup4>=4.12.3
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: httpx>=0.28.1
+Requires-Dist: pydantic>=2.9.2
+Requires-Dist: uvicorn[standard]>=0.32.0
+Provides-Extra: test
+Requires-Dist: pytest>=8.3.3; extra == "test"
+Requires-Dist: pytest-asyncio>=0.24.0; extra == "test"

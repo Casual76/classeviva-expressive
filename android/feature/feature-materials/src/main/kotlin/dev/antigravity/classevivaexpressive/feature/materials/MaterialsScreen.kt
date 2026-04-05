@@ -206,7 +206,7 @@ fun MaterialsRoute(
     item {
       ExpressiveTopHeader(
         title = "Materiale didattico",
-        subtitle = "Cartelle del portale, contenuti condivisi e apertura controllata dei documenti.",
+        subtitle = "Cartelle ufficiali, contenuti condivisi e apertura controllata dei documenti.",
         onBack = onBack,
         actions = {
           IconButton(onClick = viewModel::refresh) {
@@ -247,7 +247,7 @@ fun MaterialsRoute(
         MetricTile(
           label = "Risorse",
           value = materialCount.toString(),
-          detail = "Contenuti recuperati dal portale.",
+          detail = "Contenuti recuperati dalle API ufficiali.",
           modifier = Modifier.weight(1f),
         )
         MetricTile(
@@ -361,12 +361,12 @@ fun MaterialsRoute(
                   RegisterListRow(
                     title = attachment.name,
                     subtitle = attachment.mimeType ?: "Allegato",
-                    meta = if (attachment.portalOnly) "Richiede passaggio portale" else "Download diretto disponibile",
+                    meta = if (attachment.portalOnly) "Endpoint non ufficiale non disponibile" else "Download diretto disponibile",
                     tone = if (attachment.portalOnly) ExpressiveTone.Warning else ExpressiveTone.Neutral,
                     onClick = { viewModel.download(attachment) },
                     badge = {
                       StatusBadge(
-                        label = if (attachment.portalOnly) "PORTALE" else "DOWNLOAD",
+                        label = if (attachment.portalOnly) "NON UFFICIALE" else "DOWNLOAD",
                         tone = if (attachment.portalOnly) ExpressiveTone.Warning else ExpressiveTone.Info,
                       )
                     },
@@ -397,7 +397,7 @@ fun MaterialsRoute(
       item {
         EmptyState(
           title = "Materiale non disponibile",
-          detail = "Nessun contenuto corrisponde ai filtri correnti o il portale non ha restituito materiali.",
+          detail = "Nessun contenuto corrisponde ai filtri correnti o le API ufficiali non hanno restituito materiali.",
         )
       }
     } else {
@@ -509,7 +509,7 @@ private fun MaterialPreviewBody(
       EmptyState(
         title = "Anteprima non disponibile",
         detail = if (!asset.sourceUrl.isNullOrBlank()) {
-          "Il portale ha restituito solo un'apertura esterna. Usa 'Apri link' per continuare."
+          "L'API ufficiale ha restituito solo un'apertura esterna. Usa 'Apri link' per continuare."
         } else {
           "Il materiale e disponibile come file, ma il formato non offre una preview inline affidabile."
         },

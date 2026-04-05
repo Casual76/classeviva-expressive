@@ -12,6 +12,12 @@ android {
 
   defaultConfig {
     minSdk 26
+    def gatewayBaseUrl = providers.gradleProperty("gatewayBaseUrl").orElse("").get()
+    buildConfigField "String", "GATEWAY_BASE_URL", "\"${gatewayBaseUrl}\""
+  }
+
+  buildFeatures {
+    buildConfig true
   }
 
   compileOptions {
@@ -26,17 +32,22 @@ android {
 
 dependencies {
   implementation project(":core:core-domain")
+  implementation project(":core:core-datastore")
   implementation libs.androidx.core.ktx
   implementation libs.okhttp
   implementation libs.okhttp.logging
+  implementation libs.retrofit
+  implementation libs.retrofit.converter.gson
+  implementation libs.gson
+  implementation libs.kotlinx.coroutines.android
   implementation libs.serialization.json
   implementation libs.jsoup
-  implementation libs.webkit
   implementation libs.hilt.android
 
   kapt libs.hilt.compiler
 
   testImplementation libs.junit4
+  testImplementation libs.okhttp.mockwebserver
 }
 
 kapt {

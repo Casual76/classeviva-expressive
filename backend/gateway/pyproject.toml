@@ -1,0 +1,21 @@
+[project]
+name = "classeviva-expressive-gateway"
+version = "0.1.0"
+description = "Controlled gateway for unsupported Classeviva student/family flows"
+requires-python = ">=3.11"
+dependencies = [
+  "beautifulsoup4>=4.12.3",
+  "fastapi>=0.115.0",
+  "httpx>=0.28.1",
+  "pydantic>=2.9.2",
+  "uvicorn[standard]>=0.32.0",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.3.3",
+  "pytest-asyncio>=0.24.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

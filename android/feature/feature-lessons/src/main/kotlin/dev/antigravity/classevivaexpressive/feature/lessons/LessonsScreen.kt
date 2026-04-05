@@ -235,7 +235,7 @@ fun LessonsRoute(
           item {
             EmptyState(
               title = "Nessuna lezione in questa giornata",
-              detail = "Prova un altro giorno oppure aggiorna l'orario dal portale.",
+              detail = "Prova un altro giorno oppure aggiorna l'orario dalle API ufficiali.",
             )
           }
         } else {

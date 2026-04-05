@@ -11,6 +11,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.antigravity.classevivaexpressive.core.data.repository.AbsencesSection
+import dev.antigravity.classevivaexpressive.core.data.repository.CommunicationsSection
+import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkSection
 import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
@@ -30,9 +33,9 @@ const val CommunicationsChannelId = "comunicazioni"
 const val AbsencesChannelId = "assenze"
 const val TestChannelId = "test"
 
-internal const val HomeworkCacheKey = "homeworks"
-internal const val CommunicationsCacheKey = "communications"
-internal const val AbsencesCacheKey = "absences"
+internal const val HomeworkCacheSection = HomeworkSection
+internal const val CommunicationsCacheSection = CommunicationsSection
+internal const val AbsencesCacheSection = AbsencesSection
 
 data class SyncSnapshotPayloads(
   val homeworks: String? = null,

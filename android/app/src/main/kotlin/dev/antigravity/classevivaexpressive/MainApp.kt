@@ -25,8 +25,10 @@ import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Grade
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.PeopleAlt
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SportsScore
@@ -84,8 +86,10 @@ import dev.antigravity.classevivaexpressive.feature.communications.Communication
 import dev.antigravity.classevivaexpressive.feature.dashboard.DashboardRoute
 import dev.antigravity.classevivaexpressive.feature.documents.DocumentsRoute
 import dev.antigravity.classevivaexpressive.feature.grades.GradesRoute
+import dev.antigravity.classevivaexpressive.feature.homework.HomeworkRoute
 import dev.antigravity.classevivaexpressive.feature.lessons.LessonsRoute
 import dev.antigravity.classevivaexpressive.feature.materials.MaterialsRoute
+import dev.antigravity.classevivaexpressive.feature.meetings.MeetingsRoute
 import dev.antigravity.classevivaexpressive.feature.settings.SettingsRoute
 import dev.antigravity.classevivaexpressive.feature.studentscore.StudentScoreRoute
 
@@ -431,6 +435,8 @@ private fun AuthenticatedApp() {
       composable("more") {
         MoreHubScreen(
           onOpenNotes = { navController.navigate("communications?tab=notes") },
+          onOpenHomework = { navController.navigate("homework") },
+          onOpenMeetings = { navController.navigate("meetings") },
           onOpenLessons = { navController.navigate("lessons") },
           onOpenAbsences = { navController.navigate("absences") },
           onOpenMaterials = { navController.navigate("materials") },
@@ -439,6 +445,8 @@ private fun AuthenticatedApp() {
           onOpenSettings = { navController.navigate("settings") },
         )
       }
+      composable("homework") { HomeworkRoute(onBack = navController::navigateUp) }
+      composable("meetings") { MeetingsRoute(onBack = navController::navigateUp) }
       composable("materials") { MaterialsRoute(onBack = navController::navigateUp) }
       composable("lessons") { LessonsRoute(onBack = navController::navigateUp) }
       composable(
@@ -480,6 +488,8 @@ private fun AuthenticatedApp() {
 @Composable
 private fun MoreHubScreen(
   onOpenNotes: () -> Unit,
+  onOpenHomework: () -> Unit,
+  onOpenMeetings: () -> Unit,
   onOpenLessons: () -> Unit,
   onOpenAbsences: () -> Unit,
   onOpenMaterials: () -> Unit,
@@ -501,6 +511,17 @@ private fun MoreHubScreen(
     item { ExpressiveAccentLabel("Registro") }
     item {
       RegisterListRow(
+        title = "Compiti",
+        subtitle = "Vista dedicata ai compiti con consegna nativa e allegati.",
+        eyebrow = "Compiti",
+        tone = ExpressiveTone.Primary,
+        onClick = onOpenHomework,
+        badge = { StatusBadge("COMPITI", tone = ExpressiveTone.Primary) },
+        leading = { Icon(Icons.Rounded.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+      )
+    }
+    item {
+      RegisterListRow(
         title = "Note e richiami",
         subtitle = "Apri direttamente annotazioni, richiami e note disciplinari.",
         eyebrow = "Note",
@@ -508,6 +529,17 @@ private fun MoreHubScreen(
         onClick = onOpenNotes,
         badge = { StatusBadge("NOTE", tone = ExpressiveTone.Warning) },
         leading = { Icon(Icons.Rounded.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+      )
+    }
+    item {
+      RegisterListRow(
+        title = "Colloqui",
+        subtitle = "Disponibilita, prenotazioni e link dei colloqui in app.",
+        eyebrow = "Colloqui",
+        tone = ExpressiveTone.Info,
+        onClick = onOpenMeetings,
+        badge = { StatusBadge("COLLOQUI", tone = ExpressiveTone.Info) },
+        leading = { Icon(Icons.Rounded.PeopleAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
       )
     }
     item {

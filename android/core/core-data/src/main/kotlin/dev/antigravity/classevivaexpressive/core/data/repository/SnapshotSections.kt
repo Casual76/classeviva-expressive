@@ -1,0 +1,18 @@
+package dev.antigravity.classevivaexpressive.core.data.repository
+
+internal const val ProfileSection = "profile"
+internal const val GradesSection = "grades"
+internal const val PeriodsSection = "periods"
+internal const val SubjectsSection = "subjects"
+internal const val LessonsSection = "lessons"
+internal const val HomeworkSection = "homeworks"
+internal const val AgendaSection = "agenda"
+internal const val AbsencesSection = "absences"
+internal const val CommunicationsSection = "communications"
+internal const val NotesSection = "notes"
+internal const val MaterialsSection = "materials"
+internal const val DocumentsSection = "documents"
+internal const val SchoolbooksSection = "schoolbooks"
+internal const val MeetingTeachersSection = "meeting_teachers"
+internal const val MeetingSlotsSection = "meeting_slots"
+internal const val MeetingBookingsSection = "meeting_bookings"
