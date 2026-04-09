@@ -6,7 +6,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -14,14 +13,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowForward
-import androidx.compose.material.icons.rounded.School
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
@@ -104,15 +107,18 @@ private fun lightBrandScheme(accent: AccentPreset): ColorScheme = lightColorSche
   secondaryContainer = Color(0xFFE9EEEC),
   onSecondaryContainer = Color(0xFF182228),
   tertiary = accent.tertiary,
-  background = Color(0xFFF4F5F2),
-  surface = Color.White,
-  surfaceContainer = Color(0xFFEFF1EC),
-  surfaceContainerHigh = Color(0xFFE7EAE3),
-  surfaceContainerHighest = Color(0xFFDEE3DB),
-  onSurface = Color(0xFF141917),
-  onSurfaceVariant = Color(0xFF5A625E),
+  onTertiary = Color(0xFF271600),
+  tertiaryContainer = Color(0xFFFFDDB6),
+  onTertiaryContainer = Color(0xFF291800),
+  background = Color(0xFFF5F4EF),
+  surface = Color(0xFFFFFBF7),
+  surfaceContainer = Color(0xFFF1F0EA),
+  surfaceContainerHigh = Color(0xFFE9E7E1),
+  surfaceContainerHighest = Color(0xFFE1DED7),
+  onSurface = Color(0xFF161D1A),
+  onSurfaceVariant = Color(0xFF55605B),
   error = Color(0xFFB42318),
-  outline = Color(0xFFD1D8D1),
+  outline = Color(0xFFCAD2CC),
 )
 
 private fun darkBrandScheme(accent: AccentPreset): ColorScheme = darkColorScheme(
@@ -125,6 +131,9 @@ private fun darkBrandScheme(accent: AccentPreset): ColorScheme = darkColorScheme
   secondaryContainer = Color(0xFF1E2624),
   onSecondaryContainer = Color(0xFFE8EEEB),
   tertiary = accent.tertiary,
+  onTertiary = Color(0xFF3B2B15),
+  tertiaryContainer = Color(0xFF5A4221),
+  onTertiaryContainer = Color(0xFFFFDDB6),
   background = Color(0xFF0E1110),
   surface = Color(0xFF131716),
   surfaceContainer = Color(0xFF191D1C),
@@ -146,6 +155,9 @@ private fun amoledScheme(accent: AccentPreset): ColorScheme = darkColorScheme(
   secondaryContainer = Color(0xFF0D0F0E),
   onSecondaryContainer = Color(0xFFF4F4F8),
   tertiary = accent.tertiary,
+  onTertiary = Color(0xFF2E1E09),
+  tertiaryContainer = Color(0xFF463310),
+  onTertiaryContainer = Color(0xFFFFDDB6),
   background = Color.Black,
   surface = Color.Black,
   surfaceContainer = Color.Black,
@@ -159,14 +171,16 @@ private fun amoledScheme(accent: AccentPreset): ColorScheme = darkColorScheme(
 
 private fun expressiveTypography(): Typography {
   return Typography(
-    displaySmall = TextStyle(fontSize = 30.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold),
-    headlineSmall = TextStyle(fontSize = 24.sp, lineHeight = 28.sp, fontWeight = FontWeight.Bold),
-    titleLarge = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontSize = 15.sp, lineHeight = 21.sp, fontWeight = FontWeight.Normal),
-    bodyMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal),
-    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Normal),
-    labelLarge = TextStyle(fontSize = 13.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium),
+    displaySmall = TextStyle(fontSize = 32.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold),
+    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold),
+    headlineSmall = TextStyle(fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold),
+    titleLarge = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
+    titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
+    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.Normal),
+    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal),
+    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal),
+    labelLarge = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
+    labelMedium = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
     labelSmall = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold),
   )
 }
@@ -190,16 +204,16 @@ fun ExpressiveHeroCard(
   modifier: Modifier = Modifier,
   trailing: (@Composable () -> Unit)? = null,
 ) {
-  Card(
+  ElevatedCard(
     modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(24.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
   ) {
     Row(
       modifier = Modifier
         .fillMaxWidth()
         .padding(20.dp),
-      horizontalArrangement = Arrangement.SpaceBetween,
+      horizontalArrangement = Arrangement.spacedBy(16.dp),
       verticalAlignment = Alignment.Top,
     ) {
       Column(
@@ -218,13 +232,11 @@ fun ExpressiveHeroCard(
           color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f),
         )
       }
-      Box(contentAlignment = Alignment.Center) {
-        trailing?.invoke() ?: Icon(
-          imageVector = Icons.Rounded.School,
-          contentDescription = null,
-          tint = MaterialTheme.colorScheme.primary,
-        )
-      }
+      trailing?.invoke() ?: Icon(
+        imageVector = Icons.Filled.School,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+      )
     }
   }
 }
@@ -235,25 +247,32 @@ fun ExpressiveCard(
   highlighted: Boolean = false,
   content: @Composable ColumnScope.() -> Unit,
 ) {
-  Card(
+  OutlinedCard(
     modifier = modifier
       .fillMaxWidth()
       .animateContentSize(),
-    shape = RoundedCornerShape(20.dp),
-    colors = CardDefaults.cardColors(
+    shape = RoundedCornerShape(24.dp),
+    colors = CardDefaults.outlinedCardColors(
       containerColor = if (highlighted) {
-        MaterialTheme.colorScheme.surfaceContainerHighest
+        MaterialTheme.colorScheme.surfaceContainerHigh
       } else {
-        MaterialTheme.colorScheme.surfaceContainer
+        MaterialTheme.colorScheme.surface
       },
     ),
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+    border = BorderStroke(
+      1.dp,
+      if (highlighted) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+      } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
+      },
+    ),
   ) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
         .padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp),
       content = content,
     )
   }
@@ -271,7 +290,7 @@ fun SectionTitle(
   ) {
     Text(
       text = eyebrow.uppercase(),
-      style = MaterialTheme.typography.labelSmall,
+      style = MaterialTheme.typography.labelLarge,
       color = MaterialTheme.colorScheme.primary,
       fontWeight = FontWeight.Bold,
     )
@@ -290,10 +309,9 @@ fun StatChip(
   value: String,
   modifier: Modifier = Modifier,
 ) {
-  Card(
+  ElevatedCard(
     modifier = modifier,
-    shape = RoundedCornerShape(16.dp),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
   ) {
     Column(
       modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -324,7 +342,12 @@ fun QuickAction(
     modifier = modifier,
     onClick = onClick,
     label = { Text(label) },
-    shape = RoundedCornerShape(999.dp),
+    colors = AssistChipDefaults.assistChipColors(
+      containerColor = MaterialTheme.colorScheme.secondaryContainer,
+      labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+      leadingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+      trailingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ),
   )
 }
 
@@ -339,6 +362,7 @@ fun EmptyState(
       text = title,
       style = MaterialTheme.typography.titleMedium,
       color = MaterialTheme.colorScheme.onSurface,
+      fontWeight = FontWeight.SemiBold,
     )
     Text(
       text = detail,
@@ -357,50 +381,55 @@ fun AppListItem(
   onClick: (() -> Unit)? = null,
   trailing: (@Composable () -> Unit)? = null,
 ) {
-  ExpressiveCard(
-    modifier = if (onClick != null) {
-      modifier.clickable(onClick = onClick)
-    } else {
-      modifier
-    },
+  OutlinedCard(
+    modifier = modifier
+      .fillMaxWidth()
+      .then(
+        if (onClick != null) {
+          Modifier.clickable(onClick = onClick)
+        } else {
+          Modifier
+        },
+      ),
+    shape = RoundedCornerShape(24.dp),
+    colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
   ) {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Column(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-      ) {
+    ListItem(
+      colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+      headlineContent = {
         Text(
           text = title,
           style = MaterialTheme.typography.titleMedium,
-          color = MaterialTheme.colorScheme.onSurface,
           fontWeight = FontWeight.SemiBold,
         )
+      },
+      overlineContent = {
         Text(
           text = subtitle,
-          style = MaterialTheme.typography.bodyMedium,
+          style = MaterialTheme.typography.labelLarge,
           color = MaterialTheme.colorScheme.primary,
         )
-        supporting?.let {
+      },
+      supportingContent = supporting?.let {
+        {
           Text(
             text = it,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
-      }
-      if (trailing != null) {
-        trailing()
-      } else if (onClick != null) {
-        Icon(
-          imageVector = Icons.Rounded.ArrowForward,
-          contentDescription = null,
-          tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-    }
+      },
+      trailingContent = trailing ?: if (onClick != null) {
+        {
+          Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      } else {
+        null
+      },
+    )
   }
 }

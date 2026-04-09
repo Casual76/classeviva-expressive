@@ -1,22 +1,18 @@
 package dev.antigravity.classevivaexpressive
 
-import android.text.InputType
-import android.text.method.PasswordTransformationMethod
-import android.view.View
-import android.view.inputmethod.EditorInfo
+import android.content.res.Configuration
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -25,8 +21,8 @@ import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Grade
 import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PeopleAlt
 import androidx.compose.material.icons.rounded.Schedule
@@ -35,13 +31,17 @@ import androidx.compose.material.icons.rounded.SportsScore
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.adaptive.navigationsuite.ExperimentalMaterial3AdaptiveNavigationSuiteApi
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldValue
+import androidx.compose.material3.adaptive.navigationsuite.rememberNavigationSuiteScaffoldState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,17 +49,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.autofill.contentType
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.appcompat.widget.AppCompatEditText
-import androidx.core.widget.doAfterTextChanged
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -80,6 +80,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
+import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.feature.absences.AbsencesRoute
 import dev.antigravity.classevivaexpressive.feature.agenda.AgendaRoute
 import dev.antigravity.classevivaexpressive.feature.communications.CommunicationsRoute
@@ -143,7 +144,7 @@ private fun LoadingScreen() {
 }
 
 @Composable
-private fun LoginScreen(
+internal fun LoginScreen(
   isLoading: Boolean,
   error: String?,
   onClearError: () -> Unit,
@@ -151,169 +152,182 @@ private fun LoginScreen(
 ) {
   var username by rememberSaveable { mutableStateOf("") }
   var password by rememberSaveable { mutableStateOf("") }
-  var passwordField by remember { mutableStateOf<AppCompatEditText?>(null) }
-  val focusManager = LocalFocusManager.current
+  var passwordVisible by rememberSaveable { mutableStateOf(false) }
 
   fun submit() {
     if (username.isNotBlank() && password.isNotBlank() && !isLoading) {
-      onLogin(username, password)
-      focusManager.clearFocus()
+      onLogin(username.trim(), password)
     }
   }
 
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(24.dp),
-    verticalArrangement = Arrangement.spacedBy(18.dp),
+    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 28.dp),
+    verticalArrangement = Arrangement.spacedBy(20.dp),
   ) {
     item {
       ExpressiveHeroCard(
         title = "Classeviva Expressive",
-        subtitle = "Versione Android nativa centrata su oggi, voti, agenda e bacheca.",
+        subtitle = "Material 3 ufficiale per registro, agenda, voti e bacheca, tutta in Kotlin e Compose.",
         trailing = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
       )
     }
     item {
-      CredentialInputField(
-        value = username,
-        onValueChange = {
-          username = it
-          if (error != null) onClearError()
-        },
-        label = "Username o codice studente",
-        autofillHints = arrayOf(View.AUTOFILL_HINT_USERNAME, View.AUTOFILL_HINT_EMAIL_ADDRESS),
-        keyboardType = KeyboardType.Text,
-        imeAction = ImeAction.Next,
-        onImeAction = { passwordField?.requestFocus() },
-      )
-    }
-    item {
-      CredentialInputField(
-        value = password,
-        onValueChange = {
-          password = it
-          if (error != null) onClearError()
-        },
-        label = "Password",
-        autofillHints = arrayOf(View.AUTOFILL_HINT_PASSWORD),
-        keyboardType = KeyboardType.Password,
-        imeAction = ImeAction.Done,
-        isPassword = true,
-        onImeAction = ::submit,
-        onViewReady = { passwordField = it },
-      )
-    }
-    if (error != null) {
-      item {
-        Text(
-          text = error,
-          modifier = Modifier.padding(top = 4.dp),
-          color = MaterialTheme.colorScheme.error,
+      Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        OutlinedTextField(
+          value = username,
+          onValueChange = {
+            username = it
+            if (error != null) onClearError()
+          },
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("login_username")
+            .contentType(ContentType.Username + ContentType.EmailAddress),
+          label = { Text("Username o codice studente") },
+          singleLine = true,
+          keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Text,
+            imeAction = ImeAction.Next,
+          ),
         )
-      }
-    }
-    item {
-      Button(
-        onClick = ::submit,
-        modifier = Modifier.fillMaxWidth(),
-        enabled = username.isNotBlank() && password.isNotBlank() && !isLoading,
-      ) {
-        if (isLoading) {
-          CircularProgressIndicator(modifier = Modifier.padding(2.dp))
-        } else {
-          Text("Accedi")
+        OutlinedTextField(
+          value = password,
+          onValueChange = {
+            password = it
+            if (error != null) onClearError()
+          },
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("login_password")
+            .contentType(ContentType.Password),
+          label = { Text("Password") },
+          singleLine = true,
+          visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+          trailingIcon = {
+            TextButton(onClick = { passwordVisible = !passwordVisible }) {
+              Text(if (passwordVisible) "Nascondi" else "Mostra")
+            }
+          },
+          keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Password,
+            imeAction = ImeAction.Done,
+          ),
+          keyboardActions = KeyboardActions(onDone = { submit() }),
+        )
+        if (error != null) {
+          Text(
+            text = error,
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+          )
+        }
+        Button(
+          onClick = ::submit,
+          modifier = Modifier
+            .fillMaxWidth()
+            .testTag("login_submit"),
+          enabled = username.isNotBlank() && password.isNotBlank() && !isLoading,
+        ) {
+          if (isLoading) {
+            CircularProgressIndicator(
+              modifier = Modifier.size(18.dp),
+              strokeWidth = 2.dp,
+              color = MaterialTheme.colorScheme.onPrimary,
+            )
+          } else {
+            Text("Accedi")
+          }
         }
       }
     }
     item {
       EmptyState(
-        title = "Autofill compatibile",
-        detail = "I campi credenziali sono configurati per username e password correnti, così password manager e autofill Android possono agganciarsi meglio.",
+        title = "Autofill Compose",
+        detail = "I campi credenziali espongono i content type ufficiali di Compose per username, email e password.",
       )
     }
   }
 }
 
+@OptIn(ExperimentalMaterial3AdaptiveNavigationSuiteApi::class)
 @Composable
-private fun CredentialInputField(
-  value: String,
-  onValueChange: (String) -> Unit,
-  label: String,
-  autofillHints: Array<String>,
-  keyboardType: KeyboardType,
-  imeAction: ImeAction,
-  modifier: Modifier = Modifier,
-  isPassword: Boolean = false,
-  onImeAction: () -> Unit = {},
-  onViewReady: (AppCompatEditText) -> Unit = {},
+internal fun TopLevelNavigationSuite(
+  currentRoute: String?,
+  showNavigationSuite: Boolean,
+  onNavigateRoute: (String) -> Unit,
+  content: @Composable () -> Unit,
 ) {
-  val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-  val hintColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
-  val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.toArgb()
+  val navigationSuiteState = rememberNavigationSuiteScaffoldState(NavigationSuiteScaffoldValue.Visible)
 
-  Column(
-    modifier = modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(8.dp),
+  LaunchedEffect(showNavigationSuite) {
+    if (showNavigationSuite) {
+      navigationSuiteState.show()
+    } else {
+      navigationSuiteState.hide()
+    }
+  }
+
+  NavigationSuiteScaffold(
+    state = navigationSuiteState,
+    navigationSuiteItems = {
+      topLevelDestinations.forEach { destination ->
+        item(
+          selected = currentRoute == destination.baseRoute,
+          onClick = { onNavigateRoute(destination.navigateRoute) },
+          icon = destination.icon,
+          label = { Text(destination.label) },
+        )
+      }
+    },
   ) {
-    Text(
-      text = label,
-      style = MaterialTheme.typography.labelLarge,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    AndroidView(
-      modifier = Modifier.fillMaxWidth(),
-      factory = { context ->
-        AppCompatEditText(context).apply {
-          importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
-          setAutofillHints(*autofillHints)
-          setSingleLine()
-          setHint(label)
-          setText(value)
-          setTextColor(textColor)
-          setHintTextColor(hintColor)
-          setPadding(40, 32, 40, 32)
-          setBackgroundColor(containerColor)
-          imeOptions = editorInfoFor(imeAction)
-          inputType = inputTypeFor(keyboardType, isPassword)
-          transformationMethod = if (isPassword) PasswordTransformationMethod.getInstance() else null
-          doAfterTextChanged { onValueChange(it?.toString().orEmpty()) }
-          setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == editorInfoFor(imeAction)) {
-              onImeAction()
-              true
-            } else {
-              false
-            }
-          }
-          onViewReady(this)
-        }
-      },
-      update = { editText ->
-        if (editText.text?.toString().orEmpty() != value) {
-          editText.setText(value)
-          editText.setSelection(value.length)
-        }
-        editText.setTextColor(textColor)
-        editText.setHintTextColor(hintColor)
-        editText.setBackgroundColor(containerColor)
-      },
-    )
+    content()
   }
 }
 
-private fun editorInfoFor(imeAction: ImeAction): Int {
-  return when (imeAction) {
-    ImeAction.Next -> EditorInfo.IME_ACTION_NEXT
-    ImeAction.Done -> EditorInfo.IME_ACTION_DONE
-    else -> EditorInfo.IME_ACTION_UNSPECIFIED
+@Preview(name = "Login Light", showBackground = true)
+@Preview(
+  name = "Login Dark",
+  showBackground = true,
+  uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+private fun LoginScreenPreview() {
+  ClassevivaExpressiveTheme(settings = AppSettings()) {
+    ExpressiveScreenSurface {
+      LoginScreen(
+        isLoading = false,
+        error = null,
+        onClearError = {},
+        onLogin = { _, _ -> },
+      )
+    }
   }
 }
 
-private fun inputTypeFor(keyboardType: KeyboardType, isPassword: Boolean): Int {
-  return when {
-    isPassword -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-    keyboardType == KeyboardType.Email -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
-    else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_NORMAL
+@Preview(name = "Adaptive Shell", widthDp = 900, heightDp = 700, showBackground = true)
+@Composable
+private fun TopLevelNavigationSuitePreview() {
+  ClassevivaExpressiveTheme(settings = AppSettings()) {
+    ExpressiveScreenSurface {
+      TopLevelNavigationSuite(
+        currentRoute = "home",
+        showNavigationSuite = true,
+        onNavigateRoute = {},
+      ) {
+        MoreHubScreen(
+          onOpenNotes = {},
+          onOpenHomework = {},
+          onOpenMeetings = {},
+          onOpenLessons = {},
+          onOpenAbsences = {},
+          onOpenMaterials = {},
+          onOpenDocuments = {},
+          onOpenStudentScore = {},
+          onOpenSettings = {},
+        )
+      }
+    }
   }
 }
 
@@ -323,77 +337,38 @@ private fun AuthenticatedApp() {
   val navBackStackEntry by navController.currentBackStackEntryAsState()
   val currentDestination = navBackStackEntry?.destination
   val currentRoute = currentDestination?.route?.substringBefore("?")
-  val showBottomBar = currentRoute in topLevelRoutes
+  val showNavigationSuite = currentRoute in topLevelRoutes
 
-  Scaffold(
-    bottomBar = {
-      if (showBottomBar) {
-        NavigationBar(
-          containerColor = MaterialTheme.colorScheme.surface,
-          tonalElevation = 0.dp,
-        ) {
-          topLevelDestinations.forEach { destination ->
-            val selected = currentDestination?.hierarchy?.any { it.route?.substringBefore("?") == destination.baseRoute } == true
-            val scale by animateFloatAsState(
-              targetValue = if (selected) 1.08f else 1f,
-              animationSpec = tween(durationMillis = 220),
-              label = "nav-item-scale",
-            )
-            NavigationBarItem(
-              selected = selected,
-              onClick = {
-                navController.navigate(destination.navigateRoute) {
-                  popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = true
-                  }
-                  launchSingleTop = true
-                  restoreState = true
-                }
-              },
-              icon = {
-                Box(
-                  modifier = Modifier.graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                  },
-                ) {
-                  destination.icon()
-                }
-              },
-              label = { Text(destination.label) },
-            )
-          }
+  TopLevelNavigationSuite(
+    currentRoute = currentDestination?.hierarchy
+      ?.mapNotNull { it.route?.substringBefore("?") }
+      ?.firstOrNull { it in topLevelRoutes },
+    showNavigationSuite = showNavigationSuite,
+    onNavigateRoute = { targetRoute ->
+      navController.navigate(targetRoute) {
+        popUpTo(navController.graph.findStartDestination().id) {
+          saveState = true
         }
+        launchSingleTop = true
+        restoreState = true
       }
     },
-  ) { innerPadding ->
+  ) {
     NavHost(
       navController = navController,
       startDestination = "home",
-      modifier = Modifier.padding(innerPadding),
+      modifier = Modifier.fillMaxSize(),
       enterTransition = {
-        fadeIn(animationSpec = tween(220)) + slideInHorizontally(
-          initialOffsetX = { it / 8 },
-          animationSpec = tween(260),
-        )
+        fadeIn() + slideInHorizontally(initialOffsetX = { it / 8 })
       },
       exitTransition = {
-        fadeOut(animationSpec = tween(180)) + slideOutHorizontally(
-          targetOffsetX = { -it / 10 },
-          animationSpec = tween(220),
-        )
+        fadeOut() + slideOutHorizontally(targetOffsetX = { -it / 10 })
       },
       popEnterTransition = {
-        fadeIn(animationSpec = tween(220)) + slideInHorizontally(
-          initialOffsetX = { -it / 8 },
-          animationSpec = tween(260),
-        )
+        fadeIn() + slideInHorizontally(initialOffsetX = { -it / 8 })
       },
       popExitTransition = {
-        fadeOut(animationSpec = tween(180)) + slideOutHorizontally(
-          targetOffsetX = { it / 10 },
-          animationSpec = tween(220),
-        )
+        fadeOut() + slideOutHorizontally(targetOffsetX = { it / 10 })
       },
     ) {
       composable("home") {
@@ -499,13 +474,13 @@ private fun MoreHubScreen(
 ) {
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(20.dp),
+    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
     verticalArrangement = Arrangement.spacedBy(18.dp),
   ) {
     item {
       ExpressiveTopHeader(
         title = "Altro",
-        subtitle = "Le sezioni secondarie restano ordinate per compito, con Note in evidenza ma fuori dalla barra principale.",
+        subtitle = "Le sezioni secondarie restano ordinate per compito, con note, didattica e profilo in una vista unica.",
       )
     }
     item { ExpressiveAccentLabel("Registro") }
@@ -523,7 +498,7 @@ private fun MoreHubScreen(
     item {
       RegisterListRow(
         title = "Note e richiami",
-        subtitle = "Apri direttamente annotazioni, richiami e note disciplinari.",
+        subtitle = "Apri annotazioni, richiami e note disciplinari in un unico flusso.",
         eyebrow = "Note",
         tone = ExpressiveTone.Warning,
         onClick = onOpenNotes,

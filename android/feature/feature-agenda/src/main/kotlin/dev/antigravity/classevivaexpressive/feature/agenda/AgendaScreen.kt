@@ -21,13 +21,20 @@ import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -60,7 +67,9 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.CustomEvent
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
 import java.time.YearMonth
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
@@ -266,7 +275,7 @@ fun AgendaRoute(
   }
 
   if (showDialog) {
-    AddEventDialog(
+    AddEventSheet(
       onDismiss = { showDialog = false },
       onSave = { title, description, subject, date, time ->
         viewModel.addCustomEvent(title, description, subject, date, time)
@@ -420,8 +429,9 @@ private fun AgendaEntryRow(
   )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddEventDialog(
+private fun AddEventSheet(
   onDismiss: () -> Unit,
   onSave: (title: String, description: String, subject: String, date: String, time: String?) -> Unit,
 ) {
@@ -430,70 +440,160 @@ private fun AddEventDialog(
   var subject by rememberSaveable { mutableStateOf("") }
   var date by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
   var time by rememberSaveable { mutableStateOf("") }
+  var showDatePicker by rememberSaveable { mutableStateOf(false) }
+  var showTimePicker by rememberSaveable { mutableStateOf(false) }
 
-  AlertDialog(
+  ModalBottomSheet(
     onDismissRequest = onDismiss,
-    title = { Text("Nuovo evento") },
-    text = {
-      LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-          OutlinedTextField(
-            value = title,
-            onValueChange = { title = it },
-            label = { Text("Titolo") },
-            singleLine = true,
-          )
-        }
-        item {
-          OutlinedTextField(
-            value = subject,
-            onValueChange = { subject = it },
-            label = { Text("Materia o tag") },
-            singleLine = true,
-          )
-        }
-        item {
-          OutlinedTextField(
-            value = date,
-            onValueChange = { date = it },
-            label = { Text("Data ISO") },
-            supportingText = { Text("Esempio: 2026-03-31") },
-            singleLine = true,
-          )
-        }
-        item {
-          OutlinedTextField(
-            value = time,
-            onValueChange = { time = it },
-            label = { Text("Ora") },
-            supportingText = { Text("Opzionale, formato 14:30") },
-            singleLine = true,
-          )
-        }
-        item {
-          OutlinedTextField(
-            value = description,
-            onValueChange = { description = it },
-            label = { Text("Dettagli") },
-            minLines = 3,
-          )
+  ) {
+    LazyColumn(
+      modifier = Modifier.fillMaxWidth(),
+      contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      item {
+        Text(
+          text = "Nuovo evento",
+          style = MaterialTheme.typography.headlineSmall,
+        )
+      }
+      item {
+        OutlinedTextField(
+          value = title,
+          onValueChange = { title = it },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Titolo") },
+          singleLine = true,
+        )
+      }
+      item {
+        OutlinedTextField(
+          value = subject,
+          onValueChange = { subject = it },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Materia o tag") },
+          singleLine = true,
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Data",
+          subtitle = date.toLocalDateOrNull()
+            ?.format(DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", italianLocale))
+            ?.replaceFirstChar { it.uppercase() }
+            ?: date,
+          eyebrow = "DatePicker",
+          tone = ExpressiveTone.Primary,
+          onClick = { showDatePicker = true },
+          badge = { StatusBadge("SELEZIONA", tone = ExpressiveTone.Primary) },
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Ora",
+          subtitle = if (time.isBlank()) "Opzionale" else time,
+          eyebrow = "TimePicker",
+          tone = ExpressiveTone.Info,
+          onClick = { showTimePicker = true },
+          badge = { StatusBadge(if (time.isBlank()) "OPZIONALE" else "IMPOSTATA", tone = ExpressiveTone.Info) },
+        )
+      }
+      item {
+        OutlinedTextField(
+          value = description,
+          onValueChange = { description = it },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Dettagli") },
+          minLines = 3,
+        )
+      }
+      item {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          TextButton(onClick = onDismiss) {
+            Text("Annulla")
+          }
+          Button(
+            onClick = { onSave(title, description, subject, date, time) },
+            enabled = title.isNotBlank() && date.isNotBlank(),
+          ) {
+            Text("Salva")
+          }
         }
       }
-    },
-    confirmButton = {
-      TextButton(
-        onClick = { onSave(title, description, subject, date, time) },
-        enabled = title.isNotBlank() && date.isNotBlank(),
-      ) {
-        Text("Salva")
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) {
-        Text("Annulla")
-      }
-    },
-  )
+    }
+  }
+
+  if (showDatePicker) {
+    val datePickerState = rememberDatePickerState(
+      initialSelectedDateMillis = date.toLocalDateOrNull()?.toEpochMillis(),
+    )
+    DatePickerDialog(
+      onDismissRequest = { showDatePicker = false },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            datePickerState.selectedDateMillis?.let { millis ->
+              date = millisToLocalDate(millis).toString()
+            }
+            showDatePicker = false
+          },
+        ) {
+          Text("Seleziona")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { showDatePicker = false }) {
+          Text("Annulla")
+        }
+      },
+    ) {
+      DatePicker(state = datePickerState)
+    }
+  }
+
+  if (showTimePicker) {
+    val initialTime = time.toLocalTimeOrNull() ?: LocalTime.of(14, 30)
+    val timePickerState = rememberTimePickerState(
+      initialHour = initialTime.hour,
+      initialMinute = initialTime.minute,
+      is24Hour = true,
+    )
+    AlertDialog(
+      onDismissRequest = { showTimePicker = false },
+      title = { Text("Seleziona orario") },
+      text = { TimePicker(state = timePickerState) },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            time = String.format(italianLocale, "%02d:%02d", timePickerState.hour, timePickerState.minute)
+            showTimePicker = false
+          },
+        ) {
+          Text("Conferma")
+        }
+      },
+      dismissButton = {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          if (time.isNotBlank()) {
+            TextButton(
+              onClick = {
+                time = ""
+                showTimePicker = false
+              },
+            ) {
+              Text("Rimuovi")
+            }
+          }
+          TextButton(onClick = { showTimePicker = false }) {
+            Text("Annulla")
+          }
+        }
+      },
+    )
+  }
 }
 
 private data class AgendaEntry(
@@ -545,6 +645,20 @@ private fun shareEntry(context: android.content.Context, entry: AgendaEntry) {
   }
 }
 
+private fun LocalDate.toEpochMillis(): Long {
+  return atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+}
+
+private fun millisToLocalDate(value: Long): LocalDate {
+  return java.time.Instant.ofEpochMilli(value)
+    .atZone(ZoneId.systemDefault())
+    .toLocalDate()
+}
+
 private fun String.toLocalDateOrNull(): LocalDate? {
   return runCatching { LocalDate.parse(this) }.getOrNull()
+}
+
+private fun String.toLocalTimeOrNull(): LocalTime? {
+  return runCatching { LocalTime.parse(this) }.getOrNull()
 }

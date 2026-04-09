@@ -1,13 +1,13 @@
 plugins {
   alias(libs.plugins.android.library)
   alias(libs.plugins.kotlin.android)
-  alias(libs.plugins.kotlin.kapt)
+  alias(libs.plugins.ksp)
   alias(libs.plugins.hilt)
 }
 
 android {
   namespace "dev.antigravity.classevivaexpressive.core.database"
-  compileSdk 35
+  compileSdk 36
 
   defaultConfig {
     minSdk 26
@@ -31,10 +31,6 @@ dependencies {
   implementation libs.hilt.android
   implementation libs.serialization.json
 
-  kapt libs.room.compiler
-  kapt libs.hilt.compiler
-}
-
-kapt {
-  correctErrorTypes true
+  ksp libs.room.compiler
+  ksp libs.hilt.compiler
 }
