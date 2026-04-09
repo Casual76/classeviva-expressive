@@ -830,6 +830,20 @@ private fun buildSubjectRows(
   }.sortedBy { it.subject }
 }
 
+internal fun calculateSubjectAverage(grades: List<Grade>): Double? {
+  val numeric = grades.filter { it.numericValue != null }
+  if (numeric.isEmpty()) return null
+  val totalWeight = numeric.sumOf { it.weight ?: 1.0 }
+  return numeric.sumOf { (it.numericValue ?: 0.0) * (it.weight ?: 1.0) } / totalWeight
+}
+
+internal fun calculateOverallAverage(grades: List<Grade>): Double? {
+  val bySubject = grades.groupBy { it.subject }
+  val subjectAverages = bySubject.values.mapNotNull { calculateSubjectAverage(it) }
+  if (subjectAverages.isEmpty()) return null
+  return subjectAverages.average()
+}
+
 private fun effectivePeriodLabel(periods: List<Period>, periodCode: String?): String {
   return periods.firstOrNull { it.code == periodCode }?.label
     ?: periods.firstOrNull { it.code == periodCode }?.description
