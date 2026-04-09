@@ -327,7 +327,7 @@ private fun AbsenceRow(
   )
 }
 
-private fun absenceLabel(type: AbsenceType): String {
+internal fun absenceLabel(type: AbsenceType): String {
   return when (type) {
     AbsenceType.ABSENCE -> "Assenza"
     AbsenceType.LATE -> "Ritardo"
@@ -335,7 +335,7 @@ private fun absenceLabel(type: AbsenceType): String {
   }
 }
 
-private fun badgeLabel(type: AbsenceType): String {
+internal fun badgeLabel(type: AbsenceType): String {
   return when (type) {
     AbsenceType.ABSENCE -> "A"
     AbsenceType.LATE -> "R"
@@ -343,7 +343,7 @@ private fun badgeLabel(type: AbsenceType): String {
   }
 }
 
-private fun hoursLabel(type: AbsenceType, hour: Int): String {
+internal fun hoursLabel(type: AbsenceType, hour: Int): String {
   return when (type) {
     AbsenceType.ABSENCE -> "Ora $hour"
     AbsenceType.LATE -> "Ingresso alla $hour"
@@ -351,7 +351,7 @@ private fun hoursLabel(type: AbsenceType, hour: Int): String {
   }
 }
 
-private fun absenceTone(absence: AbsenceRecord): ExpressiveTone {
+internal fun absenceTone(absence: AbsenceRecord): ExpressiveTone {
   return when {
     absence.justified -> ExpressiveTone.Neutral
     absence.type == AbsenceType.ABSENCE -> ExpressiveTone.Danger
