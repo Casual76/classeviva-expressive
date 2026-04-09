@@ -41,3 +41,5 @@ backend/gateway/**/__pycache__/
 builds/
 *.apk
 crash.log
+.claude/worktrees/compassionate-shtern/
+.claude/worktrees/goofy-dhawan/
