@@ -11,6 +11,7 @@ android {
 
   defaultConfig {
     minSdk 26
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
   }
 
   compileOptions {
@@ -33,4 +34,10 @@ dependencies {
 
   ksp libs.room.compiler
   ksp libs.hilt.compiler
+
+  testImplementation libs.junit4
+  androidTestImplementation libs.androidx.test.ext.junit
+  androidTestImplementation libs.room.testing
+  androidTestImplementation libs.kotlinx.coroutines.test
+  androidTestImplementation libs.turbine
 }
