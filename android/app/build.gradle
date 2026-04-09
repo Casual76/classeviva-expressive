@@ -1,7 +1,8 @@
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.android)
-  alias(libs.plugins.kotlin.kapt)
+  alias(libs.plugins.kotlin.compose)
+  alias(libs.plugins.ksp)
   alias(libs.plugins.hilt)
 }
 
@@ -18,12 +19,12 @@ def configuredApplicationId = providers.gradleProperty("releaseApplicationId")
 
 android {
   namespace "dev.antigravity.classevivaexpressive"
-  compileSdk 35
+  compileSdk 36
 
   defaultConfig {
     applicationId configuredApplicationId
     minSdk 26
-    targetSdk 35
+    targetSdk 36
     versionCode 2026040504
     versionName "4.1.2"
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -54,10 +55,6 @@ android {
   buildFeatures {
     compose true
     buildConfig true
-  }
-
-  composeOptions {
-    kotlinCompilerExtensionVersion libs.versions.composeCompiler.get()
   }
 
   compileOptions {
@@ -103,7 +100,9 @@ dependencies {
 
   implementation platform(libs.compose.bom)
   implementation libs.androidx.appcompat
+  implementation libs.google.material
   implementation libs.bundles.compose
+  implementation libs.compose.material3.adaptive.navigation.suite
   implementation libs.androidx.navigation.runtime.ktx
   implementation libs.hilt.android
   implementation libs.androidx.hilt.navigation.compose
@@ -112,8 +111,8 @@ dependencies {
   implementation libs.webkit
   implementation libs.coil.compose
 
-  kapt libs.hilt.compiler
-  kapt libs.androidx.hilt.compiler
+  ksp libs.hilt.compiler
+  ksp libs.androidx.hilt.compiler
 
   testImplementation libs.junit4
   androidTestImplementation platform(libs.compose.bom)
@@ -122,8 +121,4 @@ dependencies {
   androidTestImplementation libs.compose.ui.test.junit4
   debugImplementation libs.compose.ui.tooling
   debugImplementation libs.compose.ui.test.manifest
-}
-
-kapt {
-  correctErrorTypes true
 }

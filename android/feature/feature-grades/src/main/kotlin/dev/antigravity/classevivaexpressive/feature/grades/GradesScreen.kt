@@ -13,11 +13,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -462,7 +463,7 @@ fun GradesRoute(
   }
 
   if (showSimulationDialog) {
-    AddSimulationDialog(
+    AddSimulationSheet(
       onDismiss = { showSimulationDialog = false },
       onSave = { subject, value, type, note ->
         viewModel.addSimulatedGrade(subject, value, type, note)
@@ -472,40 +473,56 @@ fun GradesRoute(
   }
 
   if (selectedGrade != null) {
-    AlertDialog(
+    ModalBottomSheet(
       onDismissRequest = viewModel::dismissGrade,
-      title = { Text(selectedGrade.subject) },
-      text = {
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-          item {
-            RegisterListRow(
-              title = selectedGrade.valueLabel,
-              subtitle = selectedGrade.type.ifBlank { "Valutazione" },
-              eyebrow = selectedGrade.date.toReadableDate(),
-              meta = listOfNotNull(selectedGrade.teacher, selectedGrade.period, selectedGrade.description, selectedGrade.notes)
-                .joinToString(" / ")
-                .ifBlank { null },
-              tone = gradeTone(selectedGrade.numericValue),
-              badge = {
-                StatusBadge(
-                  label = if (state.seenGradeIds.contains(selectedGrade.id)) "VISTO" else "NUOVO",
-                  tone = if (state.seenGradeIds.contains(selectedGrade.id)) ExpressiveTone.Neutral else ExpressiveTone.Primary,
-                )
-              },
-            )
+    ) {
+      LazyColumn(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        item {
+          Text(
+            text = selectedGrade.subject,
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+          )
+        }
+        item {
+          RegisterListRow(
+            title = selectedGrade.valueLabel,
+            subtitle = selectedGrade.type.ifBlank { "Valutazione" },
+            eyebrow = selectedGrade.date.toReadableDate(),
+            meta = listOfNotNull(selectedGrade.teacher, selectedGrade.period, selectedGrade.description, selectedGrade.notes)
+              .joinToString(" / ")
+              .ifBlank { null },
+            tone = gradeTone(selectedGrade.numericValue),
+            badge = {
+              GradePill(
+                value = selectedGrade.valueLabel,
+                numericValue = selectedGrade.numericValue,
+              )
+              StatusBadge(
+                label = if (state.seenGradeIds.contains(selectedGrade.id)) "VISTO" else "NUOVO",
+                tone = if (state.seenGradeIds.contains(selectedGrade.id)) ExpressiveTone.Neutral else ExpressiveTone.Primary,
+              )
+            },
+          )
+        }
+        item {
+          Button(
+            onClick = viewModel::dismissGrade,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text("Chiudi")
           }
         }
-      },
-      confirmButton = {
-        TextButton(onClick = viewModel::dismissGrade) {
-          Text("Chiudi")
-        }
-      },
-    )
+      }
+    }
   }
 
   goalDialogSubject?.let { subject ->
-    GoalDialog(
+    GoalSheet(
       subject = subject,
       initialValue = selectedGoal?.targetAverage,
       periodLabel = effectivePeriodLabel(state.periods, effectivePeriodCode),
@@ -542,8 +559,9 @@ private fun PeriodSelector(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GoalDialog(
+private fun GoalSheet(
   subject: String,
   initialValue: Double?,
   periodLabel: String,
@@ -556,48 +574,59 @@ private fun GoalDialog(
   }
   val numeric = valueText.replace(",", ".").toDoubleOrNull()
 
-  AlertDialog(
+  ModalBottomSheet(
     onDismissRequest = onDismiss,
-    title = { Text("Obiettivo media / $subject") },
-    text = {
-      LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Periodo attivo: $periodLabel") }
-        item {
-          OutlinedTextField(
-            value = valueText,
-            onValueChange = { valueText = it },
-            label = { Text("Media obiettivo") },
-            supportingText = { Text("Esempio: 7.5") },
-            singleLine = true,
-          )
-        }
+  ) {
+    LazyColumn(
+      modifier = Modifier.fillMaxWidth(),
+      contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      item {
+        Text(
+          text = "Obiettivo media / $subject",
+          style = MaterialTheme.typography.headlineSmall,
+        )
       }
-    },
-    confirmButton = {
-      TextButton(
-        onClick = { onSave(numeric ?: 0.0) },
-        enabled = numeric != null,
-      ) {
-        Text("Salva")
+      item { Text("Periodo attivo: $periodLabel") }
+      item {
+        OutlinedTextField(
+          value = valueText,
+          onValueChange = { valueText = it },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Media obiettivo") },
+          supportingText = { Text("Esempio: 7.5") },
+          singleLine = true,
+        )
       }
-    },
-    dismissButton = {
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (initialValue != null) {
-          TextButton(onClick = onClear) {
-            Text("Rimuovi")
+      item {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          if (initialValue != null) {
+            TextButton(onClick = onClear) {
+              Text("Rimuovi")
+            }
+          }
+          TextButton(onClick = onDismiss) {
+            Text("Annulla")
+          }
+          Button(
+            onClick = { onSave(numeric ?: 0.0) },
+            enabled = numeric != null,
+          ) {
+            Text("Salva")
           }
         }
-        TextButton(onClick = onDismiss) {
-          Text("Annulla")
-        }
       }
-    },
-  )
+    }
+  }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddSimulationDialog(
+private fun AddSimulationSheet(
   onDismiss: () -> Unit,
   onSave: (subject: String, value: Double, type: String, note: String) -> Unit,
 ) {
@@ -605,62 +634,77 @@ private fun AddSimulationDialog(
   var valueText by rememberSaveable { mutableStateOf("") }
   var type by rememberSaveable { mutableStateOf("Interrogazione") }
   var note by rememberSaveable { mutableStateOf("") }
+  val numeric = valueText.replace(",", ".").toDoubleOrNull()
 
-  AlertDialog(
+  ModalBottomSheet(
     onDismissRequest = onDismiss,
-    title = { Text("Aggiungi voto simulato") },
-    text = {
-      LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-          OutlinedTextField(
-            value = subject,
-            onValueChange = { subject = it },
-            label = { Text("Materia") },
-            singleLine = true,
-          )
-        }
-        item {
-          OutlinedTextField(
-            value = valueText,
-            onValueChange = { valueText = it },
-            label = { Text("Valore") },
-            supportingText = { Text("Esempio: 7.5") },
-            singleLine = true,
-          )
-        }
-        item {
-          OutlinedTextField(
-            value = type,
-            onValueChange = { type = it },
-            label = { Text("Tipologia") },
-            singleLine = true,
-          )
-        }
-        item {
-          OutlinedTextField(
-            value = note,
-            onValueChange = { note = it },
-            label = { Text("Nota") },
-            minLines = 2,
-          )
+  ) {
+    LazyColumn(
+      modifier = Modifier.fillMaxWidth(),
+      contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      item {
+        Text(
+          text = "Aggiungi voto simulato",
+          style = MaterialTheme.typography.headlineSmall,
+        )
+      }
+      item {
+        OutlinedTextField(
+          value = subject,
+          onValueChange = { subject = it },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Materia") },
+          singleLine = true,
+        )
+      }
+      item {
+        OutlinedTextField(
+          value = valueText,
+          onValueChange = { valueText = it },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Valore") },
+          supportingText = { Text("Esempio: 7.5") },
+          singleLine = true,
+        )
+      }
+      item {
+        OutlinedTextField(
+          value = type,
+          onValueChange = { type = it },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Tipologia") },
+          singleLine = true,
+        )
+      }
+      item {
+        OutlinedTextField(
+          value = note,
+          onValueChange = { note = it },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Nota") },
+          minLines = 2,
+        )
+      }
+      item {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          TextButton(onClick = onDismiss) {
+            Text("Annulla")
+          }
+          Button(
+            onClick = { onSave(subject, numeric ?: 0.0, type, note) },
+            enabled = subject.isNotBlank() && numeric != null,
+          ) {
+            Text("Salva")
+          }
         }
       }
-    },
-    confirmButton = {
-      val numeric = valueText.replace(",", ".").toDoubleOrNull()
-      TextButton(
-        onClick = { onSave(subject, numeric ?: 0.0, type, note) },
-        enabled = subject.isNotBlank() && numeric != null,
-      ) {
-        Text("Salva")
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) {
-        Text("Annulla")
-      }
-    },
-  )
+    }
+  }
 }
 
 private data class SubjectRow(

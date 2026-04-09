@@ -1,14 +1,14 @@
 plugins {
   alias(libs.plugins.android.library)
   alias(libs.plugins.kotlin.android)
-  alias(libs.plugins.kotlin.kapt)
   alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.ksp)
   alias(libs.plugins.hilt)
 }
 
 android {
   namespace "dev.antigravity.classevivaexpressive.core.network"
-  compileSdk 35
+  compileSdk 36
 
   defaultConfig {
     minSdk 26
@@ -44,12 +44,8 @@ dependencies {
   implementation libs.jsoup
   implementation libs.hilt.android
 
-  kapt libs.hilt.compiler
+  ksp libs.hilt.compiler
 
   testImplementation libs.junit4
   testImplementation libs.okhttp.mockwebserver
-}
-
-kapt {
-  correctErrorTypes true
 }

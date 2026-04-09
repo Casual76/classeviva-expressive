@@ -14,12 +14,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -375,85 +376,111 @@ fun CommunicationsRoute(
     var replyDraft by rememberSaveable(detail.communication.id, detail.replyText) {
       mutableStateOf(detail.replyText.orEmpty())
     }
-    AlertDialog(
+    ModalBottomSheet(
       onDismissRequest = viewModel::dismissDetail,
-      title = { Text(detail.communication.title) },
-      text = {
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-          item { Text(text = detail.content) }
-          if (detail.actions.any { it.type == NoticeboardActionType.REPLY } || detail.replyText != null) {
-            item { ExpressiveAccentLabel("Risposta") }
-            item {
-              OutlinedTextField(
-                value = replyDraft,
-                onValueChange = { replyDraft = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(if (detail.replyText != null) "Risposta inviata" else "Scrivi una risposta") },
-                minLines = 3,
-              )
-            }
-          }
-          if (detail.communication.noticeboardAttachments.isNotEmpty()) {
-            item { ExpressiveAccentLabel("Allegati") }
-            items(detail.communication.noticeboardAttachments, key = { it.id }) { attachment ->
-              RegisterListRow(
-                title = attachment.name,
-                subtitle = attachment.mimeType ?: "Allegato",
-                meta = if (attachment.portalOnly) "Endpoint non ufficiale non disponibile" else "Download diretto",
-                tone = ExpressiveTone.Neutral,
-                badge = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
-                onClick = {
-                  viewModel.downloadAttachment(
-                    RemoteAttachment(
-                      id = attachment.id,
-                      name = attachment.name,
-                      url = attachment.url,
-                      mimeType = attachment.mimeType,
-                      portalOnly = attachment.portalOnly,
-                    ),
-                  )
-                },
-              )
-            }
+    ) {
+      LazyColumn(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        item {
+          Text(
+            text = detail.communication.title,
+            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+          )
+        }
+        item { Text(text = detail.content) }
+        if (detail.actions.any { it.type == NoticeboardActionType.REPLY } || detail.replyText != null) {
+          item { ExpressiveAccentLabel("Risposta") }
+          item {
+            OutlinedTextField(
+              value = replyDraft,
+              onValueChange = { replyDraft = it },
+              modifier = Modifier.fillMaxWidth(),
+              label = { Text(if (detail.replyText != null) "Risposta inviata" else "Scrivi una risposta") },
+              minLines = 3,
+            )
           }
         }
-      },
-      confirmButton = {
-        if (state.isSubmittingAction) {
-          CircularProgressIndicator()
-        } else {
-          TextButton(onClick = viewModel::dismissDetail) {
+        if (detail.communication.noticeboardAttachments.isNotEmpty()) {
+          item { ExpressiveAccentLabel("Allegati") }
+          items(detail.communication.noticeboardAttachments, key = { it.id }) { attachment ->
+            RegisterListRow(
+              title = attachment.name,
+              subtitle = attachment.mimeType ?: "Allegato",
+              meta = if (attachment.portalOnly) "Endpoint non ufficiale non disponibile" else "Download diretto",
+              tone = ExpressiveTone.Neutral,
+              badge = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
+              onClick = {
+                viewModel.downloadAttachment(
+                  RemoteAttachment(
+                    id = attachment.id,
+                    name = attachment.name,
+                    url = attachment.url,
+                    mimeType = attachment.mimeType,
+                    portalOnly = attachment.portalOnly,
+                  ),
+                )
+              },
+            )
+          }
+        }
+        item {
+          if (state.isSubmittingAction) {
+            CircularProgressIndicator()
+          } else {
+            CommunicationActions(
+              actions = detail.actions,
+              replyDraft = replyDraft,
+              onAcknowledge = { viewModel.acknowledge(detail) },
+              onReply = { viewModel.reply(detail, replyDraft) },
+              onJoin = { viewModel.join(detail) },
+              onUpload = {
+                pendingUploadDetail = detail
+                uploadLauncher.launch(arrayOf("*/*"))
+              },
+            )
+          }
+        }
+        item {
+          Button(
+            onClick = viewModel::dismissDetail,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
             Text("Chiudi")
           }
         }
-      },
-      dismissButton = {
-        CommunicationActions(
-          actions = detail.actions,
-          replyDraft = replyDraft,
-          onAcknowledge = { viewModel.acknowledge(detail) },
-          onReply = { viewModel.reply(detail, replyDraft) },
-          onJoin = { viewModel.join(detail) },
-          onUpload = {
-            pendingUploadDetail = detail
-            uploadLauncher.launch(arrayOf("*/*"))
-          },
-        )
-      },
-    )
+      }
+    }
   }
 
   state.selectedNote?.let { detail ->
-    AlertDialog(
+    ModalBottomSheet(
       onDismissRequest = viewModel::dismissDetail,
-      title = { Text(detail.note.title.ifBlank { detail.note.categoryLabel }) },
-      text = { Text(detail.content) },
-      confirmButton = {
-        TextButton(onClick = viewModel::dismissDetail) {
-          Text("Chiudi")
+    ) {
+      LazyColumn(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        item {
+          Text(
+            text = detail.note.title.ifBlank { detail.note.categoryLabel },
+            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
+          )
         }
-      },
-    )
+        item { Text(detail.content) }
+        item {
+          Button(
+            onClick = viewModel::dismissDetail,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text("Chiudi")
+          }
+        }
+      }
+    }
   }
 }
 
@@ -466,25 +493,28 @@ private fun CommunicationActions(
   onJoin: () -> Unit,
   onUpload: () -> Unit,
 ) {
-  LazyColumn {
+  androidx.compose.foundation.layout.Column(
+    modifier = Modifier.fillMaxWidth(),
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
     actions.distinctBy { it.type }.forEach { action ->
       when (action.type) {
-        NoticeboardActionType.ACKNOWLEDGE -> item {
+        NoticeboardActionType.ACKNOWLEDGE -> {
           TextButton(onClick = onAcknowledge) {
             Text(action.label)
           }
         }
-        NoticeboardActionType.REPLY -> item {
+        NoticeboardActionType.REPLY -> {
           TextButton(onClick = onReply, enabled = replyDraft.isNotBlank()) {
             Text("Invia risposta")
           }
         }
-        NoticeboardActionType.JOIN -> item {
+        NoticeboardActionType.JOIN -> {
           TextButton(onClick = onJoin) {
             Text(action.label)
           }
         }
-        NoticeboardActionType.UPLOAD -> item {
+        NoticeboardActionType.UPLOAD -> {
           TextButton(onClick = onUpload) {
             Text(action.label)
           }

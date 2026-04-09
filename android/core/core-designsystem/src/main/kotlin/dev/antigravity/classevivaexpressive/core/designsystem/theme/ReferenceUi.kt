@@ -2,31 +2,39 @@ package dev.antigravity.classevivaexpressive.core.designsystem.theme
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -48,6 +56,7 @@ enum class ExpressiveTone {
   Neutral,
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpressiveTopHeader(
   title: String,
@@ -56,47 +65,45 @@ fun ExpressiveTopHeader(
   onBack: (() -> Unit)? = null,
   actions: @Composable RowScope.() -> Unit = {},
 ) {
-  Column(
+  TopAppBar(
     modifier = modifier.fillMaxWidth(),
-    verticalArrangement = Arrangement.spacedBy(4.dp),
-  ) {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Row(
-        modifier = Modifier.weight(1f),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        if (onBack != null) {
-          IconButton(onClick = onBack) {
-            Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
-          }
-        }
+    title = {
+      Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
           text = title,
-          style = MaterialTheme.typography.displaySmall,
+          style = MaterialTheme.typography.headlineMedium,
           fontWeight = FontWeight.SemiBold,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
+        subtitle?.let {
+          Text(
+            text = it,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
       }
-      Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        content = actions,
-      )
-    }
-    subtitle?.let {
-      Text(
-        text = it,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-    }
-  }
+    },
+    navigationIcon = {
+      if (onBack != null) {
+        IconButton(onClick = onBack) {
+          Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+        }
+      }
+    },
+    actions = actions,
+    colors = TopAppBarDefaults.topAppBarColors(
+      containerColor = Color.Transparent,
+      scrolledContainerColor = Color.Transparent,
+      navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+      actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+      titleContentColor = MaterialTheme.colorScheme.onSurface,
+    ),
+    windowInsets = WindowInsets(0, 0, 0, 0),
+  )
 }
 
 @Composable
@@ -105,10 +112,10 @@ fun ExpressiveAccentLabel(
   modifier: Modifier = Modifier,
 ) {
   Text(
-    text = text,
+    text = text.uppercase(),
     modifier = modifier,
-    style = MaterialTheme.typography.titleMedium,
-    fontWeight = FontWeight.Medium,
+    style = MaterialTheme.typography.labelLarge,
+    fontWeight = FontWeight.Bold,
     color = MaterialTheme.colorScheme.primary,
   )
 }
@@ -120,28 +127,22 @@ fun ExpressivePillTabs(
   onSelect: (String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Row(
-    modifier = modifier,
-    horizontalArrangement = Arrangement.spacedBy(10.dp),
-    verticalAlignment = Alignment.CenterVertically,
+  SingleChoiceSegmentedButtonRow(
+    modifier = modifier.fillMaxWidth(),
   ) {
-    options.forEach { option ->
-      val isSelected = option == selected
-      Surface(
-        modifier = Modifier
-          .clip(RoundedCornerShape(18.dp))
-          .clickable { onSelect(option) },
-        shape = RoundedCornerShape(18.dp),
-        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
-      ) {
-        Text(
-          text = option,
-          modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-          style = MaterialTheme.typography.bodyLarge,
-          color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-          fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-        )
-      }
+    options.forEachIndexed { index, option ->
+      SegmentedButton(
+        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+        selected = option == selected,
+        onClick = { onSelect(option) },
+        label = {
+          Text(
+            text = option,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        },
+      )
     }
   }
 }
@@ -149,22 +150,23 @@ fun ExpressivePillTabs(
 @Composable
 fun ExpressiveEditorialCard(
   modifier: Modifier = Modifier,
-  color: Color = MaterialTheme.colorScheme.surfaceContainer,
+  color: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
   contentColor: Color = MaterialTheme.colorScheme.onSurface,
   content: @Composable ColumnScope.() -> Unit,
 ) {
-  Surface(
+  ElevatedCard(
     modifier = modifier.fillMaxWidth(),
-    shape = RoundedCornerShape(20.dp),
-    color = color,
-    contentColor = contentColor,
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)),
+    colors = CardDefaults.elevatedCardColors(
+      containerColor = color,
+      contentColor = contentColor,
+    ),
+    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
   ) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(16.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
+        .padding(20.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
       content = content,
     )
   }
@@ -250,19 +252,24 @@ fun StatusBadge(
   tone: ExpressiveTone = ExpressiveTone.Neutral,
 ) {
   val colors = toneColors(tone)
-  Surface(
+  SuggestionChip(
     modifier = modifier,
-    shape = RoundedCornerShape(999.dp),
-    color = colors.container,
-    contentColor = colors.content,
-  ) {
-    Text(
-      text = label,
-      modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-      style = MaterialTheme.typography.labelSmall,
-      fontWeight = FontWeight.Bold,
-    )
-  }
+    onClick = {},
+    label = {
+      Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+      )
+    },
+    colors = SuggestionChipDefaults.suggestionChipColors(
+      containerColor = colors.container,
+      labelColor = colors.content,
+      disabledContainerColor = colors.container,
+      disabledLabelColor = colors.content,
+    ),
+    enabled = false,
+  )
 }
 
 @Composable
@@ -274,19 +281,32 @@ fun MetricTile(
   tone: ExpressiveTone = ExpressiveTone.Neutral,
 ) {
   val colors = toneColors(tone)
-  Surface(
+  ElevatedCard(
     modifier = modifier,
-    shape = RoundedCornerShape(20.dp),
-    color = MaterialTheme.colorScheme.surfaceContainer,
-    border = BorderStroke(1.dp, colors.container.copy(alpha = 0.45f)),
+    colors = CardDefaults.elevatedCardColors(containerColor = colors.container),
   ) {
     Column(
-      modifier = Modifier.padding(14.dp),
-      verticalArrangement = Arrangement.spacedBy(6.dp),
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = colors.content)
-      Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      Text(
+        text = label.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      Text(
+        text = value,
+        style = MaterialTheme.typography.headlineSmall,
+        fontWeight = FontWeight.Bold,
+        color = colors.content,
+      )
+      Text(
+        text = detail,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
     }
   }
 }
@@ -304,35 +324,67 @@ fun RegisterListRow(
   onClick: (() -> Unit)? = null,
 ) {
   val colors = toneColors(tone)
-  Surface(
-    modifier = if (onClick != null) modifier.clickable(onClick = onClick) else modifier,
-    shape = RoundedCornerShape(20.dp),
-    color = MaterialTheme.colorScheme.surfaceContainer,
-    border = BorderStroke(1.dp, colors.container.copy(alpha = 0.32f)),
+  OutlinedCard(
+    modifier = modifier
+      .fillMaxWidth()
+      .then(
+        if (onClick != null) {
+          Modifier.clickable(onClick = onClick)
+        } else {
+          Modifier
+        },
+      ),
+    shape = RoundedCornerShape(24.dp),
+    colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+    border = BorderStroke(1.dp, colors.container.copy(alpha = 0.65f)),
   ) {
-    Row(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(16.dp),
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      leading?.invoke()
-      Column(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-      ) {
-        eyebrow?.let {
-          Text(it, style = MaterialTheme.typography.labelSmall, color = colors.content, fontWeight = FontWeight.Bold)
+    ListItem(
+      colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+      overlineContent = eyebrow?.let {
+        {
+          Text(
+            text = it,
+            color = colors.content,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+          )
         }
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        meta?.takeIf { it.isNotBlank() }?.let {
-          Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      },
+      headlineContent = {
+        Text(
+          text = title,
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold,
+        )
+      },
+      supportingContent = {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+          Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          meta?.takeIf { it.isNotBlank() }?.let {
+            Text(
+              text = it,
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
         }
-      }
-      badge?.invoke()
-    }
+      },
+      leadingContent = leading,
+      trailingContent = badge?.let {
+        {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            it()
+          }
+        }
+      },
+    )
   }
 }
 
@@ -363,10 +415,10 @@ private data class ToneColors(
 private fun toneColors(tone: ExpressiveTone): ToneColors {
   return when (tone) {
     ExpressiveTone.Primary -> ToneColors(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary)
-    ExpressiveTone.Success -> ToneColors(Color(0x1F2E7D32), Color(0xFF2E7D32))
-    ExpressiveTone.Warning -> ToneColors(Color(0x1FFF8F00), Color(0xFFB26A00))
-    ExpressiveTone.Danger -> ToneColors(Color(0x1FC62828), Color(0xFFC62828))
-    ExpressiveTone.Info -> ToneColors(Color(0x1F1565C0), Color(0xFF1565C0))
-    ExpressiveTone.Neutral -> ToneColors(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant)
+    ExpressiveTone.Success -> ToneColors(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
+    ExpressiveTone.Warning -> ToneColors(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
+    ExpressiveTone.Danger -> ToneColors(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
+    ExpressiveTone.Info -> ToneColors(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.primary)
+    ExpressiveTone.Neutral -> ToneColors(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }

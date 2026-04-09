@@ -1,13 +1,14 @@
 plugins {
   alias(libs.plugins.android.library)
   alias(libs.plugins.kotlin.android)
-  alias(libs.plugins.kotlin.kapt)
+  alias(libs.plugins.kotlin.compose)
+  alias(libs.plugins.ksp)
   alias(libs.plugins.hilt)
 }
 
 android {
   namespace "dev.antigravity.classevivaexpressive.feature.materials"
-  compileSdk 35
+  compileSdk 36
 
   defaultConfig {
     minSdk 26
@@ -15,10 +16,6 @@ android {
 
   buildFeatures {
     compose true
-  }
-
-  composeOptions {
-    kotlinCompilerExtensionVersion libs.versions.composeCompiler.get()
   }
 
   compileOptions {
@@ -41,9 +38,5 @@ dependencies {
   implementation libs.hilt.android
   implementation libs.androidx.hilt.navigation.compose
 
-  kapt libs.hilt.compiler
-}
-
-kapt {
-  correctErrorTypes true
+  ksp libs.hilt.compiler
 }
