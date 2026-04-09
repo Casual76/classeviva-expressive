@@ -42,4 +42,6 @@ dependencies {
   ksp libs.androidx.hilt.compiler
 
   testImplementation libs.junit4
+  testImplementation libs.mockk
+  testImplementation libs.kotlinx.coroutines.test
 }

@@ -39,4 +39,8 @@ dependencies {
   implementation libs.androidx.hilt.navigation.compose
 
   ksp libs.hilt.compiler
+  testImplementation libs.junit4
+  testImplementation libs.mockk
+  testImplementation libs.kotlinx.coroutines.test
+  testImplementation libs.turbine
 }
