@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -32,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -58,6 +60,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.Period
 import dev.antigravity.classevivaexpressive.core.domain.model.SimulatedGrade
 import dev.antigravity.classevivaexpressive.core.domain.model.SimulationRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SubjectGoal
+import dev.antigravity.classevivaexpressive.core.domain.util.parseDecimal
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -236,6 +239,9 @@ fun GradesRoute(
     state.subjectGoals.firstOrNull { it.subject == subject && it.periodCode == effectivePeriodCode }
       ?: state.subjectGoals.firstOrNull { it.subject == subject && it.periodCode == null }
   }
+  val chartPoints = remember(filteredGrades) {
+    filteredGrades.sortedBy { it.date }.mapNotNull { it.numericValue?.toFloat() }
+  }
 
   LaunchedEffect(initialGradeId, state.grades.size) {
     if (!initialGradeId.isNullOrBlank() && state.grades.any { it.id == initialGradeId } && state.selectedGradeId != initialGradeId) {
@@ -298,6 +304,24 @@ fun GradesRoute(
           tone = ExpressiveTone.Info,
           modifier = Modifier.weight(1f),
         )
+      }
+    }
+    if (chartPoints.size >= 2) {
+      item {
+        ExpressiveEditorialCard {
+          Text(
+            text = "TREND RECENTE",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+          )
+          ExpressiveMiniChart(
+            points = chartPoints.takeLast(12),
+            color = MaterialTheme.colorScheme.primary,
+            threshold = 6f,
+            modifier = Modifier.height(100.dp)
+          )
+        }
       }
     }
     if (state.periods.isNotEmpty()) {
@@ -572,7 +596,7 @@ private fun GoalSheet(
   var valueText by rememberSaveable(subject, initialValue) {
     mutableStateOf(initialValue?.format1().orEmpty())
   }
-  val numeric = valueText.replace(",", ".").toDoubleOrNull()
+  val numeric = valueText.parseDecimal()
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
@@ -634,7 +658,7 @@ private fun AddSimulationSheet(
   var valueText by rememberSaveable { mutableStateOf("") }
   var type by rememberSaveable { mutableStateOf("Interrogazione") }
   var note by rememberSaveable { mutableStateOf("") }
-  val numeric = valueText.replace(",", ".").toDoubleOrNull()
+  val numeric = valueText.parseDecimal()
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,

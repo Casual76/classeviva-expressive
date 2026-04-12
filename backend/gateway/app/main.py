@@ -4,16 +4,25 @@ from fastapi import FastAPI
 
 from .models import (
     AbsenceJustificationPayload,
+    AgendaItemModel,
     CommunicationDetailModel,
+    CommunicationModel,
+    DocumentItemModel,
     GatewayEnvelope,
+    GradeModel,
     HomeworkDetailModel,
     HomeworkModel,
     HomeworkSubmissionPayload,
     HomeworkSubmissionReceiptModel,
+    LessonModel,
+    MaterialItemModel,
     MeetingBookingModel,
     MeetingJoinLinkModel,
     MeetingSnapshotModel,
     NoticeboardActionPayload,
+    PeriodModel,
+    StudentProfileModel,
+    SubjectModel,
 )
 from .service import ClassevivaGatewayService
 
@@ -24,6 +33,51 @@ service = ClassevivaGatewayService()
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/gateway/profile", response_model=StudentProfileModel)
+async def get_profile(envelope: GatewayEnvelope) -> StudentProfileModel:
+    return await service.get_profile(envelope.credentials)
+
+
+@app.post("/gateway/grades", response_model=list[GradeModel])
+async def get_grades(envelope: GatewayEnvelope) -> list[GradeModel]:
+    return await service.get_grades(envelope.credentials, envelope.schoolYear)
+
+
+@app.post("/gateway/periods", response_model=list[PeriodModel])
+async def get_periods(envelope: GatewayEnvelope) -> list[PeriodModel]:
+    return await service.get_periods(envelope.credentials, envelope.schoolYear)
+
+
+@app.post("/gateway/subjects", response_model=list[SubjectModel])
+async def get_subjects(envelope: GatewayEnvelope) -> list[SubjectModel]:
+    return await service.get_subjects(envelope.credentials, envelope.schoolYear)
+
+
+@app.post("/gateway/agenda", response_model=list[AgendaItemModel])
+async def get_agenda(envelope: GatewayEnvelope) -> list[AgendaItemModel]:
+    return await service.get_agenda(envelope.credentials, envelope.schoolYear)
+
+
+@app.post("/gateway/lessons", response_model=list[LessonModel])
+async def get_lessons(envelope: GatewayEnvelope) -> list[LessonModel]:
+    return await service.get_lessons(envelope.credentials, envelope.schoolYear)
+
+
+@app.post("/gateway/noticeboard", response_model=list[CommunicationModel])
+async def get_noticeboard(envelope: GatewayEnvelope) -> list[CommunicationModel]:
+    return await service.get_noticeboard(envelope.credentials, envelope.schoolYear)
+
+
+@app.post("/gateway/materials", response_model=list[MaterialItemModel])
+async def get_materials(envelope: GatewayEnvelope) -> list[MaterialItemModel]:
+    return await service.get_materials(envelope.credentials, envelope.schoolYear)
+
+
+@app.post("/gateway/documents", response_model=list[DocumentItemModel])
+async def get_documents(envelope: GatewayEnvelope) -> list[DocumentItemModel]:
+    return await service.get_documents(envelope.credentials, envelope.schoolYear)
 
 
 @app.post("/gateway/homeworks", response_model=list[HomeworkModel])

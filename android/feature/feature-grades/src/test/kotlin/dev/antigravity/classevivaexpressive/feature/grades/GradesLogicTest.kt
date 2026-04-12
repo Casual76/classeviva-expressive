@@ -2,9 +2,9 @@ package dev.antigravity.classevivaexpressive.feature.grades
 
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.*
 import org.junit.Test
+
 import java.time.LocalDate
 
 class GradesLogicTest {

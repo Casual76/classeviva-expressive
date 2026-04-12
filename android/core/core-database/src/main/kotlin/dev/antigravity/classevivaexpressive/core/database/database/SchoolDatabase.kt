@@ -77,6 +77,40 @@ data class SubjectGoalEntity(
   val updatedAtEpochMillis: Long,
 )
 
+@Entity(tableName = "grades")
+data class GradeEntity(
+  @PrimaryKey val id: String,
+  val studentId: String,
+  val schoolYearId: String,
+  val subject: String,
+  val valueLabel: String,
+  val numericValue: Double?,
+  val description: String?,
+  val date: String,
+  val type: String,
+  val weight: Double?,
+  val notes: String?,
+  val period: String?,
+  val periodCode: String?,
+  val teacher: String?,
+  val color: String?,
+)
+
+@Entity(tableName = "agenda_items")
+data class AgendaItemEntity(
+  @PrimaryKey val id: String,
+  val studentId: String,
+  val schoolYearId: String,
+  val title: String,
+  val subtitle: String,
+  val date: String,
+  val time: String?,
+  val detail: String?,
+  val subject: String?,
+  val category: String,
+  val sharePayload: String?,
+)
+
 @Dao
 interface SnapshotCacheDao {
   @Query("SELECT * FROM snapshot_cache WHERE cacheKey = :key LIMIT 1")
@@ -158,6 +192,30 @@ interface SubjectGoalDao {
   suspend fun delete(studentId: String, subject: String, periodCode: String?)
 }
 
+@Dao
+interface GradeDao {
+  @Query("SELECT * FROM grades WHERE studentId = :studentId AND schoolYearId = :schoolYearId ORDER BY date DESC")
+  fun observeByYear(studentId: String, schoolYearId: String): Flow<List<GradeEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertAll(entities: List<GradeEntity>)
+
+  @Query("DELETE FROM grades WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
+  suspend fun deleteByYear(studentId: String, schoolYearId: String)
+}
+
+@Dao
+interface AgendaDao {
+  @Query("SELECT * FROM agenda_items WHERE studentId = :studentId AND schoolYearId = :schoolYearId ORDER BY date ASC, time ASC")
+  fun observeByYear(studentId: String, schoolYearId: String): Flow<List<AgendaItemEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertAll(entities: List<AgendaItemEntity>)
+
+  @Query("DELETE FROM agenda_items WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
+  suspend fun deleteByYear(studentId: String, schoolYearId: String)
+}
+
 @Database(
   entities = [
     SnapshotCacheEntity::class,
@@ -167,8 +225,10 @@ interface SubjectGoalDao {
     DownloadRecordEntity::class,
     SeenGradeEntity::class,
     SubjectGoalEntity::class,
+    GradeEntity::class,
+    AgendaItemEntity::class,
   ],
-  version = 2,
+  version = 3,
   exportSchema = false,
 )
 abstract class SchoolDatabase : RoomDatabase() {
@@ -179,6 +239,8 @@ abstract class SchoolDatabase : RoomDatabase() {
   abstract fun downloadRecordDao(): DownloadRecordDao
   abstract fun seenGradeDao(): SeenGradeDao
   abstract fun subjectGoalDao(): SubjectGoalDao
+  abstract fun gradeDao(): GradeDao
+  abstract fun agendaDao(): AgendaDao
 }
 
 @Module
@@ -213,4 +275,10 @@ object DatabaseModule {
 
   @Provides
   fun provideSubjectGoalDao(database: SchoolDatabase): SubjectGoalDao = database.subjectGoalDao()
+
+  @Provides
+  fun provideGradeDao(database: SchoolDatabase): GradeDao = database.gradeDao()
+
+  @Provides
+  fun provideAgendaDao(database: SchoolDatabase): AgendaDao = database.agendaDao()
 }

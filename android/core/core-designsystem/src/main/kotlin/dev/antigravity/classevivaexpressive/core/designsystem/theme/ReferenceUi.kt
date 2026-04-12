@@ -413,11 +413,20 @@ private data class ToneColors(
 
 @Composable
 private fun toneColors(tone: ExpressiveTone): ToneColors {
+  val isDark = androidx.compose.foundation.isSystemInDarkTheme()
   return when (tone) {
     ExpressiveTone.Primary -> ToneColors(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary)
-    ExpressiveTone.Success -> ToneColors(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
-    ExpressiveTone.Warning -> ToneColors(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
-    ExpressiveTone.Danger -> ToneColors(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
+    ExpressiveTone.Success -> if (isDark) {
+      ToneColors(Color(0xFF0F2D1D), Color(0xFF81C784))
+    } else {
+      ToneColors(Color(0xFFE8F5E9), Color(0xFF1B5E20))
+    }
+    ExpressiveTone.Warning -> if (isDark) {
+      ToneColors(Color(0xFF332000), Color(0xFFFFB74D))
+    } else {
+      ToneColors(Color(0xFFFFF3E0), Color(0xFFE65100))
+    }
+    ExpressiveTone.Danger -> ToneColors(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.error)
     ExpressiveTone.Info -> ToneColors(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.primary)
     ExpressiveTone.Neutral -> ToneColors(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurfaceVariant)
   }

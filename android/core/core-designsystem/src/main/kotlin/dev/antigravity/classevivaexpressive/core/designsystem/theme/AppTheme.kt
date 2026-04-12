@@ -55,6 +55,7 @@ data class AccentPreset(
 )
 
 val expressiveAccentPresets = listOf(
+  AccentPreset("expressive", Color(0xFF6750A4), Color(0xFF625B71), Color(0xFF7D5260)),
   AccentPreset("ember", Color(0xFF176B63), Color(0xFF233239), Color(0xFFC48A3A)),
   AccentPreset("ocean", Color(0xFF275F7A), Color(0xFF223541), Color(0xFFD0A15B)),
   AccentPreset("jade", Color(0xFF3F6D58), Color(0xFF27352F), Color(0xFFB98A5F)),
@@ -117,7 +118,10 @@ private fun lightBrandScheme(accent: AccentPreset): ColorScheme = lightColorSche
   surfaceContainerHighest = Color(0xFFE1DED7),
   onSurface = Color(0xFF161D1A),
   onSurfaceVariant = Color(0xFF55605B),
-  error = Color(0xFFB42318),
+  error = Color(0xFFDC3545),
+  errorContainer = Color(0xFFFFDAD6),
+  onError = Color.White,
+  onErrorContainer = Color(0xFF410002),
   outline = Color(0xFFCAD2CC),
 )
 

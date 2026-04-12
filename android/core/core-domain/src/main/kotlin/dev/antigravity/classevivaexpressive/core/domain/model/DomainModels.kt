@@ -654,17 +654,31 @@ data class StudentScoreComparison(
 )
 
 @Serializable
+data class NetworkConfig(
+  val featureModes: Map<RegistroFeature, FeatureCapabilityMode> = RegistroFeature.entries.associateWith {
+    if (it in listOf(RegistroFeature.LOGIN_SESSION, RegistroFeature.NOTIFICATIONS)) FeatureCapabilityMode.DIRECT_REST
+    else FeatureCapabilityMode.GATEWAY
+  },
+  val gatewayBaseUrl: String = "http://localhost:8088", // Default for local dev
+)
+
+@Serializable
 data class AppSettings(
   val themeMode: ThemeMode = ThemeMode.SYSTEM,
   val accentMode: AccentMode = AccentMode.BRAND,
-  val customAccentName: String = "ember",
+  val customAccentName: String = "expressive",
   val dynamicColorEnabled: Boolean = true,
   val amoledEnabled: Boolean = false,
   val notificationPreferences: NotificationPreferences = NotificationPreferences(),
   val periodicSyncEnabled: Boolean = true,
+  val networkConfig: NetworkConfig = NetworkConfig(),
 ) {
   val notificationsEnabled: Boolean
     get() = notificationPreferences.enabled
+
+  fun getFeatureMode(feature: RegistroFeature): FeatureCapabilityMode {
+    return networkConfig.featureModes[feature] ?: FeatureCapabilityMode.DIRECT_REST
+  }
 }
 
 interface AuthRepository {

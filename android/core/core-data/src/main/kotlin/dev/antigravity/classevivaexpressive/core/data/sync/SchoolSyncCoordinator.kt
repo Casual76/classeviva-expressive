@@ -17,16 +17,24 @@ import dev.antigravity.classevivaexpressive.core.data.repository.ProfileSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SchoolbooksSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SubjectsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey
+import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
+import dev.antigravity.classevivaexpressive.core.database.database.AgendaItemEntity
+import dev.antigravity.classevivaexpressive.core.database.database.GradeDao
+import dev.antigravity.classevivaexpressive.core.database.database.GradeEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheEntity
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
+import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceJustificationRequest
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
+import dev.antigravity.classevivaexpressive.core.domain.model.FeatureCapabilityMode
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSubmission
@@ -38,6 +46,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.MeetingTeacher
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
+import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolbookCourse
 import dev.antigravity.classevivaexpressive.core.domain.model.Subject
@@ -63,8 +72,11 @@ class SchoolSyncCoordinator @Inject constructor(
   private val restClient: ClassevivaRestClient,
   private val gatewayClient: ClassevivaGatewayClient,
   private val sessionStore: SessionStore,
+  private val settingsStore: SettingsStore,
   private val schoolYearStore: SchoolYearStore,
   private val snapshotCacheDao: SnapshotCacheDao,
+  private val gradeDao: GradeDao,
+  private val agendaDao: AgendaDao,
 ) {
   private var activeSession: UserSession? = null
   val syncStatus = MutableStateFlow(SyncStatus())
@@ -286,6 +298,7 @@ class SchoolSyncCoordinator @Inject constructor(
       state = SyncState.ERROR,
       message = "Sessione assente.",
     )
+    val settings = settingsStore.settings.first()
     attachSession(session)
     syncStatus.value = SyncStatus(
       state = SyncState.SYNCING,
@@ -301,64 +314,129 @@ class SchoolSyncCoordinator @Inject constructor(
     val selectedSections = sections ?: allSections()
 
     if (refreshProfile && selectedSections.contains(ProfileSection)) {
-      syncGlobal(ProfileSection, errors) { restClient.getProfile() }
+      syncGlobal(ProfileSection, errors) {
+        if (settings.getFeatureMode(RegistroFeature.PROFILE) == FeatureCapabilityMode.GATEWAY) {
+          gatewayClient.getProfile(selectedYear)
+        } else {
+          restClient.getProfile()
+        }
+      }
     }
 
     if (selectedSections.contains(GradesSection)) {
-      if (isCurrentYear) syncYearScoped(GradesSection, selectedYear, errors) { restClient.getGrades() }
-      else clearYearScoped(GradesSection, selectedYear, emptyList<Grade>())
+      syncGrades(selectedYear, errors) {
+        if (settings.getFeatureMode(RegistroFeature.GRADES) == FeatureCapabilityMode.GATEWAY) {
+          gatewayClient.getGrades(selectedYear)
+        } else if (isCurrentYear) {
+          restClient.getGrades()
+        } else {
+          emptyList<Grade>()
+        }
+      }
     }
     if (selectedSections.contains(PeriodsSection)) {
-      if (isCurrentYear) syncYearScoped(PeriodsSection, selectedYear, errors) { restClient.getPeriods() }
-      else clearYearScoped(PeriodsSection, selectedYear, emptyList<Period>())
+      syncYearScoped(PeriodsSection, selectedYear, errors) {
+        if (settings.getFeatureMode(RegistroFeature.PERIODS) == FeatureCapabilityMode.GATEWAY) {
+          gatewayClient.getPeriods(selectedYear)
+        } else if (isCurrentYear) {
+          restClient.getPeriods()
+        } else {
+          emptyList<Period>()
+        }
+      }
     }
     if (selectedSections.contains(SubjectsSection)) {
-      if (isCurrentYear) syncYearScoped(SubjectsSection, selectedYear, errors) { restClient.getSubjects() }
-      else clearYearScoped(SubjectsSection, selectedYear, emptyList<Subject>())
+      syncYearScoped(SubjectsSection, selectedYear, errors) {
+        if (settings.getFeatureMode(RegistroFeature.SUBJECTS) == FeatureCapabilityMode.GATEWAY) {
+          gatewayClient.getSubjects(selectedYear)
+        } else if (isCurrentYear) {
+          restClient.getSubjects()
+        } else {
+          emptyList<Subject>()
+        }
+      }
     }
     if (selectedSections.contains(LessonsSection)) {
       syncYearScoped(LessonsSection, selectedYear, errors) {
-        restClient.getLessons(yearStart.toString(), yearEnd.toString())
+        if (settings.getFeatureMode(RegistroFeature.LESSONS) == FeatureCapabilityMode.GATEWAY) {
+          gatewayClient.getLessons(selectedYear)
+        } else {
+          restClient.getLessons(yearStart.toString(), yearEnd.toString())
+        }
       }
     }
     if (selectedSections.contains(HomeworkSection)) {
-      if (isCurrentYear) {
-        syncYearScoped(HomeworkSection, selectedYear, errors) {
-          filterHomeworksForYear(restClient.getHomeworks(), selectedYear)
-        }
-      } else if (gatewayClient.isConfigured()) {
-        syncYearScoped(HomeworkSection, selectedYear, errors) {
+      syncYearScoped(HomeworkSection, selectedYear, errors) {
+        if (settings.getFeatureMode(RegistroFeature.HOMEWORKS) == FeatureCapabilityMode.GATEWAY) {
           gatewayClient.getHomeworks(selectedYear)
+        } else if (isCurrentYear) {
+          filterHomeworksForYear(restClient.getHomeworks(), selectedYear)
+        } else {
+          emptyList<Homework>()
         }
-      } else {
-        clearYearScoped(HomeworkSection, selectedYear, emptyList<Homework>())
       }
     }
     if (selectedSections.contains(AgendaSection)) {
-      syncYearScoped(AgendaSection, selectedYear, errors) {
-        restClient.getAgenda(yearStart.toString(), yearEnd.toString())
+      syncAgenda(selectedYear, errors) {
+        if (settings.getFeatureMode(RegistroFeature.AGENDA) == FeatureCapabilityMode.GATEWAY) {
+          gatewayClient.getAgenda(selectedYear)
+        } else {
+          restClient.getAgenda(yearStart.toString(), yearEnd.toString())
+        }
       }
     }
     if (selectedSections.contains(AbsencesSection)) {
       syncYearScoped(AbsencesSection, selectedYear, errors) {
-        restClient.getAbsences(yearStart.toString(), yearEnd.toString())
+        if (settings.getFeatureMode(RegistroFeature.ABSENCES) == FeatureCapabilityMode.GATEWAY) {
+          restClient.getAbsences(yearStart.toString(), yearEnd.toString())
+        } else {
+          restClient.getAbsences(yearStart.toString(), yearEnd.toString())
+        }
       }
     }
     if (selectedSections.contains(CommunicationsSection)) {
-      if (isCurrentYear) syncYearScoped(CommunicationsSection, selectedYear, errors) { restClient.getCommunications() }
-      else clearYearScoped(CommunicationsSection, selectedYear, emptyList<Communication>())
+      syncYearScoped(CommunicationsSection, selectedYear, errors) {
+        if (settings.getFeatureMode(RegistroFeature.NOTICEBOARD) == FeatureCapabilityMode.GATEWAY) {
+          gatewayClient.getCommunications(selectedYear)
+        } else if (isCurrentYear) {
+          restClient.getCommunications()
+        } else {
+          emptyList<Communication>()
+        }
+      }
     }
     if (selectedSections.contains(NotesSection)) {
-      if (isCurrentYear) syncYearScoped(NotesSection, selectedYear, errors) { restClient.getNotes() }
-      else clearYearScoped(NotesSection, selectedYear, emptyList<Note>())
+      syncYearScoped(NotesSection, selectedYear, errors) {
+        if (settings.getFeatureMode(RegistroFeature.NOTES) == FeatureCapabilityMode.GATEWAY) {
+          emptyList<Note>()
+        } else if (isCurrentYear) {
+          restClient.getNotes()
+        } else {
+          emptyList<Note>()
+        }
+      }
     }
     if (selectedSections.contains(MaterialsSection)) {
-      if (isCurrentYear) syncYearScoped(MaterialsSection, selectedYear, errors) { restClient.getMaterials() }
-      else clearYearScoped(MaterialsSection, selectedYear, emptyList<dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem>())
+      syncYearScoped(MaterialsSection, selectedYear, errors) {
+        if (settings.getFeatureMode(RegistroFeature.MATERIALS) == FeatureCapabilityMode.GATEWAY) {
+          gatewayClient.getMaterials(selectedYear)
+        } else if (isCurrentYear) {
+          restClient.getMaterials()
+        } else {
+          emptyList()
+        }
+      }
     }
     if (selectedSections.contains(DocumentsSection)) {
-      if (isCurrentYear) syncYearScoped(DocumentsSection, selectedYear, errors) { restClient.getDocuments() }
-      else clearYearScoped(DocumentsSection, selectedYear, emptyList<DocumentItem>())
+      syncYearScoped(DocumentsSection, selectedYear, errors) {
+        if (settings.getFeatureMode(RegistroFeature.DOCUMENTS) == FeatureCapabilityMode.GATEWAY) {
+          gatewayClient.getDocuments(selectedYear)
+        } else if (isCurrentYear) {
+          restClient.getDocuments()
+        } else {
+          emptyList<DocumentItem>()
+        }
+      }
     }
     if (selectedSections.contains(SchoolbooksSection)) {
       if (isCurrentYear) syncYearScoped(SchoolbooksSection, selectedYear, errors) { restClient.getSchoolbooks() }
@@ -396,6 +474,72 @@ class SchoolSyncCoordinator @Inject constructor(
     }
     syncStatus.value = next
     return next
+  }
+
+  private suspend fun syncGrades(
+    schoolYear: SchoolYearRef,
+    errors: MutableList<String>,
+    fetch: suspend () -> List<Grade>,
+  ) {
+    val session = activeSession ?: return
+    runCatching {
+      val grades = fetch()
+      val entities = grades.map { grade ->
+        GradeEntity(
+          id = grade.id,
+          studentId = session.studentId,
+          schoolYearId = schoolYear.id,
+          subject = grade.subject,
+          valueLabel = grade.valueLabel,
+          numericValue = grade.numericValue,
+          description = grade.description,
+          date = grade.date,
+          type = grade.type,
+          weight = grade.weight,
+          notes = grade.notes,
+          period = grade.period,
+          periodCode = grade.periodCode,
+          teacher = grade.teacher,
+          color = grade.color,
+        )
+      }
+      gradeDao.deleteByYear(session.studentId, schoolYear.id)
+      gradeDao.upsertAll(entities)
+      storeYearScopedValue(GradesSection, schoolYear, grades)
+    }.onFailure {
+      errors += GradesSection
+    }
+  }
+
+  private suspend fun syncAgenda(
+    schoolYear: SchoolYearRef,
+    errors: MutableList<String>,
+    fetch: suspend () -> List<AgendaItem>,
+  ) {
+    val session = activeSession ?: return
+    runCatching {
+      val agenda = fetch()
+      val entities = agenda.map { item ->
+        AgendaItemEntity(
+          id = item.id,
+          studentId = session.studentId,
+          schoolYearId = schoolYear.id,
+          title = item.title,
+          subtitle = item.subtitle,
+          date = item.date,
+          time = item.time,
+          detail = item.detail,
+          subject = item.subject,
+          category = item.category.name,
+          sharePayload = item.sharePayload,
+        )
+      }
+      agendaDao.deleteByYear(session.studentId, schoolYear.id)
+      agendaDao.upsertAll(entities)
+      storeYearScopedValue(AgendaSection, schoolYear, agenda)
+    }.onFailure {
+      errors += AgendaSection
+    }
   }
 
   private suspend inline fun <reified T> syncGlobal(

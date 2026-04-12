@@ -1,10 +1,12 @@
 package dev.antigravity.classevivaexpressive.core.data.repository
 
+import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.FeatureCapabilityMode
+import dev.antigravity.classevivaexpressive.core.domain.model.NetworkConfig
 import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
-import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaGatewayClient
+import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.first
@@ -24,14 +26,20 @@ class CapabilityResolverTest {
     selectedYear: SchoolYearRef = currentYear,
     gatewayConfigured: Boolean = false,
   ): DefaultCapabilityResolver {
-    val store = mockk<SchoolYearStore>()
-    val gateway = mockk<ClassevivaGatewayClient>()
+    val schoolYearStore = mockk<SchoolYearStore>()
+    val settingsStore = mockk<SettingsStore>()
 
-    every { store.observeSelectedSchoolYear() } returns flowOf(selectedYear)
-    every { store.currentSchoolYearRef() } returns currentYear
-    every { gateway.isConfigured() } returns gatewayConfigured
+    every { schoolYearStore.observeSelectedSchoolYear() } returns flowOf(selectedYear)
+    every { schoolYearStore.currentSchoolYearRef() } returns currentYear
+    every { settingsStore.settings } returns flowOf(
+      AppSettings(
+        networkConfig = NetworkConfig(
+          gatewayBaseUrl = if (gatewayConfigured) "http://gateway" else ""
+        )
+      )
+    )
 
-    return DefaultCapabilityResolver(store, gateway)
+    return DefaultCapabilityResolver(schoolYearStore, settingsStore)
   }
 
   @Test
