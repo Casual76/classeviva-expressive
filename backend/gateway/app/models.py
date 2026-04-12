@@ -155,6 +155,96 @@ class NoticeboardActionPayload(BaseModel):
     attachment: AttachmentPayload | None = None
 
 
+class StudentProfileModel(BaseModel):
+    id: str = ""
+    name: str = ""
+    surname: str = ""
+    email: str = ""
+    schoolClass: str = ""
+    section: str = ""
+    school: str = ""
+    schoolYear: str = ""
+
+
+class GradeModel(BaseModel):
+    id: str
+    subject: str
+    valueLabel: str
+    numericValue: float | None = None
+    description: str | None = None
+    date: str
+    type: str
+    weight: float | None = None
+    notes: str | None = None
+    period: str | None = None
+    periodCode: str | None = None
+    teacher: str | None = None
+    color: str | None = None
+
+
+class PeriodModel(BaseModel):
+    code: str
+    order: int
+    description: str
+    label: str
+    isFinal: bool
+    startDate: str
+    endDate: str
+
+
+class SubjectModel(BaseModel):
+    id: str
+    description: str
+    order: int
+    teachers: list[str] = Field(default_factory=list)
+
+
+class AgendaItemModel(BaseModel):
+    id: str
+    title: str
+    subtitle: str
+    date: str
+    time: str | None = None
+    detail: str | None = None
+    subject: str | None = None
+    category: str
+    sharePayload: str | None = None
+
+
+class LessonModel(BaseModel):
+    id: str
+    subject: str
+    date: str
+    time: str
+    durationMinutes: int
+    topic: str | None = None
+    teacher: str | None = None
+    room: str | None = None
+
+
+class MaterialItemModel(BaseModel):
+    id: str
+    teacherId: str
+    teacherName: str
+    folderId: str
+    folderName: str
+    title: str
+    objectId: str
+    objectType: str
+    sharedAt: str
+    capabilityState: CapabilityState = Field(default_factory=CapabilityState)
+    attachments: list[RemoteAttachment] = Field(default_factory=list)
+
+
+class DocumentItemModel(BaseModel):
+    id: str
+    title: str
+    detail: str
+    viewUrl: str | None = None
+    confirmUrl: str | None = None
+    capabilityState: CapabilityState = Field(default_factory=CapabilityState)
+
+
 class MeetingTeacherModel(BaseModel):
     id: str
     name: str

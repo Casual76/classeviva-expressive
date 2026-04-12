@@ -15,6 +15,17 @@ import dev.antigravity.classevivaexpressive.core.domain.model.MeetingJoinLink
 import dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot
 import dev.antigravity.classevivaexpressive.core.domain.model.MeetingTeacher
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
+import dev.antigravity.classevivaexpressive.core.domain.model.Communication
+import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
+import dev.antigravity.classevivaexpressive.core.domain.model.Grade
+import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
+import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
+import dev.antigravity.classevivaexpressive.core.domain.model.Period
+import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
+import dev.antigravity.classevivaexpressive.core.domain.model.Subject
+import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +72,24 @@ data class GatewayMeetingsSnapshotDto(
 )
 
 interface ClassevivaGatewayService {
+  @POST("gateway/profile")
+  suspend fun getProfile(@Body body: GatewayEnvelope<Unit>): StudentProfile
+
+  @POST("gateway/grades")
+  suspend fun getGrades(@Body body: GatewayEnvelope<Unit>): List<Grade>
+
+  @POST("gateway/periods")
+  suspend fun getPeriods(@Body body: GatewayEnvelope<Unit>): List<Period>
+
+  @POST("gateway/subjects")
+  suspend fun getSubjects(@Body body: GatewayEnvelope<Unit>): List<Subject>
+
+  @POST("gateway/agenda")
+  suspend fun getAgenda(@Body body: GatewayEnvelope<Unit>): List<AgendaItem>
+
+  @POST("gateway/lessons")
+  suspend fun getLessons(@Body body: GatewayEnvelope<Unit>): List<Lesson>
+
   @POST("gateway/homeworks")
   suspend fun getHomeworks(@Body body: GatewayEnvelope<Unit>): List<Homework>
 
@@ -82,6 +111,9 @@ interface ClassevivaGatewayService {
     @Body body: GatewayEnvelope<AbsenceJustificationRequest>,
   ): List<AbsenceRecord>
 
+  @POST("gateway/noticeboard")
+  suspend fun getNoticeboard(@Body body: GatewayEnvelope<Unit>): List<Communication>
+
   @POST("gateway/noticeboard/{evtCode}/{pubId}/reply")
   suspend fun replyToNoticeboard(
     @Path("evtCode") evtCode: String,
@@ -102,6 +134,12 @@ interface ClassevivaGatewayService {
     @Path("pubId") pubId: String,
     @Body body: GatewayEnvelope<GatewayNoticeboardReplyPayload>,
   ): CommunicationDetail
+
+  @POST("gateway/materials")
+  suspend fun getMaterials(@Body body: GatewayEnvelope<Unit>): List<MaterialItem>
+
+  @POST("gateway/documents")
+  suspend fun getDocuments(@Body body: GatewayEnvelope<Unit>): List<DocumentItem>
 
   @POST("gateway/meetings")
   suspend fun getMeetings(@Body body: GatewayEnvelope<Unit>): GatewayMeetingsSnapshotDto
@@ -125,9 +163,40 @@ interface ClassevivaGatewayService {
 @Singleton
 class ClassevivaGatewayClient @Inject constructor(
   private val sessionStorage: SessionStorage,
+  private val settingsStore: SettingsStore,
   private val gatewayService: ClassevivaGatewayService,
 ) {
-  fun isConfigured(): Boolean = BuildConfig.GATEWAY_BASE_URL.isNotBlank()
+  suspend fun isConfigured(): Boolean = settingsStore.settings.first().networkConfig.gatewayBaseUrl.isNotBlank()
+
+  suspend fun getProfile(schoolYear: SchoolYearRef): StudentProfile = withContext(Dispatchers.IO) {
+    requireConfigured()
+    apiCall { gatewayService.getProfile(envelope(schoolYear)) }
+  }
+
+  suspend fun getGrades(schoolYear: SchoolYearRef): List<Grade> = withContext(Dispatchers.IO) {
+    requireConfigured()
+    apiCall { gatewayService.getGrades(envelope(schoolYear)) }
+  }
+
+  suspend fun getPeriods(schoolYear: SchoolYearRef): List<Period> = withContext(Dispatchers.IO) {
+    requireConfigured()
+    apiCall { gatewayService.getPeriods(envelope(schoolYear)) }
+  }
+
+  suspend fun getSubjects(schoolYear: SchoolYearRef): List<Subject> = withContext(Dispatchers.IO) {
+    requireConfigured()
+    apiCall { gatewayService.getSubjects(envelope(schoolYear)) }
+  }
+
+  suspend fun getAgenda(schoolYear: SchoolYearRef): List<AgendaItem> = withContext(Dispatchers.IO) {
+    requireConfigured()
+    apiCall { gatewayService.getAgenda(envelope(schoolYear)) }
+  }
+
+  suspend fun getLessons(schoolYear: SchoolYearRef): List<Lesson> = withContext(Dispatchers.IO) {
+    requireConfigured()
+    apiCall { gatewayService.getLessons(envelope(schoolYear)) }
+  }
 
   suspend fun getHomeworks(schoolYear: SchoolYearRef): List<Homework> = withContext(Dispatchers.IO) {
     requireConfigured()
@@ -155,6 +224,11 @@ class ClassevivaGatewayClient @Inject constructor(
     apiCall {
       gatewayService.justifyAbsence(request.absenceId, envelope(schoolYear, request))
     }
+  }
+
+  suspend fun getCommunications(schoolYear: SchoolYearRef): List<Communication> = withContext(Dispatchers.IO) {
+    requireConfigured()
+    apiCall { gatewayService.getNoticeboard(envelope(schoolYear)) }
   }
 
   suspend fun replyToNoticeboard(
@@ -216,6 +290,16 @@ class ClassevivaGatewayClient @Inject constructor(
     }
   }
 
+  suspend fun getMaterials(schoolYear: SchoolYearRef): List<MaterialItem> = withContext(Dispatchers.IO) {
+    requireConfigured()
+    apiCall { gatewayService.getMaterials(envelope(schoolYear)) }
+  }
+
+  suspend fun getDocuments(schoolYear: SchoolYearRef): List<DocumentItem> = withContext(Dispatchers.IO) {
+    requireConfigured()
+    apiCall { gatewayService.getDocuments(envelope(schoolYear)) }
+  }
+
   suspend fun getMeetings(schoolYear: SchoolYearRef): GatewayMeetingsSnapshotDto = withContext(Dispatchers.IO) {
     requireConfigured()
     apiCall {
@@ -247,7 +331,7 @@ class ClassevivaGatewayClient @Inject constructor(
     }
   }
 
-  private fun requireConfigured() {
+  private suspend fun requireConfigured() {
     if (!isConfigured()) {
       throw ClassevivaNetworkException("Gateway non configurato. Imposta gatewayBaseUrl per abilitare le funzioni avanzate.")
     }

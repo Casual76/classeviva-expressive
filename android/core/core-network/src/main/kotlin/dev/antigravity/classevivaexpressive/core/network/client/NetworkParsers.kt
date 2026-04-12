@@ -1,5 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.network.client
 
+import dev.antigravity.classevivaexpressive.core.domain.util.parseDecimal
+
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
@@ -592,7 +594,7 @@ internal fun JsonObject.double(vararg keys: String): Double? {
   keys.forEach { key ->
     val primitive = this[key] as? JsonPrimitive ?: return@forEach
     primitive.doubleOrNull?.let { return it }
-    primitive.contentOrNull?.replace(",", ".")?.toDoubleOrNull()?.let { return it }
+    primitive.contentOrNull?.parseDecimal()?.let { return it }
   }
   return null
 }

@@ -15,23 +15,32 @@ from fastapi import HTTPException
 from .models import (
     AbsenceJustificationPayload,
     AbsenceRecordModel,
+    AgendaItemModel,
     AttachmentPayload,
     CapabilityState,
     CommunicationDetailModel,
+    CommunicationModel,
+    DocumentItemModel,
     FeatureCapability,
     GatewayCredentials,
     GatewaySchoolYear,
+    GradeModel,
     HomeworkDetailModel,
     HomeworkModel,
     HomeworkSubmissionPayload,
     HomeworkSubmissionReceiptModel,
+    LessonModel,
+    MaterialItemModel,
     MeetingBookingModel,
     MeetingJoinLinkModel,
     MeetingSlotModel,
     MeetingSnapshotModel,
     MeetingTeacherModel,
     NoticeboardActionPayload,
+    PeriodModel,
     RemoteAttachment,
+    StudentProfileModel,
+    SubjectModel,
 )
 
 REST_BASE_URL = "https://web.spaggiari.eu/rest/"
@@ -56,6 +65,21 @@ class PortalSession:
 class ClassevivaGatewayService:
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._transport = transport
+
+    async def get_profile(self, credentials: GatewayCredentials) -> StudentProfileModel:
+        context = await self._login_rest(credentials)
+        # Often the login response already contains some info, but let's try to get full profile if available
+        # or just use what we have from login if the specialized endpoint is not standard
+        try:
+            payload = await self._rest_json(f"v1/students/{context.student_id}", context.token)
+            return normalize_profile(payload.get("student") or payload)
+        except Exception:
+            # Fallback to a basic profile if the detail call fails
+            return StudentProfileModel(
+                id=context.student_id,
+                name=credentials.username,
+                surname="",
+            )
 
     async def get_homeworks(
         self,
@@ -291,6 +315,116 @@ class ClassevivaGatewayService:
             raise HTTPException(status_code=501, detail="Link colloquio non disponibile.")
         return MeetingJoinLinkModel(bookingId=booking_id, url=join_url)
 
+    async def get_grades(
+        self,
+        credentials: GatewayCredentials,
+        school_year: GatewaySchoolYear,
+    ) -> list[GradeModel]:
+        context = await self._login_rest(credentials)
+        payload = await self._rest_json(
+            path=f"v1/students/{context.student_id}/grades",
+            token=context.token,
+        )
+        items = extract_array(payload, "grades", "items", "data")
+        return [normalize_grade(item) for item in items]
+
+    async def get_periods(
+        self,
+        credentials: GatewayCredentials,
+        school_year: GatewaySchoolYear,
+    ) -> list[PeriodModel]:
+        context = await self._login_rest(credentials)
+        payload = await self._rest_json(
+            path=f"v1/students/{context.student_id}/periods",
+            token=context.token,
+        )
+        items = extract_array(payload, "periods", "items", "data")
+        return [normalize_period(item) for item in items]
+
+    async def get_subjects(
+        self,
+        credentials: GatewayCredentials,
+        school_year: GatewaySchoolYear,
+    ) -> list[SubjectModel]:
+        context = await self._login_rest(credentials)
+        payload = await self._rest_json(
+            path=f"v1/students/{context.student_id}/subjects",
+            token=context.token,
+        )
+        items = extract_array(payload, "subjects", "items", "data")
+        return [normalize_subject(item) for item in items]
+
+    async def get_agenda(
+        self,
+        credentials: GatewayCredentials,
+        school_year: GatewaySchoolYear,
+    ) -> list[AgendaItemModel]:
+        context = await self._login_rest(credentials)
+        begin, end = school_year_bounds(school_year)
+        payload = await self._rest_json(
+            path=f"v1/students/{context.student_id}/agenda/all/{begin}/{end}",
+            token=context.token,
+        )
+        items = extract_array(payload, "agenda", "items", "events")
+        return [normalize_agenda_item(item) for item in items]
+
+    async def get_lessons(
+        self,
+        credentials: GatewayCredentials,
+        school_year: GatewaySchoolYear,
+    ) -> list[LessonModel]:
+        context = await self._login_rest(credentials)
+        # Lessons for the current week usually, or we can use the same bounds as agenda
+        # For lessons, Classeviva often uses current week if bounds are not provided.
+        # Let's use current week or just use school year bounds if that's what's expected.
+        # Usually dashboard only needs today's/week's.
+        begin, end = school_year_bounds(school_year)
+        payload = await self._rest_json(
+            path=f"v1/students/{context.student_id}/lessons/{begin}/{end}",
+            token=context.token,
+        )
+        items = extract_array(payload, "lessons", "items", "data")
+        return [normalize_lesson(item) for item in items]
+
+    async def get_noticeboard(
+        self,
+        credentials: GatewayCredentials,
+        school_year: GatewaySchoolYear,
+    ) -> list[CommunicationModel]:
+        context = await self._login_rest(credentials)
+        payload = await self._rest_json(
+            path=f"v1/students/{context.student_id}/noticeboard",
+            token=context.token,
+        )
+        items = extract_array(payload, "communications", "items", "data")
+        return [normalize_communication(item) for item in items]
+
+    async def get_materials(
+        self,
+        credentials: GatewayCredentials,
+        school_year: GatewaySchoolYear,
+    ) -> list[MaterialItemModel]:
+        context = await self._login_rest(credentials)
+        payload = await self._rest_json(
+            path=f"v1/students/{context.student_id}/didactics",
+            token=context.token,
+        )
+        items = extract_array(payload, "didactics", "items", "data")
+        return [normalize_material_item(item) for item in items]
+
+    async def get_documents(
+        self,
+        credentials: GatewayCredentials,
+        school_year: GatewaySchoolYear,
+    ) -> list[DocumentItemModel]:
+        context = await self._login_rest(credentials)
+        payload = await self._rest_json(
+            path=f"v1/students/{context.student_id}/documents",
+            token=context.token,
+        )
+        items = extract_array(payload, "documents", "items", "data")
+        return [normalize_document_item(item) for item in items]
+
     async def get_absences(
         self,
         credentials: GatewayCredentials,
@@ -477,6 +611,186 @@ def normalize_homework(item: dict[str, Any]) -> HomeworkModel:
         dueDate=normalize_date(item.get("dataConsegna") or item.get("dueDate") or item.get("date") or item.get("evtDate")),
         notes=normalize_text(item.get("note") or item.get("notesForFamily") or item.get("notes")) or None,
         attachments=attachments,
+    )
+
+
+def normalize_profile(item: dict[str, Any]) -> StudentProfileModel:
+    return StudentProfileModel(
+        id=str(item.get("id") or item.get("studentId") or ""),
+        name=normalize_text(item.get("firstName") or item.get("nome") or ""),
+        surname=normalize_text(item.get("lastName") or item.get("cognome") or ""),
+        email=str(item.get("email") or ""),
+        schoolClass=normalize_text(item.get("class") or item.get("classe") or ""),
+        section=normalize_text(item.get("section") or item.get("sezione") or ""),
+        school=normalize_text(item.get("schoolName") or item.get("scuola") or ""),
+        schoolYear=normalize_text(item.get("schoolYear") or ""),
+    )
+
+
+def normalize_grade(item: dict[str, Any]) -> GradeModel:
+    value_label = str(item.get("displayValue") or item.get("voto") or item.get("value") or "")
+    numeric_value = item.get("decimalValue") or item.get("numericValue")
+    if numeric_value is None:
+        # Simple extraction from label if decimalValue is missing
+        match = re.search(r"(\d+[\.,]\d+)", value_label)
+        if match:
+            numeric_value = float(match.group(1).replace(",", "."))
+        elif value_label.isdigit():
+            numeric_value = float(value_label)
+
+    return GradeModel(
+        id=str(item.get("id") or item.get("evtId") or ""),
+        subject=normalize_text(item.get("subjectDesc") or item.get("materia") or "Materia"),
+        valueLabel=value_label,
+        numericValue=float(numeric_value) if numeric_value is not None else None,
+        description=normalize_text(item.get("notes") or item.get("commento") or item.get("descrizione")) or None,
+        date=normalize_date(item.get("evtDate") or item.get("data")),
+        type=normalize_text(item.get("componentDesc") or item.get("tipo") or "Scritto/Orale"),
+        weight=float(item.get("weight")) if item.get("weight") else None,
+        notes=normalize_text(item.get("notes") or item.get("commento")) or None,
+        period=normalize_text(item.get("periodDesc") or item.get("periodo")),
+        periodCode=str(item.get("periodPos") or item.get("periodoId") or ""),
+        teacher=normalize_text(item.get("authorName") or item.get("docente")),
+        color=str(item.get("color") or ""),
+    )
+
+
+def normalize_period(item: dict[str, Any]) -> PeriodModel:
+    return PeriodModel(
+        code=str(item.get("periodPos") or item.get("id") or ""),
+        order=int(item.get("periodPos") or 0),
+        description=normalize_text(item.get("periodDesc") or item.get("descrizione") or ""),
+        label=normalize_text(item.get("periodDesc") or ""),
+        isFinal=bool(item.get("isFinal") or False),
+        startDate=normalize_date(item.get("startDate") or item.get("inizio")),
+        endDate=normalize_date(item.get("endDate") or item.get("fine")),
+    )
+
+
+def normalize_subject(item: dict[str, Any]) -> SubjectModel:
+    teachers = []
+    raw_teachers = item.get("teachers") or item.get("docenti")
+    if isinstance(raw_teachers, list):
+        teachers = [normalize_text(t.get("teacherName") if isinstance(t, dict) else str(t)) for t in raw_teachers]
+    elif isinstance(raw_teachers, str):
+        teachers = [normalize_text(raw_teachers)]
+
+    return SubjectModel(
+        id=str(item.get("id") or item.get("subjectId") or ""),
+        description=normalize_text(item.get("description") or item.get("descrizione") or "Materia"),
+        order=int(item.get("order") or 0),
+        teachers=teachers,
+    )
+
+
+def normalize_agenda_item(item: dict[str, Any]) -> AgendaItemModel:
+    evt_code = str(item.get("evtCode") or "").upper()
+    category = "EVENT"
+    if evt_code == "AGD":
+        category = "LESSON"
+    elif evt_code == "HWK":
+        category = "HOMEWORK"
+    elif evt_code == "TST":
+        category = "ASSESSMENT"
+
+    return AgendaItemModel(
+        id=str(item.get("id") or item.get("evtId") or ""),
+        title=normalize_text(item.get("title") or item.get("oggetto") or "Evento"),
+        subtitle=normalize_text(item.get("authorName") or item.get("docente") or ""),
+        date=normalize_date(item.get("evtDate") or item.get("data")),
+        time=str(item.get("evtTime")) if item.get("evtTime") else None,
+        detail=normalize_text(item.get("notes") or item.get("nota") or item.get("content") or ""),
+        subject=normalize_text(item.get("subjectDesc") or item.get("materia")),
+        category=category,
+        sharePayload=None,
+    )
+
+
+def normalize_lesson(item: dict[str, Any]) -> LessonModel:
+    return LessonModel(
+        id=str(item.get("id") or item.get("lessonId") or ""),
+        subject=normalize_text(item.get("subjectDesc") or item.get("materia") or "Materia"),
+        date=normalize_date(item.get("evtDate") or item.get("data")),
+        time=str(item.get("evtTime") or "00:00"),
+        durationMinutes=int(item.get("duration") or 60),
+        topic=normalize_text(item.get("lessonArg") or item.get("argomento")),
+        teacher=normalize_text(item.get("authorName") or item.get("docente")),
+        room=normalize_text(item.get("room") or item.get("aula")),
+    )
+
+
+def normalize_communication(item: dict[str, Any]) -> CommunicationModel:
+    attachments = []
+    raw_attachments = item.get("attachments") or item.get("allegati") or []
+    if isinstance(raw_attachments, list):
+        for attachment in raw_attachments:
+            if isinstance(attachment, dict):
+                attachments.append(
+                    RemoteAttachment(
+                        id=str(attachment.get("id") or attachment.get("attachId") or ""),
+                        name=normalize_text(attachment.get("fileName") or attachment.get("desc") or "Allegato"),
+                        url=attachment.get("url"),
+                        mimeType=attachment.get("mimeType"),
+                        portalOnly=False,
+                    )
+                )
+
+    return CommunicationModel(
+        id=str(item.get("id") or item.get("pubId") or ""),
+        pubId=str(item.get("pubId") or ""),
+        evtCode=str(item.get("evtCode") or ""),
+        title=normalize_text(item.get("title") or item.get("oggetto") or "Comunicazione"),
+        contentPreview=normalize_text(item.get("content") or item.get("testo") or "")[:200],
+        sender=normalize_text(item.get("authorName") or item.get("mittente") or "Scuola"),
+        date=normalize_date(item.get("pubDate") or item.get("data")),
+        read=bool(item.get("read") or item.get("letto") or False),
+        attachments=attachments,
+        category=normalize_text(item.get("category") or item.get("tipo")),
+        needsAck=bool(item.get("needsAck") or item.get("richiedeFirma") or False),
+        needsReply=bool(item.get("needsReply") or False),
+        needsJoin=bool(item.get("needsJoin") or False),
+        needsFile=bool(item.get("needsFile") or False),
+    )
+
+
+def normalize_material_item(item: dict[str, Any]) -> MaterialItemModel:
+    attachments = []
+    raw_attachments = item.get("attachments") or item.get("allegati") or []
+    if isinstance(raw_attachments, list):
+        for attachment in raw_attachments:
+            if isinstance(attachment, dict):
+                attachments.append(
+                    RemoteAttachment(
+                        id=str(attachment.get("id") or ""),
+                        name=normalize_text(attachment.get("fileName") or "File"),
+                        url=attachment.get("url"),
+                        mimeType=attachment.get("mimeType"),
+                    )
+                )
+
+    return MaterialItemModel(
+        id=str(item.get("id") or item.get("objectId") or ""),
+        teacherId=str(item.get("teacherId") or ""),
+        teacherName=normalize_text(item.get("teacherName") or "Docente"),
+        folderId=str(item.get("folderId") or ""),
+        folderName=normalize_text(item.get("folderName") or "Cartella"),
+        title=normalize_text(item.get("title") or item.get("oggetto") or "Materiale"),
+        objectId=str(item.get("objectId") or ""),
+        objectType=str(item.get("objectType") or "FILE"),
+        sharedAt=normalize_date(item.get("sharedAt") or item.get("data")),
+        capabilityState=CapabilityState(status="AVAILABLE"),
+        attachments=attachments,
+    )
+
+
+def normalize_document_item(item: dict[str, Any]) -> DocumentItemModel:
+    return DocumentItemModel(
+        id=str(item.get("id") or item.get("docId") or ""),
+        title=normalize_text(item.get("title") or item.get("oggetto") or "Documento"),
+        detail=normalize_text(item.get("description") or item.get("descrizione") or ""),
+        viewUrl=item.get("viewUrl") or item.get("url"),
+        confirmUrl=item.get("confirmUrl"),
+        capabilityState=CapabilityState(status="AVAILABLE"),
     )
 
 

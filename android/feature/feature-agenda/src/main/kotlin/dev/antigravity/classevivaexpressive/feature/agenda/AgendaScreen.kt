@@ -364,7 +364,6 @@ private fun CalendarDayCell(
   modifier: Modifier = Modifier,
 ) {
   val isSunday = date.dayOfWeek == DayOfWeek.SUNDAY
-  val tone = entries.firstOrNull()?.let { categoryTone(it.category) } ?: ExpressiveTone.Neutral
   val containerColor = when {
     selected -> MaterialTheme.colorScheme.primary
     isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
@@ -379,14 +378,14 @@ private fun CalendarDayCell(
 
   Column(
     modifier = modifier
-      .height(70.dp)
+      .height(72.dp)
       .clickable(onClick = onClick),
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(6.dp),
+    verticalArrangement = Arrangement.spacedBy(4.dp),
   ) {
     Box(
       modifier = Modifier
-        .size(38.dp)
+        .size(40.dp)
         .background(
           color = containerColor,
           shape = MaterialTheme.shapes.extraLarge,
@@ -399,11 +398,26 @@ private fun CalendarDayCell(
         fontWeight = FontWeight.SemiBold,
       )
     }
-    if (entries.isNotEmpty()) {
-      StatusBadge(
-        label = entries.size.toString(),
-        tone = tone,
-      )
+    Row(
+      modifier = Modifier.height(8.dp),
+      horizontalArrangement = Arrangement.spacedBy(3.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      entries.map { it.category }.distinct().take(3).forEach { category ->
+        val dotColor = when (categoryTone(category)) {
+          ExpressiveTone.Primary -> MaterialTheme.colorScheme.primary
+          ExpressiveTone.Success -> Color(0xFF2E8B57)
+          ExpressiveTone.Warning -> Color(0xFFFF9800)
+          ExpressiveTone.Danger -> MaterialTheme.colorScheme.error
+          ExpressiveTone.Info -> MaterialTheme.colorScheme.tertiary
+          ExpressiveTone.Neutral -> MaterialTheme.colorScheme.outline
+        }
+        Box(
+          modifier = Modifier
+            .size(6.dp)
+            .background(color = dotColor, shape = androidx.compose.foundation.shape.CircleShape)
+        )
+      }
     }
   }
 }

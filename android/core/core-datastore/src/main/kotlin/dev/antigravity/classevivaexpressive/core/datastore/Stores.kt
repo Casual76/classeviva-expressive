@@ -43,16 +43,22 @@ private val SettingsNotificationsCommunicationsKey = booleanPreferencesKey("noti
 private val SettingsNotificationsAbsencesKey = booleanPreferencesKey("notifications_absences")
 private val SettingsNotificationsTestKey = booleanPreferencesKey("notifications_test")
 private val SettingsPeriodicSyncKey = booleanPreferencesKey("periodic_sync")
+private val SettingsNetworkConfigKey = stringPreferencesKey("network_config")
 private val SelectedSchoolYearKey = stringPreferencesKey("selected_school_year")
 
 @Singleton
 class SettingsStore(@ApplicationContext context: Context) {
+  private val json = Json { ignoreUnknownKeys = true }
   private val dataStore = PreferenceDataStoreFactory.create(
     produceFile = { context.preferencesDataStoreFile("classeviva_settings.preferences_pb") },
   )
 
   val settings: Flow<AppSettings> =
     dataStore.data.map { prefs ->
+      val networkConfig = prefs[SettingsNetworkConfigKey]?.let {
+        runCatching { json.decodeFromString<dev.antigravity.classevivaexpressive.core.domain.model.NetworkConfig>(it) }.getOrNull()
+      } ?: dev.antigravity.classevivaexpressive.core.domain.model.NetworkConfig()
+
       AppSettings(
         themeMode = prefs[SettingsThemeModeKey]?.let { ThemeMode.valueOf(it) } ?: ThemeMode.SYSTEM,
         accentMode = prefs[SettingsAccentModeKey]?.let { AccentMode.valueOf(it) } ?: AccentMode.BRAND,
@@ -67,6 +73,7 @@ class SettingsStore(@ApplicationContext context: Context) {
           test = prefs[SettingsNotificationsTestKey] ?: true,
         ),
         periodicSyncEnabled = prefs[SettingsPeriodicSyncKey] ?: true,
+        networkConfig = networkConfig,
       )
     }
 
@@ -85,6 +92,7 @@ class SettingsStore(@ApplicationContext context: Context) {
       prefs[SettingsNotificationsAbsencesKey] = next.notificationPreferences.absences
       prefs[SettingsNotificationsTestKey] = next.notificationPreferences.test
       prefs[SettingsPeriodicSyncKey] = next.periodicSyncEnabled
+      prefs[SettingsNetworkConfigKey] = json.encodeToString(next.networkConfig)
     }
   }
 }

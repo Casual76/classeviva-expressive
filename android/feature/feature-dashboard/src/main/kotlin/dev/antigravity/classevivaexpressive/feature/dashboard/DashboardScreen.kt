@@ -117,11 +117,28 @@ fun DashboardRoute(
         )
       }
       item {
+        val firstName = snapshot.profile.name.split(" ").firstOrNull() ?: "studente"
         ExpressiveHeroCard(
-          title = snapshot.profile.name.ifBlank { "Classeviva Expressive" },
-          subtitle = snapshot.averageNumeric?.let { "Media attuale ${snapshot.averageLabel}" }
-            ?: "Media non ancora disponibile",
+          title = "Ciao, $firstName!",
+          subtitle = snapshot.subheadline.ifBlank { "Lezioni, voti e bacheca restano in primo piano." },
         )
+      }
+      if (snapshot.averageNumeric != null) {
+        item {
+          RegisterListRow(
+            title = "Media Generale",
+            subtitle = "La tua media calcolata su tutte le materie.",
+            eyebrow = "Andamento",
+            tone = dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone(snapshot.averageNumeric),
+            onClick = onNavigateGrades,
+            badge = {
+              StatusBadge(
+                label = snapshot.averageLabel,
+                tone = dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone(snapshot.averageNumeric),
+              )
+            },
+          )
+        }
       }
       item {
         Row(

@@ -7,11 +7,15 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStorage
+import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import dev.antigravity.classevivaexpressive.core.network.BuildConfig
 import javax.inject.Named
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Authenticator
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -51,6 +55,28 @@ private class AuthTokenInterceptor(
       token?.takeIf(String::isNotBlank)?.let { header("Z-Auth-Token", it) }
     }.build()
     return chain.proceed(request)
+  }
+}
+
+private class DynamicGatewayInterceptor(
+  private val settingsStore: SettingsStore,
+) : Interceptor {
+  override fun intercept(chain: Interceptor.Chain): Response {
+    val originalRequest = chain.request()
+    val gatewayUrl = runBlocking { settingsStore.settings.first().networkConfig.gatewayBaseUrl }
+    
+    if (gatewayUrl.isBlank()) {
+      return chain.proceed(originalRequest)
+    }
+
+    val newBaseUrl = gatewayUrl.toHttpUrlOrNull() ?: return chain.proceed(originalRequest)
+    val newUrl = originalRequest.url.newBuilder()
+      .scheme(newBaseUrl.scheme)
+      .host(newBaseUrl.host)
+      .port(newBaseUrl.port)
+      .build()
+
+    return chain.proceed(originalRequest.newBuilder().url(newUrl).build())
   }
 }
 
@@ -171,8 +197,10 @@ object NetworkModule {
   fun provideGatewayHttpClient(
     loggingInterceptor: HttpLoggingInterceptor,
     @Named("gatewayHeaders") gatewayHeadersInterceptor: Interceptor,
+    settingsStore: SettingsStore,
   ): OkHttpClient {
     return OkHttpClient.Builder()
+      .addInterceptor(DynamicGatewayInterceptor(settingsStore))
       .addInterceptor(gatewayHeadersInterceptor)
       .addInterceptor(loggingInterceptor)
       .build()

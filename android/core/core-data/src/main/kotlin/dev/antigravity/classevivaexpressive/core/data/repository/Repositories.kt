@@ -18,6 +18,8 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChan
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.readNotificationRuntimeState
 import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNotification
+import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
+import dev.antigravity.classevivaexpressive.core.database.database.GradeDao
 import dev.antigravity.classevivaexpressive.core.database.database.CustomEventDao
 import dev.antigravity.classevivaexpressive.core.database.database.CustomEventEntity
 import dev.antigravity.classevivaexpressive.core.database.database.DownloadRecordDao
@@ -211,6 +213,8 @@ class SchoolDataRepository @Inject constructor(
   private val downloadRecordDao: DownloadRecordDao,
   private val seenGradeDao: SeenGradeDao,
   private val subjectGoalDao: SubjectGoalDao,
+  private val gradeDao: GradeDao,
+  private val agendaDao: AgendaDao,
   private val syncCoordinator: SchoolSyncCoordinator,
   private val downloadManager: DownloadManager,
   private val sessionStore: SessionStore,
@@ -307,7 +311,35 @@ class SchoolDataRepository @Inject constructor(
     observeDashboard().firstValue()
   }
 
-  override fun observeGrades(): Flow<List<Grade>> = observeYearScopedValue(GradesSection, emptyList())
+  override fun observeGrades(): Flow<List<Grade>> {
+    return combine(
+      sessionStore.session,
+      schoolYearStore.observeSelectedSchoolYear(),
+    ) { session, schoolYear ->
+      session to schoolYear
+    }.flatMapLatest { (session, schoolYear) ->
+      val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList<Grade>())
+      gradeDao.observeByYear(studentId, schoolYear.id).map { entities ->
+        entities.map { entity ->
+          Grade(
+            id = entity.id,
+            subject = entity.subject,
+            valueLabel = entity.valueLabel,
+            numericValue = entity.numericValue,
+            description = entity.description,
+            date = entity.date,
+            type = entity.type,
+            weight = entity.weight,
+            notes = entity.notes,
+            period = entity.period,
+            periodCode = entity.periodCode,
+            teacher = entity.teacher,
+            color = entity.color,
+          )
+        }
+      }
+    }
+  }
   override fun observePeriods(): Flow<List<Period>> = observeYearScopedValue(PeriodsSection, emptyList())
   override fun observeSubjects(): Flow<List<Subject>> = observeYearScopedValue(SubjectsSection, emptyList())
   override fun observeSeenGradeStates(): Flow<List<SeenGradeState>> {
@@ -398,7 +430,7 @@ class SchoolDataRepository @Inject constructor(
 
   override fun observeAgenda(): Flow<List<AgendaItem>> {
     return combine(
-      observeYearScopedValue(AgendaSection, emptyList<AgendaItem>()),
+      observeDbAgenda(),
       observeHomeworks(),
       observeSelectedSchoolYear(),
       customEventDao.observeAll().map { entities ->
@@ -435,6 +467,32 @@ class SchoolDataRepository @Inject constructor(
     }
   }
 
+  private fun observeDbAgenda(): Flow<List<AgendaItem>> {
+    return combine(
+      sessionStore.session,
+      schoolYearStore.observeSelectedSchoolYear(),
+    ) { session, schoolYear ->
+      session to schoolYear
+    }.flatMapLatest { (session, schoolYear) ->
+      val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList<AgendaItem>())
+      agendaDao.observeByYear(studentId, schoolYear.id).map { entities ->
+        entities.map { entity ->
+          AgendaItem(
+            id = entity.id,
+            title = entity.title,
+            subtitle = entity.subtitle,
+            date = entity.date,
+            time = entity.time,
+            detail = entity.detail,
+            subject = entity.subject,
+            category = AgendaCategory.valueOf(entity.category),
+            sharePayload = entity.sharePayload,
+          )
+        }
+      }
+    }
+  }
+
   override fun observeCustomEvents(): Flow<List<CustomEvent>> = customEventDao.observeAll().map { entities ->
     entities.map { json.decodeFromString<CustomEvent>(it.payload) }
   }
@@ -455,7 +513,7 @@ class SchoolDataRepository @Inject constructor(
   override fun observeLessons(): Flow<List<Lesson>> {
     return combine(
       observeYearScopedValue(LessonsSection, emptyList<Lesson>()),
-      observeYearScopedValue(AgendaSection, emptyList<AgendaItem>()),
+      observeDbAgenda(),
     ) { lessons, agenda ->
       buildLessonsWithFallback(lessons, agenda)
     }
