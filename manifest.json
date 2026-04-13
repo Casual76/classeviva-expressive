@@ -15,24 +15,33 @@
             "ref": ""
         },
         "stable": {
-            "version": "4.1.4",
-            "releaseDate": "2026-04-10",
-            "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 4.1.4. Asset rilevati: app-release.apk.",
-            "releaseTag": "stable-classeviva-expressive-v4.1.4",
-            "apkAsset": "classeviva-expressive-4.1.4.apk",
+            "version": "5.1.0",
+            "releaseDate": "2026-04-13",
+            "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.1.0. Asset rilevati: app-release.apk.",
+            "releaseTag": "stable-classeviva-expressive-v5.1.0",
+            "apkAsset": "classeviva-expressive-5.1.0.apk",
             "exeAsset": "",
             "sizeBytes": 0
         },
         "beta": {
-            "version": "5.0.0",
-            "releaseDate": "2026-04-12",
-            "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.0.0. Asset rilevati: app-release.apk.",
-            "releaseTag": "beta-classeviva-expressive-v5.0.0",
-            "apkAsset": "classeviva-expressive-5.0.0.apk",
+            "version": "5.1.0",
+            "releaseDate": "2026-04-13",
+            "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.1.0. Asset rilevati: app-release.apk.",
+            "releaseTag": "stable-classeviva-expressive-v5.1.0",
+            "apkAsset": "classeviva-expressive-5.1.0.apk",
             "exeAsset": "",
             "sizeBytes": 0
         },
         "history": [
+            {
+                "version": "4.1.4",
+                "releaseDate": "2026-04-10",
+                "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 4.1.4. Asset rilevati: app-release.apk.",
+                "releaseTag": "stable-classeviva-expressive-v4.1.4",
+                "apkAsset": "classeviva-expressive-4.1.4.apk",
+                "exeAsset": "",
+                "sizeBytes": 0
+            },
             {
                 "version": "4.1.4",
                 "releaseDate": "2026-04-10",
