@@ -44,3 +44,9 @@ crash.log
 .claude/worktrees/compassionate-shtern/
 .claude/worktrees/goofy-dhawan/
 .claude/worktrees/adoring-margulis/
+
+# AI assistants / agent artifacts
+.claude/
+.cursor/
+.codex/
+agent-transcripts/

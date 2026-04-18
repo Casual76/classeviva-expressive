@@ -19,6 +19,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPrefer
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
+import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import java.time.LocalDate
 import javax.inject.Singleton
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -41,10 +43,12 @@ private val SettingsNotificationsEnabledKey = booleanPreferencesKey("notificatio
 private val SettingsNotificationsHomeworkKey = booleanPreferencesKey("notifications_homework")
 private val SettingsNotificationsCommunicationsKey = booleanPreferencesKey("notifications_communications")
 private val SettingsNotificationsAbsencesKey = booleanPreferencesKey("notifications_absences")
+private val SettingsNotificationsGradesKey = booleanPreferencesKey("notifications_grades")
 private val SettingsNotificationsTestKey = booleanPreferencesKey("notifications_test")
 private val SettingsPeriodicSyncKey = booleanPreferencesKey("periodic_sync")
 private val SettingsNetworkConfigKey = stringPreferencesKey("network_config")
 private val SelectedSchoolYearKey = stringPreferencesKey("selected_school_year")
+private val TimetableTemplatesKey = stringPreferencesKey("timetable_templates")
 
 @Singleton
 class SettingsStore(@ApplicationContext context: Context) {
@@ -70,6 +74,7 @@ class SettingsStore(@ApplicationContext context: Context) {
           homework = prefs[SettingsNotificationsHomeworkKey] ?: true,
           communications = prefs[SettingsNotificationsCommunicationsKey] ?: true,
           absences = prefs[SettingsNotificationsAbsencesKey] ?: true,
+          grades = prefs[SettingsNotificationsGradesKey] ?: true,
           test = prefs[SettingsNotificationsTestKey] ?: true,
         ),
         periodicSyncEnabled = prefs[SettingsPeriodicSyncKey] ?: true,
@@ -90,6 +95,7 @@ class SettingsStore(@ApplicationContext context: Context) {
       prefs[SettingsNotificationsHomeworkKey] = next.notificationPreferences.homework
       prefs[SettingsNotificationsCommunicationsKey] = next.notificationPreferences.communications
       prefs[SettingsNotificationsAbsencesKey] = next.notificationPreferences.absences
+      prefs[SettingsNotificationsGradesKey] = next.notificationPreferences.grades
       prefs[SettingsNotificationsTestKey] = next.notificationPreferences.test
       prefs[SettingsPeriodicSyncKey] = next.periodicSyncEnabled
       prefs[SettingsNetworkConfigKey] = json.encodeToString(next.networkConfig)
@@ -141,6 +147,41 @@ class SchoolYearStore(@ApplicationContext context: Context) : SchoolYearReposito
     val start = pieces[0].toIntOrNull() ?: return null
     val end = pieces[1].toIntOrNull() ?: return null
     return SchoolYearRef(startYear = start, endYear = end)
+  }
+}
+
+@Serializable
+private data class StoredTimetableTemplates(
+  val templates: Map<String, TimetableTemplate> = emptyMap(),
+)
+
+@Singleton
+class TimetableTemplateStore(@ApplicationContext context: Context) {
+  private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+  private val dataStore = PreferenceDataStoreFactory.create(
+    produceFile = { context.preferencesDataStoreFile("classeviva_timetable.preferences_pb") },
+  )
+
+  fun observeTemplate(schoolYearId: String): Flow<TimetableTemplate> {
+    return dataStore.data.map { prefs ->
+      val stored = prefs[TimetableTemplatesKey]?.let {
+        runCatching { json.decodeFromString<StoredTimetableTemplates>(it) }.getOrNull()
+      } ?: StoredTimetableTemplates()
+      stored.templates[schoolYearId] ?: TimetableTemplate()
+    }
+  }
+
+  suspend fun writeTemplate(schoolYearId: String, template: TimetableTemplate) {
+    dataStore.edit { prefs ->
+      val stored = prefs[TimetableTemplatesKey]?.let {
+        runCatching { json.decodeFromString<StoredTimetableTemplates>(it) }.getOrNull()
+      } ?: StoredTimetableTemplates()
+      prefs[TimetableTemplatesKey] = json.encodeToString(
+        stored.copy(
+          templates = stored.templates + (schoolYearId to template),
+        ),
+      )
+    }
   }
 }
 
@@ -249,6 +290,11 @@ object StoresModule {
   @Provides
   @Singleton
   fun provideSessionStore(@ApplicationContext context: Context): SessionStore = SessionStore(context)
+
+  @Provides
+  @Singleton
+  fun provideTimetableTemplateStore(@ApplicationContext context: Context): TimetableTemplateStore =
+    TimetableTemplateStore(context)
 
   @Provides
   @Singleton

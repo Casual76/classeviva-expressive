@@ -16,7 +16,16 @@ import dev.antigravity.classevivaexpressive.core.data.repository.PeriodsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.ProfileSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SchoolbooksSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SubjectsSection
+import dev.antigravity.classevivaexpressive.core.data.repository.buildLessonsWithFallback
 import dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey
+import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
+import dev.antigravity.classevivaexpressive.core.database.database.AbsenceEntity
+import dev.antigravity.classevivaexpressive.core.database.database.CommunicationDao
+import dev.antigravity.classevivaexpressive.core.database.database.CommunicationEntity
+import dev.antigravity.classevivaexpressive.core.database.database.MaterialDao
+import dev.antigravity.classevivaexpressive.core.database.database.MaterialEntity
+import dev.antigravity.classevivaexpressive.core.database.database.DocumentDao
+import dev.antigravity.classevivaexpressive.core.database.database.DocumentEntity
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaItemEntity
 import dev.antigravity.classevivaexpressive.core.database.database.GradeDao
@@ -25,20 +34,23 @@ import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCache
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheEntity
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
-import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
+import dev.antigravity.classevivaexpressive.core.datastore.TimetableTemplateStore
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceJustificationRequest
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
+import dev.antigravity.classevivaexpressive.core.domain.model.AttachmentPayload
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
-import dev.antigravity.classevivaexpressive.core.domain.model.FeatureCapabilityMode
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSubmission
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSubmissionReceipt
+import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
+import dev.antigravity.classevivaexpressive.core.domain.model.MaterialAsset
+import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.MeetingBooking
 import dev.antigravity.classevivaexpressive.core.domain.model.MeetingJoinLink
 import dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot
@@ -46,18 +58,21 @@ import dev.antigravity.classevivaexpressive.core.domain.model.MeetingTeacher
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
-import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolbookCourse
 import dev.antigravity.classevivaexpressive.core.domain.model.Subject
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
-import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaGatewayClient
+import dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCase
+import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaNetworkException
 import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaRestClient
 import dev.antigravity.classevivaexpressive.core.network.client.LoginResult
+import dev.antigravity.classevivaexpressive.core.network.client.PortalClient
 import dev.antigravity.classevivaexpressive.core.network.client.normalizeDocumentAsset
+import dev.antigravity.classevivaexpressive.core.network.client.parseMeetingsSnapshot
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -70,13 +85,18 @@ import kotlinx.serialization.json.Json
 class SchoolSyncCoordinator @Inject constructor(
   private val json: Json,
   private val restClient: ClassevivaRestClient,
-  private val gatewayClient: ClassevivaGatewayClient,
+  private val portalClient: PortalClient,
   private val sessionStore: SessionStore,
-  private val settingsStore: SettingsStore,
   private val schoolYearStore: SchoolYearStore,
+  private val timetableTemplateStore: TimetableTemplateStore,
   private val snapshotCacheDao: SnapshotCacheDao,
   private val gradeDao: GradeDao,
   private val agendaDao: AgendaDao,
+  private val absenceDao: AbsenceDao,
+  private val communicationDao: CommunicationDao,
+  private val materialDao: MaterialDao,
+  private val documentDao: DocumentDao,
+  private val predictiveTimetableUseCase: PredictiveTimetableUseCase,
 ) {
   private var activeSession: UserSession? = null
   val syncStatus = MutableStateFlow(SyncStatus())
@@ -110,6 +130,8 @@ class SchoolSyncCoordinator @Inject constructor(
 
   fun authToken(): String? = restClient.currentToken()
 
+  fun clearPortalSession() = portalClient.clearSession()
+
   suspend fun refreshAll(force: Boolean = false): SyncStatus {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     return refreshSchoolYear(selectedYear = selectedYear, force = force, refreshProfile = true)
@@ -121,6 +143,20 @@ class SchoolSyncCoordinator @Inject constructor(
       force = force,
       refreshProfile = false,
     )
+  }
+
+  suspend fun refreshAbsences(force: Boolean = false): Result<List<AbsenceRecord>> = runCatching {
+    val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
+    val status = refreshSchoolYear(
+      selectedYear = selectedYear,
+      force = force,
+      refreshProfile = false,
+      sections = setOf(AbsencesSection),
+    )
+    if (status.state == SyncState.PARTIAL) {
+      throw ClassevivaNetworkException("Impossibile aggiornare le assenze. Verificare la connessione.")
+    }
+    readYearScopedValue(AbsencesSection, selectedYear, emptyList<AbsenceRecord>())
   }
 
   suspend fun refreshHomeworks(force: Boolean = false): List<Homework> {
@@ -147,14 +183,25 @@ class SchoolSyncCoordinator @Inject constructor(
 
   suspend fun submitHomework(submission: HomeworkSubmission): Result<HomeworkSubmissionReceipt> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val receipt = gatewayClient.submitHomework(submission, selectedYear)
+    val submitUrl = submission.submitUrl
+      ?: throw ClassevivaNetworkException("URL consegna compito non disponibile per questo tenant.")
+    portalClient.submitHomework(
+      submitUrl = submitUrl,
+      text = submission.text,
+      attachment = submission.attachments.firstOrNull(),
+    )
     refreshSchoolYear(
       selectedYear = selectedYear,
       force = true,
       refreshProfile = false,
       sections = setOf(HomeworkSection),
     )
-    receipt
+    HomeworkSubmissionReceipt(
+      homeworkId = submission.homeworkId,
+      state = "SUCCESS",
+      submittedAt = java.time.LocalDateTime.now().toString().take(16),
+      message = "Compito inviato tramite portale on-device.",
+    )
   }
 
   suspend fun getCommunicationDetail(pubId: String, evtCode: String) = runCatching {
@@ -173,16 +220,26 @@ class SchoolSyncCoordinator @Inject constructor(
 
   suspend fun replyToCommunication(detail: CommunicationDetail, text: String): Result<CommunicationDetail> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val updated = gatewayClient.replyToNoticeboard(detail = detail, text = text, schoolYear = selectedYear)
+    val replyUrl = detail.replyUrl
+      ?: detail.portalDetailUrl
+      ?: throw ClassevivaNetworkException("URL risposta bacheca non disponibile.")
+    portalClient.replyNoticeboard(replyUrl = replyUrl, text = text)
     runCatching { refreshCommunicationsSnapshot(selectedYear) }
-    runCatching { restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode) }.getOrDefault(updated)
+    runCatching {
+      restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode)
+    }.getOrDefault(detail)
   }
 
   suspend fun joinCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val updated = gatewayClient.joinNoticeboard(detail = detail, schoolYear = selectedYear)
+    val joinUrl = detail.joinUrl
+      ?: detail.portalDetailUrl
+      ?: throw ClassevivaNetworkException("URL adesione bacheca non disponibile.")
+    portalClient.joinNoticeboard(joinUrl = joinUrl)
     runCatching { refreshCommunicationsSnapshot(selectedYear) }
-    runCatching { restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode) }.getOrDefault(updated)
+    runCatching {
+      restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode)
+    }.getOrDefault(detail)
   }
 
   suspend fun uploadCommunicationFile(
@@ -192,17 +249,21 @@ class SchoolSyncCoordinator @Inject constructor(
     bytes: ByteArray,
   ): Result<CommunicationDetail> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val updated = gatewayClient.uploadNoticeboard(
-      detail = detail,
-      attachment = dev.antigravity.classevivaexpressive.core.domain.model.AttachmentPayload(
+    val uploadUrl = detail.fileUploadUrl
+      ?: detail.portalDetailUrl
+      ?: throw ClassevivaNetworkException("URL upload bacheca non disponibile.")
+    portalClient.uploadNoticeboard(
+      uploadUrl = uploadUrl,
+      attachment = AttachmentPayload(
         fileName = fileName,
         mimeType = mimeType,
         base64Content = Base64.getEncoder().encodeToString(bytes),
       ),
-      schoolYear = selectedYear,
     )
     runCatching { refreshCommunicationsSnapshot(selectedYear) }
-    runCatching { restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode) }.getOrDefault(updated)
+    runCatching {
+      restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode)
+    }.getOrDefault(detail)
   }
 
   suspend fun getNoteDetail(id: String, categoryCode: String): Result<NoteDetail> = runCatching {
@@ -212,7 +273,7 @@ class SchoolSyncCoordinator @Inject constructor(
     }
   }
 
-  suspend fun openMaterial(item: dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem): Result<dev.antigravity.classevivaexpressive.core.domain.model.MaterialAsset> = runCatching {
+  suspend fun openMaterial(item: MaterialItem): Result<MaterialAsset> = runCatching {
     restClient.getMaterialAsset(item)
   }
 
@@ -264,29 +325,55 @@ class SchoolSyncCoordinator @Inject constructor(
       justifyUrl = request.justifyUrl ?: record.justifyUrl,
       detailUrl = request.detailUrl ?: record.detailUrl,
     )
-    val updated = gatewayClient.justifyAbsence(effectiveRequest, selectedYear)
-    storeYearScopedValue(AbsencesSection, selectedYear, updated)
+    val session = activeSession ?: return Result.failure(ClassevivaNetworkException("Sessione assente."))
+    portalClient.justifyAbsence(
+      justifyUrl = effectiveRequest.justifyUrl,
+      detailUrl = effectiveRequest.detailUrl,
+      reasonText = effectiveRequest.reasonText,
+      fileAttachment = effectiveRequest.attachment,
+    )
+    val updated = restClient.getAbsences(
+      schoolYearStart(selectedYear).toString(),
+      schoolYearEnd(selectedYear).toString(),
+    )
+    syncAbsences(selectedYear, mutableListOf(), session) { updated }
     updated
   }
 
   suspend fun bookMeeting(slot: MeetingSlot): Result<MeetingBooking> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val booking = gatewayClient.bookMeeting(slot, selectedYear)
+    portalClient.submitPortalAction(
+      pageUrl = slot.id,
+      formKeywords = listOf("prenota", "book", "conferma"),
+    )
     refreshMeetingsSnapshot(selectedYear)
-    booking
+    readYearScopedValue(MeetingBookingsSection, selectedYear, emptyList<MeetingBooking>())
+      .firstOrNull()
+      ?: MeetingBooking(
+        id = slot.id,
+        teacher = MeetingTeacher(id = slot.teacherId, name = "Docente"),
+        slot = slot,
+        status = "BOOKED",
+      )
   }
 
   suspend fun cancelMeeting(booking: MeetingBooking): Result<List<MeetingBooking>> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val updated = gatewayClient.cancelMeeting(booking.id, selectedYear)
-    storeYearScopedValue(MeetingBookingsSection, selectedYear, updated)
-    updated
+    portalClient.submitPortalAction(
+      pageUrl = booking.id,
+      formKeywords = listOf("annulla", "cancel", "rimuovi", "disdici"),
+    )
+    refreshMeetingsSnapshot(selectedYear)
+    readYearScopedValue(MeetingBookingsSection, selectedYear, emptyList())
   }
 
   suspend fun joinMeeting(booking: MeetingBooking): Result<MeetingJoinLink> = runCatching {
-    val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    gatewayClient.joinMeeting(booking.id, selectedYear)
+    val joinUrl = booking.slot.joinUrl
+      ?: throw ClassevivaNetworkException("Link colloquio non disponibile.")
+    MeetingJoinLink(bookingId = booking.id, url = joinUrl)
   }
+
+  fun getPortalSessionCookies() = portalClient.getSessionCookies()
 
   private suspend fun refreshSchoolYear(
     selectedYear: SchoolYearRef,
@@ -294,11 +381,14 @@ class SchoolSyncCoordinator @Inject constructor(
     refreshProfile: Boolean,
     sections: Set<String>? = null,
   ): SyncStatus {
-    val session = activeSession ?: return SyncStatus(
-      state = SyncState.ERROR,
-      message = "Sessione assente.",
-    )
-    val settings = settingsStore.settings.first()
+    val session = activeSession ?: run {
+        android.util.Log.e("SyncCoordinator", "Sincronizzazione abortita: activeSession è NULL")
+        return SyncStatus(
+            state = SyncState.ERROR,
+            message = "Sessione assente (Coordinator).",
+        )
+    }
+    android.util.Log.i("SyncCoordinator", "Avvio sincronizzazione per anno: ${selectedYear.id}")
     attachSession(session)
     syncStatus.value = SyncStatus(
       state = SyncState.SYNCING,
@@ -314,129 +404,59 @@ class SchoolSyncCoordinator @Inject constructor(
     val selectedSections = sections ?: allSections()
 
     if (refreshProfile && selectedSections.contains(ProfileSection)) {
-      syncGlobal(ProfileSection, errors) {
-        if (settings.getFeatureMode(RegistroFeature.PROFILE) == FeatureCapabilityMode.GATEWAY) {
-          gatewayClient.getProfile(selectedYear)
-        } else {
-          restClient.getProfile()
-        }
-      }
+      syncGlobal(ProfileSection, errors) { restClient.getProfile() }
     }
 
     if (selectedSections.contains(GradesSection)) {
-      syncGrades(selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.GRADES) == FeatureCapabilityMode.GATEWAY) {
-          gatewayClient.getGrades(selectedYear)
-        } else if (isCurrentYear) {
-          restClient.getGrades()
-        } else {
-          emptyList<Grade>()
-        }
+      syncGrades(selectedYear, errors, session) {
+        filterGradesForYear(restClient.getGrades(), selectedYear)
       }
     }
     if (selectedSections.contains(PeriodsSection)) {
-      syncYearScoped(PeriodsSection, selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.PERIODS) == FeatureCapabilityMode.GATEWAY) {
-          gatewayClient.getPeriods(selectedYear)
-        } else if (isCurrentYear) {
-          restClient.getPeriods()
-        } else {
-          emptyList<Period>()
-        }
-      }
+      syncYearScoped(PeriodsSection, selectedYear, errors) { restClient.getPeriods() }
     }
     if (selectedSections.contains(SubjectsSection)) {
-      syncYearScoped(SubjectsSection, selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.SUBJECTS) == FeatureCapabilityMode.GATEWAY) {
-          gatewayClient.getSubjects(selectedYear)
-        } else if (isCurrentYear) {
-          restClient.getSubjects()
-        } else {
-          emptyList<Subject>()
-        }
-      }
+      syncYearScoped(SubjectsSection, selectedYear, errors) { restClient.getSubjects() }
     }
     if (selectedSections.contains(LessonsSection)) {
       syncYearScoped(LessonsSection, selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.LESSONS) == FeatureCapabilityMode.GATEWAY) {
-          gatewayClient.getLessons(selectedYear)
-        } else {
-          restClient.getLessons(yearStart.toString(), yearEnd.toString())
-        }
+        restClient.getLessons(yearStart.toString(), yearEnd.toString())
       }
     }
     if (selectedSections.contains(HomeworkSection)) {
       syncYearScoped(HomeworkSection, selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.HOMEWORKS) == FeatureCapabilityMode.GATEWAY) {
-          gatewayClient.getHomeworks(selectedYear)
-        } else if (isCurrentYear) {
-          filterHomeworksForYear(restClient.getHomeworks(), selectedYear)
-        } else {
-          emptyList<Homework>()
-        }
+        filterHomeworksForYear(restClient.getHomeworks(), selectedYear)
       }
     }
     if (selectedSections.contains(AgendaSection)) {
-      syncAgenda(selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.AGENDA) == FeatureCapabilityMode.GATEWAY) {
-          gatewayClient.getAgenda(selectedYear)
-        } else {
-          restClient.getAgenda(yearStart.toString(), yearEnd.toString())
-        }
+      syncAgenda(selectedYear, errors, session) {
+        restClient.getAgenda(yearStart.toString(), yearEnd.toString())
       }
     }
     if (selectedSections.contains(AbsencesSection)) {
-      syncYearScoped(AbsencesSection, selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.ABSENCES) == FeatureCapabilityMode.GATEWAY) {
-          restClient.getAbsences(yearStart.toString(), yearEnd.toString())
-        } else {
-          restClient.getAbsences(yearStart.toString(), yearEnd.toString())
-        }
+      syncAbsences(selectedYear, errors, session) {
+        restClient.getAbsences(yearStart.toString(), yearEnd.toString())
       }
     }
     if (selectedSections.contains(CommunicationsSection)) {
-      syncYearScoped(CommunicationsSection, selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.NOTICEBOARD) == FeatureCapabilityMode.GATEWAY) {
-          gatewayClient.getCommunications(selectedYear)
-        } else if (isCurrentYear) {
-          restClient.getCommunications()
-        } else {
-          emptyList<Communication>()
+      syncCommunications(selectedYear, errors, session) {
+        restClient.getCommunications().filter { comm ->
+          filterByDate(comm.date, yearStart, yearEnd)
         }
       }
     }
     if (selectedSections.contains(NotesSection)) {
       syncYearScoped(NotesSection, selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.NOTES) == FeatureCapabilityMode.GATEWAY) {
-          emptyList<Note>()
-        } else if (isCurrentYear) {
-          restClient.getNotes()
-        } else {
-          emptyList<Note>()
-        }
+        restClient.getNotes().filter { note -> filterByDate(note.date, yearStart, yearEnd) }
       }
     }
     if (selectedSections.contains(MaterialsSection)) {
-      syncYearScoped(MaterialsSection, selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.MATERIALS) == FeatureCapabilityMode.GATEWAY) {
-          gatewayClient.getMaterials(selectedYear)
-        } else if (isCurrentYear) {
-          restClient.getMaterials()
-        } else {
-          emptyList()
-        }
+      syncMaterials(selectedYear, errors, session) {
+        restClient.getMaterials().filter { mat -> filterByDate(mat.sharedAt, yearStart, yearEnd) }
       }
     }
     if (selectedSections.contains(DocumentsSection)) {
-      syncYearScoped(DocumentsSection, selectedYear, errors) {
-        if (settings.getFeatureMode(RegistroFeature.DOCUMENTS) == FeatureCapabilityMode.GATEWAY) {
-          gatewayClient.getDocuments(selectedYear)
-        } else if (isCurrentYear) {
-          restClient.getDocuments()
-        } else {
-          emptyList<DocumentItem>()
-        }
-      }
+      syncDocuments(selectedYear, errors, session) { restClient.getDocuments() }
     }
     if (selectedSections.contains(SchoolbooksSection)) {
       if (isCurrentYear) syncYearScoped(SchoolbooksSection, selectedYear, errors) { restClient.getSchoolbooks() }
@@ -448,13 +468,15 @@ class SchoolSyncCoordinator @Inject constructor(
       selectedSections.contains(MeetingSlotsSection) ||
       selectedSections.contains(MeetingBookingsSection)
     ) {
-      if (gatewayClient.isConfigured()) {
-        runCatching { refreshMeetingsSnapshot(selectedYear) }.onFailure {
-          errors += MeetingBookingsSection
-          clearMeetings(selectedYear)
-        }
-      } else {
+      runCatching { refreshMeetingsSnapshot(selectedYear) }.onFailure {
+        errors += MeetingBookingsSection
         clearMeetings(selectedYear)
+      }
+    }
+
+    if (selectedSections.contains(LessonsSection) || selectedSections.contains(AgendaSection)) {
+      runCatching { persistTimetableTemplate(selectedYear, session) }.onFailure {
+        errors += LessonsSection
       }
     }
 
@@ -479,9 +501,9 @@ class SchoolSyncCoordinator @Inject constructor(
   private suspend fun syncGrades(
     schoolYear: SchoolYearRef,
     errors: MutableList<String>,
+    session: UserSession,
     fetch: suspend () -> List<Grade>,
   ) {
-    val session = activeSession ?: return
     runCatching {
       val grades = fetch()
       val entities = grades.map { grade ->
@@ -514,12 +536,15 @@ class SchoolSyncCoordinator @Inject constructor(
   private suspend fun syncAgenda(
     schoolYear: SchoolYearRef,
     errors: MutableList<String>,
+    session: UserSession,
     fetch: suspend () -> List<AgendaItem>,
   ) {
-    val session = activeSession ?: return
     runCatching {
       val agenda = fetch()
+      val existingById = agendaDao.getByYearOnce(session.studentId, schoolYear.id).associateBy { it.id }
+      val now = System.currentTimeMillis()
       val entities = agenda.map { item ->
+        val existing = existingById[item.id]
         AgendaItemEntity(
           id = item.id,
           studentId = session.studentId,
@@ -530,8 +555,11 @@ class SchoolSyncCoordinator @Inject constructor(
           time = item.time,
           detail = item.detail,
           subject = item.subject,
+          teacher = item.teacher,
           category = item.category.name,
           sharePayload = item.sharePayload,
+          createdAt = item.createdAt ?: existing?.createdAt,
+          firstSeenAtMs = existing?.firstSeenAtMs ?: now,
         )
       }
       agendaDao.deleteByYear(session.studentId, schoolYear.id)
@@ -539,6 +567,139 @@ class SchoolSyncCoordinator @Inject constructor(
       storeYearScopedValue(AgendaSection, schoolYear, agenda)
     }.onFailure {
       errors += AgendaSection
+    }
+  }
+
+  private suspend fun syncAbsences(
+    schoolYear: SchoolYearRef,
+    errors: MutableList<String>,
+    session: UserSession,
+    fetch: suspend () -> List<AbsenceRecord>,
+  ) {
+    runCatching {
+      val absences = fetch()
+      val entities = absences.map { record ->
+        AbsenceEntity(
+          id = record.id,
+          studentId = session.studentId,
+          schoolYearId = schoolYear.id,
+          date = record.date,
+          type = record.type.name,
+          hours = record.hours,
+          justified = record.justified,
+          canJustify = record.canJustify,
+          justificationDate = record.justificationDate,
+          justificationReason = record.justificationReason,
+          justifyUrl = record.justifyUrl,
+          detailUrl = record.detailUrl,
+        )
+      }
+      absenceDao.deleteByYear(session.studentId, schoolYear.id)
+      absenceDao.upsertAll(entities)
+      storeYearScopedValue(AbsencesSection, schoolYear, absences)
+    }.onFailure {
+      errors += AbsencesSection
+    }
+  }
+
+  private suspend fun syncCommunications(
+    schoolYear: SchoolYearRef,
+    errors: MutableList<String>,
+    session: UserSession,
+    fetch: suspend () -> List<Communication>,
+  ) {
+    runCatching {
+      val communications = fetch()
+      val localReadIds = communicationDao.getReadIds(session.studentId, schoolYear.id).toSet()
+      val entities = communications.map { comm ->
+        CommunicationEntity(
+          id = comm.id,
+          studentId = session.studentId,
+          schoolYearId = schoolYear.id,
+          pubId = comm.pubId,
+          evtCode = comm.evtCode,
+          title = comm.title,
+          contentPreview = comm.contentPreview,
+          sender = comm.sender,
+          date = comm.date,
+          read = comm.read || localReadIds.contains(comm.id),
+          attachments = json.encodeToString(comm.attachments),
+          category = comm.category,
+          needsAck = comm.needsAck,
+          needsReply = comm.needsReply,
+          needsJoin = comm.needsJoin,
+          needsFile = comm.needsFile,
+          actions = json.encodeToString(comm.actions),
+          noticeboardAttachments = json.encodeToString(comm.noticeboardAttachments),
+          capabilityState = json.encodeToString(comm.capabilityState),
+        )
+      }
+      communicationDao.deleteByYear(session.studentId, schoolYear.id)
+      communicationDao.upsertAll(entities)
+      storeYearScopedValue(CommunicationsSection, schoolYear, communications)
+    }.onFailure {
+      errors += CommunicationsSection
+    }
+  }
+
+  private suspend fun syncMaterials(
+    schoolYear: SchoolYearRef,
+    errors: MutableList<String>,
+    session: UserSession,
+    fetch: suspend () -> List<MaterialItem>,
+  ) {
+    runCatching {
+      val materials = fetch()
+      val entities = materials.map { mat ->
+        MaterialEntity(
+          id = mat.id,
+          studentId = session.studentId,
+          schoolYearId = schoolYear.id,
+          teacherId = mat.teacherId,
+          teacherName = mat.teacherName,
+          folderId = mat.folderId,
+          folderName = mat.folderName,
+          title = mat.title,
+          objectId = mat.objectId,
+          objectType = mat.objectType,
+          sharedAt = mat.sharedAt,
+          capabilityState = json.encodeToString(mat.capabilityState),
+          attachments = json.encodeToString(mat.attachments),
+        )
+      }
+      materialDao.deleteByYear(session.studentId, schoolYear.id)
+      materialDao.upsertAll(entities)
+      storeYearScopedValue(MaterialsSection, schoolYear, materials)
+    }.onFailure {
+      errors += MaterialsSection
+    }
+  }
+
+  private suspend fun syncDocuments(
+    schoolYear: SchoolYearRef,
+    errors: MutableList<String>,
+    session: UserSession,
+    fetch: suspend () -> List<DocumentItem>,
+  ) {
+    runCatching {
+      val documents = fetch()
+      val entities = documents.map { doc ->
+        DocumentEntity(
+          id = doc.id,
+          studentId = session.studentId,
+          schoolYearId = schoolYear.id,
+          title = doc.title,
+          detail = doc.detail,
+          viewUrl = doc.viewUrl,
+          confirmUrl = doc.confirmUrl,
+          capabilityState = json.encodeToString(doc.capabilityState),
+        )
+      }
+      documentDao.deleteByYear(session.studentId, schoolYear.id)
+      documentDao.upsertAll(entities)
+      storeYearScopedValue(DocumentsSection, schoolYear, documents)
+    }.onFailure {
+      errors += DocumentsSection
     }
   }
 
@@ -601,11 +762,10 @@ class SchoolSyncCoordinator @Inject constructor(
 
   private suspend fun refreshCommunicationsSnapshot(schoolYear: SchoolYearRef) {
     if (schoolYear.id != schoolYearStore.currentSchoolYearRef().id) return
-    storeYearScopedValue(
-      CommunicationsSection,
-      schoolYear,
-      restClient.getCommunications(),
-    )
+    val session = activeSession ?: return
+    syncCommunications(schoolYear, mutableListOf(), session) {
+      restClient.getCommunications()
+    }
   }
 
   private suspend fun refreshNotesSnapshot(schoolYear: SchoolYearRef) {
@@ -618,10 +778,42 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   private suspend fun refreshMeetingsSnapshot(schoolYear: SchoolYearRef) {
-    val snapshot = gatewayClient.getMeetings(schoolYear)
+    val page = portalClient.getMeetingsPageHtml()
+    if (page == null) {
+      clearMeetings(schoolYear)
+      return
+    }
+    val snapshot = parseMeetingsSnapshot(page.first, page.second)
     storeYearScopedValue(MeetingTeachersSection, schoolYear, snapshot.teachers)
     storeYearScopedValue(MeetingSlotsSection, schoolYear, snapshot.slots)
     storeYearScopedValue(MeetingBookingsSection, schoolYear, snapshot.bookings)
+  }
+
+  private suspend fun persistTimetableTemplate(
+    schoolYear: SchoolYearRef,
+    session: UserSession,
+  ) {
+    val lessons = readYearScopedValue(LessonsSection, schoolYear, emptyList<Lesson>())
+    val agenda = agendaDao.getByYearOnce(session.studentId, schoolYear.id).map { entity ->
+      AgendaItem(
+        id = entity.id,
+        title = entity.title,
+        subtitle = entity.subtitle,
+        date = entity.date,
+        time = entity.time,
+        detail = entity.detail,
+        subject = entity.subject,
+        teacher = entity.teacher,
+        category = AgendaCategory.valueOf(entity.category),
+        sharePayload = entity.sharePayload,
+        createdAt = entity.createdAt ?: entity.firstSeenAtMs?.let(::epochMillisToCreatedAt),
+      )
+    }
+    val preparedLessons = buildLessonsWithFallback(lessons, agenda)
+    timetableTemplateStore.writeTemplate(
+      schoolYear.id,
+      predictiveTimetableUseCase.generateTimetableTemplate(preparedLessons),
+    )
   }
 
   private suspend fun clearMeetings(schoolYear: SchoolYearRef) {
@@ -646,6 +838,23 @@ class SchoolSyncCoordinator @Inject constructor(
         !dueDate.isBefore(start) && !dueDate.isAfter(end)
       } ?: false
     }
+  }
+
+  private fun filterGradesForYear(grades: List<Grade>, schoolYear: SchoolYearRef): List<Grade> {
+    val start = schoolYearStart(schoolYear)
+    val end = schoolYearEnd(schoolYear)
+    return grades.filter { grade ->
+      runCatching { LocalDate.parse(grade.date) }.getOrNull()?.let { date ->
+        !date.isBefore(start) && !date.isAfter(end)
+      } ?: true
+    }
+  }
+
+  private fun filterByDate(date: String?, start: LocalDate, end: LocalDate): Boolean {
+    if (date.isNullOrBlank()) return true
+    return runCatching { LocalDate.parse(date) }.getOrNull()?.let { d ->
+      !d.isBefore(start) && !d.isAfter(end)
+    } ?: true
   }
 
   private fun allSections(): Set<String> {
@@ -678,5 +887,13 @@ class SchoolSyncCoordinator @Inject constructor(
     return declaredMimeType
       ?: java.net.URLConnection.guessContentTypeFromName(fileName ?: title)
       ?: java.net.URLConnection.guessContentTypeFromStream(bytes.inputStream())
+  }
+
+  private fun epochMillisToCreatedAt(value: Long): String {
+    return java.time.Instant.ofEpochMilli(value)
+      .atZone(ZoneId.systemDefault())
+      .toLocalDateTime()
+      .toString()
+      .take(16)
   }
 }

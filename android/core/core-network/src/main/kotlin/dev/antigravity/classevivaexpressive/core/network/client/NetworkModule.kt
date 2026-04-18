@@ -267,4 +267,11 @@ object NetworkModule {
   fun provideGatewayService(@Named("gatewayRetrofit") retrofit: Retrofit): ClassevivaGatewayService {
     return retrofit.create(ClassevivaGatewayService::class.java)
   }
+
+  @Provides
+  @Singleton
+  fun providePortalClient(
+    sessionStorage: SessionStorage,
+    loggingInterceptor: HttpLoggingInterceptor,
+  ): PortalClient = PortalClient(sessionStorage, loggingInterceptor)
 }

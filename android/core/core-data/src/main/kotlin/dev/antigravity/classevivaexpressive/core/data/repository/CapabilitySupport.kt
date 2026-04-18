@@ -1,6 +1,5 @@
 package dev.antigravity.classevivaexpressive.core.data.repository
 
-import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
 import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityResolver
 import dev.antigravity.classevivaexpressive.core.domain.model.FeatureCapability
@@ -10,7 +9,6 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 internal fun yearScopedCacheKey(section: String, schoolYear: SchoolYearRef): String {
@@ -20,15 +18,9 @@ internal fun yearScopedCacheKey(section: String, schoolYear: SchoolYearRef): Str
 @Singleton
 class DefaultCapabilityResolver @Inject constructor(
   private val schoolYearStore: SchoolYearStore,
-  private val settingsStore: SettingsStore,
 ) : CapabilityResolver {
   override fun observeCapabilityMatrix(): Flow<List<FeatureCapability>> {
-    return combine(
-      schoolYearStore.observeSelectedSchoolYear(),
-      settingsStore.settings,
-    ) { selectedYear, settings ->
-      buildCapabilityMatrix(selectedYear, settings.networkConfig.gatewayBaseUrl.isNotBlank())
-    }
+    return schoolYearStore.observeSelectedSchoolYear().map { buildCapabilityMatrix() }
   }
 
   override fun observeCapability(feature: RegistroFeature): Flow<FeatureCapability> {
@@ -44,81 +36,55 @@ class DefaultCapabilityResolver @Inject constructor(
     }
   }
 
-  private fun buildCapabilityMatrix(selectedYear: SchoolYearRef, gatewayConfigured: Boolean): List<FeatureCapability> {
-    val currentYear = schoolYearStore.currentSchoolYearRef()
-    val previousYearSelected = selectedYear.id != currentYear.id
+  private fun buildCapabilityMatrix(): List<FeatureCapability> {
+    fun direct(feature: RegistroFeature, label: String, detail: String) = FeatureCapability(
+      feature = feature,
+      mode = FeatureCapabilityMode.DIRECT_REST,
+      enabled = true,
+      label = label,
+      detail = detail,
+    )
 
-    fun direct(feature: RegistroFeature, label: String, detail: String): FeatureCapability {
-      return FeatureCapability(
-        feature = feature,
-        mode = FeatureCapabilityMode.DIRECT_REST,
-        enabled = true,
-        label = label,
-        detail = detail,
-      )
-    }
+    fun portal(feature: RegistroFeature, label: String, detail: String) = FeatureCapability(
+      feature = feature,
+      mode = FeatureCapabilityMode.DIRECT_PORTAL,
+      enabled = true,
+      label = label,
+      detail = detail,
+    )
 
-    fun gateway(
-      feature: RegistroFeature,
-      label: String,
-      detail: String,
-      enabled: Boolean = gatewayConfigured,
-    ): FeatureCapability {
-      return FeatureCapability(
-        feature = feature,
-        mode = FeatureCapabilityMode.GATEWAY,
-        enabled = enabled,
-        label = label,
-        detail = detail,
-      )
-    }
-
-    fun optional(feature: RegistroFeature, label: String, detail: String): FeatureCapability {
-      return FeatureCapability(
-        feature = feature,
-        mode = FeatureCapabilityMode.TENANT_OPTIONAL,
-        enabled = gatewayConfigured,
-        label = label,
-        detail = detail,
-      )
-    }
+    fun optional(feature: RegistroFeature, label: String, detail: String) = FeatureCapability(
+      feature = feature,
+      mode = FeatureCapabilityMode.TENANT_OPTIONAL,
+      enabled = true,
+      label = label,
+      detail = detail,
+    )
 
     return buildList {
       add(direct(RegistroFeature.LOGIN_SESSION, "Disponibile", "Login e sessione gestiti direttamente dal client Android."))
       add(direct(RegistroFeature.PROFILE, "Disponibile", "Profilo studente disponibile via REST ufficiali."))
-      add(if (previousYearSelected) gateway(RegistroFeature.GRADES, "Richiede gateway", gatewayYearDetail(gatewayConfigured)) else direct(RegistroFeature.GRADES, "Disponibile", "Voti e media letti via REST ufficiali."))
-      add(if (previousYearSelected) gateway(RegistroFeature.PERIODS, "Richiede gateway", gatewayYearDetail(gatewayConfigured)) else direct(RegistroFeature.PERIODS, "Disponibile", "Periodi ufficiali letti direttamente dal client."))
-      add(if (previousYearSelected) gateway(RegistroFeature.SUBJECTS, "Richiede gateway", gatewayYearDetail(gatewayConfigured)) else direct(RegistroFeature.SUBJECTS, "Disponibile", "Materie ufficiali lette direttamente dal client."))
+      add(direct(RegistroFeature.GRADES, "Disponibile", "Voti filtrati per anno scolastico via REST ufficiali."))
+      add(direct(RegistroFeature.PERIODS, "Disponibile", "Periodi ufficiali letti direttamente dal client."))
+      add(direct(RegistroFeature.SUBJECTS, "Disponibile", "Materie ufficiali lette direttamente dal client."))
       add(direct(RegistroFeature.AGENDA, "Disponibile", "Agenda filtrata sull'anno scolastico selezionato."))
-      add(direct(RegistroFeature.HOMEWORKS, "Disponibile", "Compiti disponibili come sezione dedicata, con submit via gateway quando necessario."))
+      add(direct(RegistroFeature.HOMEWORKS, "Disponibile", "Compiti disponibili come sezione dedicata."))
       add(direct(RegistroFeature.LESSONS, "Disponibile", "Lezioni e argomenti filtrati sull'anno scolastico selezionato."))
-      add(if (previousYearSelected) gateway(RegistroFeature.ABSENCES, "Richiede gateway", gatewayYearDetail(gatewayConfigured)) else direct(RegistroFeature.ABSENCES, "Disponibile", "Assenze, ritardi e uscite lette via REST ufficiali."))
-      add(gateway(RegistroFeature.ABSENCE_JUSTIFICATIONS, gatewayLabel(gatewayConfigured), "Le giustificazioni assenze passano dal gateway controllato."))
-      add(if (previousYearSelected) gateway(RegistroFeature.NOTICEBOARD, "Richiede gateway", gatewayYearDetail(gatewayConfigured)) else direct(RegistroFeature.NOTICEBOARD, "Disponibile", "Bacheca, lettura e allegati diretti via REST ufficiali."))
-      add(gateway(RegistroFeature.NOTICEBOARD_REPLY, gatewayLabel(gatewayConfigured), "Risposte bacheca tramite gateway."))
-      add(gateway(RegistroFeature.NOTICEBOARD_JOIN, gatewayLabel(gatewayConfigured), "Adesioni bacheca tramite gateway."))
-      add(gateway(RegistroFeature.NOTICEBOARD_UPLOAD, gatewayLabel(gatewayConfigured), "Upload allegati bacheca tramite gateway."))
-      add(if (previousYearSelected) gateway(RegistroFeature.NOTES, "Richiede gateway", gatewayYearDetail(gatewayConfigured)) else direct(RegistroFeature.NOTES, "Disponibile", "Note e richiami disponibili nel client."))
-      add(if (previousYearSelected) gateway(RegistroFeature.MATERIALS, "Richiede gateway", gatewayYearDetail(gatewayConfigured)) else direct(RegistroFeature.MATERIALS, "Disponibile", "Materiali e allegati disponibili via REST ufficiali."))
-      add(if (previousYearSelected) gateway(RegistroFeature.DOCUMENTS, "Richiede gateway", gatewayYearDetail(gatewayConfigured)) else direct(RegistroFeature.DOCUMENTS, "Disponibile", "Documenti e pagelle disponibili via REST ufficiali."))
-      add(if (previousYearSelected) gateway(RegistroFeature.SCHOOLBOOKS, "Richiede gateway", gatewayYearDetail(gatewayConfigured)) else direct(RegistroFeature.SCHOOLBOOKS, "Disponibile", "Libri di testo disponibili nel client."))
-      add(gateway(RegistroFeature.MEETINGS, gatewayLabel(gatewayConfigured), "I colloqui richiedono il gateway controllato e possono dipendere dal tenant."))
+      add(direct(RegistroFeature.ABSENCES, "Disponibile", "Assenze, ritardi e uscite lette via REST ufficiali."))
+      add(portal(RegistroFeature.ABSENCE_JUSTIFICATIONS, "Disponibile", "Giustificazioni assenze tramite portale on-device (nessun server esterno)."))
+      add(direct(RegistroFeature.NOTICEBOARD, "Disponibile", "Bacheca, lettura e allegati diretti via REST ufficiali."))
+      add(portal(RegistroFeature.NOTICEBOARD_REPLY, "Disponibile", "Risposte bacheca tramite portale on-device."))
+      add(portal(RegistroFeature.NOTICEBOARD_JOIN, "Disponibile", "Adesioni bacheca tramite portale on-device."))
+      add(portal(RegistroFeature.NOTICEBOARD_UPLOAD, "Disponibile", "Upload allegati bacheca tramite portale on-device."))
+      add(direct(RegistroFeature.NOTES, "Disponibile", "Note e richiami filtrati per anno via REST."))
+      add(direct(RegistroFeature.MATERIALS, "Disponibile", "Materiali filtrati per anno via REST ufficiali."))
+      add(direct(RegistroFeature.DOCUMENTS, "Disponibile", "Documenti e pagelle via REST ufficiali."))
+      add(direct(RegistroFeature.SCHOOLBOOKS, "Disponibile", "Libri di testo disponibili nel client."))
+      add(portal(RegistroFeature.MEETINGS, "Best-effort", "Colloqui tramite portale on-device. WebView come fallback se il parsing fallisce."))
       add(direct(RegistroFeature.NOTIFICATIONS, "Disponibile", "Notifiche e deep link gestiti nativamente da Android."))
-      add(gateway(RegistroFeature.PREVIOUS_SCHOOL_YEAR, gatewayLabel(gatewayConfigured), "L'anno scolastico precedente usa gateway quando i dati non sono disponibili via REST diretta.", enabled = gatewayConfigured || !previousYearSelected))
+      add(direct(RegistroFeature.PREVIOUS_SCHOOL_YEAR, "Disponibile", "Anno precedente via REST con filtro data client-side. Nessuna configurazione richiesta."))
       add(optional(RegistroFeature.SPORTELLO, "Opzionale", "Sportello scuola varia per tenant e verra attivato solo se il modulo esiste."))
       add(optional(RegistroFeature.QUESTIONNAIRES, "Opzionale", "Questionari e sondaggi dipendono dai moduli abilitati per la scuola."))
-    }
-  }
-
-  private fun gatewayLabel(gatewayConfigured: Boolean): String {
-    return if (gatewayConfigured) "Richiede gateway" else "Gateway non configurato"
-  }
-
-  private fun gatewayYearDetail(gatewayConfigured: Boolean): String {
-    return if (gatewayConfigured) {
-      "L'anno precedente usa il gateway controllato per evitare incoerenze tra cache e REST ufficiali."
-    } else {
-      "Configura il gateway per consultare correttamente l'anno scolastico precedente."
     }
   }
 }

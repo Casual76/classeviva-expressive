@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.theme
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
@@ -15,11 +16,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +38,7 @@ import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,16 +70,17 @@ fun ExpressiveTopHeader(
   modifier: Modifier = Modifier,
   subtitle: String? = null,
   onBack: (() -> Unit)? = null,
+  scrollBehavior: TopAppBarScrollBehavior? = null,
   actions: @Composable RowScope.() -> Unit = {},
 ) {
-  TopAppBar(
+  LargeTopAppBar(
     modifier = modifier.fillMaxWidth(),
+    scrollBehavior = scrollBehavior,
     title = {
-      Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
           text = title,
-          style = MaterialTheme.typography.headlineMedium,
-          fontWeight = FontWeight.SemiBold,
+          fontWeight = FontWeight.Bold,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
@@ -95,14 +103,13 @@ fun ExpressiveTopHeader(
       }
     },
     actions = actions,
-    colors = TopAppBarDefaults.topAppBarColors(
+    colors = TopAppBarDefaults.largeTopAppBarColors(
       containerColor = Color.Transparent,
       scrolledContainerColor = Color.Transparent,
       navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
       actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
       titleContentColor = MaterialTheme.colorScheme.onSurface,
     ),
-    windowInsets = WindowInsets(0, 0, 0, 0),
   )
 }
 
@@ -279,10 +286,17 @@ fun MetricTile(
   detail: String,
   modifier: Modifier = Modifier,
   tone: ExpressiveTone = ExpressiveTone.Neutral,
+  onClick: (() -> Unit)? = null,
 ) {
   val colors = toneColors(tone)
+  val clickableModifier = if (onClick != null) {
+    modifier.bouncyClickable(onClick = onClick)
+  } else {
+    modifier
+  }
+
   ElevatedCard(
-    modifier = modifier,
+    modifier = clickableModifier,
     colors = CardDefaults.elevatedCardColors(containerColor = colors.container),
   ) {
     Column(
@@ -312,6 +326,72 @@ fun MetricTile(
 }
 
 @Composable
+fun ExpressiveCard(
+  modifier: Modifier = Modifier,
+  highlighted: Boolean = false,
+  onClick: (() -> Unit)? = null,
+  content: @Composable ColumnScope.() -> Unit,
+) {
+  val baseModifier = modifier
+    .fillMaxWidth()
+    .animateContentSize()
+
+  val clickableModifier = if (onClick != null) {
+    baseModifier.bouncyClickable(onClick = onClick)
+  } else {
+    baseModifier
+  }
+
+  OutlinedCard(
+    modifier = clickableModifier,
+    shape = RoundedCornerShape(24.dp),
+    colors = CardDefaults.outlinedCardColors(
+      containerColor = if (highlighted) {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+      } else {
+        MaterialTheme.colorScheme.surface
+      },
+    ),
+    border = BorderStroke(
+      1.dp,
+      if (highlighted) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+      } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
+      },
+    ),
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp),
+      content = content,
+    )
+  }
+}
+
+@Composable
+fun QuickAction(
+  label: String,
+  modifier: Modifier = Modifier,
+  onClick: () -> Unit,
+) {
+  AssistChip(
+    modifier = modifier,
+    onClick = onClick,
+    label = { Text(label) },
+    colors = AssistChipDefaults.assistChipColors(
+      containerColor = MaterialTheme.colorScheme.secondaryContainer,
+      labelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+      leadingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+      trailingIconContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ),
+  )
+}
+
+
+@Composable
 fun RegisterListRow(
   title: String,
   subtitle: String,
@@ -322,20 +402,22 @@ fun RegisterListRow(
   badge: (@Composable () -> Unit)? = null,
   leading: (@Composable () -> Unit)? = null,
   onClick: (() -> Unit)? = null,
+  onLongClick: (() -> Unit)? = null,
 ) {
   val colors = toneColors(tone)
+  val isTinted = tone != ExpressiveTone.Neutral
   OutlinedCard(
     modifier = modifier
       .fillMaxWidth()
       .then(
-        if (onClick != null) {
-          Modifier.clickable(onClick = onClick)
+        if (onClick != null || onLongClick != null) {
+          Modifier.bouncyClickable(onClick = onClick, onLongClick = onLongClick)
         } else {
           Modifier
         },
       ),
     shape = RoundedCornerShape(24.dp),
-    colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+    colors = CardDefaults.outlinedCardColors(containerColor = if (isTinted) colors.container.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surface),
     border = BorderStroke(1.dp, colors.container.copy(alpha = 0.65f)),
   ) {
     ListItem(
@@ -429,5 +511,186 @@ private fun toneColors(tone: ExpressiveTone): ToneColors {
     ExpressiveTone.Danger -> ToneColors(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.error)
     ExpressiveTone.Info -> ToneColors(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.primary)
     ExpressiveTone.Neutral -> ToneColors(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurfaceVariant)
+  }
+}
+
+@Composable
+fun ExpressiveHeroCard(
+  title: String,
+  subtitle: String,
+  modifier: Modifier = Modifier,
+  trailing: (@Composable () -> Unit)? = null,
+) {
+  ElevatedCard(
+    modifier = modifier.fillMaxWidth(),
+    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+  ) {
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(20.dp),
+      horizontalArrangement = Arrangement.spacedBy(16.dp),
+      verticalAlignment = Alignment.Top,
+    ) {
+      Column(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Text(
+          text = title,
+          style = MaterialTheme.typography.headlineSmall,
+          fontWeight = FontWeight.SemiBold,
+          color = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+        Text(
+          text = subtitle,
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f),
+        )
+      }
+      trailing?.invoke() ?: Icon(
+        imageVector = Icons.Filled.School,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+      )
+    }
+  }
+}
+
+@Composable
+fun SectionTitle(
+  eyebrow: String,
+  title: String,
+  modifier: Modifier = Modifier,
+) {
+  Column(
+    modifier = modifier,
+    verticalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
+    Text(
+      text = eyebrow.uppercase(),
+      style = MaterialTheme.typography.labelLarge,
+      color = MaterialTheme.colorScheme.primary,
+      fontWeight = FontWeight.Bold,
+    )
+    Text(
+      text = title,
+      style = MaterialTheme.typography.titleLarge,
+      color = MaterialTheme.colorScheme.onBackground,
+      fontWeight = FontWeight.SemiBold,
+    )
+  }
+}
+
+@Composable
+fun StatChip(
+  label: String,
+  value: String,
+  modifier: Modifier = Modifier,
+) {
+  ElevatedCard(
+    modifier = modifier,
+    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+  ) {
+    Column(
+      modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+      verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      Text(
+        text = label.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.primary,
+      )
+      Text(
+        text = value,
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.onSurface,
+        fontWeight = FontWeight.SemiBold,
+      )
+    }
+  }
+}
+
+@Composable
+fun EmptyState(
+  title: String,
+  detail: String,
+  modifier: Modifier = Modifier,
+) {
+  ExpressiveCard(modifier = modifier, highlighted = true) {
+    Text(
+      text = title,
+      style = MaterialTheme.typography.titleMedium,
+      color = MaterialTheme.colorScheme.onSurface,
+      fontWeight = FontWeight.SemiBold,
+    )
+    Text(
+      text = detail,
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+  }
+}
+
+@Composable
+fun AppListItem(
+  title: String,
+  subtitle: String,
+  supporting: String? = null,
+  modifier: Modifier = Modifier,
+  onClick: (() -> Unit)? = null,
+  trailing: (@Composable () -> Unit)? = null,
+) {
+  OutlinedCard(
+    modifier = modifier
+      .fillMaxWidth()
+      .then(
+        if (onClick != null) {
+          Modifier.bouncyClickable(onClick = onClick)
+        } else {
+          Modifier
+        },
+      ),
+    shape = RoundedCornerShape(24.dp),
+    colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+  ) {
+    ListItem(
+      colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+      headlineContent = {
+        Text(
+          text = title,
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold,
+        )
+      },
+      overlineContent = {
+        Text(
+          text = subtitle,
+          style = MaterialTheme.typography.labelLarge,
+          color = MaterialTheme.colorScheme.primary,
+        )
+      },
+      supportingContent = supporting?.let {
+        {
+          Text(
+            text = it,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      },
+      trailingContent = trailing ?: if (onClick != null) {
+        {
+          Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      } else {
+        null
+      },
+    )
   }
 }

@@ -3,6 +3,7 @@ package dev.antigravity.classevivaexpressive.core.domain.model
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
+import java.time.DayOfWeek
 
 @Serializable
 enum class ThemeMode {
@@ -64,6 +65,7 @@ enum class NoticeboardActionType {
 @Serializable
 enum class FeatureCapabilityMode {
   DIRECT_REST,
+  DIRECT_PORTAL,
   GATEWAY,
   TENANT_OPTIONAL,
   UNSUPPORTED,
@@ -161,6 +163,7 @@ data class NotificationPreferences(
   val homework: Boolean = true,
   val communications: Boolean = true,
   val absences: Boolean = true,
+  val grades: Boolean = true,
   val test: Boolean = true,
 )
 
@@ -225,6 +228,7 @@ data class Lesson(
   val topic: String? = null,
   val teacher: String? = null,
   val room: String? = null,
+  val endTime: String? = null,
 )
 
 @Serializable
@@ -258,12 +262,13 @@ data class HomeworkSubmission(
   val homeworkId: String,
   val text: String? = null,
   val attachments: List<AttachmentPayload> = emptyList(),
+  val submitUrl: String? = null,
 )
 
 @Serializable
 data class HomeworkSubmissionReceipt(
   val homeworkId: String,
-  val state: GatewayActionState,
+  val state: String,
   val submittedAt: String? = null,
   val message: String? = null,
   val remoteReference: String? = null,
@@ -278,8 +283,10 @@ data class AgendaItem(
   val time: String? = null,
   val detail: String? = null,
   val subject: String? = null,
+  val teacher: String? = null,
   val category: AgendaCategory,
   val sharePayload: String? = null,
+  val createdAt: String? = null,
 )
 
 @Serializable
@@ -291,7 +298,39 @@ data class CustomEvent(
   val date: String,
   val time: String? = null,
   val category: AgendaCategory = AgendaCategory.CUSTOM,
+  val createdAt: String? = null,
 )
+
+@Serializable
+data class TemplateSlot(
+  val dayOfWeek: Int,
+  val time: String,
+  val endTime: String? = null,
+  val durationMinutes: Int,
+  val subject: String,
+  val teacher: String? = null,
+  val room: String? = null,
+  val confidence: Float = 0f,
+  val sampleCount: Int = 0,
+) {
+  val weekday: DayOfWeek
+    get() = DayOfWeek.of(dayOfWeek.coerceIn(1, 7))
+}
+
+@Serializable
+data class TimetableTemplate(
+  val slots: List<TemplateSlot> = emptyList(),
+  val sampledWeeks: Int = 0,
+  val lastComputedAt: Long = 0L,
+) {
+  fun slotsByDay(): Map<DayOfWeek, List<TemplateSlot>> {
+    return slots
+      .groupBy(TemplateSlot::weekday)
+      .mapValues { (_, items) -> items.sortedBy { it.time } }
+  }
+
+  fun hasLessonsOn(dayOfWeek: DayOfWeek): Boolean = slots.any { it.weekday == dayOfWeek }
+}
 
 @Serializable
 data class AbsenceRecord(
@@ -574,7 +613,7 @@ data class DashboardSnapshot(
   val averageLabel: String = "--",
   val averageNumeric: Double? = null,
   val stats: List<DashboardStat> = emptyList(),
-  val todayLessons: List<AgendaItem> = emptyList(),
+  val todayLessons: List<Lesson> = emptyList(),
   val recentGrades: List<Grade> = emptyList(),
   val unseenGrades: List<Grade> = emptyList(),
   val upcomingItems: List<AgendaItem> = emptyList(),
@@ -656,10 +695,9 @@ data class StudentScoreComparison(
 @Serializable
 data class NetworkConfig(
   val featureModes: Map<RegistroFeature, FeatureCapabilityMode> = RegistroFeature.entries.associateWith {
-    if (it in listOf(RegistroFeature.LOGIN_SESSION, RegistroFeature.NOTIFICATIONS)) FeatureCapabilityMode.DIRECT_REST
-    else FeatureCapabilityMode.GATEWAY
+    FeatureCapabilityMode.DIRECT_REST
   },
-  val gatewayBaseUrl: String = "http://localhost:8088", // Default for local dev
+  val gatewayBaseUrl: String = "",
 )
 
 @Serializable
@@ -715,6 +753,7 @@ interface AgendaRepository {
 
 interface LessonsRepository {
   fun observeLessons(): Flow<List<Lesson>>
+  fun observeTimetableTemplate(): Flow<TimetableTemplate>
   suspend fun refreshLessons(force: Boolean = false): Result<List<Lesson>>
 }
 
@@ -730,6 +769,8 @@ interface CommunicationsRepository {
   fun observeCommunications(): Flow<List<Communication>>
   fun observeNotes(): Flow<List<Note>>
   suspend fun refreshCommunications(force: Boolean = false): Result<List<Communication>>
+  suspend fun markAllAsRead(): Result<Unit>
+  suspend fun markCommunicationRead(id: String): Result<Unit>
   suspend fun getCommunicationDetail(pubId: String, evtCode: String): Result<CommunicationDetail>
   suspend fun getNoteDetail(id: String, categoryCode: String): Result<NoteDetail>
   suspend fun queueDownload(attachment: RemoteAttachment): Result<Long>
@@ -769,6 +810,8 @@ interface AbsencesRepository {
   ): Result<List<AbsenceRecord>>
 }
 
+data class PortalCookieDto(val name: String, val value: String)
+
 interface MeetingsRepository {
   fun observeMeetingTeachers(): Flow<List<MeetingTeacher>>
   fun observeMeetingSlots(): Flow<List<MeetingSlot>>
@@ -777,6 +820,8 @@ interface MeetingsRepository {
   suspend fun bookMeeting(slot: MeetingSlot): Result<MeetingBooking>
   suspend fun cancelMeeting(booking: MeetingBooking): Result<List<MeetingBooking>>
   suspend fun joinMeeting(booking: MeetingBooking): Result<MeetingJoinLink>
+  fun getPortalMeetingsUrl(): String
+  suspend fun getPortalSessionCookies(): List<PortalCookieDto>
 }
 
 interface SchoolYearRepository {
@@ -824,4 +869,5 @@ interface SettingsRepository {
   suspend fun setNotificationCategoryEnabled(channelId: String, enabled: Boolean)
   suspend fun refreshNotificationRuntimeState()
   suspend fun sendTestNotification(): Result<Unit>
+  suspend fun updateGatewayBaseUrl(url: String)
 }
