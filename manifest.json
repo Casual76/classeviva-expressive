@@ -15,24 +15,33 @@
             "ref": ""
         },
         "stable": {
-            "version": "5.2.0",
+            "version": "5.2.1",
             "releaseDate": "2026-04-18",
-            "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.0. Asset rilevati: app-release.apk.",
-            "releaseTag": "stable-classeviva-expressive-v5.2.0",
-            "apkAsset": "classeviva-expressive-5.2.0.apk",
+            "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.1. Asset rilevati: app-release.apk.",
+            "releaseTag": "stable-classeviva-expressive-v5.2.1",
+            "apkAsset": "classeviva-expressive-5.2.1.apk",
             "exeAsset": "",
             "sizeBytes": 0
         },
         "beta": {
-            "version": "5.2.0",
+            "version": "5.2.1",
             "releaseDate": "2026-04-18",
-            "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.0. Asset rilevati: app-release.apk.",
-            "releaseTag": "stable-classeviva-expressive-v5.2.0",
-            "apkAsset": "classeviva-expressive-5.2.0.apk",
+            "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.1. Asset rilevati: app-release.apk.",
+            "releaseTag": "stable-classeviva-expressive-v5.2.1",
+            "apkAsset": "classeviva-expressive-5.2.1.apk",
             "exeAsset": "",
             "sizeBytes": 0
         },
         "history": [
+            {
+                "version": "5.2.0",
+                "releaseDate": "2026-04-18",
+                "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.0. Asset rilevati: app-release.apk.",
+                "releaseTag": "stable-classeviva-expressive-v5.2.0",
+                "apkAsset": "classeviva-expressive-5.2.0.apk",
+                "exeAsset": "",
+                "sizeBytes": 0
+            },
             {
                 "version": "5.1.0",
                 "releaseDate": "2026-04-13",
