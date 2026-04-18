@@ -25,8 +25,8 @@ android {
     applicationId configuredApplicationId
     minSdk 26
     targetSdk 36
-    versionCode 2026040902
-    versionName "4.1.4"
+    versionCode 2026041801
+    versionName "5.2.1"
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
   }
@@ -90,13 +90,8 @@ dependencies {
   implementation project(":feature:feature-grades")
   implementation project(":feature:feature-lessons")
   implementation project(":feature:feature-communications")
-  implementation project(":feature:feature-materials")
-  implementation project(":feature:feature-documents")
   implementation project(":feature:feature-absences")
-  implementation project(":feature:feature-homework")
-  implementation project(":feature:feature-meetings")
   implementation project(":feature:feature-settings")
-  implementation project(":feature:feature-student-score")
 
   implementation platform(libs.compose.bom)
   implementation libs.androidx.appcompat

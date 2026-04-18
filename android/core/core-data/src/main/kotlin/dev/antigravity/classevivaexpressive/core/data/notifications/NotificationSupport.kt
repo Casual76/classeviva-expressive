@@ -13,10 +13,12 @@ import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.antigravity.classevivaexpressive.core.data.repository.AbsencesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.CommunicationsSection
+import dev.antigravity.classevivaexpressive.core.data.repository.GradesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkSection
 import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
+import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationChannelStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPreferences
@@ -31,16 +33,19 @@ import kotlinx.serialization.json.Json
 const val HomeworkChannelId = "compiti"
 const val CommunicationsChannelId = "comunicazioni"
 const val AbsencesChannelId = "assenze"
+const val GradesChannelId = "voti"
 const val TestChannelId = "test"
 
 internal const val HomeworkCacheSection = HomeworkSection
 internal const val CommunicationsCacheSection = CommunicationsSection
 internal const val AbsencesCacheSection = AbsencesSection
+internal const val GradesCacheSection = GradesSection
 
 data class SyncSnapshotPayloads(
   val homeworks: String? = null,
   val communications: String? = null,
   val absences: String? = null,
+  val grades: String? = null,
 )
 
 data class ChannelDefinition(
@@ -67,6 +72,12 @@ private val channelDefinitions = listOf(
     id = AbsencesChannelId,
     label = "Assenze",
     description = "Assenze, ritardi e uscite da controllare.",
+    importance = NotificationManager.IMPORTANCE_HIGH,
+  ),
+  ChannelDefinition(
+    id = GradesChannelId,
+    label = "Voti",
+    description = "Nuovi voti e aggiornamenti alle valutazioni.",
     importance = NotificationManager.IMPORTANCE_HIGH,
   ),
   ChannelDefinition(
@@ -138,7 +149,7 @@ fun sendTestNotification(
   NotificationManagerCompat.from(context).notify(
     3111,
     NotificationCompat.Builder(context, TestChannelId)
-      .setSmallIcon(android.R.drawable.ic_dialog_info)
+      .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
       .setContentTitle("Classeviva Expressive")
       .setContentText("Notifica di test inviata correttamente.")
       .setStyle(
@@ -226,6 +237,25 @@ class SyncNotificationDispatcher @Inject constructor(
         )
       }
     }
+
+    if (preferences.grades) {
+      val before = decodeList<Grade>(previous.grades)
+      val after = decodeList<Grade>(current.grades)
+      val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id } }
+      if (newItems.isNotEmpty()) {
+        val latest = newItems.maxByOrNull { it.date } ?: newItems.first()
+        showNotification(
+          channelId = GradesChannelId,
+          notificationId = 4400 + newItems.hashCode(),
+          title = if (newItems.size == 1) "Nuovo voto" else "${newItems.size} nuovi voti",
+          text = if (newItems.size == 1) {
+            "${latest.valueLabel} in ${latest.subject}"
+          } else {
+            "Nuovi voti o valutazioni aggiornate nel registro."
+          },
+        )
+      }
+    }
   }
 
   private inline fun <reified T> decodeList(payload: String?): List<T> {
@@ -252,7 +282,7 @@ class SyncNotificationDispatcher @Inject constructor(
     NotificationManagerCompat.from(context).notify(
       notificationId,
       NotificationCompat.Builder(context, channelId)
-        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
         .setContentTitle(title)
         .setContentText(text)
         .setStyle(NotificationCompat.BigTextStyle().bigText(text))

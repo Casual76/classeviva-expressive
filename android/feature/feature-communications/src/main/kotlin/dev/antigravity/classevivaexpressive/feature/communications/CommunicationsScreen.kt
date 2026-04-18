@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -17,12 +18,16 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +37,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -63,11 +69,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-private const val TAB_BOARD = "Bacheca"
+private const val TAB_BOARD = "Comunicazioni"
 private const val TAB_NOTES = "Note"
 private const val FILTER_ALL = "Tutte"
 private const val FILTER_UNREAD = "Non lette"
-private const val FILTER_ACTION = "Da gestire"
 private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
 
 data class CommunicationsUiState(
@@ -127,13 +132,24 @@ class CommunicationsViewModel @Inject constructor(
 
   fun openCommunication(pubId: String, evtCode: String) {
     viewModelScope.launch {
+      val cached = state.value.communications.firstOrNull { it.pubId == pubId && it.evtCode == evtCode }
+      if (cached != null) {
+        selectedNote.value = null
+        selectedCommunication.value = CommunicationDetail(
+          communication = cached,
+          content = cached.contentPreview.ifBlank { "Caricamento contenuto…" },
+          actions = cached.actions,
+        )
+      }
       communicationsRepository.getCommunicationDetail(pubId, evtCode)
         .onSuccess {
           selectedNote.value = null
           selectedCommunication.value = it
         }
-        .onFailure {
-          lastMessage.value = it.message ?: "Impossibile aprire la comunicazione."
+        .onFailure { error ->
+          if (cached == null) {
+            lastMessage.value = error.message ?: "Impossibile aprire la comunicazione."
+          }
         }
     }
   }
@@ -198,6 +214,18 @@ class CommunicationsViewModel @Inject constructor(
   fun dismissDetail() {
     selectedCommunication.value = null
     selectedNote.value = null
+  }
+
+  fun markAllAsRead() {
+    viewModelScope.launch {
+      communicationsRepository.markAllAsRead()
+        .onSuccess { lastMessage.value = "Tutte le comunicazioni segnate come lette." }
+        .onFailure { lastMessage.value = it.message ?: "Errore durante l'operazione." }
+    }
+  }
+
+  fun markCommunicationRead(id: String) {
+    viewModelScope.launch { communicationsRepository.markCommunicationRead(id) }
   }
 
   fun clearMessage() {
@@ -271,104 +299,119 @@ fun CommunicationsRoute(
     state.communications.filter { communication ->
       when (selectedFilter) {
         FILTER_UNREAD -> !communication.read
-        FILTER_ACTION -> communication.actions.isNotEmpty()
         else -> true
       }
     }
   }
 
-  PullToRefreshBox(
-    modifier = modifier.fillMaxSize(),
-    isRefreshing = state.isRefreshing,
-    onRefresh = viewModel::refresh,
-  ) {
-    LazyColumn(
-      modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-      verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-    item {
+  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+  Scaffold(
+    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+    topBar = {
       ExpressiveTopHeader(
-        title = "Bacheca",
+        title = "Comunicazioni",
         subtitle = "Comunicazioni e note scolastiche in una vista unica, con azioni ufficiali e allegati disponibili.",
         onBack = onBack,
+        scrollBehavior = scrollBehavior,
         actions = {
           IconButton(onClick = viewModel::refresh) {
             Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
           }
         },
       )
-    }
-    item {
-      ExpressivePillTabs(
-        options = listOf(TAB_BOARD, TAB_NOTES),
-        selected = selectedTab,
-        onSelect = { selectedTab = it },
-      )
-    }
-    if (selectedTab == TAB_BOARD) {
-      item {
-        ExpressivePillTabs(
-          options = listOf(FILTER_ALL, FILTER_UNREAD, FILTER_ACTION),
-          selected = selectedFilter,
-          onSelect = { selectedFilter = it },
-        )
-      }
-      if (filteredCommunications.isEmpty()) {
+    },
+  ) { paddingValues ->
+    PullToRefreshBox(
+      modifier = Modifier.fillMaxSize().padding(paddingValues),
+      isRefreshing = state.isRefreshing,
+      onRefresh = viewModel::refresh,
+    ) {
+      LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+      ) {
         item {
-          EmptyState(
-            title = "Nessuna comunicazione visibile",
-            detail = "Nuove circolari e messaggi compariranno qui con stato di lettura, allegati e azioni richieste.",
+          ExpressivePillTabs(
+            options = listOf(TAB_BOARD, TAB_NOTES),
+            selected = selectedTab,
+            onSelect = { selectedTab = it },
           )
         }
-      } else {
-        items(filteredCommunications, key = { it.id }) { communication ->
-          RegisterListRow(
-            title = communication.title,
-            subtitle = communication.sender.ifBlank { "Bacheca scuola" },
-            eyebrow = communication.date.toReadableDate(),
-            meta = communication.contentPreview.takeIf { it.isNotBlank() },
-            tone = communicationTone(communication),
-            badge = {
-              StatusBadge(
-                label = communicationBadgeLabel(communication),
+        if (selectedTab == TAB_BOARD) {
+          val unreadCount = filteredCommunications.count { !it.read }
+          item {
+            ExpressivePillTabs(
+              options = listOf(FILTER_ALL, FILTER_UNREAD),
+              selected = selectedFilter,
+              onSelect = { selectedFilter = it },
+            )
+          }
+          if (unreadCount > 0) {
+              item {
+                  dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction(
+                      label = "Segna tutte come lette",
+                      onClick = viewModel::markAllAsRead
+                  )
+              }
+          }
+          if (filteredCommunications.isEmpty()) {
+            item {
+              EmptyState(
+                title = "Nessuna comunicazione visibile",
+                detail = "Nuove circolari e messaggi compariranno qui con stato di lettura, allegati e azioni richieste.",
+              )
+            }
+          } else {
+            items(filteredCommunications, key = { it.id }) { communication ->
+              RegisterListRow(
+                title = communication.title,
+                subtitle = communication.sender.ifBlank { "Bacheca scuola" },
+                eyebrow = communication.date.toReadableDate(),
+                meta = communication.contentPreview.takeIf { it.isNotBlank() },
                 tone = communicationTone(communication),
+                badge = {
+                  StatusBadge(
+                    label = communicationBadgeLabel(communication),
+                    tone = communicationTone(communication),
+                  )
+                },
+                onClick = { viewModel.openCommunication(communication.pubId, communication.evtCode) },
               )
-            },
-            onClick = { viewModel.openCommunication(communication.pubId, communication.evtCode) },
-          )
-        }
-      }
-    } else {
-      if (state.notes.isEmpty()) {
-        item {
-          EmptyState(
-            title = "Nessuna nota disponibile",
-            detail = "Note disciplinari, annotazioni e richiami compariranno qui in forma sintetica e chiara.",
-          )
-        }
-      } else {
-        items(state.notes, key = { it.id }) { note ->
-          RegisterListRow(
-            title = note.title.ifBlank { note.author.uppercase(italianLocale) },
-            subtitle = note.categoryLabel,
-            eyebrow = note.date.toReadableDate(),
-            meta = note.contentPreview.takeIf { it.isNotBlank() },
-            tone = noteTone(note),
-            badge = {
-              StatusBadge(
-                label = if (note.read) "LETTA" else "NOTA",
+            }
+          }
+        } else {
+          if (state.notes.isEmpty()) {
+            item {
+              EmptyState(
+                title = "Nessuna nota disponibile",
+                detail = "Note disciplinari, annotazioni e richiami compariranno qui in forma sintetica e chiara.",
+              )
+            }
+          } else {
+            items(state.notes, key = { it.id }) { note ->
+              RegisterListRow(
+                title = note.title.ifBlank { note.author.uppercase(italianLocale) },
+                subtitle = note.categoryLabel,
+                eyebrow = note.date.toReadableDate(),
+                meta = note.contentPreview.takeIf { it.isNotBlank() },
                 tone = noteTone(note),
+                badge = {
+                  StatusBadge(
+                    label = if (note.read) "LETTA" else "NOTA",
+                    tone = noteTone(note),
+                  )
+                },
+                onClick = { viewModel.openNote(note.id, note.categoryCode) },
               )
-            },
-            onClick = { viewModel.openNote(note.id, note.categoryCode) },
-          )
+            }
+          }
+        }
+        if (!state.lastMessage.isNullOrBlank()) {
+          item { Text(text = state.lastMessage.orEmpty()) }
         }
       }
-    }
-    if (!state.lastMessage.isNullOrBlank()) {
-      item { Text(text = state.lastMessage.orEmpty()) }
-    }
     }
   }
 
@@ -376,8 +419,10 @@ fun CommunicationsRoute(
     var replyDraft by rememberSaveable(detail.communication.id, detail.replyText) {
       mutableStateOf(detail.replyText.orEmpty())
     }
+    val commSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
       onDismissRequest = viewModel::dismissDetail,
+      sheetState = commSheetState,
     ) {
       LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -389,6 +434,37 @@ fun CommunicationsRoute(
             text = detail.communication.title,
             style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
           )
+        }
+        item {
+          val formattedDate = runCatching {
+            val parsed = LocalDate.parse(detail.communication.date)
+            parsed.format(DateTimeFormatter.ofPattern("d MMMM yyyy", italianLocale))
+          }.getOrDefault(detail.communication.date)
+          androidx.compose.foundation.layout.Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+          ) {
+            Text(
+              text = detail.communication.sender,
+              style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+            )
+            Text(
+              text = formattedDate,
+              style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+            )
+            if (!detail.communication.category.isNullOrBlank()) {
+              StatusBadge(label = detail.communication.category!!, tone = ExpressiveTone.Info)
+            }
+            if (!detail.communication.read) {
+              FilledTonalButton(
+                onClick = {
+                  viewModel.markCommunicationRead(detail.communication.id)
+                },
+                modifier = Modifier.fillMaxWidth(),
+              ) {
+                Text("Segna come letta")
+              }
+            }
+          }
         }
         item { Text(text = detail.content) }
         if (detail.actions.any { it.type == NoticeboardActionType.REPLY } || detail.replyText != null) {
@@ -500,22 +576,22 @@ private fun CommunicationActions(
     actions.distinctBy { it.type }.forEach { action ->
       when (action.type) {
         NoticeboardActionType.ACKNOWLEDGE -> {
-          TextButton(onClick = onAcknowledge) {
-            Text(action.label)
+          FilledTonalButton(onClick = onAcknowledge, modifier = Modifier.fillMaxWidth()) {
+            Text("Firma presa visione")
           }
         }
         NoticeboardActionType.REPLY -> {
-          TextButton(onClick = onReply, enabled = replyDraft.isNotBlank()) {
+          FilledTonalButton(onClick = onReply, enabled = replyDraft.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
             Text("Invia risposta")
           }
         }
         NoticeboardActionType.JOIN -> {
-          TextButton(onClick = onJoin) {
-            Text(action.label)
+          FilledTonalButton(onClick = onJoin, modifier = Modifier.fillMaxWidth()) {
+            Text("Adesione")
           }
         }
         NoticeboardActionType.UPLOAD -> {
-          TextButton(onClick = onUpload) {
+          TextButton(onClick = onUpload, modifier = Modifier.fillMaxWidth()) {
             Text(action.label)
           }
         }

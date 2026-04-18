@@ -1,6 +1,10 @@
 package dev.antigravity.classevivaexpressive
 
 import android.content.res.Configuration
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -30,12 +34,16 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SportsScore
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material3.adaptive.navigationsuite.ExperimentalMaterial3AdaptiveNavigationSuiteApi
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldValue
@@ -78,6 +86,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHe
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveScreenSurface
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.MotionTokens
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
@@ -85,14 +94,14 @@ import dev.antigravity.classevivaexpressive.feature.absences.AbsencesRoute
 import dev.antigravity.classevivaexpressive.feature.agenda.AgendaRoute
 import dev.antigravity.classevivaexpressive.feature.communications.CommunicationsRoute
 import dev.antigravity.classevivaexpressive.feature.dashboard.DashboardRoute
-import dev.antigravity.classevivaexpressive.feature.documents.DocumentsRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.DocumentsRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.HomeworkRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.MaterialsRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.MeetingsRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.StudentScoreRoute
 import dev.antigravity.classevivaexpressive.feature.grades.GradesRoute
-import dev.antigravity.classevivaexpressive.feature.homework.HomeworkRoute
 import dev.antigravity.classevivaexpressive.feature.lessons.LessonsRoute
-import dev.antigravity.classevivaexpressive.feature.materials.MaterialsRoute
-import dev.antigravity.classevivaexpressive.feature.meetings.MeetingsRoute
 import dev.antigravity.classevivaexpressive.feature.settings.SettingsRoute
-import dev.antigravity.classevivaexpressive.feature.studentscore.StudentScoreRoute
 
 private data class TopLevelDestination(
   val baseRoute: String,
@@ -316,21 +325,18 @@ private fun TopLevelNavigationSuitePreview() {
         onNavigateRoute = {},
       ) {
         MoreHubScreen(
-          onOpenNotes = {},
-          onOpenHomework = {},
-          onOpenMeetings = {},
           onOpenLessons = {},
           onOpenAbsences = {},
           onOpenMaterials = {},
-          onOpenDocuments = {},
-          onOpenStudentScore = {},
           onOpenSettings = {},
+          onOpenNotes = {},
         )
       }
     }
   }
 }
 
+@OptIn(ExperimentalMaterial3AdaptiveNavigationSuiteApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
 private fun AuthenticatedApp() {
   val navController = rememberNavController()
@@ -354,236 +360,214 @@ private fun AuthenticatedApp() {
       }
     },
   ) {
-    NavHost(
-      navController = navController,
-      startDestination = "home",
-      modifier = Modifier.fillMaxSize(),
-      enterTransition = {
-        fadeIn() + slideInHorizontally(initialOffsetX = { it / 8 })
-      },
-      exitTransition = {
-        fadeOut() + slideOutHorizontally(targetOffsetX = { -it / 10 })
-      },
-      popEnterTransition = {
-        fadeIn() + slideInHorizontally(initialOffsetX = { -it / 8 })
-      },
-      popExitTransition = {
-        fadeOut() + slideOutHorizontally(targetOffsetX = { it / 10 })
-      },
-    ) {
-      composable("home") {
-        DashboardRoute(
-          onNavigateGrades = { navController.navigate("grades") },
-          onNavigateAgenda = { navController.navigate("agenda") },
-          onNavigateLessons = { navController.navigate("lessons") },
-          onNavigateCommunications = { navController.navigate("communications?tab=board") },
-          onOpenGrade = { gradeId -> navController.navigate("grades?gradeId=$gradeId") },
-        )
-      }
-      composable("agenda") { AgendaRoute() }
-      composable(
-        route = "grades?gradeId={gradeId}",
-        arguments = listOf(
-          navArgument("gradeId") {
-            nullable = true
-            defaultValue = null
-            type = NavType.StringType
-          },
-        ),
-      ) { entry ->
-        GradesRoute(initialGradeId = entry.arguments?.getString("gradeId"))
-      }
-      composable(
-        route = "communications?tab={tab}",
-        arguments = listOf(
-          navArgument("tab") {
-            defaultValue = "board"
-            type = NavType.StringType
-          },
-        ),
-      ) { entry ->
-        CommunicationsRoute(
-          initialTab = entry.arguments?.getString("tab") ?: "board",
-          onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
-        )
-      }
-      composable("more") {
-        MoreHubScreen(
-          onOpenNotes = { navController.navigate("communications?tab=notes") },
-          onOpenHomework = { navController.navigate("homework") },
-          onOpenMeetings = { navController.navigate("meetings") },
-          onOpenLessons = { navController.navigate("lessons") },
-          onOpenAbsences = { navController.navigate("absences") },
-          onOpenMaterials = { navController.navigate("materials") },
-          onOpenDocuments = { navController.navigate("documents") },
-          onOpenStudentScore = { navController.navigate("studentScore") },
-          onOpenSettings = { navController.navigate("settings") },
-        )
-      }
-      composable("homework") { HomeworkRoute(onBack = navController::navigateUp) }
-      composable("meetings") { MeetingsRoute(onBack = navController::navigateUp) }
-      composable("materials") { MaterialsRoute(onBack = navController::navigateUp) }
-      composable("lessons") { LessonsRoute(onBack = navController::navigateUp) }
-      composable(
-        route = "documents?documentId={documentId}",
-        arguments = listOf(
-          navArgument("documentId") {
-            nullable = true
-            defaultValue = null
-            type = NavType.StringType
-          },
-        ),
-        deepLinks = listOf(
-          navDeepLink { uriPattern = "classevivaexpressive://documents/open?documentId={documentId}" },
-        ),
+    SharedTransitionLayout {
+      NavHost(
+        navController = navController,
+        startDestination = "home",
+        modifier = Modifier.fillMaxSize(),
+        enterTransition = {
+          fadeIn(animationSpec = MotionTokens.fastEffects()) +
+            slideInHorizontally(
+              initialOffsetX = { it / 7 },
+              animationSpec = MotionTokens.expressive(),
+            )
+        },
+        exitTransition = {
+          fadeOut(animationSpec = MotionTokens.expressive()) +
+            slideOutHorizontally(
+              targetOffsetX = { -it / 9 },
+              animationSpec = MotionTokens.spatial(),
+            )
+        },
+        popEnterTransition = {
+          fadeIn(animationSpec = MotionTokens.fastEffects()) +
+            slideInHorizontally(
+              initialOffsetX = { -it / 7 },
+              animationSpec = MotionTokens.expressive(),
+            )
+        },
+        popExitTransition = {
+          fadeOut(animationSpec = MotionTokens.expressive()) +
+            slideOutHorizontally(
+              targetOffsetX = { it / 9 },
+              animationSpec = MotionTokens.spatial(),
+            )
+        },
       ) {
-        DocumentsRoute(onBack = navController::navigateUp)
-      }
-      composable("absences") { AbsencesRoute(onBack = navController::navigateUp) }
-      composable("settings") { SettingsRoute(onBack = navController::navigateUp) }
-      composable(
-        route = "studentScore?payload={payload}",
-        arguments = listOf(
-          navArgument("payload") {
-            nullable = true
-            defaultValue = null
-            type = NavType.StringType
-          },
-        ),
-        deepLinks = listOf(
-          navDeepLink { uriPattern = "classevivaexpressive://student-score/import?payload={payload}" },
-        ),
-      ) { entry ->
-        StudentScoreRoute(initialImportPayload = entry.arguments?.getString("payload"))
+        composable("home") {
+          DashboardRoute(
+            onNavigateGrades = { navController.navigate("grades") },
+            onNavigateAgenda = { navController.navigate("agenda") },
+            onNavigateLessons = { navController.navigate("lessons") },
+            onNavigateCommunications = { navController.navigate("communications?tab=board") },
+            onOpenGrade = { gradeId -> navController.navigate("grades?gradeId=$gradeId") },
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+          )
+        }
+        composable("agenda") {
+          AgendaRoute(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+          )
+        }
+        composable(
+          route = "grades?gradeId={gradeId}",
+          arguments = listOf(
+            navArgument("gradeId") {
+              nullable = true
+              defaultValue = null
+              type = NavType.StringType
+            },
+          ),
+        ) { entry ->
+          GradesRoute(
+            initialGradeId = entry.arguments?.getString("gradeId"),
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+          )
+        }
+        composable(
+          route = "communications?tab={tab}",
+          arguments = listOf(
+            navArgument("tab") {
+              defaultValue = "board"
+              type = NavType.StringType
+            },
+          ),
+        ) { entry ->
+          CommunicationsRoute(
+            initialTab = entry.arguments?.getString("tab") ?: "board",
+            onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
+          )
+        }
+        composable("more") {
+          MoreHubScreen(
+            onOpenNotes = { navController.navigate("communications?tab=notes") },
+            onOpenLessons = { navController.navigate("lessons") },
+            onOpenAbsences = { navController.navigate("absences") },
+            onOpenMaterials = { navController.navigate("materials") },
+            onOpenSettings = { navController.navigate("settings") },
+          )
+        }
+        composable("materials") { MaterialsRoute(onBack = navController::navigateUp) }
+        composable("lessons") { LessonsRoute(onBack = navController::navigateUp) }
+        composable("absences") { AbsencesRoute(onBack = navController::navigateUp) }
+        composable("settings") {
+          SettingsRoute(
+            onBack = navController::navigateUp,
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+          )
+        }
+        composable(
+          route = "studentScore?payload={payload}",
+          arguments = listOf(
+            navArgument("payload") {
+              nullable = true
+              defaultValue = null
+              type = NavType.StringType
+            },
+          ),
+          deepLinks = listOf(
+            navDeepLink { uriPattern = "classevivaexpressive://student-score/import?payload={payload}" },
+          ),
+        ) { entry ->
+          StudentScoreRoute(initialImportPayload = entry.arguments?.getString("payload"))
+        }
       }
     }
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MoreHubScreen(
-  onOpenNotes: () -> Unit,
-  onOpenHomework: () -> Unit,
-  onOpenMeetings: () -> Unit,
   onOpenLessons: () -> Unit,
   onOpenAbsences: () -> Unit,
   onOpenMaterials: () -> Unit,
-  onOpenDocuments: () -> Unit,
-  onOpenStudentScore: () -> Unit,
   onOpenSettings: () -> Unit,
+  onOpenNotes: () -> Unit,
 ) {
-  LazyColumn(
-    modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-    verticalArrangement = Arrangement.spacedBy(18.dp),
-  ) {
-    item {
+  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+  Scaffold(
+    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+    topBar = {
       ExpressiveTopHeader(
         title = "Altro",
-        subtitle = "Le sezioni secondarie restano ordinate per compito, con note, didattica e profilo in una vista unica.",
+        subtitle = "Le sezioni secondarie restano ordinate per compito, con orario, assenze e profilo in una vista unica.",
+        scrollBehavior = scrollBehavior,
       )
-    }
-    item { ExpressiveAccentLabel("Registro") }
-    item {
-      RegisterListRow(
-        title = "Compiti",
-        subtitle = "Vista dedicata ai compiti con consegna nativa e allegati.",
-        eyebrow = "Compiti",
-        tone = ExpressiveTone.Primary,
-        onClick = onOpenHomework,
-        badge = { StatusBadge("COMPITI", tone = ExpressiveTone.Primary) },
-        leading = { Icon(Icons.Rounded.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-      )
-    }
-    item {
-      RegisterListRow(
-        title = "Note e richiami",
-        subtitle = "Apri annotazioni, richiami e note disciplinari in un unico flusso.",
-        eyebrow = "Note",
-        tone = ExpressiveTone.Warning,
-        onClick = onOpenNotes,
-        badge = { StatusBadge("NOTE", tone = ExpressiveTone.Warning) },
-        leading = { Icon(Icons.Rounded.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-      )
-    }
-    item {
-      RegisterListRow(
-        title = "Colloqui",
-        subtitle = "Disponibilita, prenotazioni e link dei colloqui in app.",
-        eyebrow = "Colloqui",
-        tone = ExpressiveTone.Info,
-        onClick = onOpenMeetings,
-        badge = { StatusBadge("COLLOQUI", tone = ExpressiveTone.Info) },
-        leading = { Icon(Icons.Rounded.PeopleAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-      )
-    }
-    item {
-      RegisterListRow(
-        title = "Orario",
-        subtitle = "Lezioni del giorno e settimana corrente, anche con fallback dagli eventi agenda.",
-        eyebrow = "Lezioni",
-        tone = ExpressiveTone.Info,
-        onClick = onOpenLessons,
-        badge = { StatusBadge("ORARIO", tone = ExpressiveTone.Info) },
-        leading = { Icon(Icons.Rounded.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-      )
-    }
-    item {
-      RegisterListRow(
-        title = "Assenze",
-        subtitle = "Storico di assenze, ritardi e uscite anticipate separati correttamente.",
-        eyebrow = "Presenze",
-        tone = ExpressiveTone.Warning,
-        onClick = onOpenAbsences,
-        badge = { StatusBadge("PRESENZE", tone = ExpressiveTone.Warning) },
-        leading = { Icon(Icons.Rounded.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-      )
-    }
-    item { ExpressiveAccentLabel("Didattica") }
-    item {
-      RegisterListRow(
-        title = "Materiale didattico",
-        subtitle = "Cartelle, file, link e aperture esterne gestite in modo robusto.",
-        eyebrow = "Materiali",
-        tone = ExpressiveTone.Primary,
-        onClick = onOpenMaterials,
-        badge = { StatusBadge("MATERIALI", tone = ExpressiveTone.Primary) },
-        leading = { Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-      )
-    }
-    item {
-      RegisterListRow(
-        title = "Documenti e libri",
-        subtitle = "Pagelle, documenti scaricabili e libri di testo del corso.",
-        eyebrow = "Documenti",
-        tone = ExpressiveTone.Success,
-        onClick = onOpenDocuments,
-        badge = { StatusBadge("DOCUMENTI", tone = ExpressiveTone.Success) },
-        leading = { Icon(Icons.Rounded.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-      )
-    }
-    item {
-      RegisterListRow(
-        title = "Student Score",
-        subtitle = "Confronto, importazione ed export del riepilogo studente.",
-        eyebrow = "Extra",
-        tone = ExpressiveTone.Success,
-        onClick = onOpenStudentScore,
-        badge = { StatusBadge("SCORE", tone = ExpressiveTone.Success) },
-        leading = { Icon(Icons.Rounded.SportsScore, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-      )
-    }
-    item { ExpressiveAccentLabel("Profilo") }
-    item {
-      RegisterListRow(
-        title = "Profilo e impostazioni",
-        subtitle = "Tema, notifiche, canali Android, sync periodica e account attivo.",
-        eyebrow = "Profilo",
-        tone = ExpressiveTone.Neutral,
-        onClick = onOpenSettings,
-        badge = { StatusBadge("PROFILO") },
-        leading = { Icon(Icons.Rounded.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-      )
+    },
+  ) { paddingValues ->
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(
+        start = 20.dp,
+        end = 20.dp,
+        top = paddingValues.calculateTopPadding() + 24.dp,
+        bottom = paddingValues.calculateBottomPadding() + 24.dp,
+      ),
+      verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+      item { ExpressiveAccentLabel("Registro") }
+      item {
+        RegisterListRow(
+          title = "Orario",
+          subtitle = "Lezioni del giorno e settimana corrente, generato automaticamente.",
+          eyebrow = "Lezioni",
+          tone = ExpressiveTone.Info,
+          onClick = onOpenLessons,
+          badge = { StatusBadge("ORARIO", tone = ExpressiveTone.Info) },
+          leading = { Icon(Icons.Rounded.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Didattica",
+          subtitle = "Materiali condivisi, link e file dei docenti.",
+          eyebrow = "Didattica",
+          tone = ExpressiveTone.Info,
+          onClick = onOpenMaterials,
+          badge = { StatusBadge("DIDATTICA", tone = ExpressiveTone.Info) },
+          leading = { Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Note disciplinari",
+          subtitle = "Storico delle note e sanzioni disciplinari.",
+          eyebrow = "Comunicazioni",
+          tone = ExpressiveTone.Danger,
+          onClick = onOpenNotes,
+          badge = { StatusBadge("NOTE", tone = ExpressiveTone.Danger) },
+          leading = { Icon(Icons.Rounded.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Assenze",
+          subtitle = "Storico di assenze, ritardi e uscite anticipate.",
+          eyebrow = "Presenze",
+          tone = ExpressiveTone.Warning,
+          onClick = onOpenAbsences,
+          badge = { StatusBadge("PRESENZE", tone = ExpressiveTone.Warning) },
+          leading = { Icon(Icons.Rounded.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        )
+      }
+      item { ExpressiveAccentLabel("Profilo") }
+      item {
+        RegisterListRow(
+          title = "Profilo e impostazioni",
+          subtitle = "Tema, notifiche, canali Android, sync periodica e account attivo.",
+          eyebrow = "Profilo",
+          tone = ExpressiveTone.Neutral,
+          onClick = onOpenSettings,
+          badge = { StatusBadge("PROFILO") },
+          leading = { Icon(Icons.Rounded.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        )
+      }
     }
   }
 }

@@ -1,5 +1,15 @@
 package dev.antigravity.classevivaexpressive.feature.settings
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -8,22 +18,41 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.ColorLens
+import androidx.compose.material.icons.rounded.Dns
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -32,6 +61,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.CommunicationsChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.GradesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
@@ -201,267 +231,348 @@ class SettingsViewModel @Inject constructor(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun SettingsRoute(
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
   viewModel: SettingsViewModel = hiltViewModel(),
+  sharedTransitionScope: SharedTransitionScope? = null,
+  animatedVisibilityScope: AnimatedVisibilityScope? = null,
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+  val lazyListState = rememberLazyListState()
+
+  val permissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestPermission()
+  ) { isGranted ->
+    viewModel.refresh()
+  }
+
+  val requestNotificationPermission = {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+  }
+
+  val context = LocalContext.current
+  val requestBatteryOptimizationExemption = {
+    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+      data = Uri.parse("package:${context.packageName}")
+    }
+    context.startActivity(intent)
+  }
+
   val enabledLocalChannels = listOf(
     state.settings.notificationPreferences.homework,
     state.settings.notificationPreferences.communications,
     state.settings.notificationPreferences.absences,
+    state.settings.notificationPreferences.grades,
     state.settings.notificationPreferences.test,
   ).count { it }
   val enabledSystemChannels = state.runtimeState.channels.count { it.enabled }
 
-  PullToRefreshBox(
-    modifier = modifier.fillMaxSize(),
-    isRefreshing = state.isRefreshing,
-    onRefresh = { viewModel.refresh() },
-  ) {
-    LazyColumn(
-      modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-      verticalArrangement = Arrangement.spacedBy(18.dp),
+  Scaffold(
+    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+    topBar = {
+      ExpressiveTopHeader(
+        title = "Impostazioni",
+        subtitle = "Gestisci aspetto, notifiche e sincronizzazione account.",
+        onBack = onBack,
+        scrollBehavior = scrollBehavior,
+        actions = {
+          IconButton(onClick = { viewModel.refresh() }) {
+            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
+          }
+        },
+      )
+    }
+  ) { paddingValues ->
+    PullToRefreshBox(
+      modifier = Modifier
+        .padding(paddingValues)
+        .fillMaxSize(),
+      isRefreshing = state.isRefreshing,
+      onRefresh = { viewModel.refresh() },
     ) {
-      item {
-        ExpressiveTopHeader(
-          title = "Impostazioni",
-          subtitle = "Tema, notifiche Android e sync in background ogni 5 minuti quando l'account e attivo.",
-          onBack = onBack,
-          actions = {
-            IconButton(onClick = { viewModel.refresh() }) {
-              Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-            }
-          },
-        )
-      }
-      item {
-        Column(
-          modifier = Modifier.fillMaxWidth(),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          MetricTile(
-            label = "Canali locali",
-            value = enabledLocalChannels.toString(),
-            detail = "Preferenze abilitate nell'app.",
-            modifier = Modifier.fillMaxWidth(),
-          )
-          MetricTile(
-            label = "Canali sistema",
-            value = enabledSystemChannels.toString(),
-            detail = "Canali Android realmente attivi.",
-            modifier = Modifier.fillMaxWidth(),
-            tone = if (state.runtimeState.appNotificationsEnabled) ExpressiveTone.Success else ExpressiveTone.Warning,
-          )
-          MetricTile(
-            label = "Sync",
-            value = if (state.settings.periodicSyncEnabled) "5 min" else "Off",
-            detail = "WorkManager in background.",
-            modifier = Modifier.fillMaxWidth(),
-            tone = if (state.settings.periodicSyncEnabled) ExpressiveTone.Info else ExpressiveTone.Neutral,
-          )
-        }
-      }
-      item {
-        ExpressiveHeroCard(
-          title = state.session?.profile?.name?.ifBlank { "Studente" } ?: "Nessuna sessione attiva",
-          subtitle = buildString {
-            append(state.session?.username ?: "Login richiesto")
-            state.session?.profile?.schoolClass?.takeIf(String::isNotBlank)?.let {
-              append(" / ")
-              append(it)
-            }
-            state.session?.profile?.school?.takeIf(String::isNotBlank)?.let {
-              append(" / ")
-              append(it)
-            }
-          },
-        )
-      }
-      item {
-        SectionTitle(
-          eyebrow = "Registro",
-          title = "Anno scolastico e capability",
-        )
-      }
-      item {
-        ExpressiveCard {
-          Text("Anno scolastico attivo")
-          FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-          ) {
-            state.availableSchoolYears.forEach { year ->
-              FilterChip(
-                selected = state.selectedSchoolYear.id == year.id,
-                onClick = { viewModel.selectSchoolYear(year) },
-                label = { Text(year.label) },
-              )
+      LazyColumn(
+        state = lazyListState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
+      ) {
+        item {
+          val parallaxOffset = remember {
+            derivedStateOf {
+              val firstVisibleItemIndex = lazyListState.firstVisibleItemIndex
+              if (firstVisibleItemIndex == 0) {
+                val offset = lazyListState.firstVisibleItemScrollOffset
+                -offset.toFloat() * 0.2f
+              } else {
+                0f
+              }
             }
           }
+
+          ExpressiveHeroCard(
+            modifier = Modifier
+              .fillMaxWidth()
+              .graphicsLayer {
+                translationY = parallaxOffset.value
+              },
+            title = state.session?.profile?.name?.ifBlank { "Studente" } ?: "Nessuna sessione attiva",
+            subtitle = buildString {
+              append(state.session?.username ?: "Login richiesto")
+              state.session?.profile?.schoolClass?.takeIf(String::isNotBlank)?.let {
+                append(" / ")
+                append(it)
+              }
+              state.session?.profile?.school?.takeIf(String::isNotBlank)?.let {
+                append(" / ")
+                append(it)
+              }
+            },
+          )
         }
-      }
-      if (state.capabilities.isNotEmpty()) {
+
+        item {
+          SectionTitle(
+            eyebrow = "Comunicazione",
+            title = "Notifiche e Sincronizzazione",
+          )
+        }
+        item {
+          RuntimeStateCard(
+            runtimeState = state.runtimeState,
+            onRequestPermission = requestNotificationPermission
+          )
+        }
+        item {
+          SettingToggleRow(
+            title = "Notifiche in app",
+            subtitle = "Abilita o disabilita globalmente le notifiche inviate dall'app.",
+            checked = state.settings.notificationsEnabled,
+            onCheckedChange = { enabled ->
+              viewModel.setNotifications(enabled)
+              if (enabled && !state.runtimeState.permissionGranted) {
+                requestNotificationPermission()
+              }
+            },
+            icon = { Icon(Icons.Rounded.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+          )
+        }
+        item {
+          SettingToggleRow(
+            title = "Sincronizzazione periodica",
+            subtitle = "Mantiene aggiornati i dati in background ogni 5 minuti.",
+            checked = state.settings.periodicSyncEnabled,
+            onCheckedChange = viewModel::setPeriodicSync,
+            icon = { Icon(Icons.Rounded.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+          )
+        }
         item {
           ExpressiveCard {
-            Text("Matrice funzionale")
+            Text("Ottimizzazione Batteria", style = MaterialTheme.typography.titleMedium)
+            Text(
+              "Per garantire che le notifiche e la sincronizzazione funzionino in background, l'app non deve essere soggetta a ottimizzazioni batteria aggressive.",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+              onClick = requestBatteryOptimizationExemption,
+              modifier = Modifier.padding(top = 8.dp)
+            ) {
+              Text("Esonera da ottimizzazioni batteria")
+            }
           }
         }
-        items(state.capabilities, key = { it.feature.name }) { capability ->
-          CapabilityRow(capability = capability)
+
+        if (state.settings.notificationsEnabled && state.runtimeState.permissionGranted) {
+          item {
+            ExpressiveCard(highlighted = false) {
+              Text(
+                "Canali Notifiche",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+              )
+              Text(
+                "Configura quali eventi generano notifiche push.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+              )
+              
+              Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                state.runtimeState.channels.forEach { channel ->
+                  SettingToggleRow(
+                    title = channel.label.ifBlank { channel.id },
+                    subtitle = channelSubtitle(channel, state.settings),
+                    checked = channelEnabledInSettings(channel.id, state.settings),
+                    onCheckedChange = { enabled ->
+                      viewModel.setNotificationCategoryEnabled(channel.id, enabled)
+                    },
+                    badge = {
+                      StatusBadge(
+                        label = if (channel.enabled) "ON" else "OFF",
+                        tone = if (channel.enabled) ExpressiveTone.Success else ExpressiveTone.Warning,
+                      )
+                    },
+                  )
+                }
+              }
+            }
+          }
+          item {
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+              verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              OutlinedButton(onClick = viewModel::sendTestNotification) {
+                Text("Invia notifica di test")
+              }
+              TextButton(onClick = { viewModel.refresh() }) {
+                Text("Rileggi stato di sistema")
+              }
+            }
+          }
         }
-      }
-      state.lastMessage?.let { message ->
+
         item {
-          ExpressiveCard(highlighted = true) {
-            Text(message)
-            TextButton(onClick = viewModel::clearMessage) {
-              Text("Nascondi messaggio")
-            }
-          }
-        }
-      }
-      item {
-        SectionTitle(
-          eyebrow = "Tema",
-          title = "Aspetto dell'app",
-        )
-      }
-      item {
-        ExpressiveCard {
-          Text("Modalita colore")
-          FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-          ) {
-            ThemeMode.entries.forEach { mode ->
-              FilterChip(
-                selected = state.settings.themeMode == mode,
-                onClick = { viewModel.setThemeMode(mode) },
-                label = { Text(mode.label()) },
-              )
-            }
-          }
-        }
-      }
-      item {
-        ExpressiveCard {
-          Text("Accento")
-          FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-          ) {
-            FilterChip(
-              selected = state.settings.accentMode == AccentMode.BRAND,
-              onClick = { viewModel.setAccentMode(AccentMode.BRAND) },
-              label = { Text("Brand") },
-            )
-            FilterChip(
-              selected = state.settings.accentMode == AccentMode.DYNAMIC,
-              onClick = { viewModel.setAccentMode(AccentMode.DYNAMIC) },
-              label = { Text("Dynamic") },
-            )
-            expressiveAccentPresets.forEach { preset ->
-              FilterChip(
-                selected = state.settings.accentMode == AccentMode.CUSTOM_PRESET &&
-                  state.settings.customAccentName == preset.name,
-                onClick = { viewModel.setAccentPreset(preset.name) },
-                label = { Text(preset.name.replaceFirstChar { it.uppercase() }) },
-              )
-            }
-          }
-        }
-      }
-      item {
-        SectionTitle(
-          eyebrow = "Comportamento",
-          title = "Preferenze operative",
-        )
-      }
-      item {
-        SettingToggleRow(
-          title = "Dynamic color",
-          subtitle = "Usa i colori di sistema quando l'accento e impostato su Dynamic.",
-          checked = state.settings.dynamicColorEnabled,
-          onCheckedChange = viewModel::setDynamicColor,
-        )
-      }
-      item {
-        SettingToggleRow(
-          title = "Tema AMOLED",
-          subtitle = "Usa il nero pieno oltre al dark standard.",
-          checked = state.settings.amoledEnabled,
-          onCheckedChange = viewModel::setAmoled,
-        )
-      }
-      item {
-        SettingToggleRow(
-          title = "Notifiche in app",
-          subtitle = "Abilita o disabilita la gestione locale delle notifiche.",
-          checked = state.settings.notificationsEnabled,
-          onCheckedChange = viewModel::setNotifications,
-        )
-      }
-      item {
-        SettingToggleRow(
-          title = "Sync periodica",
-          subtitle = "Mantiene attivo il refresh in background ogni 5 minuti finche la sessione resta valida.",
-          checked = state.settings.periodicSyncEnabled,
-          onCheckedChange = viewModel::setPeriodicSync,
-        )
-      }
-      item {
-        SectionTitle(
-          eyebrow = "Notifiche",
-          title = "Permessi e canali",
-        )
-      }
-      item {
-        RuntimeStateCard(runtimeState = state.runtimeState)
-      }
-      item {
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-          verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          QuickAction(label = "Invia test", onClick = viewModel::sendTestNotification)
-          QuickAction(label = "Rileggi stato", onClick = { viewModel.refresh() })
-        }
-      }
-      state.runtimeState.channels.forEach { channel ->
-        item(key = channel.id) {
-          SettingToggleRow(
-            title = channel.label.ifBlank { channel.id },
-            subtitle = channelSubtitle(channel, state.settings),
-            checked = channelEnabledInSettings(channel.id, state.settings),
-            onCheckedChange = { enabled ->
-              viewModel.setNotificationCategoryEnabled(channel.id, enabled)
-            },
-            badge = {
-              StatusBadge(
-                label = if (channel.enabled) "SISTEMA ON" else "SISTEMA OFF",
-                tone = if (channel.enabled) ExpressiveTone.Success else ExpressiveTone.Warning,
-              )
-            },
+          SectionTitle(
+            eyebrow = "Interfaccia",
+            title = "Personalizzazione Aspetto",
           )
         }
-      }
-      item {
-        SectionTitle(
-          eyebrow = "Account",
-          title = "Profilo attivo",
-        )
-      }
-      item {
-        ExpressiveCard {
-          Text(state.session?.profile?.schoolYear?.ifBlank { "Anno scolastico non disponibile" } ?: "Sessione non presente")
-          Text(state.session?.profile?.email?.ifBlank { "Email non disponibile" } ?: "Accedi per sincronizzare i dati")
-          TextButton(onClick = viewModel::logout) {
-            Text("Esci")
+        item {
+          ExpressiveCard {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              Icon(Icons.Rounded.ColorLens, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+              Text("Modalita Colore", style = MaterialTheme.typography.titleMedium)
+            }
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+              verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              ThemeMode.entries.forEach { mode ->
+                FilterChip(
+                  selected = state.settings.themeMode == mode,
+                  onClick = { viewModel.setThemeMode(mode) },
+                  label = { Text(mode.label()) },
+                )
+              }
+            }
+            
+            Text("Colore Accento", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+              verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              FilterChip(
+                selected = state.settings.accentMode == AccentMode.BRAND,
+                onClick = { viewModel.setAccentMode(AccentMode.BRAND) },
+                label = { Text("Brand Originale") },
+              )
+              FilterChip(
+                selected = state.settings.accentMode == AccentMode.DYNAMIC,
+                onClick = { viewModel.setAccentMode(AccentMode.DYNAMIC) },
+                label = { Text("Dynamic Color") },
+              )
+              expressiveAccentPresets.forEach { preset ->
+                FilterChip(
+                  selected = state.settings.accentMode == AccentMode.CUSTOM_PRESET &&
+                    state.settings.customAccentName == preset.name,
+                  onClick = { viewModel.setAccentPreset(preset.name) },
+                  label = { Text(preset.name.replaceFirstChar { it.uppercase() }) },
+                )
+              }
+            }
+          }
+        }
+        item {
+          SettingToggleRow(
+            title = "Dynamic Color Nativo",
+            subtitle = "Forza i colori monet estratti dal sistema se l'accento e impostato su Dynamic.",
+            checked = state.settings.dynamicColorEnabled,
+            onCheckedChange = viewModel::setDynamicColor,
+          )
+        }
+        item {
+          SettingToggleRow(
+            title = "Contrasto AMOLED",
+            subtitle = "Sostituisce il grigio scuro con il nero profondo per risparmiare batteria.",
+            checked = state.settings.amoledEnabled,
+            onCheckedChange = viewModel::setAmoled,
+          )
+        }
+
+        item {
+          SectionTitle(
+            eyebrow = "Configurazione",
+            title = "Connettivita e Registro",
+          )
+        }
+        item {
+          ExpressiveCard {
+            Text("Anno Scolastico Attivo", style = MaterialTheme.typography.titleMedium)
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+              verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              state.availableSchoolYears.forEach { year ->
+                FilterChip(
+                  selected = state.selectedSchoolYear.id == year.id,
+                  onClick = { viewModel.selectSchoolYear(year) },
+                  label = { Text(year.label) },
+                )
+              }
+            }
+          }
+        }
+        if (state.capabilities.isNotEmpty()) {
+          item {
+            ExpressiveCard {
+              Text("Capability Sbloccate", style = MaterialTheme.typography.titleMedium)
+            }
+          }
+          items(state.capabilities, key = { it.feature.name }) { capability ->
+            CapabilityRow(capability = capability)
+          }
+        }
+
+        item {
+          SectionTitle(
+            eyebrow = "Account",
+            title = "Sessione e Sicurezza",
+          )
+        }
+        item {
+          ExpressiveCard {
+            Text(
+              text = state.session?.profile?.schoolYear?.ifBlank { "Nessun anno selezionato" } ?: "Non sei autenticato",
+              style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+              text = state.session?.profile?.email?.ifBlank { "Email non presente" } ?: "Effettua l'accesso per sincronizzare.",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+              onClick = viewModel::logout,
+              modifier = Modifier.padding(top = 8.dp)
+            ) {
+              Text("Disconnetti Dispositivo")
+            }
+          }
+        }
+        
+        state.lastMessage?.let { message ->
+          item {
+            ExpressiveCard(highlighted = true) {
+              Text(message)
+              TextButton(onClick = viewModel::clearMessage) {
+                Text("Nascondi messaggio")
+              }
+            }
           }
         }
       }
@@ -472,11 +583,41 @@ fun SettingsRoute(
 @Composable
 private fun RuntimeStateCard(
   runtimeState: NotificationRuntimeState,
+  onRequestPermission: () -> Unit
 ) {
-  ExpressiveCard(highlighted = !runtimeState.permissionGranted || !runtimeState.appNotificationsEnabled) {
-    Text("Stato notifiche")
-    Text("Permesso: ${if (runtimeState.permissionGranted) "concesso" else "negato"}")
-    Text("App: ${if (runtimeState.appNotificationsEnabled) "abilitata" else "disabilitata nelle impostazioni di sistema"}")
+  val isError = !runtimeState.permissionGranted || !runtimeState.appNotificationsEnabled
+  ExpressiveCard(
+    highlighted = isError,
+  ) {
+    Text(
+      "Stato Permessi Android",
+      style = MaterialTheme.typography.titleMedium,
+      color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    )
+    Text(
+      "Permesso di sistema: ${if (runtimeState.permissionGranted) "Concesso" else "Negato"}",
+      style = MaterialTheme.typography.bodyMedium
+    )
+    Text(
+      "Impostazioni App (OS): ${if (runtimeState.appNotificationsEnabled) "Abilitate" else "Disabilitate"}",
+      style = MaterialTheme.typography.bodyMedium
+    )
+    
+    if (!runtimeState.permissionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      OutlinedButton(
+        onClick = onRequestPermission,
+        modifier = Modifier.padding(top = 8.dp)
+      ) {
+        Text("Richiedi Permesso Notifiche")
+      }
+    } else if (!runtimeState.appNotificationsEnabled) {
+      Text(
+        "Vai nelle impostazioni di Android per riabilitare le notifiche dell'app.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.padding(top = 8.dp)
+      )
+    }
   }
 }
 
@@ -486,6 +627,7 @@ private fun SettingToggleRow(
   subtitle: String,
   checked: Boolean,
   onCheckedChange: (Boolean) -> Unit,
+  icon: @Composable (() -> Unit)? = null,
   badge: @Composable (() -> Unit)? = null,
 ) {
   ExpressiveCard {
@@ -494,12 +636,13 @@ private fun SettingToggleRow(
       horizontalArrangement = Arrangement.spacedBy(12.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
+      icon?.invoke()
       Column(
         modifier = Modifier.weight(1f),
         verticalArrangement = Arrangement.spacedBy(4.dp),
       ) {
-        Text(title)
-        Text(subtitle)
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       badge?.invoke()
       Switch(
@@ -527,6 +670,7 @@ private fun channelEnabledInSettings(
     HomeworkChannelId -> settings.notificationPreferences.homework
     CommunicationsChannelId -> settings.notificationPreferences.communications
     AbsencesChannelId -> settings.notificationPreferences.absences
+    GradesChannelId -> settings.notificationPreferences.grades
     TestChannelId -> settings.notificationPreferences.test
     else -> false
   }
@@ -536,16 +680,16 @@ private fun channelSubtitle(
   channel: NotificationChannelStatus,
   settings: AppSettings,
 ): String {
-  val local = if (channelEnabledInSettings(channel.id, settings)) "attivo" else "disattivo"
   val system = if (channel.enabled) "abilitato" else "disabilitato"
-  return "Canale locale $local, canale Android $system."
+  return "Canale Android $system."
 }
 
 @Composable
 private fun CapabilityRow(capability: FeatureCapability) {
   val tone = when {
     !capability.enabled -> ExpressiveTone.Warning
-    capability.mode == FeatureCapabilityMode.GATEWAY -> ExpressiveTone.Info
+    capability.mode == FeatureCapabilityMode.DIRECT_PORTAL -> ExpressiveTone.Info
+    capability.mode == FeatureCapabilityMode.GATEWAY -> ExpressiveTone.Warning
     capability.mode == FeatureCapabilityMode.TENANT_OPTIONAL -> ExpressiveTone.Neutral
     else -> ExpressiveTone.Success
   }

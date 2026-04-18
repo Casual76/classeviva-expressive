@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+  <group android:translateX="54" android:translateY="54">
+    <!-- Notebook cover -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M-18,-24 L18,-24 Q22,-24 22,-20 L22,20 Q22,24 18,24 L-18,24 Q-22,24 -22,20 L-22,-20 Q-22,-24 -18,-24 Z" />
+    <!-- Spine -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.35"
+        android:pathData="M-22,-24 L-14,-24 L-14,24 L-22,24 Z" />
+    <!-- Spine divider line -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:strokeAlpha="0.5"
+        android:fillColor="#00000000"
+        android:pathData="M-14,-24 L-14,24" />
+    <!-- Spiral rings -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeAlpha="0.7"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:pathData="M-14,-14 Q-9,-14 -9,-10 Q-9,-6 -14,-6" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeAlpha="0.7"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round"
+        android:pathData="M-14,0 Q-9,0 -9,4 Q-9,8 -14,8" />
+    <!-- Text lines on page -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeAlpha="0.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M-4,-12 L16,-12" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeAlpha="0.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M-4,-4 L16,-4" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeAlpha="0.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M-4,4 L16,4" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeAlpha="0.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M-4,12 L12,12" />
+  </group>
+</vector>

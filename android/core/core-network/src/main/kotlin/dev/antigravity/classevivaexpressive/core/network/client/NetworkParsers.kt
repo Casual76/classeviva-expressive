@@ -29,6 +29,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
 import dev.antigravity.classevivaexpressive.core.domain.model.Subject
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -106,16 +107,37 @@ internal fun normalizeGrade(data: JsonElement): Grade {
 
 internal fun normalizeLesson(data: JsonElement): Lesson {
   val obj = data.obj()
+  val beginStr = obj.string("evtDatetimeBegin")
+  val endStr = obj.string("evtDatetimeEnd")
+  val durationMinutes = run {
+    val fromDatetime = if (beginStr != null && endStr != null) {
+      runCatching {
+        val begin = OffsetDateTime.parse(beginStr)
+        val end = OffsetDateTime.parse(endStr)
+        val diff = java.time.Duration.between(begin, end).toMinutes().toInt()
+        if (diff > 0) diff else null
+      }.getOrNull()
+    } else null
+    fromDatetime ?: run {
+      val raw = obj.int("duration", "durata", "evtDuration") ?: 60
+      if (raw in 1..10) raw * 60 else raw
+    }
+  }
+  val startTime = normalizeTime(obj.string("lessonHour", "ora", "time", "startTime", "evtDatetimeBegin")).orEmpty()
+  val endTime = normalizeTime(endStr)
+    ?: startTime.takeIf(String::isNotBlank)?.let { start ->
+      runCatching { LocalTime.parse(start).plusMinutes(durationMinutes.toLong()).format(TimeFormatter) }.getOrNull()
+    }
   return Lesson(
     id = obj.string("id", "lessonId", "evtId").orEmpty(),
-    subject = sanitizeRegisterText(obj.string("subjectDesc", "subject"))
-      ?: sanitizeRegisterText(obj["materia"].obj().string("desc")).orEmpty(),
+    subject = resolveSubject(obj).orEmpty(),
     date = normalizeDate(obj.string("data", "date", "evtDate", "evtDatetimeBegin")),
-    time = normalizeTime(obj.string("lessonHour", "ora", "time", "startTime", "evtDatetimeBegin")).orEmpty(),
-    durationMinutes = obj.int("duration", "durata", "evtDuration") ?: 60,
+    time = startTime,
+    durationMinutes = durationMinutes,
     topic = sanitizeRegisterText(obj.string("argomento", "topic", "lessonArg")),
     teacher = sanitizeRegisterText(obj.string("teacherName", "authorName", "teacher")),
     room = sanitizeRegisterText(obj.string("classroom", "room")),
+    endTime = endTime,
   )
 }
 
@@ -123,8 +145,7 @@ internal fun normalizeHomework(data: JsonElement): Homework {
   val obj = data.obj()
   return Homework(
     id = obj.string("id", "hwId", "evtId", "homeworkId").orEmpty(),
-    subject = sanitizeRegisterText(obj.string("subjectDesc", "subject"))
-      ?: sanitizeRegisterText(obj["materia"].obj().string("desc")).orEmpty(),
+    subject = resolveSubject(obj).orEmpty(),
     description = sanitizeRegisterText(obj.string("contenuto", "description", "notes", "title")).orEmpty(),
     dueDate = normalizeDate(obj.string("dataConsegna", "dueDate", "date", "evtDate", "evtDatetimeEnd")),
     notes = sanitizeRegisterText(obj.string("note", "notesForFamily", "notes")),
@@ -153,9 +174,12 @@ internal fun normalizeAbsence(data: JsonElement): AbsenceRecord {
     normalizeUrlCandidate(obj.string("detailUrl", "detailLink", "detailHref"))
       ?: findActionUrl(data, "detail", "event", "scheda", "notice")
     )
+  val rawDate = normalizeDate(obj.string("evtDate", "data", "date"))
+  val rawId = obj.string("id", "evtId", "absenceId")?.takeIf(String::isNotBlank)
+    ?: "${rawDate}_${evtCode}_${obj.int("evtHPos", "hours", "ore") ?: 0}"
   return AbsenceRecord(
-    id = obj.string("id", "evtId", "absenceId").orEmpty(),
-    date = normalizeDate(obj.string("evtDate", "data", "date")),
+    id = rawId,
+    date = rawDate,
     type = type,
     hours = obj.int("hoursAbsence", "ore", "hours", "hour", "evtHPos"),
     justified = obj.bool("isJustified", "giustificata", "justified") ?: false,
@@ -274,8 +298,7 @@ internal fun normalizeAgendaItem(data: JsonElement): AgendaItem {
     ?: obj["materia"].obj().string("desc")
     ?: "Evento"
   val title = sanitizeRegisterText(rawTitle) ?: "Evento"
-  val subject = sanitizeRegisterText(obj.string("subjectDesc", "subject", "classDesc"))
-    ?: sanitizeRegisterText(obj["materia"].obj().string("desc"))
+  val subject = resolveSubject(obj)
   val typeSource = listOfNotNull(
     obj.string("type", "eventTypeDesc", "evtCode", "eventCode"),
     obj.string("category", "cntCategory"),
@@ -299,8 +322,10 @@ internal fun normalizeAgendaItem(data: JsonElement): AgendaItem {
     time = time,
     detail = detail,
     subject = subject,
+    teacher = sanitizeRegisterText(obj.string("teacherName", "authorName", "teacher")),
     category = category,
     sharePayload = listOf(title, subject, date, time, detail).filterNotNull().joinToString(" - "),
+    createdAt = normalizeDateTimeOrNull(obj.string("evtInsDatetime", "mdtPubl", "crtDT", "insertDate")),
   )
 }
 
@@ -746,6 +771,96 @@ private fun requiresGatewayUrl(value: String?): Boolean {
   return !value.isNullOrBlank() && !isOfficialApiUrl(value)
 }
 
+data class MeetingsSnapshot(
+  val teachers: List<dev.antigravity.classevivaexpressive.core.domain.model.MeetingTeacher>,
+  val slots: List<dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot>,
+  val bookings: List<dev.antigravity.classevivaexpressive.core.domain.model.MeetingBooking>,
+)
+
+fun parseMeetingsSnapshot(html: String, baseUrl: String): MeetingsSnapshot {
+  val doc = org.jsoup.Jsoup.parse(html, baseUrl)
+  val teachers = mutableListOf<dev.antigravity.classevivaexpressive.core.domain.model.MeetingTeacher>()
+  val slots = mutableListOf<dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot>()
+  val bookings = mutableListOf<dev.antigravity.classevivaexpressive.core.domain.model.MeetingBooking>()
+
+  doc.select("h3, h4, strong, th, .teacher, .docente").forEach { el ->
+    val text = sanitizeRegisterText(el.text()) ?: return@forEach
+    if (text.length > 3 && !text.contains("colloqui", ignoreCase = true) &&
+      !text.contains("orario", ignoreCase = true)
+    ) {
+      teachers.add(
+        dev.antigravity.classevivaexpressive.core.domain.model.MeetingTeacher(
+          id = text.hashCode().toString(),
+          name = text,
+        )
+      )
+    }
+  }
+
+  doc.select("tr").forEach { row ->
+    val cells = row.select("td")
+    if (cells.size < 2) return@forEach
+    val rowText = row.text()
+    val date = extractMeetingDateFromText(rowText) ?: return@forEach
+    val time = extractMeetingTimeFromText(rowText) ?: return@forEach
+    val syntheticId = "${date}_${time}".hashCode().toString()
+
+    val cancelButton = row.select("a[href*=annul], a[href*=cancel], a[href*=disdici]").firstOrNull()
+    val bookButton = row.select("a[href*=prenot], a[href*=book], button").firstOrNull()
+
+    when {
+      cancelButton != null -> {
+        val cancelHref = cancelButton.absUrl("href").ifBlank { syntheticId }
+        bookings.add(
+          dev.antigravity.classevivaexpressive.core.domain.model.MeetingBooking(
+            id = cancelHref,
+            teacher = teachers.firstOrNull()
+              ?: dev.antigravity.classevivaexpressive.core.domain.model.MeetingTeacher("", "Docente"),
+            slot = dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot(
+              id = syntheticId,
+              teacherId = teachers.firstOrNull()?.id ?: "",
+              date = date,
+              startTime = time,
+            ),
+            status = "BOOKED",
+          )
+        )
+      }
+      bookButton != null -> {
+        val slotHref = bookButton.absUrl("href").ifBlank { syntheticId }
+        slots.add(
+          dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot(
+            id = slotHref,
+            teacherId = teachers.firstOrNull()?.id ?: "",
+            date = date,
+            startTime = time,
+            available = true,
+          )
+        )
+      }
+    }
+  }
+
+  return MeetingsSnapshot(
+    teachers = teachers.distinctBy { it.name },
+    slots = slots,
+    bookings = bookings,
+  )
+}
+
+private fun extractMeetingDateFromText(text: String): String? {
+  val match = Regex("""(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})""").find(text) ?: return null
+  val (d, m, y) = match.destructured
+  val year = if (y.length == 2) "20$y" else y
+  return runCatching {
+    java.time.LocalDate.of(year.toInt(), m.toInt(), d.toInt()).toString()
+  }.getOrNull()
+}
+
+private fun extractMeetingTimeFromText(text: String): String? {
+  return Regex("""(\d{1,2}):(\d{2})""").find(text)?.value
+}
+
 private fun findActionUrl(root: JsonElement?, vararg keywords: String): String? {
   val loweredKeywords = keywords.map(String::lowercase)
 
@@ -817,11 +932,26 @@ private fun normalizeDateOrNull(value: String?): String? {
   return normalizeDate(raw)
 }
 
+private fun normalizeDateTimeOrNull(value: String?): String? {
+  val raw = value?.trim()?.takeIf { it.isNotBlank() } ?: return null
+  return when {
+    Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}").containsMatchIn(raw) -> raw.take(16)
+    Regex("^\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}").containsMatchIn(raw) -> raw.replace(" ", "T").take(16)
+    Regex("^\\d{8}$").matches(raw) -> "${normalizeDate(raw)}T00:00"
+    else -> runCatching {
+      OffsetDateTime.parse(raw).format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm"))
+    }.getOrElse {
+      normalizeDateOrNull(raw)?.let { normalized -> "${normalized}T00:00" }
+    }
+  }
+}
+
 internal fun normalizeTime(value: String?): String? {
   val raw = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
   return when {
     Regex("^\\d{2}:\\d{2}$").matches(raw) -> raw
     Regex("^\\d{1,2}:\\d{2}$").matches(raw) -> raw.padStart(5, '0')
+    Regex("^\\d{1,2}$").matches(raw) -> null
     Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}").containsMatchIn(raw) -> raw.substring(11, 16)
     else -> raw
   }
@@ -851,7 +981,47 @@ internal fun sanitizeRegisterText(value: String?): String? {
   return withoutIsoPrefix.takeIf { it.isNotBlank() }
 }
 
+private val classCodePrefixRegex = Regex("""^\d+[A-Z]\s+""")
+private val genericSubjectLabels = setOf(
+  "agenda",
+  "evento",
+  "lezione",
+  "compito",
+  "compiti",
+  "verifica",
+  "verifiche",
+  "assessment",
+  "lesson",
+  "homework",
+)
+
+private fun cleanSubject(raw: String?): String? {
+  if (raw.isNullOrBlank()) return null
+  val cleaned = raw.replace(classCodePrefixRegex, "").trim()
+  return if (cleaned.length < 3) null else cleaned
+}
+
+private fun resolveSubject(obj: JsonObject): String? {
+  val subject = cleanSubject(sanitizeRegisterText(obj.string("subjectDesc", "subject")))
+  if (subject != null) return subject
+
+  val categoryFallback = sanitizeRegisterText(
+    obj.string("cntCategory", "eventType", "eventTypeDesc", "categoryDesc", "type"),
+  )?.let(::cleanSubject)?.takeUnless(::isGenericSubjectLabel)
+  if (categoryFallback != null) return categoryFallback
+
+  val materiaRaw = sanitizeRegisterText(obj["materia"].obj().string("desc"))
+  val materia = cleanSubject(materiaRaw)
+  return materia ?: materiaRaw?.let { "Materia non specificata" }
+}
+
+private fun isGenericSubjectLabel(value: String?): Boolean {
+  val normalized = value?.trim()?.lowercase() ?: return true
+  return normalized in genericSubjectLabels
+}
+
 private fun trimZero(value: Double): String = if (value % 1.0 == 0.0) value.toInt().toString() else value.toString()
+private val TimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 private fun schoolYearNow(): String {
   val now = LocalDate.now()

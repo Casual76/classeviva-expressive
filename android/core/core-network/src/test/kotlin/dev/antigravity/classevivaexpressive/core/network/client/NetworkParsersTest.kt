@@ -627,6 +627,45 @@ class NetworkParsersTest {
     assertEquals(AgendaCategory.EVENT, item.category)
   }
 
+  @Test
+  fun normalizeAgendaItem_usesCreatedAtAndTeacherWhenAvailable() {
+    val item = normalizeAgendaItem(
+      Json.parseToJsonElement(
+        """
+        {
+          "evtId": "ag4",
+          "title": "Sportello pomeridiano",
+          "evtDatetimeBegin": "2026-04-01T14:30:00+02:00",
+          "teacherName": "Prof.ssa Rossi",
+          "evtInsDatetime": "2026-03-28T18:45:00+02:00"
+        }
+        """.trimIndent(),
+      ),
+    )
+
+    assertEquals("Prof.ssa Rossi", item.teacher)
+    assertEquals("2026-03-28T18:45", item.createdAt)
+  }
+
+  @Test
+  fun normalizeAgendaItem_fallsBackToFriendlySubjectWhenMateriaIsClassLabel() {
+    val item = normalizeAgendaItem(
+      Json.parseToJsonElement(
+        """
+        {
+          "evtId": "ag5",
+          "title": "Laboratorio guidato",
+          "evtDatetimeBegin": "2026-04-02T08:00:00+02:00",
+          "categoryDesc": "Scienze naturali",
+          "materia": { "desc": "4F scienze applicate" }
+        }
+        """.trimIndent(),
+      ),
+    )
+
+    assertEquals("Scienze naturali", item.subject)
+  }
+
   // ─── normalizeDocument ───────────────────────────────────────────────────
 
   @Test

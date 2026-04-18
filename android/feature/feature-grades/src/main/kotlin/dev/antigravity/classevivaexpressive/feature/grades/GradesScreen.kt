@@ -1,12 +1,20 @@
 package dev.antigravity.classevivaexpressive.feature.grades
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -14,16 +22,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -32,7 +43,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -74,7 +87,6 @@ import kotlinx.coroutines.launch
 
 private const val TAB_RECENT = "Ultimi"
 private const val TAB_SUBJECTS = "Per materia"
-private const val TAB_TREND = "Andamento"
 private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
 
 data class GradesUiState(
@@ -86,6 +98,14 @@ data class GradesUiState(
   val selectedPeriodCode: String? = null,
   val selectedGradeId: String? = null,
   val isRefreshing: Boolean = false,
+)
+
+private data class GradesContentState(
+  val grades: List<Grade>,
+  val periods: List<Period>,
+  val seenGradeIds: Set<String>,
+  val subjectGoals: List<SubjectGoal>,
+  val simulation: GradeSimulationSummary,
 )
 
 @HiltViewModel
@@ -204,41 +224,53 @@ class GradesViewModel @Inject constructor(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun GradesRoute(
   initialGradeId: String? = null,
   modifier: Modifier = Modifier,
   viewModel: GradesViewModel = hiltViewModel(),
+  sharedTransitionScope: SharedTransitionScope? = null,
+  animatedVisibilityScope: AnimatedVisibilityScope? = null,
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   var selectedTab by rememberSaveable { mutableStateOf(TAB_RECENT) }
   var showSimulationDialog by rememberSaveable { mutableStateOf(false) }
   var goalDialogSubject by rememberSaveable { mutableStateOf<String?>(null) }
+  var detailSubject by rememberSaveable { mutableStateOf<String?>(null) }
+  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-  val effectivePeriodCode = remember(state.periods, state.selectedPeriodCode) {
-    selectCurrentPeriodCode(state.periods, state.selectedPeriodCode)
+  val effectivePeriodCode = remember(state.periods, state.selectedPeriodCode, state.grades) {
+    if (state.selectedPeriodCode != null) state.selectedPeriodCode else {
+      val latestGrade = state.grades.maxByOrNull { it.date }
+      latestGrade?.periodCode ?: selectCurrentPeriodCode(state.periods, null)
+    }
   }
+  
   val filteredGrades = remember(state.grades, state.periods, effectivePeriodCode) {
     filterGradesByPeriod(state.grades, state.periods, effectivePeriodCode)
   }
-  val unseenGrades = remember(filteredGrades, state.seenGradeIds) {
-    filteredGrades.filterNot { state.seenGradeIds.contains(it.id) }
+  
+  val overallAverage = remember(state.grades) {
+    calculateOverallAverage(state.grades)
   }
-  val average = remember(filteredGrades) {
-    filteredGrades.mapNotNull { it.numericValue }.takeIf { it.isNotEmpty() }?.average()
+  
+  val periodAverage = remember(filteredGrades) {
+    calculateOverallAverage(filteredGrades)
   }
+  
   val subjectRows = remember(filteredGrades, state.subjectGoals, effectivePeriodCode) {
     buildSubjectRows(filteredGrades, state.subjectGoals, effectivePeriodCode)
   }
+  
+  val riskSubjectsCount = remember(subjectRows) {
+    subjectRows.count { it.average != null && it.average < 6.0 }
+  }
+
   val selectedGrade = remember(state.grades, state.selectedGradeId) {
     state.grades.firstOrNull { it.id == state.selectedGradeId }
   }
-  val selectedGoal = remember(goalDialogSubject, state.subjectGoals, effectivePeriodCode) {
-    val subject = goalDialogSubject ?: return@remember null
-    state.subjectGoals.firstOrNull { it.subject == subject && it.periodCode == effectivePeriodCode }
-      ?: state.subjectGoals.firstOrNull { it.subject == subject && it.periodCode == null }
-  }
+
   val chartPoints = remember(filteredGrades) {
     filteredGrades.sortedBy { it.date }.mapNotNull { it.numericValue?.toFloat() }
   }
@@ -249,240 +281,216 @@ fun GradesRoute(
     }
   }
 
-  PullToRefreshBox(
-    modifier = modifier.fillMaxSize(),
-    isRefreshing = state.isRefreshing,
-    onRefresh = viewModel::refresh,
-  ) {
-    LazyColumn(
-      modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-      verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-    item {
+  Scaffold(
+    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+    topBar = {
       ExpressiveTopHeader(
         title = "Voti",
-        subtitle = "Periodo corrente, dettagli dei voti, andamento e obiettivi media per materia.",
+        subtitle = "Riepilogo medie, situazione per materia e ultimi voti registrati.",
+        scrollBehavior = scrollBehavior,
         actions = {
           IconButton(onClick = viewModel::refresh) {
             Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
           }
           IconButton(onClick = { showSimulationDialog = true }) {
-            Icon(Icons.Rounded.Add, contentDescription = "Aggiungi simulazione")
+            Icon(Icons.Rounded.Add, contentDescription = "Simulazione")
           }
           if (state.simulation.grades.isNotEmpty()) {
             IconButton(onClick = viewModel::clearSimulation) {
-              Icon(Icons.Rounded.DeleteSweep, contentDescription = "Svuota simulazione")
+              Icon(Icons.Rounded.DeleteSweep, contentDescription = "Pulisci")
             }
           }
         },
       )
     }
-    item {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+  ) { paddingValues ->
+    PullToRefreshBox(
+      modifier = Modifier.padding(paddingValues).fillMaxSize(),
+      isRefreshing = state.isRefreshing,
+      onRefresh = viewModel::refresh,
+    ) {
+      LazyColumn(
+        modifier = Modifier.fillMaxSize().animateContentSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
       ) {
-        MetricTile(
-          label = "Media",
-          value = average?.format2() ?: "--",
-          detail = effectivePeriodLabel(state.periods, effectivePeriodCode),
-          tone = gradeTone(average),
-          modifier = Modifier.weight(1f),
-        )
-        MetricTile(
-          label = "Non visti",
-          value = unseenGrades.size.toString(),
-          detail = "Voti ancora da aprire",
-          tone = if (unseenGrades.isNotEmpty()) ExpressiveTone.Primary else ExpressiveTone.Neutral,
-          modifier = Modifier.weight(1f),
-        )
-        MetricTile(
-          label = "Materie",
-          value = subjectRows.size.toString(),
-          detail = "Discipline nel periodo attivo",
-          tone = ExpressiveTone.Info,
-          modifier = Modifier.weight(1f),
-        )
-      }
-    }
-    if (chartPoints.size >= 2) {
-      item {
-        ExpressiveEditorialCard {
-          Text(
-            text = "TREND RECENTE",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-          )
-          ExpressiveMiniChart(
-            points = chartPoints.takeLast(12),
-            color = MaterialTheme.colorScheme.primary,
-            threshold = 6f,
-            modifier = Modifier.height(100.dp)
-          )
+        item {
+          Row(
+            modifier = Modifier.fillMaxWidth().animateItem(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            MetricTile(
+              label = "Annuale",
+              value = overallAverage?.format2() ?: "--",
+              detail = "Media globale anno",
+              tone = gradeTone(overallAverage),
+              modifier = Modifier.weight(1f),
+            )
+            MetricTile(
+              label = "Periodo",
+              value = periodAverage?.format2() ?: "--",
+              detail = effectivePeriodLabel(state.periods, effectivePeriodCode),
+              tone = gradeTone(periodAverage),
+              modifier = Modifier.weight(1f),
+            )
+            MetricTile(
+              label = "A rischio",
+              value = riskSubjectsCount.toString(),
+              detail = "Materie sotto il 6.0",
+              tone = if (riskSubjectsCount > 0) ExpressiveTone.Danger else ExpressiveTone.Success,
+              modifier = Modifier.weight(1f),
+            )
+          }
         }
-      }
-    }
-    if (state.periods.isNotEmpty()) {
-      item {
-        PeriodSelector(
-          periods = state.periods,
-          selectedCode = effectivePeriodCode,
-          onSelect = viewModel::selectPeriod,
-        )
-      }
-    }
-    item {
-      ExpressivePillTabs(
-        options = listOf(TAB_RECENT, TAB_SUBJECTS, TAB_TREND),
-        selected = selectedTab,
-        onSelect = { selectedTab = it },
-      )
-    }
-    if (unseenGrades.isNotEmpty()) {
-      item {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          QuickAction(
-            label = "Segna tutto come gia visto",
-            onClick = { viewModel.markGradesSeen(unseenGrades.map(Grade::id)) },
-          )
-        }
-      }
-    }
-
-    when (selectedTab) {
-      TAB_RECENT -> {
-        if (filteredGrades.isEmpty()) {
+        
+        if (chartPoints.isNotEmpty()) {
           item {
-            EmptyState(
-              title = "Nessun voto disponibile",
-              detail = "I voti del periodo selezionato appariranno qui appena la sincronizzazione li rende disponibili.",
-            )
-          }
-        } else {
-          items(filteredGrades.sortedByDescending { it.date }, key = { it.id }) { grade ->
-            val unseen = !state.seenGradeIds.contains(grade.id)
-            RegisterListRow(
-              title = grade.subject,
-              subtitle = listOfNotNull(grade.type.takeIf { it.isNotBlank() }, grade.description ?: grade.notes)
-                .joinToString(" / ")
-                .ifBlank { "Valutazione registrata" },
-              eyebrow = grade.date.toReadableDate(),
-              meta = listOfNotNull(grade.teacher, grade.period).joinToString(" / ").ifBlank { null },
-              tone = gradeTone(grade.numericValue),
-              badge = {
-                if (unseen) {
-                  StatusBadge(label = "NUOVO", tone = ExpressiveTone.Primary)
-                }
-                GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
-              },
-              onClick = { viewModel.openGrade(grade.id) },
-            )
-          }
-        }
-      }
-
-      TAB_SUBJECTS -> {
-        if (subjectRows.isEmpty()) {
-          item {
-            EmptyState(
-              title = "Nessun riepilogo disponibile",
-              detail = "Appena arrivano voti numerici sufficienti, qui trovi andamento e obiettivo per materia.",
-            )
-          }
-        } else {
-          items(subjectRows, key = { it.subject }) { row ->
-            RegisterListRow(
-              title = row.subject,
-              subtitle = row.detail,
-              eyebrow = "Per materia",
-              meta = row.meta,
-              tone = gradeTone(row.average),
-              badge = {
-                row.target?.let {
-                  StatusBadge(
-                    label = "TARGET ${it.format1()}",
-                    tone = ExpressiveTone.Primary,
+            ExpressiveEditorialCard(modifier = Modifier.animateItem()) {
+              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                  Text(
+                    text = "ANDAMENTO",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
                   )
-                }
-                GradePill(
-                  value = row.average?.format2() ?: "--",
-                  numericValue = row.average,
-                )
-              },
-              onClick = { goalDialogSubject = row.subject },
-            )
-          }
-        }
-      }
-
-      TAB_TREND -> {
-        val numericGrades = filteredGrades.sortedBy { it.date }.mapNotNull { grade ->
-          grade.numericValue?.toFloat()?.let { TrendGrade(label = "${grade.subject.take(3)} ${grade.date.takeLast(2)}", value = it, raw = grade) }
-        }
-        if (numericGrades.isEmpty()) {
-          item {
-            EmptyState(
-              title = "Andamento non disponibile",
-              detail = "Servono voti numerici nel periodo selezionato per costruire il trend.",
-            )
-          }
-        } else {
-          item {
-            ExpressiveEditorialCard {
-              Text(text = "Andamento del periodo")
-              ExpressiveMiniChart(
-                points = numericGrades.takeLast(10).map { it.value },
-                color = MaterialTheme.colorScheme.primary,
-                threshold = 6f,
-              )
+                  val latestValue = chartPoints.lastOrNull()
+                  if (latestValue != null) {
+                      Text(
+                        text = "Ultimo: ${latestValue.toDouble().format1()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                      )
+                  }
+              }
+              Box(modifier = Modifier.fillMaxWidth()) {
+                  ExpressiveMiniChart(
+                    points = chartPoints.takeLast(15),
+                    color = MaterialTheme.colorScheme.primary,
+                    threshold = 6f,
+                    modifier = Modifier.height(110.dp)
+                  )
+                  // Min/Max axis indicators
+                  Column(modifier = Modifier.align(Alignment.TopStart).padding(4.dp)) {
+                      Text("10", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                      Spacer(Modifier.height(70.dp))
+                      Text("2", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                  }
+              }
             }
           }
-          items(numericGrades.takeLast(8).reversed(), key = { it.raw.id }) { point ->
-            RegisterListRow(
-              title = point.raw.subject,
-              subtitle = point.raw.type.ifBlank { "Valutazione" },
-              eyebrow = point.raw.date.toReadableDate(),
-              meta = point.raw.description ?: point.raw.notes,
-              tone = gradeTone(point.raw.numericValue),
-              badge = {
-                GradePill(
-                  value = point.raw.valueLabel,
-                  numericValue = point.raw.numericValue,
-                )
-              },
-              onClick = { viewModel.openGrade(point.raw.id) },
+        }
+
+        if (state.periods.isNotEmpty()) {
+          item {
+            PeriodSelector(
+              modifier = Modifier.animateItem(),
+              periods = state.periods,
+              selectedCode = effectivePeriodCode,
+              onSelect = viewModel::selectPeriod,
             )
           }
         }
-      }
-    }
+        
+        item {
+          ExpressivePillTabs(
+            modifier = Modifier.animateItem(),
+            options = listOf(TAB_RECENT, TAB_SUBJECTS),
+            selected = selectedTab,
+            onSelect = { selectedTab = it },
+          )
+        }
+        
+        val periodUnseen = filteredGrades.filterNot { state.seenGradeIds.contains(it.id) }
+        if (periodUnseen.isNotEmpty()) {
+          item {
+            QuickAction(
+              label = "Segna tutto come gia visto",
+              onClick = { viewModel.markGradesSeen(periodUnseen.map(Grade::id)) },
+            )
+          }
+        }
 
-    if (state.simulation.grades.isNotEmpty()) {
-      item { ExpressiveAccentLabel("Simulazione") }
-      item {
-        Text(
-          text = "I voti simulati non toccano i dati reali e servono solo a capire come potrebbe muoversi la media.",
-        )
+        when (selectedTab) {
+          TAB_RECENT -> {
+            if (filteredGrades.isEmpty()) {
+              item {
+                EmptyState(
+                  modifier = Modifier.animateItem(),
+                  title = "Nessun voto in questo periodo",
+                  detail = "Seleziona un altro periodo oppure attendi la sincronizzazione dei dati.",
+                )
+              }
+            } else {
+              items(filteredGrades.sortedByDescending { it.date }, key = { it.id }) { grade ->
+                val unseen = !state.seenGradeIds.contains(grade.id)
+                val sharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
+                  with(sharedTransitionScope) {
+                    Modifier.sharedElement(
+                      rememberSharedContentState(key = "grade-${grade.id}"),
+                      animatedVisibilityScope = animatedVisibilityScope
+                    )
+                  }
+                } else Modifier
+
+                RegisterListRow(
+                  modifier = Modifier.animateItem().then(sharedModifier),
+                  title = grade.subject,
+                  subtitle = grade.type.ifBlank { "Valutazione" },
+                  eyebrow = grade.date.toReadableDate(),
+                  meta = listOfNotNull(
+                      grade.description ?: grade.notes,
+                      grade.teacher
+                  ).joinToString(" / ").ifBlank { null },
+                  tone = gradeTone(grade.numericValue),
+                  badge = {
+                    if (unseen) {
+                      StatusBadge(label = "NUOVO", tone = ExpressiveTone.Primary)
+                    }
+                    GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
+                  },
+                  onClick = { viewModel.openGrade(grade.id) },
+                )
+              }
+            }
+          }
+
+          TAB_SUBJECTS -> {
+            if (subjectRows.isEmpty()) {
+              item {
+                EmptyState(
+                  modifier = Modifier.animateItem(),
+                  title = "Mancano voti numerici",
+                  detail = "Le medie per materia vengono calcolate solo in presenza di valutazioni con valore decimale.",
+                )
+              }
+            } else {
+              items(subjectRows, key = { it.subject }) { row ->
+                RegisterListRow(
+                  modifier = Modifier.animateItem(),
+                  title = row.subject,
+                  subtitle = row.detail,
+                  eyebrow = if (row.average != null && row.average < 6.0) "Materia a rischio" else "Per materia",
+                  meta = row.meta,
+                  tone = gradeTone(row.average),
+                  badge = {
+                    row.target?.let {
+                      StatusBadge(
+                        label = "TARGET ${it.format1()}",
+                        tone = ExpressiveTone.Primary,
+                      )
+                    }
+                    GradePill(
+                      value = row.average?.format2() ?: "--",
+                      numericValue = row.average,
+                    )
+                  },
+                  onClick = { detailSubject = row.subject },
+                )
+              }
+            }
+          }
+        }
       }
-      items(state.simulation.grades, key = { it.id }) { grade ->
-        RegisterListRow(
-          title = "${grade.subject} / ${grade.type}",
-          subtitle = grade.note ?: "Voto simulato aggiunto il ${grade.date.toReadableDate()}",
-          eyebrow = "Simulato",
-          meta = "Media simulata ${state.simulation.simulatedAverage?.format2() ?: "--"}",
-          tone = gradeTone(grade.value),
-          badge = {
-            GradePill(value = grade.value.format1(), numericValue = grade.value)
-          },
-          onClick = { viewModel.removeSimulatedGrade(grade.id) },
-        )
-      }
-    }
     }
   }
 
@@ -496,59 +504,23 @@ fun GradesRoute(
     )
   }
 
-  if (selectedGrade != null) {
-    ModalBottomSheet(
-      onDismissRequest = viewModel::dismissGrade,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
-        item {
-          Text(
-            text = selectedGrade.subject,
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-          )
-        }
-        item {
-          RegisterListRow(
-            title = selectedGrade.valueLabel,
-            subtitle = selectedGrade.type.ifBlank { "Valutazione" },
-            eyebrow = selectedGrade.date.toReadableDate(),
-            meta = listOfNotNull(selectedGrade.teacher, selectedGrade.period, selectedGrade.description, selectedGrade.notes)
-              .joinToString(" / ")
-              .ifBlank { null },
-            tone = gradeTone(selectedGrade.numericValue),
-            badge = {
-              GradePill(
-                value = selectedGrade.valueLabel,
-                numericValue = selectedGrade.numericValue,
-              )
-              StatusBadge(
-                label = if (state.seenGradeIds.contains(selectedGrade.id)) "VISTO" else "NUOVO",
-                tone = if (state.seenGradeIds.contains(selectedGrade.id)) ExpressiveTone.Neutral else ExpressiveTone.Primary,
-              )
-            },
-          )
-        }
-        item {
-          Button(
-            onClick = viewModel::dismissGrade,
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            Text("Chiudi")
-          }
-        }
-      }
-    }
+  detailSubject?.let { subject ->
+    SubjectDetailSheet(
+      subject = subject,
+      grades = filteredGrades.filter { it.subject == subject },
+      onDismiss = { detailSubject = null },
+      onOpenGrade = { viewModel.openGrade(it) },
+      onSetGoal = { goalDialogSubject = subject }
+    )
   }
 
   goalDialogSubject?.let { subject ->
+    val selectedGoal = state.subjectGoals.firstOrNull { it.subject == subject && it.periodCode == effectivePeriodCode }
+      ?: state.subjectGoals.firstOrNull { it.subject == subject && it.periodCode == null }
+      
     GoalSheet(
       subject = subject,
-      initialValue = selectedGoal?.targetAverage,
+      initialValue = selectedGoal?.targetAverage ?: 6.0,
       periodLabel = effectivePeriodLabel(state.periods, effectivePeriodCode),
       onDismiss = { goalDialogSubject = null },
       onClear = {
@@ -561,6 +533,80 @@ fun GradesRoute(
       },
     )
   }
+
+  if (selectedGrade != null) {
+    ModalBottomSheet(onDismissRequest = viewModel::dismissGrade) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        Text(text = selectedGrade.subject, style = MaterialTheme.typography.headlineSmall)
+        RegisterListRow(
+          title = selectedGrade.valueLabel,
+          subtitle = selectedGrade.type.ifBlank { "Valutazione" },
+          eyebrow = selectedGrade.date.toReadableDate(),
+          meta = listOfNotNull(selectedGrade.description, selectedGrade.notes, selectedGrade.teacher).joinToString(" / "),
+          tone = gradeTone(selectedGrade.numericValue),
+          badge = {
+            GradePill(value = selectedGrade.valueLabel, numericValue = selectedGrade.numericValue)
+          }
+        )
+        Button(onClick = viewModel::dismissGrade, modifier = Modifier.fillMaxWidth()) {
+          Text("Chiudi")
+        }
+      }
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SubjectDetailSheet(
+  subject: String,
+  grades: List<Grade>,
+  onDismiss: () -> Unit,
+  onOpenGrade: (String) -> Unit,
+  onSetGoal: () -> Unit
+) {
+  val writtenAvg = calculateSubjectAverage(grades.filter { it.type.contains("scritto", true) || it.type.contains("grafico", true) })
+  val oralAvg = calculateSubjectAverage(grades.filter { it.type.contains("orale", true) })
+  val practicalAvg = calculateSubjectAverage(grades.filter { it.type.contains("pratico", true) })
+
+  ModalBottomSheet(onDismissRequest = onDismiss) {
+    LazyColumn(
+      modifier = Modifier.fillMaxWidth(),
+      contentPadding = PaddingValues(24.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+      item {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+          Text(text = subject, style = MaterialTheme.typography.headlineSmall)
+          IconButton(onClick = onSetGoal) {
+              Icon(Icons.Rounded.Settings, contentDescription = "Obiettivo")
+          }
+        }
+      }
+      item {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          MetricTile(label = "Scritto", value = writtenAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(writtenAvg))
+          MetricTile(label = "Orale", value = oralAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(oralAvg))
+          MetricTile(label = "Pratico", value = practicalAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(practicalAvg))
+        }
+      }
+      item { ExpressiveAccentLabel("Tutti i voti") }
+      items(grades.sortedByDescending { it.date }) { grade ->
+          RegisterListRow(
+            title = grade.valueLabel,
+            subtitle = grade.type,
+            eyebrow = grade.date.toReadableDate(),
+            meta = grade.description ?: grade.notes,
+            tone = gradeTone(grade.numericValue),
+            onClick = { onOpenGrade(grade.id) }
+          )
+      }
+      item { Spacer(Modifier.height(32.dp)) }
+    }
+  }
 }
 
 @Composable
@@ -568,9 +614,10 @@ private fun PeriodSelector(
   periods: List<Period>,
   selectedCode: String?,
   onSelect: (String?) -> Unit,
+  modifier: Modifier = Modifier,
 ) {
   Row(
-    modifier = Modifier.horizontalScroll(rememberScrollState()),
+    modifier = modifier.horizontalScroll(rememberScrollState()),
     horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
     periods.sortedBy { it.order }.forEach { period ->
@@ -587,62 +634,36 @@ private fun PeriodSelector(
 @Composable
 private fun GoalSheet(
   subject: String,
-  initialValue: Double?,
+  initialValue: Double,
   periodLabel: String,
   onDismiss: () -> Unit,
   onClear: () -> Unit,
   onSave: (Double) -> Unit,
 ) {
   var valueText by rememberSaveable(subject, initialValue) {
-    mutableStateOf(initialValue?.format1().orEmpty())
+    mutableStateOf(initialValue.format1())
   }
   val numeric = valueText.parseDecimal()
 
-  ModalBottomSheet(
-    onDismissRequest = onDismiss,
-  ) {
-    LazyColumn(
-      modifier = Modifier.fillMaxWidth(),
-      contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+  ModalBottomSheet(onDismissRequest = onDismiss) {
+    Column(
+      modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      item {
-        Text(
-          text = "Obiettivo media / $subject",
-          style = MaterialTheme.typography.headlineSmall,
-        )
-      }
-      item { Text("Periodo attivo: $periodLabel") }
-      item {
-        OutlinedTextField(
-          value = valueText,
-          onValueChange = { valueText = it },
-          modifier = Modifier.fillMaxWidth(),
-          label = { Text("Media obiettivo") },
-          supportingText = { Text("Esempio: 7.5") },
-          singleLine = true,
-        )
-      }
-      item {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          if (initialValue != null) {
-            TextButton(onClick = onClear) {
-              Text("Rimuovi")
-            }
-          }
-          TextButton(onClick = onDismiss) {
-            Text("Annulla")
-          }
-          Button(
-            onClick = { onSave(numeric ?: 0.0) },
-            enabled = numeric != null,
-          ) {
-            Text("Salva")
-          }
-        }
+      Text(text = "Imposta Obiettivo / $subject", style = MaterialTheme.typography.titleLarge)
+      Text(text = "Periodo: $periodLabel", style = MaterialTheme.typography.bodyMedium)
+      OutlinedTextField(
+        value = valueText,
+        onValueChange = { valueText = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Media desiderata") },
+        singleLine = true,
+      )
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = onClear) { Text("Rimuovi") }
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = onDismiss) { Text("Annulla") }
+        Button(onClick = { onSave(numeric ?: 6.0) }, enabled = numeric != null) { Text("Salva") }
       }
     }
   }
@@ -660,72 +681,19 @@ private fun AddSimulationSheet(
   var note by rememberSaveable { mutableStateOf("") }
   val numeric = valueText.parseDecimal()
 
-  ModalBottomSheet(
-    onDismissRequest = onDismiss,
-  ) {
-    LazyColumn(
-      modifier = Modifier.fillMaxWidth(),
-      contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+  ModalBottomSheet(onDismissRequest = onDismiss) {
+    Column(
+      modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-      item {
-        Text(
-          text = "Aggiungi voto simulato",
-          style = MaterialTheme.typography.headlineSmall,
-        )
-      }
-      item {
-        OutlinedTextField(
-          value = subject,
-          onValueChange = { subject = it },
-          modifier = Modifier.fillMaxWidth(),
-          label = { Text("Materia") },
-          singleLine = true,
-        )
-      }
-      item {
-        OutlinedTextField(
-          value = valueText,
-          onValueChange = { valueText = it },
-          modifier = Modifier.fillMaxWidth(),
-          label = { Text("Valore") },
-          supportingText = { Text("Esempio: 7.5") },
-          singleLine = true,
-        )
-      }
-      item {
-        OutlinedTextField(
-          value = type,
-          onValueChange = { type = it },
-          modifier = Modifier.fillMaxWidth(),
-          label = { Text("Tipologia") },
-          singleLine = true,
-        )
-      }
-      item {
-        OutlinedTextField(
-          value = note,
-          onValueChange = { note = it },
-          modifier = Modifier.fillMaxWidth(),
-          label = { Text("Nota") },
-          minLines = 2,
-        )
-      }
-      item {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          TextButton(onClick = onDismiss) {
-            Text("Annulla")
-          }
-          Button(
-            onClick = { onSave(subject, numeric ?: 0.0, type, note) },
-            enabled = subject.isNotBlank() && numeric != null,
-          ) {
-            Text("Salva")
-          }
-        }
+      Text(text = "Voto Simulato", style = MaterialTheme.typography.titleLarge)
+      OutlinedTextField(value = subject, onValueChange = { subject = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Materia") })
+      OutlinedTextField(value = valueText, onValueChange = { valueText = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Valore") })
+      OutlinedTextField(value = type, onValueChange = { type = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Tipologia") })
+      OutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Nota") })
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = onDismiss) { Text("Annulla") }
+        Button(onClick = { onSave(subject, numeric ?: 0.0, type, note) }, enabled = subject.isNotBlank() && numeric != null) { Text("Aggiungi") }
       }
     }
   }
@@ -737,20 +705,6 @@ private data class SubjectRow(
   val detail: String,
   val meta: String,
   val target: Double?,
-)
-
-private data class TrendGrade(
-  val label: String,
-  val value: Float,
-  val raw: Grade,
-)
-
-private data class GradesContentState(
-  val grades: List<Grade>,
-  val periods: List<Period>,
-  val seenGradeIds: Set<String>,
-  val subjectGoals: List<SubjectGoal>,
-  val simulation: GradeSimulationSummary,
 )
 
 internal fun selectCurrentPeriodCode(
@@ -815,10 +769,10 @@ internal fun calculateRequiredGradeMessage(
   val required = if (currentWeight == 0.0) targetAverage else (targetAverage * (currentWeight + 1.0)) - weightedSum
 
   return when {
-    required > 10.0 -> "Media non raggiungibile con un singolo voto"
-    required <= 0.0 -> "non ti preoccupare!"
-    currentAverage != null && currentAverage >= targetAverage -> "non prendere meno di ${required.coerceAtLeast(1.0).format1()}"
-    else -> "devi prendere almeno ${required.coerceAtLeast(1.0).format1()}"
+    required > 10.0 -> "Lontano dal target"
+    required <= 0.0 -> "Target sicuro"
+    currentAverage != null && currentAverage >= targetAverage -> "Soglia sicura: ${required.coerceAtLeast(1.0).format1()}"
+    else -> "Serve almeno ${required.coerceAtLeast(1.0).format1()}"
   }
 }
 
@@ -829,12 +783,7 @@ private fun buildSubjectRows(
 ): List<SubjectRow> {
   return grades.groupBy { it.subject }.map { (subject, items) ->
     val numeric = items.filter { it.numericValue != null }
-    val average = numeric
-      .takeIf { it.isNotEmpty() }
-      ?.let { values ->
-        val totalWeight = values.sumOf { it.weight ?: 1.0 }
-        values.sumOf { (it.numericValue ?: 0.0) * (it.weight ?: 1.0) } / totalWeight
-      }
+    val average = calculateSubjectAverage(numeric)
     val goal = subjectGoals.firstOrNull { it.subject == subject && it.periodCode == periodCode }
       ?: subjectGoals.firstOrNull { it.subject == subject && it.periodCode == null }
     val goalMessage = goal?.let { calculateRequiredGradeMessage(numeric, it.targetAverage) }
@@ -842,13 +791,13 @@ private fun buildSubjectRows(
       subject = subject,
       average = average,
       detail = buildString {
-        append("${items.size} valutazioni")
-        goal?.let { append(" / obiettivo ${it.targetAverage.format1()}") }
+        append("${items.size} voti")
+        goal?.let { append(" / target ${it.targetAverage.format1()}") }
       },
       meta = listOfNotNull(
-        numeric.takeLast(3).mapNotNull { it.numericValue?.format1() }.joinToString(" / ").ifBlank { null },
+        numeric.takeLast(2).mapNotNull { it.numericValue?.format1() }.joinToString(" / ").ifBlank { null },
         goalMessage,
-      ).joinToString(" / ").ifBlank { "Nessun trend numerico disponibile" },
+      ).joinToString(" / ").ifBlank { "Nessun trend" },
       target = goal?.targetAverage,
     )
   }.sortedBy { it.subject }
@@ -871,7 +820,7 @@ internal fun calculateOverallAverage(grades: List<Grade>): Double? {
 private fun effectivePeriodLabel(periods: List<Period>, periodCode: String?): String {
   return periods.firstOrNull { it.code == periodCode }?.label
     ?: periods.firstOrNull { it.code == periodCode }?.description
-    ?: "Periodo corrente"
+    ?: "Corrente"
 }
 
 private fun String.toReadableDate(): String {

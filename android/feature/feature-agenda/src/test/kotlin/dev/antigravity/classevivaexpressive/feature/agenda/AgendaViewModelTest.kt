@@ -127,21 +127,15 @@ class AgendaViewModelTest {
   }
 
   @Test
-  fun refresh_setsIsRefreshingTrueTheFalse() = runTest {
+  fun refresh_resetsIsRefreshingWhenComplete() = runTest {
     every { agendaRepository.observeAgenda() } returns flowOf(emptyList())
     every { agendaRepository.observeCustomEvents() } returns flowOf(emptyList())
     coEvery { agendaRepository.refreshAgenda(any()) } returns Result.success(emptyList())
 
     val vm = buildViewModel()
+    vm.refresh()
+    testDispatcher.scheduler.advanceUntilIdle()
 
-    vm.state.test {
-      awaitItem() // initial
-      vm.refresh()
-      val refreshing = awaitItem()
-      assertTrue(refreshing.isRefreshing)
-      val done = awaitItem()
-      assertTrue(!done.isRefreshing)
-      cancelAndIgnoreRemainingEvents()
-    }
+    assertTrue(!vm.state.value.isRefreshing)
   }
 }

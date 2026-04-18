@@ -12,6 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinator
 import dev.antigravity.classevivaexpressive.core.data.notifications.CommunicationsChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.GradesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.AppNotificationChannels
 import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChannelId
@@ -20,6 +21,10 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.readNotifica
 import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNotification
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
 import dev.antigravity.classevivaexpressive.core.database.database.GradeDao
+import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
+import dev.antigravity.classevivaexpressive.core.database.database.CommunicationDao
+import dev.antigravity.classevivaexpressive.core.database.database.MaterialDao
+import dev.antigravity.classevivaexpressive.core.database.database.DocumentDao
 import dev.antigravity.classevivaexpressive.core.database.database.CustomEventDao
 import dev.antigravity.classevivaexpressive.core.database.database.CustomEventEntity
 import dev.antigravity.classevivaexpressive.core.database.database.DownloadRecordDao
@@ -36,7 +41,9 @@ import dev.antigravity.classevivaexpressive.core.database.database.StudentScoreS
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
 import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
+import dev.antigravity.classevivaexpressive.core.datastore.TimetableTemplateStore
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
+import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceJustificationRequest
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsencesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
@@ -102,13 +109,19 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SubjectSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import dev.antigravity.classevivaexpressive.core.domain.model.TimelinePoint
+import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
+import dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCase
 import dev.antigravity.classevivaexpressive.core.network.client.ApiSessionManager
-import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaGatewayClient
+
+import dev.antigravity.classevivaexpressive.core.network.client.DevApiKey
+import dev.antigravity.classevivaexpressive.core.network.client.UserAgent
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
+import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.util.Base64
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -147,6 +160,7 @@ class SchoolAuthRepository @Inject constructor(
   override suspend fun logout() {
     sessionStore.clear()
     syncCoordinator.attachSession(null)
+    syncCoordinator.clearPortalSession()
   }
 }
 
@@ -184,6 +198,7 @@ class SchoolSettingsRepository @Inject constructor(
           HomeworkChannelId -> current.notificationPreferences.copy(homework = enabled)
           CommunicationsChannelId -> current.notificationPreferences.copy(communications = enabled)
           AbsencesChannelId -> current.notificationPreferences.copy(absences = enabled)
+          GradesChannelId -> current.notificationPreferences.copy(grades = enabled)
           TestChannelId -> current.notificationPreferences.copy(test = enabled)
           else -> current.notificationPreferences
         },
@@ -200,6 +215,10 @@ class SchoolSettingsRepository @Inject constructor(
     refreshNotificationRuntimeState()
     return result
   }
+
+  override suspend fun updateGatewayBaseUrl(url: String) {
+    settingsStore.update { it.copy(networkConfig = it.networkConfig.copy(gatewayBaseUrl = url)) }
+  }
 }
 
 @Singleton
@@ -215,12 +234,17 @@ class SchoolDataRepository @Inject constructor(
   private val subjectGoalDao: SubjectGoalDao,
   private val gradeDao: GradeDao,
   private val agendaDao: AgendaDao,
+  private val absenceDao: AbsenceDao,
+  private val communicationDao: CommunicationDao,
+  private val materialDao: MaterialDao,
+  private val documentDao: DocumentDao,
   private val syncCoordinator: SchoolSyncCoordinator,
   private val downloadManager: DownloadManager,
   private val sessionStore: SessionStore,
   private val schoolYearStore: SchoolYearStore,
+  private val timetableTemplateStore: TimetableTemplateStore,
   private val capabilityResolver: CapabilityResolver,
-  private val gatewayClient: ClassevivaGatewayClient,
+  private val predictiveTimetableUseCase: PredictiveTimetableUseCase,
   @ApplicationContext private val context: Context,
 ) : DashboardRepository,
   GradesRepository,
@@ -271,10 +295,21 @@ class SchoolDataRepository @Inject constructor(
       syncCoordinator.syncStatus,
     ) { profile, academic, school, syncStatus ->
       val average = academic.grades.mapNotNull { it.numericValue }.takeIf { it.isNotEmpty() }?.average()
-      val todayLessons = academic.lessons
-        .filter { it.date == todayIso() }
-        .sortedBy { it.time }
-        .map { it.toDashboardAgendaItem() }
+      val today = java.time.LocalDate.now()
+      val scheduleForToday = predictiveTimetableUseCase.getScheduleForDate(today, academic.lessons)
+      val todayLessonsList = scheduleForToday.map { slot ->
+        dev.antigravity.classevivaexpressive.core.domain.model.Lesson(
+            id = "${slot.time}_${slot.subject}",
+            subject = slot.subject,
+            date = today.toString(),
+            time = slot.time.toString(),
+            durationMinutes = slot.durationMinutes,
+            topic = slot.topic,
+            teacher = slot.teacher,
+            room = slot.room,
+            endTime = slot.endTime?.formatTime(),
+        )
+      }
       val unseenGradeIds = academic.seenGradeStates.map { it.gradeId }.toSet()
       val recentGrades = academic.grades.sortedByDescending { it.date }
       val unseenGrades = recentGrades.filterNot { unseenGradeIds.contains(it.id) }
@@ -284,21 +319,21 @@ class SchoolDataRepository @Inject constructor(
         .sortedBy { "${it.date}-${it.time.orEmpty()}" }
       DashboardSnapshot(
         profile = profile,
-        headline = "Oggi",
+        headline = "",
         subheadline = "Lezioni, voti da aprire e comunicazioni da leggere restano al centro.",
         averageLabel = average?.let { "%.1f".format(it) } ?: "--",
         averageNumeric = average,
         stats = listOf(
-          DashboardStat("lessons", "Lezioni", todayLessons.size.toString(), "Lezioni visibili oggi"),
+          DashboardStat("lessons", "Lezioni", todayLessonsList.size.toString(), "Lezioni visibili oggi"),
           DashboardStat("grades", "Voti non visti", unseenGrades.size.toString(), "Valutazioni da aprire"),
           DashboardStat("messages", "Comunicazioni", unreadCommunications.size.toString(), "Messaggi non letti"),
         ),
-        todayLessons = todayLessons,
+        todayLessons = todayLessonsList,
         recentGrades = recentGrades.take(6),
         unseenGrades = unseenGrades.take(6),
         upcomingItems = upcoming.take(8),
         unreadCommunications = unreadCommunications,
-        highlightedNotes = school.notes.filter { !it.read }.ifEmpty { school.notes }.take(3),
+        highlightedNotes = school.notes.filter { !it.read }.take(3),
         recentAbsences = academic.absences.sortedByDescending { it.date }.take(3),
         schoolDocuments = school.documents.take(2),
         syncStatus = syncStatus,
@@ -462,6 +497,7 @@ class SchoolDataRepository @Inject constructor(
           subject = event.subject,
           category = event.category,
           sharePayload = "${event.title} - ${event.date} ${event.time.orEmpty()}",
+          createdAt = event.createdAt,
         )
       }).sortedBy { "${it.date}-${it.time.orEmpty()}" }
     }
@@ -485,8 +521,10 @@ class SchoolDataRepository @Inject constructor(
             time = entity.time,
             detail = entity.detail,
             subject = entity.subject,
+            teacher = entity.teacher,
             category = AgendaCategory.valueOf(entity.category),
             sharePayload = entity.sharePayload,
+            createdAt = entity.createdAt ?: entity.firstSeenAtMs?.let(::epochMillisToCreatedAt),
           )
         }
       }
@@ -494,11 +532,23 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override fun observeCustomEvents(): Flow<List<CustomEvent>> = customEventDao.observeAll().map { entities ->
-    entities.map { json.decodeFromString<CustomEvent>(it.payload) }
+    entities.map { entity ->
+      val decoded = json.decodeFromString<CustomEvent>(entity.payload)
+      decoded.copy(createdAt = decoded.createdAt ?: entity.createdAt)
+    }
   }
 
   override suspend fun addCustomEvent(event: CustomEvent) {
-    customEventDao.upsert(CustomEventEntity(event.id, json.encodeToString(event), event.date, event.time))
+    val createdAt = event.createdAt ?: java.time.LocalDateTime.now().toString().take(16)
+    customEventDao.upsert(
+      CustomEventEntity(
+        id = event.id,
+        payload = json.encodeToString(event.copy(createdAt = createdAt)),
+        date = event.date,
+        time = event.time,
+        createdAt = createdAt,
+      ),
+    )
   }
 
   override suspend fun removeCustomEvent(id: String) {
@@ -518,6 +568,16 @@ class SchoolDataRepository @Inject constructor(
       buildLessonsWithFallback(lessons, agenda)
     }
   }
+
+  override fun observeTimetableTemplate(): Flow<TimetableTemplate> {
+    val storedFlow = schoolYearStore.observeSelectedSchoolYear().flatMapLatest { schoolYear ->
+      timetableTemplateStore.observeTemplate(schoolYear.id)
+    }
+    return combine(storedFlow, observeLessons()) { stored, lessons ->
+      if (stored.slots.isNotEmpty()) stored
+      else predictiveTimetableUseCase.generateTimetableTemplate(lessons)
+    }
+  }
   override suspend fun refreshLessons(force: Boolean): Result<List<Lesson>> = runCatching {
     syncCoordinator.refreshAll(force)
     observeLessons().firstValue()
@@ -529,10 +589,6 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun getHomeworkDetail(id: String): Result<HomeworkDetail> = runCatching {
-    val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    if (gatewayClient.isConfigured()) {
-      runCatching { gatewayClient.getHomeworkDetail(id, selectedYear) }.getOrNull()?.let { return@runCatching it }
-    }
     val homework = observeHomeworks().firstValue().firstOrNull { it.id == id }
       ?: syncCoordinator.refreshHomeworks(force = false).firstOrNull { it.id == id }
       ?: error("Compito non trovato.")
@@ -549,11 +605,54 @@ class SchoolDataRepository @Inject constructor(
 
   override suspend fun queueAttachmentDownload(attachment: RemoteAttachment): Result<Long> = queueDownload(attachment)
 
-  override fun observeCommunications(): Flow<List<Communication>> = observeYearScopedValue(CommunicationsSection, emptyList())
+  override fun observeCommunications(): Flow<List<Communication>> {
+    return combine(
+      sessionStore.session,
+      schoolYearStore.observeSelectedSchoolYear(),
+    ) { session, schoolYear ->
+      session to schoolYear
+    }.flatMapLatest { (session, schoolYear) ->
+      val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList<Communication>())
+      communicationDao.observeByYear(studentId, schoolYear.id).map { entities ->
+        entities.map { entity ->
+          Communication(
+            id = entity.id,
+            pubId = entity.pubId,
+            evtCode = entity.evtCode,
+            title = entity.title,
+            contentPreview = entity.contentPreview,
+            sender = entity.sender,
+            date = entity.date,
+            read = entity.read,
+            attachments = json.decodeFromString(entity.attachments),
+            category = entity.category,
+            needsAck = entity.needsAck,
+            needsReply = entity.needsReply,
+            needsJoin = entity.needsJoin,
+            needsFile = entity.needsFile,
+            actions = json.decodeFromString(entity.actions),
+            noticeboardAttachments = json.decodeFromString(entity.noticeboardAttachments),
+            capabilityState = json.decodeFromString(entity.capabilityState),
+          )
+        }
+      }
+    }
+  }
+
   override fun observeNotes(): Flow<List<Note>> = observeYearScopedValue(NotesSection, emptyList())
   override suspend fun refreshCommunications(force: Boolean): Result<List<Communication>> = runCatching {
     syncCoordinator.refreshAll(force)
     observeCommunications().firstValue()
+  }
+
+  override suspend fun markAllAsRead(): Result<Unit> = runCatching {
+    val session = sessionStore.session.value ?: return@runCatching
+    val schoolYear = schoolYearStore.observeSelectedSchoolYear().firstValue()
+    communicationDao.markAllRead(session.studentId, schoolYear.id)
+  }
+
+  override suspend fun markCommunicationRead(id: String): Result<Unit> = runCatching {
+    communicationDao.markRead(id)
   }
 
   override suspend fun getCommunicationDetail(pubId: String, evtCode: String): Result<CommunicationDetail> {
@@ -590,7 +689,34 @@ class SchoolDataRepository @Inject constructor(
     return syncCoordinator.uploadCommunicationFile(detail, fileName, mimeType, bytes)
   }
 
-  override fun observeMaterials(): Flow<List<MaterialItem>> = observeYearScopedValue(MaterialsSection, emptyList())
+  override fun observeMaterials(): Flow<List<MaterialItem>> {
+    return combine(
+      sessionStore.session,
+      schoolYearStore.observeSelectedSchoolYear(),
+    ) { session, schoolYear ->
+      session to schoolYear
+    }.flatMapLatest { (session, schoolYear) ->
+      val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList<MaterialItem>())
+      materialDao.observeByYear(studentId, schoolYear.id).map { entities ->
+        entities.map { entity ->
+          MaterialItem(
+            id = entity.id,
+            teacherId = entity.teacherId,
+            teacherName = entity.teacherName,
+            folderId = entity.folderId,
+            folderName = entity.folderName,
+            title = entity.title,
+            objectId = entity.objectId,
+            objectType = entity.objectType,
+            sharedAt = entity.sharedAt,
+            capabilityState = json.decodeFromString(entity.capabilityState),
+            attachments = json.decodeFromString(entity.attachments),
+          )
+        }
+      }
+    }
+  }
+
   override suspend fun refreshMaterials(force: Boolean): Result<List<MaterialItem>> = runCatching {
     syncCoordinator.refreshAll(force)
     observeMaterials().firstValue()
@@ -598,7 +724,29 @@ class SchoolDataRepository @Inject constructor(
 
   override suspend fun openAsset(item: MaterialItem): Result<MaterialAsset> = syncCoordinator.openMaterial(item)
 
-  override fun observeDocuments(): Flow<List<DocumentItem>> = observeYearScopedValue(DocumentsSection, emptyList())
+  override fun observeDocuments(): Flow<List<DocumentItem>> {
+    return combine(
+      sessionStore.session,
+      schoolYearStore.observeSelectedSchoolYear(),
+    ) { session, schoolYear ->
+      session to schoolYear
+    }.flatMapLatest { (session, schoolYear) ->
+      val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList<DocumentItem>())
+      documentDao.observeByYear(studentId, schoolYear.id).map { entities ->
+        entities.map { entity ->
+          DocumentItem(
+            id = entity.id,
+            title = entity.title,
+            detail = entity.detail,
+            viewUrl = entity.viewUrl,
+            confirmUrl = entity.confirmUrl,
+            capabilityState = json.decodeFromString(entity.capabilityState),
+          )
+        }
+      }
+    }
+  }
+
   override fun observeSchoolbooks(): Flow<List<SchoolbookCourse>> = observeYearScopedValue(SchoolbooksSection, emptyList())
   override suspend fun refreshDocuments(force: Boolean): Result<List<DocumentItem>> = runCatching {
     syncCoordinator.refreshAll(force)
@@ -612,10 +760,34 @@ class SchoolDataRepository @Inject constructor(
     queueDownloadInternal(url, document.title, null)
   }
 
-  override fun observeAbsences(): Flow<List<AbsenceRecord>> = observeYearScopedValue(AbsencesSection, emptyList())
-  override suspend fun refreshAbsences(force: Boolean): Result<List<AbsenceRecord>> = runCatching {
-    syncCoordinator.refreshAll(force)
-    observeAbsences().firstValue()
+  override fun observeAbsences(): Flow<List<AbsenceRecord>> {
+    return combine(
+      sessionStore.session,
+      schoolYearStore.observeSelectedSchoolYear(),
+    ) { session, schoolYear ->
+      session to schoolYear
+    }.flatMapLatest { (session, schoolYear) ->
+      val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList<AbsenceRecord>())
+      absenceDao.observeByYear(studentId, schoolYear.id).map { entities ->
+        entities.map { entity ->
+          AbsenceRecord(
+            id = entity.id,
+            date = entity.date,
+            type = AbsenceType.valueOf(entity.type),
+            hours = entity.hours,
+            justified = entity.justified,
+            canJustify = entity.canJustify,
+            justificationDate = entity.justificationDate,
+            justificationReason = entity.justificationReason,
+            justifyUrl = entity.justifyUrl,
+            detailUrl = entity.detailUrl,
+          )
+        }
+      }
+    }
+  }
+  override suspend fun refreshAbsences(force: Boolean): Result<List<AbsenceRecord>> {
+    return syncCoordinator.refreshAbsences(force)
   }
 
   override suspend fun justifyAbsence(
@@ -654,6 +826,10 @@ class SchoolDataRepository @Inject constructor(
   override suspend fun joinMeeting(booking: MeetingBooking): Result<MeetingJoinLink> {
     return syncCoordinator.joinMeeting(booking)
   }
+
+  override fun getPortalMeetingsUrl(): String = dev.antigravity.classevivaexpressive.core.network.client.PortalMeetingsUrl
+
+  override suspend fun getPortalSessionCookies() = syncCoordinator.getPortalSessionCookies()
 
   override fun observeSelectedSchoolYear(): Flow<SchoolYearRef> = schoolYearStore.observeSelectedSchoolYear()
   override fun observeAvailableSchoolYears(): Flow<List<SchoolYearRef>> = schoolYearStore.observeAvailableSchoolYears()
@@ -835,11 +1011,15 @@ internal fun buildLessonsWithFallback(
         time = item.time.orEmpty(),
         durationMinutes = 60,
         topic = item.detail ?: item.title,
+        teacher = item.teacher,
+        endTime = item.time?.takeIf(String::isNotBlank)?.let { start ->
+          runCatching { LocalTime.parse(start).plusMinutes(60).formatTime() }.getOrNull()
+        },
       )
     }
 
   val commonTimes = lessons
-    .mapNotNull { it.time.takeIf(String::isNotBlank) }
+    .mapNotNull { it.time.takeIf(::isClockTime) }
     .distinct()
     .sorted()
 
@@ -859,8 +1039,8 @@ private fun assignLessonSlots(
   commonTimes: List<String>,
 ): List<Lesson> {
   if (lessons.isEmpty()) return emptyList()
-  val sorted = lessons.sortedWith(compareBy<Lesson> { it.time.isBlank() }.thenBy { it.time })
-  val usedTimes = sorted.mapNotNull { it.time.takeIf(String::isNotBlank) }.toMutableSet()
+  val sorted = lessons.sortedWith(compareBy<Lesson> { !isClockTime(it.time) }.thenBy { it.time })
+  val usedTimes = sorted.mapNotNull { it.time.takeIf(::isClockTime) }.toMutableSet()
   val fallbackTimes = commonTimes.filterNot { usedTimes.contains(it) }.toMutableList()
   var generated = LocalTime.of(8, 0)
 
@@ -881,9 +1061,14 @@ private fun assignLessonSlots(
   }
 
   return sorted.map { lesson ->
+    val resolvedTime = lesson.time.takeIf(::isClockTime) ?: nextTime()
+    val resolvedDuration = lesson.durationMinutes.takeIf { it > 0 } ?: 60
     lesson.copy(
-      time = lesson.time.takeIf(String::isNotBlank) ?: nextTime(),
-      durationMinutes = lesson.durationMinutes.takeIf { it > 0 } ?: 60,
+      time = resolvedTime,
+      durationMinutes = resolvedDuration,
+      endTime = lesson.endTime?.takeIf(String::isNotBlank) ?: runCatching {
+        LocalTime.parse(resolvedTime).plusMinutes(resolvedDuration.toLong()).formatTime()
+      }.getOrNull(),
     )
   }
 }
@@ -897,12 +1082,22 @@ private fun Lesson.toDashboardAgendaItem(): AgendaItem {
     time = time.takeIf { it.isNotBlank() },
     detail = listOfNotNull(teacher, room).joinToString(" / ").ifBlank { null },
     subject = subject,
+    teacher = teacher,
     category = AgendaCategory.LESSON,
     sharePayload = listOf(subject, date, time, topic).filterNotNull().joinToString(" - "),
   )
 }
 
 private fun LocalTime.formatTime(): String = "%02d:%02d".format(hour, minute)
+private fun isClockTime(value: String): Boolean = runCatching { LocalTime.parse(value) }.isSuccess
+
+private fun epochMillisToCreatedAt(value: Long): String {
+  return java.time.Instant.ofEpochMilli(value)
+    .atZone(ZoneId.systemDefault())
+    .toLocalDateTime()
+    .toString()
+    .take(16)
+}
 
 internal fun computeStudentScore(stats: StatsSnapshot, absences: List<AbsenceRecord>): StudentScoreSnapshot {
   val averageScore = ((stats.overallAverage ?: 6.0) / 10.0) * 60.0
@@ -940,6 +1135,9 @@ object PlatformModule {
   fun provideDownloadManager(@ApplicationContext context: Context): DownloadManager {
     return context.getSystemService(DownloadManager::class.java)
   }
+
+  @Provides
+  fun providePredictiveTimetableUseCase(): PredictiveTimetableUseCase = PredictiveTimetableUseCase()
 }
 
 @Module

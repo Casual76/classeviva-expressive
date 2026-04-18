@@ -4,9 +4,9 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingWorkPolicy
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
@@ -24,7 +24,7 @@ import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.first
 
-private const val RefreshIntervalMinutes = 5L
+private const val RefreshIntervalMinutes = 15L
 
 @HiltWorker
 class SchoolSyncWorker @AssistedInject constructor(
@@ -55,10 +55,6 @@ class SchoolSyncWorker @AssistedInject constructor(
         notificationDispatcher.dispatch(previous = before, current = capturePayloads())
       }
     }
-
-    if (sessionStore.readCurrentSession() != null && settingsStore.settings.first().periodicSyncEnabled) {
-      SyncWorkScheduler.scheduleNext(applicationContext)
-    }
     return Result.success()
   }
 
@@ -78,35 +74,21 @@ class SchoolSyncWorker @AssistedInject constructor(
 
 object SyncWorkScheduler {
   fun schedule(context: Context) {
-    enqueue(context = context, delayMinutes = RefreshIntervalMinutes, replace = false)
-  }
-
-  internal fun scheduleNext(context: Context) {
-    enqueue(context = context, delayMinutes = RefreshIntervalMinutes, replace = true)
-  }
-
-  fun cancel(context: Context) {
-    WorkManager.getInstance(context).cancelUniqueWork(SchoolSyncWorker.UniquePeriodicWorkName)
-  }
-
-  private fun enqueue(
-    context: Context,
-    delayMinutes: Long,
-    replace: Boolean,
-  ) {
-    val request = OneTimeWorkRequestBuilder<SchoolSyncWorker>()
-      .setInitialDelay(delayMinutes, TimeUnit.MINUTES)
+    val request = PeriodicWorkRequestBuilder<SchoolSyncWorker>(RefreshIntervalMinutes, TimeUnit.MINUTES)
       .setConstraints(
         Constraints.Builder()
           .setRequiredNetworkType(NetworkType.CONNECTED)
           .build(),
       )
       .build()
-
-    WorkManager.getInstance(context).enqueueUniqueWork(
+    WorkManager.getInstance(context).enqueueUniquePeriodicWork(
       SchoolSyncWorker.UniquePeriodicWorkName,
-      if (replace) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+      ExistingPeriodicWorkPolicy.KEEP,
       request,
     )
+  }
+
+  fun cancel(context: Context) {
+    WorkManager.getInstance(context).cancelUniqueWork(SchoolSyncWorker.UniquePeriodicWorkName)
   }
 }
