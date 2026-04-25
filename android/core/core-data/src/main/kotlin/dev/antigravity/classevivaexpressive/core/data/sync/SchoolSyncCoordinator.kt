@@ -17,6 +17,7 @@ import dev.antigravity.classevivaexpressive.core.data.repository.ProfileSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SchoolbooksSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SubjectsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.buildLessonsWithFallback
+import dev.antigravity.classevivaexpressive.core.data.repository.toCommunication
 import dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceEntity
@@ -76,8 +77,12 @@ import java.time.ZoneId
 import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -100,6 +105,7 @@ class SchoolSyncCoordinator @Inject constructor(
 ) {
   private var activeSession: UserSession? = null
   val syncStatus = MutableStateFlow(SyncStatus())
+  private val syncMutex = Mutex()
 
   fun attachSession(session: UserSession?) {
     activeSession = session
@@ -133,16 +139,22 @@ class SchoolSyncCoordinator @Inject constructor(
   fun clearPortalSession() = portalClient.clearSession()
 
   suspend fun refreshAll(force: Boolean = false): SyncStatus {
+    if (!force && syncMutex.isLocked) return syncStatus.value
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    return refreshSchoolYear(selectedYear = selectedYear, force = force, refreshProfile = true)
+    return syncMutex.withLock {
+      refreshSchoolYear(selectedYear = selectedYear, force = force, refreshProfile = true)
+    }
   }
 
   suspend fun refreshCurrentSchoolYearForNotifications(force: Boolean = false): SyncStatus {
-    return refreshSchoolYear(
-      selectedYear = schoolYearStore.currentSchoolYearRef(),
-      force = force,
-      refreshProfile = false,
-    )
+    if (!force && syncMutex.isLocked) return syncStatus.value
+    return syncMutex.withLock {
+      refreshSchoolYear(
+        selectedYear = schoolYearStore.currentSchoolYearRef(),
+        force = force,
+        refreshProfile = false,
+      )
+    }
   }
 
   suspend fun refreshAbsences(force: Boolean = false): Result<List<AbsenceRecord>> = runCatching {
@@ -206,8 +218,18 @@ class SchoolSyncCoordinator @Inject constructor(
 
   suspend fun getCommunicationDetail(pubId: String, evtCode: String) = runCatching {
     val entity = communicationDao.getByPubIdAndEvtCode(pubId, evtCode)
-    val detail = if (entity != null) {
-      restClient.getCommunicationDetail(entity.toCommunication())
+    val base = entity?.toCommunication(json)
+    val detail = if (base != null) {
+      runCatching { restClient.getCommunicationDetail(base) }
+        .getOrElse {
+          // API rejected the read (e.g. 400 for already-acknowledged or 404) —
+          // serve the cached version so the sheet still opens with the stored content.
+          CommunicationDetail(
+            communication = base,
+            content = base.contentPreview.ifBlank { base.title },
+            actions = base.actions,
+          )
+        }
     } else {
       restClient.getCommunicationDetail(pubId, evtCode)
     }
@@ -224,20 +246,20 @@ class SchoolSyncCoordinator @Inject constructor(
     val session = activeSession ?: throw ClassevivaNetworkException("Sessione assente.")
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val unread = communicationDao.getUnread(session.studentId, selectedYear.id)
-    val failures = mutableListOf<String>()
-    for (entity in unread) {
-      if (entity.pubId.isBlank() || entity.evtCode.isBlank()) {
-        communicationDao.markRead(entity.id)
-        continue
-      }
-
-      val result = runCatching {
-        restClient.markNoticeboardRead(pubId = entity.pubId, evtCode = entity.evtCode)
-        communicationDao.markRead(entity.id)
-      }
-      if (result.isFailure) {
-        failures += entity.title.ifBlank { entity.id }
-      }
+    val failures = coroutineScope {
+      unread.map { entity ->
+        async {
+          if (entity.pubId.isBlank() || entity.evtCode.isBlank()) {
+            communicationDao.markRead(entity.id)
+            null
+          } else {
+            runCatching {
+              restClient.markNoticeboardRead(pubId = entity.pubId, evtCode = entity.evtCode)
+              communicationDao.markRead(entity.id)
+            }.exceptionOrNull()?.let { entity.title.ifBlank { entity.id } }
+          }
+        }
+      }.map { it.await() }.filterNotNull()
     }
 
     if (failures.isNotEmpty()) {
@@ -965,23 +987,4 @@ class SchoolSyncCoordinator @Inject constructor(
       .take(16)
   }
 
-  private fun CommunicationEntity.toCommunication(): Communication = Communication(
-    id = id,
-    pubId = pubId,
-    evtCode = evtCode,
-    title = title,
-    contentPreview = contentPreview,
-    sender = sender,
-    date = date,
-    read = read,
-    attachments = json.decodeFromString(attachments),
-    category = category,
-    needsAck = needsAck,
-    needsReply = needsReply,
-    needsJoin = needsJoin,
-    needsFile = needsFile,
-    actions = json.decodeFromString(actions),
-    noticeboardAttachments = json.decodeFromString(noticeboardAttachments),
-    capabilityState = json.decodeFromString(capabilityState),
-  )
 }

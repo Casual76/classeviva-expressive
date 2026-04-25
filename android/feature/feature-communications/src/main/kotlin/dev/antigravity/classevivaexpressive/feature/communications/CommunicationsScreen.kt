@@ -659,7 +659,7 @@ internal fun shouldShowUploadAction(detail: CommunicationDetail): Boolean {
 
 private fun detailActionHaystack(detail: CommunicationDetail): String {
   return (detail.communication.title + " " + detail.content + " " +
-    detail.communication.contentPreview + " " + (detail.communication.category ?: ""))
+    (detail.communication.category ?: ""))
     .lowercase(italianLocale)
 }
 
