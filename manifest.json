@@ -21,7 +21,7 @@
             "releaseTag": "stable-classeviva-expressive-v5.2.4",
             "apkAsset": "classeviva-expressive-5.2.4.apk",
             "exeAsset": "",
-            "sizeBytes": 0
+            "sizeBytes": 20764291
         },
         "beta": {
             "version": "5.2.4",
@@ -30,7 +30,7 @@
             "releaseTag": "stable-classeviva-expressive-v5.2.4",
             "apkAsset": "classeviva-expressive-5.2.4.apk",
             "exeAsset": "",
-            "sizeBytes": 0
+            "sizeBytes": 20764291
         },
         "history": [
             {
