@@ -25,6 +25,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -56,7 +58,6 @@ import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetai
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
-import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardAction
 import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardActionType
 import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
 import java.time.LocalDate
@@ -137,7 +138,7 @@ class CommunicationsViewModel @Inject constructor(
         selectedNote.value = null
         selectedCommunication.value = CommunicationDetail(
           communication = cached,
-          content = cached.contentPreview.ifBlank { "Caricamento contenuto…" },
+          content = cached.contentPreview.ifBlank { "Caricamento contenuto..." },
           actions = cached.actions,
         )
       }
@@ -276,9 +277,18 @@ fun CommunicationsRoute(
   var selectedTab by rememberSaveable { mutableStateOf(tabFromRoute(initialTab)) }
   var selectedFilter by rememberSaveable { mutableStateOf(FILTER_ALL) }
   var pendingUploadDetail by remember { mutableStateOf<CommunicationDetail?>(null) }
+  val snackbarHostState = remember { SnackbarHostState() }
 
   LaunchedEffect(initialTab) {
     selectedTab = tabFromRoute(initialTab)
+  }
+
+  LaunchedEffect(state.lastMessage) {
+    val message = state.lastMessage
+    if (!message.isNullOrBlank()) {
+      snackbarHostState.showSnackbar(message)
+      viewModel.clearMessage()
+    }
   }
 
   val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -321,6 +331,7 @@ fun CommunicationsRoute(
         },
       )
     },
+    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
   ) { paddingValues ->
     PullToRefreshBox(
       modifier = Modifier.fillMaxSize().padding(paddingValues),
@@ -408,9 +419,6 @@ fun CommunicationsRoute(
             }
           }
         }
-        if (!state.lastMessage.isNullOrBlank()) {
-          item { Text(text = state.lastMessage.orEmpty()) }
-        }
       }
     }
   }
@@ -467,7 +475,8 @@ fun CommunicationsRoute(
           }
         }
         item { Text(text = detail.content) }
-        if (detail.actions.any { it.type == NoticeboardActionType.REPLY } || detail.replyText != null) {
+        val canReply = shouldShowReplyComposer(detail)
+        if (canReply) {
           item { ExpressiveAccentLabel("Risposta") }
           item {
             OutlinedTextField(
@@ -476,6 +485,7 @@ fun CommunicationsRoute(
               modifier = Modifier.fillMaxWidth(),
               label = { Text(if (detail.replyText != null) "Risposta inviata" else "Scrivi una risposta") },
               minLines = 3,
+              readOnly = detail.replyText != null,
             )
           }
         }
@@ -507,7 +517,8 @@ fun CommunicationsRoute(
             CircularProgressIndicator()
           } else {
             CommunicationActions(
-              actions = detail.actions,
+              detail = detail,
+              canReply = canReply,
               replyDraft = replyDraft,
               onAcknowledge = { viewModel.acknowledge(detail) },
               onReply = { viewModel.reply(detail, replyDraft) },
@@ -562,43 +573,137 @@ fun CommunicationsRoute(
 
 @Composable
 private fun CommunicationActions(
-  actions: List<NoticeboardAction>,
+  detail: CommunicationDetail,
+  canReply: Boolean,
   replyDraft: String,
   onAcknowledge: () -> Unit,
   onReply: () -> Unit,
   onJoin: () -> Unit,
   onUpload: () -> Unit,
 ) {
+  val canAck = shouldShowAcknowledgeAction(detail)
+  val canJoin = shouldShowJoinAction(detail)
+  val canUpload = shouldShowUploadAction(detail)
+
   androidx.compose.foundation.layout.Column(
     modifier = Modifier.fillMaxWidth(),
     verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
-    actions.distinctBy { it.type }.forEach { action ->
-      when (action.type) {
-        NoticeboardActionType.ACKNOWLEDGE -> {
-          FilledTonalButton(onClick = onAcknowledge, modifier = Modifier.fillMaxWidth()) {
-            Text("Firma presa visione")
-          }
-        }
-        NoticeboardActionType.REPLY -> {
-          FilledTonalButton(onClick = onReply, enabled = replyDraft.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-            Text("Invia risposta")
-          }
-        }
-        NoticeboardActionType.JOIN -> {
-          FilledTonalButton(onClick = onJoin, modifier = Modifier.fillMaxWidth()) {
-            Text("Adesione")
-          }
-        }
-        NoticeboardActionType.UPLOAD -> {
-          TextButton(onClick = onUpload, modifier = Modifier.fillMaxWidth()) {
-            Text(action.label)
-          }
-        }
-        NoticeboardActionType.DOWNLOAD -> Unit
+    if (canAck) {
+      val ackLabel = when {
+        detail.communication.needsAck || !detail.acknowledgeUrl.isNullOrBlank() -> "Firma presa visione"
+        else -> "Conferma lettura"
+      }
+      FilledTonalButton(onClick = onAcknowledge, modifier = Modifier.fillMaxWidth()) {
+        Text(ackLabel)
+      }
+    }
+    if (canReply) {
+      FilledTonalButton(
+        onClick = onReply,
+        enabled = replyDraft.isNotBlank() && detail.replyText == null,
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Text(if (detail.replyText != null) "Risposta gia inviata" else "Invia risposta")
+      }
+    }
+    if (canJoin) {
+      FilledTonalButton(onClick = onJoin, modifier = Modifier.fillMaxWidth()) {
+        Text("Aderisci")
+      }
+    }
+    if (canUpload) {
+      val uploadLabel = detail.actions.firstOrNull { it.type == NoticeboardActionType.UPLOAD }?.label
+        ?: "Carica file"
+      TextButton(onClick = onUpload, modifier = Modifier.fillMaxWidth()) {
+        Text(uploadLabel)
       }
     }
   }
+}
+
+internal fun shouldShowAcknowledgeAction(detail: CommunicationDetail): Boolean {
+  val parsedTypes = detail.actions.map { it.type }.toSet()
+  return NoticeboardActionType.ACKNOWLEDGE in parsedTypes ||
+    detail.communication.needsAck ||
+    !detail.acknowledgeUrl.isNullOrBlank()
+}
+
+internal fun shouldShowReplyComposer(detail: CommunicationDetail): Boolean {
+  if (detail.replyText != null) return true
+  if (!detail.replyUrl.isNullOrBlank()) return true
+  return !detail.portalDetailUrl.isNullOrBlank() && (
+    detail.actions.any { it.type == NoticeboardActionType.REPLY } ||
+      detail.communication.needsReply ||
+      detectsReplyIntent(detail)
+    )
+}
+
+internal fun shouldShowJoinAction(detail: CommunicationDetail): Boolean {
+  if (!detail.joinUrl.isNullOrBlank()) return true
+  return !detail.portalDetailUrl.isNullOrBlank() && (
+    detail.actions.any { it.type == NoticeboardActionType.JOIN } ||
+      detail.communication.needsJoin ||
+      detectsJoinIntent(detail)
+    )
+}
+
+internal fun shouldShowUploadAction(detail: CommunicationDetail): Boolean {
+  if (!detail.fileUploadUrl.isNullOrBlank()) return true
+  return !detail.portalDetailUrl.isNullOrBlank() && (
+    detail.actions.any { it.type == NoticeboardActionType.UPLOAD } ||
+      detail.communication.needsFile ||
+      detectsUploadIntent(detail)
+    )
+}
+
+private fun detailActionHaystack(detail: CommunicationDetail): String {
+  return (detail.communication.title + " " + detail.content + " " +
+    detail.communication.contentPreview + " " + (detail.communication.category ?: ""))
+    .lowercase(italianLocale)
+}
+
+private fun containsActionKeywords(haystack: String, keywords: List<String>): Boolean {
+  return keywords.any { haystack.contains(it) }
+}
+
+private fun detectsReplyIntent(detail: CommunicationDetail): Boolean {
+  val haystack = detailActionHaystack(detail)
+  return listOf(
+    "rispost",
+    "rispond",
+    "questionar",
+    "feedback",
+    "motivazion",
+  ).any { haystack.contains(it) }
+}
+
+private fun detectsJoinIntent(detail: CommunicationDetail): Boolean {
+  return containsActionKeywords(
+    detailActionHaystack(detail),
+    listOf(
+      "adesion",
+      "aderisc",
+      "partecip",
+      "consenso",
+      "autorizzazion",
+      "prenot",
+    ),
+  )
+}
+
+private fun detectsUploadIntent(detail: CommunicationDetail): Boolean {
+  return containsActionKeywords(
+    detailActionHaystack(detail),
+    listOf(
+      "alleg",
+      "upload",
+      "caric",
+      "modul firm",
+      "pdf",
+      "file",
+    ),
+  )
 }
 
 private fun communicationTone(communication: Communication): ExpressiveTone {

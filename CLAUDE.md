@@ -36,21 +36,24 @@ app  →  feature-*  →  core-data  →  core-domain (pure Kotlin)
 ```
 
 - **`core-domain`**: Models, repository interfaces, use cases — no Android dependencies.
-- **`core-network`**: Retrofit/OkHttp API clients. Two clients exist: `ClassevivaApiService` (official Classeviva REST) and `GatewayClient` (tenant-specific flows via the controlled FastAPI gateway).
+- **`core-network`**: Retrofit/OkHttp clients. Three entry points live side by side: `ClassevivaApiService` (official REST, via `RestClient`), `PortalClient` (scraped web-portal flows), and `GatewayClient` (controlled FastAPI gateway). `ApiSessionManager` owns token lifecycle; `NetworkModule` wires the shared OkHttp/Retrofit graph.
 - **`core-data`**: Repository implementations, WorkManager sync scheduler (`SyncWorkScheduler`).
 - **`core-database`**: Room DAOs and entities.
 - **`core-datastore`**: DataStore preferences and encrypted settings.
 - **`core-designsystem`**: Shared Material 3 Compose components, theme (supports System/Light/Dark/AMOLED + brand/dynamic/custom color).
-- **`feature-*`**: 11 feature modules, each owns its Screen composable and ViewModel.
+- **`feature-*`**: 7 feature modules — `dashboard`, `grades`, `agenda`, `lessons`, `communications`, `absences`, `settings` — each owns its Screen composable and ViewModel. Secondary screens (materials, documents, notes, schoolbooks, meetings, …) are hosted inside the `feature-*` modules above and reached from `MoreHubScreen`.
+
+All Kotlin sources sit under the package root `dev.antigravity.classevivaexpressive`.
 
 ### Feature Capability System
 
-Classeviva capabilities are year-scoped and tagged with a `FeatureCapabilityMode`:
-- `DIRECT_REST` — covered by official Classeviva REST API.
-- `GATEWAY` — routes through the controlled FastAPI gateway (justifications, noticeboard reply/upload, meetings, deliverable homework).
+Classeviva capabilities are year-scoped and tagged with a `FeatureCapabilityMode` (see [DomainModels.kt](android/core/core-domain/src/main/kotlin/dev/antigravity/classevivaexpressive/core/domain/model/DomainModels.kt)):
+- `DIRECT_REST` — covered by the official Classeviva REST API (`ClassevivaApiService` / `RestClient`).
+- `DIRECT_PORTAL` — scraped from the web portal via `PortalClient` when no stable REST exists.
+- `GATEWAY` — routes through the controlled FastAPI gateway (justifications, noticeboard reply/join/upload, meetings, deliverable homework).
 - `TENANT_OPTIONAL` / `UNSUPPORTED` — handled accordingly.
 
-When adding or modifying a feature, check the domain's `RegistroFeature` enum and the relevant `FeatureCapabilityMode` before choosing the data path.
+`RegistroFeature` enumerates every capability the app can expose. When adding or modifying a feature, pick the correct `RegistroFeature` entry and capability mode before choosing the data path — repositories in `core-data` branch on this to decide which client to hit.
 
 ### UI Pattern
 

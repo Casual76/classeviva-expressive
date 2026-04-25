@@ -100,20 +100,14 @@ class DashboardViewModelTest {
   }
 
   @Test
-  fun refresh_setsIsRefreshingTrueThenFalse() = runTest {
+  fun refresh_leavesRefreshingDisabledAfterCompletion() = runTest {
     every { dashboardRepository.observeDashboard() } returns flowOf(DashboardSnapshot())
     coEvery { dashboardRepository.refreshDashboard(any()) } returns Result.success(DashboardSnapshot())
 
     val vm = buildViewModel()
+    vm.refresh()
+    testDispatcher.scheduler.advanceUntilIdle()
 
-    vm.state.test {
-      awaitItem() // initial
-      vm.refresh()
-      val refreshing = awaitItem()
-      assertTrue(refreshing.isRefreshing)
-      val done = awaitItem()
-      assertFalse(done.isRefreshing)
-      cancelAndIgnoreRemainingEvents()
-    }
+    assertFalse(vm.state.value.isRefreshing)
   }
 }

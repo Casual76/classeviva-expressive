@@ -1,19 +1,15 @@
 package dev.antigravity.classevivaexpressive.core.data.repository
 
-import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.FeatureCapabilityMode
-import dev.antigravity.classevivaexpressive.core.domain.model.NetworkConfig
 import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
-import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -24,27 +20,15 @@ class CapabilityResolverTest {
 
   private fun buildResolver(
     selectedYear: SchoolYearRef = currentYear,
-    gatewayConfigured: Boolean = false,
   ): DefaultCapabilityResolver {
     val schoolYearStore = mockk<SchoolYearStore>()
-    val settingsStore = mockk<SettingsStore>()
-
     every { schoolYearStore.observeSelectedSchoolYear() } returns flowOf(selectedYear)
-    every { schoolYearStore.currentSchoolYearRef() } returns currentYear
-    every { settingsStore.settings } returns flowOf(
-      AppSettings(
-        networkConfig = NetworkConfig(
-          gatewayBaseUrl = if (gatewayConfigured) "http://gateway" else ""
-        )
-      )
-    )
-
-    return DefaultCapabilityResolver(schoolYearStore, settingsStore)
+    return DefaultCapabilityResolver(schoolYearStore)
   }
 
   @Test
   fun gradesFeature_isDirectRestForCurrentYear() = runTest {
-    val resolver = buildResolver(selectedYear = currentYear, gatewayConfigured = false)
+    val resolver = buildResolver(selectedYear = currentYear)
 
     val matrix = resolver.observeCapabilityMatrix().first()
     val grades = matrix.first { it.feature == RegistroFeature.GRADES }
@@ -54,62 +38,41 @@ class CapabilityResolverTest {
   }
 
   @Test
-  fun gradesFeature_requiresGatewayForPreviousYear() = runTest {
-    val resolver = buildResolver(selectedYear = previousYear, gatewayConfigured = true)
+  fun gradesFeature_staysDirectRestForPreviousYear() = runTest {
+    val resolver = buildResolver(selectedYear = previousYear)
 
     val matrix = resolver.observeCapabilityMatrix().first()
     val grades = matrix.first { it.feature == RegistroFeature.GRADES }
 
-    assertEquals(FeatureCapabilityMode.GATEWAY, grades.mode)
+    assertEquals(FeatureCapabilityMode.DIRECT_REST, grades.mode)
+    assertTrue(grades.enabled)
   }
 
   @Test
-  fun gradesFeature_isGatewayModeButDisabledWhenPreviousYearAndNoGateway() = runTest {
-    val resolver = buildResolver(selectedYear = previousYear, gatewayConfigured = false)
-
-    val matrix = resolver.observeCapabilityMatrix().first()
-    val grades = matrix.first { it.feature == RegistroFeature.GRADES }
-
-    assertEquals(FeatureCapabilityMode.GATEWAY, grades.mode)
-    assertFalse(grades.enabled)
-  }
-
-  @Test
-  fun absenceJustificationsFeature_isGatewayMode() = runTest {
-    val resolver = buildResolver(gatewayConfigured = true)
+  fun absenceJustificationsFeature_isPortalMode() = runTest {
+    val resolver = buildResolver()
 
     val matrix = resolver.observeCapabilityMatrix().first()
     val justifications = matrix.first { it.feature == RegistroFeature.ABSENCE_JUSTIFICATIONS }
 
-    assertEquals(FeatureCapabilityMode.GATEWAY, justifications.mode)
+    assertEquals(FeatureCapabilityMode.DIRECT_PORTAL, justifications.mode)
     assertTrue(justifications.enabled)
   }
 
   @Test
-  fun absenceJustificationsFeature_isDisabledWhenGatewayNotConfigured() = runTest {
-    val resolver = buildResolver(gatewayConfigured = false)
-
-    val matrix = resolver.observeCapabilityMatrix().first()
-    val justifications = matrix.first { it.feature == RegistroFeature.ABSENCE_JUSTIFICATIONS }
-
-    assertEquals(FeatureCapabilityMode.GATEWAY, justifications.mode)
-    assertFalse(justifications.enabled)
-  }
-
-  @Test
-  fun noticeboardReplyFeature_isGatewayMode() = runTest {
-    val resolver = buildResolver(gatewayConfigured = true)
+  fun noticeboardReplyFeature_isPortalMode() = runTest {
+    val resolver = buildResolver()
 
     val matrix = resolver.observeCapabilityMatrix().first()
     val reply = matrix.first { it.feature == RegistroFeature.NOTICEBOARD_REPLY }
 
-    assertEquals(FeatureCapabilityMode.GATEWAY, reply.mode)
+    assertEquals(FeatureCapabilityMode.DIRECT_PORTAL, reply.mode)
     assertTrue(reply.enabled)
   }
 
   @Test
   fun loginSessionFeature_isAlwaysDirectRest() = runTest {
-    val resolver = buildResolver(gatewayConfigured = false)
+    val resolver = buildResolver()
 
     val capability = resolver.observeCapability(RegistroFeature.LOGIN_SESSION).first()
 
@@ -119,7 +82,7 @@ class CapabilityResolverTest {
 
   @Test
   fun notificationsFeature_isAlwaysDirectRest() = runTest {
-    val resolver = buildResolver(gatewayConfigured = false)
+    val resolver = buildResolver()
 
     val capability = resolver.observeCapability(RegistroFeature.NOTIFICATIONS).first()
 
@@ -129,7 +92,7 @@ class CapabilityResolverTest {
 
   @Test
   fun sportelloFeature_isTenantOptional() = runTest {
-    val resolver = buildResolver(gatewayConfigured = false)
+    val resolver = buildResolver()
 
     val matrix = resolver.observeCapabilityMatrix().first()
     val sportello = matrix.first { it.feature == RegistroFeature.SPORTELLO }
@@ -138,20 +101,19 @@ class CapabilityResolverTest {
   }
 
   @Test
-  fun meetingsFeature_isGatewayMode() = runTest {
-    val resolver = buildResolver(gatewayConfigured = true)
+  fun meetingsFeature_isPortalMode() = runTest {
+    val resolver = buildResolver()
 
     val capability = resolver.observeCapability(RegistroFeature.MEETINGS).first()
 
-    assertEquals(FeatureCapabilityMode.GATEWAY, capability.mode)
+    assertEquals(FeatureCapabilityMode.DIRECT_PORTAL, capability.mode)
     assertTrue(capability.enabled)
   }
 
   @Test
-  fun observeCapability_returnsUnsupportedForUnknownFeature() = runTest {
+  fun questionnairesFeature_isTenantOptional() = runTest {
     val resolver = buildResolver()
 
-    // QUESTIONNAIRES is in the matrix but we can verify it returns TENANT_OPTIONAL
     val capability = resolver.observeCapability(RegistroFeature.QUESTIONNAIRES).first()
 
     assertEquals(FeatureCapabilityMode.TENANT_OPTIONAL, capability.mode)

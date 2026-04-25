@@ -160,6 +160,20 @@ class ClassevivaRestClient @Inject constructor(
     }
   }
 
+  suspend fun getCommunicationDetail(base: Communication): CommunicationDetail = withContext(Dispatchers.IO) {
+    val session = requireSession()
+    apiCall {
+      normalizeCommunicationDetail(
+        apiService.readNoticeboard(
+          studentId = session.studentId,
+          evtCode = base.evtCode,
+          pubId = base.pubId,
+        ).toPayload(),
+        base,
+      ).withOfficialAttachmentUrls(session.studentId)
+    }
+  }
+
   suspend fun getCommunicationDetail(pubId: String, evtCode: String): CommunicationDetail = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {
@@ -173,6 +187,18 @@ class ClassevivaRestClient @Inject constructor(
         ).toPayload(),
         base,
       ).withOfficialAttachmentUrls(session.studentId)
+    }
+  }
+
+  suspend fun markNoticeboardRead(pubId: String, evtCode: String): Unit = withContext(Dispatchers.IO) {
+    val session = requireSession()
+    apiCall {
+      apiService.readNoticeboard(
+        studentId = session.studentId,
+        evtCode = evtCode,
+        pubId = pubId,
+      )
+      Unit
     }
   }
 

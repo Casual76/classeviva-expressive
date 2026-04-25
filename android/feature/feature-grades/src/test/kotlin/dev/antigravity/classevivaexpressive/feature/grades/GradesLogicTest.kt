@@ -46,8 +46,8 @@ class GradesLogicTest {
       Grade(id = "3", subject = "Fisica", valueLabel = "4", numericValue = 4.0, date = "2026-02-10", type = "Scritto", weight = 1.0),
     )
 
-    assertEquals("devi prendere almeno 9,0", calculateRequiredGradeMessage(weightedGrades, 7.0))
-    assertEquals("Media non raggiungibile con un singolo voto", calculateRequiredGradeMessage(impossibleGrades, 9.0))
+    assertEquals("Serve almeno 9,0", calculateRequiredGradeMessage(weightedGrades, 7.0))
+    assertEquals("Lontano dal target", calculateRequiredGradeMessage(impossibleGrades, 9.0))
   }
 
   @Test
@@ -57,7 +57,7 @@ class GradesLogicTest {
       Grade(id = "2", subject = "Italiano", valueLabel = "9", numericValue = 9.0, date = "2026-03-10", type = "Orale", weight = 1.0),
     )
 
-    assertEquals("non prendere meno di 5,5", calculateRequiredGradeMessage(grades, 7.5))
+    assertEquals("Soglia sicura: 5,5", calculateRequiredGradeMessage(grades, 7.5))
   }
 
   @Test
@@ -67,12 +67,12 @@ class GradesLogicTest {
       Grade(id = "2", subject = "Storia", valueLabel = "9", numericValue = 9.0, date = "2026-03-10", type = "Orale", weight = 1.0),
     )
 
-    assertEquals("non ti preoccupare!", calculateRequiredGradeMessage(grades, 6.0))
+    assertEquals("Target sicuro", calculateRequiredGradeMessage(grades, 6.0))
   }
 
   @Test
   fun calculateRequiredGradeMessage_withEmptyGradeListReturnsTargetMessage() {
-    assertEquals("devi prendere almeno 7,0", calculateRequiredGradeMessage(emptyList(), 7.0))
+    assertEquals("Serve almeno 7,0", calculateRequiredGradeMessage(emptyList(), 7.0))
   }
 
   @Test
