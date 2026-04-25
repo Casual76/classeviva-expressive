@@ -237,6 +237,8 @@ class SchoolSyncCoordinator @Inject constructor(
     detail
   }
 
+  suspend fun downloadAttachmentBytes(url: String): ByteArray = restClient.downloadAttachmentBytes(url)
+
   suspend fun markCommunicationReadRemotely(id: String, pubId: String, evtCode: String): Result<Unit> = runCatching {
     restClient.markNoticeboardRead(pubId = pubId, evtCode = evtCode)
     communicationDao.markRead(id)

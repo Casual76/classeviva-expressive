@@ -154,6 +154,17 @@ data class CommunicationEntity(
   val capabilityState: String, // JSON
 )
 
+@Entity(tableName = "attachment_cache")
+data class AttachmentCacheEntity(
+  @PrimaryKey val urlKey: String,
+  val sourceUrl: String,
+  val localPath: String,
+  val fileName: String,
+  val mimeType: String?,
+  val downloadedAtMs: Long,
+  val lastAccessedMs: Long,
+)
+
 @Entity(tableName = "materials")
 data class MaterialEntity(
   @PrimaryKey val id: String,
@@ -373,6 +384,21 @@ interface ReadNoteDao {
   suspend fun upsert(entity: ReadNoteEntity)
 }
 
+@Dao
+interface AttachmentCacheDao {
+  @Query("SELECT * FROM attachment_cache WHERE urlKey = :urlKey LIMIT 1")
+  suspend fun getByUrlKey(urlKey: String): AttachmentCacheEntity?
+
+  @Query("SELECT * FROM attachment_cache WHERE lastAccessedMs < :beforeMs")
+  suspend fun getExpiredBefore(beforeMs: Long): List<AttachmentCacheEntity>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsert(entity: AttachmentCacheEntity)
+
+  @Query("DELETE FROM attachment_cache WHERE urlKey = :urlKey")
+  suspend fun deleteByUrlKey(urlKey: String)
+}
+
 @Database(
   entities = [
     SnapshotCacheEntity::class,
@@ -389,8 +415,9 @@ interface ReadNoteDao {
     MaterialEntity::class,
     DocumentEntity::class,
     ReadNoteEntity::class,
+    AttachmentCacheEntity::class,
   ],
-  version = 6,
+  version = 7,
   exportSchema = false,
 )
 abstract class SchoolDatabase : RoomDatabase() {
@@ -408,6 +435,7 @@ abstract class SchoolDatabase : RoomDatabase() {
   abstract fun materialDao(): MaterialDao
   abstract fun documentDao(): DocumentDao
   abstract fun readNoteDao(): ReadNoteDao
+  abstract fun attachmentCacheDao(): AttachmentCacheDao
 }
 
 @Module
@@ -463,4 +491,7 @@ object DatabaseModule {
 
   @Provides
   fun provideReadNoteDao(database: SchoolDatabase): ReadNoteDao = database.readNoteDao()
+
+  @Provides
+  fun provideAttachmentCacheDao(database: SchoolDatabase): AttachmentCacheDao = database.attachmentCacheDao()
 }

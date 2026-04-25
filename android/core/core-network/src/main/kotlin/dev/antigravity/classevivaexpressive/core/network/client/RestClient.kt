@@ -182,14 +182,21 @@ class ClassevivaRestClient @Inject constructor(
 
   suspend fun markNoticeboardRead(pubId: String, evtCode: String): Unit = withContext(Dispatchers.IO) {
     val session = requireSession()
-    apiCall {
-      apiService.readNoticeboard(
-        studentId = session.studentId,
-        evtCode = evtCode,
-        pubId = pubId,
-      )
-      Unit
+    // Best-effort: 400 means already acknowledged — that's fine, ignore all errors.
+    runCatching {
+      apiCall {
+        apiService.readNoticeboard(
+          studentId = session.studentId,
+          evtCode = evtCode,
+          pubId = pubId,
+        )
+        Unit
+      }
     }
+  }
+
+  suspend fun downloadAttachmentBytes(url: String): ByteArray = withContext(Dispatchers.IO) {
+    apiCall { apiService.downloadByUrl(url) }.use { it.bytes() }
   }
 
   suspend fun getAgenda(startDate: String, endDate: String): List<dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem> = withContext(Dispatchers.IO) {
