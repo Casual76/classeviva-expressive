@@ -774,6 +774,8 @@ interface CommunicationsRepository {
   suspend fun getCommunicationDetail(pubId: String, evtCode: String): Result<CommunicationDetail>
   suspend fun getNoteDetail(id: String, categoryCode: String): Result<NoteDetail>
   suspend fun queueDownload(attachment: RemoteAttachment): Result<Long>
+  /** Downloads the attachment if not locally cached (or if expired), returns its absolute local path. */
+  suspend fun resolveAttachmentLocalPath(attachment: RemoteAttachment): Result<String>
   suspend fun acknowledgeCommunication(detail: CommunicationDetail): Result<CommunicationDetail>
   suspend fun replyToCommunication(detail: CommunicationDetail, text: String): Result<CommunicationDetail>
   suspend fun joinCommunication(detail: CommunicationDetail): Result<CommunicationDetail>

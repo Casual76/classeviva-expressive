@@ -22,6 +22,8 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNoti
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
 import dev.antigravity.classevivaexpressive.core.database.database.GradeDao
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
+import dev.antigravity.classevivaexpressive.core.database.database.AttachmentCacheDao
+import dev.antigravity.classevivaexpressive.core.database.database.AttachmentCacheEntity
 import dev.antigravity.classevivaexpressive.core.database.database.CommunicationDao
 import dev.antigravity.classevivaexpressive.core.database.database.CommunicationEntity
 import dev.antigravity.classevivaexpressive.core.database.database.MaterialDao
@@ -237,6 +239,7 @@ class SchoolDataRepository @Inject constructor(
   private val agendaDao: AgendaDao,
   private val absenceDao: AbsenceDao,
   private val communicationDao: CommunicationDao,
+  private val attachmentCacheDao: AttachmentCacheDao,
   private val materialDao: MaterialDao,
   private val documentDao: DocumentDao,
   private val syncCoordinator: SchoolSyncCoordinator,
@@ -634,14 +637,11 @@ class SchoolDataRepository @Inject constructor(
   override suspend fun markCommunicationRead(id: String): Result<Unit> = runCatching {
     val entity = communicationDao.getById(id)
     if (entity != null && entity.pubId.isNotBlank() && entity.evtCode.isNotBlank()) {
-      syncCoordinator.markCommunicationReadRemotely(id, entity.pubId, entity.evtCode)
-        .getOrElse {
-          communicationDao.markRead(id)
-          throw it
-        }
-    } else {
-      communicationDao.markRead(id)
+      // Best-effort remote mark — markNoticeboardRead now swallows 400 (already read).
+      runCatching { syncCoordinator.markCommunicationReadRemotely(id, entity.pubId, entity.evtCode) }
     }
+    // Always persist locally regardless of remote outcome.
+    communicationDao.markRead(id)
   }
 
   override suspend fun getCommunicationDetail(pubId: String, evtCode: String): Result<CommunicationDetail> {
@@ -655,6 +655,66 @@ class SchoolDataRepository @Inject constructor(
   override suspend fun queueDownload(attachment: RemoteAttachment): Result<Long> = runCatching {
     require(!attachment.url.isNullOrBlank()) { "Nessun URL disponibile per l'allegato." }
     queueDownloadInternal(attachment.url!!, attachment.name, attachment.mimeType)
+  }
+
+  override suspend fun resolveAttachmentLocalPath(attachment: RemoteAttachment): Result<String> = runCatching {
+    require(!attachment.url.isNullOrBlank()) { "Nessun URL disponibile per l'allegato." }
+    val url = attachment.url!!
+    val urlKey = url.trim().take(250)
+    val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000
+
+    val cacheDir = java.io.File(context.filesDir, "attachment_cache")
+
+    // Return cached file if still valid.
+    val cached = attachmentCacheDao.getByUrlKey(urlKey)
+    if (cached != null) {
+      val file = java.io.File(cached.localPath)
+      if (file.exists() && System.currentTimeMillis() - cached.lastAccessedMs < thirtyDaysMs) {
+        attachmentCacheDao.upsert(cached.copy(lastAccessedMs = System.currentTimeMillis()))
+        cleanupExpiredAttachments(cacheDir, thirtyDaysMs)
+        return@runCatching cached.localPath
+      }
+      // File missing or expired — evict and re-download.
+      runCatching { java.io.File(cached.localPath).delete() }
+      attachmentCacheDao.deleteByUrlKey(urlKey)
+    }
+
+    // Download with auth headers via the RestClient.
+    val bytes = syncCoordinator.downloadAttachmentBytes(url)
+    val safeBase = sanitizeFileName(attachment.name.ifBlank { "allegato" })
+    val hashSuffix = url.hashCode().let { if (it < 0) "m${-it}" else "$it" }
+    val fileName = run {
+      val dot = safeBase.lastIndexOf('.')
+      if (dot > 0) "${safeBase.substring(0, dot)}_$hashSuffix${safeBase.substring(dot)}"
+      else "${safeBase}_$hashSuffix"
+    }
+    cacheDir.mkdirs()
+    val file = java.io.File(cacheDir, fileName)
+    file.writeBytes(bytes)
+
+    val now = System.currentTimeMillis()
+    attachmentCacheDao.upsert(
+      AttachmentCacheEntity(
+        urlKey = urlKey,
+        sourceUrl = url,
+        localPath = file.absolutePath,
+        fileName = fileName,
+        mimeType = attachment.mimeType,
+        downloadedAtMs = now,
+        lastAccessedMs = now,
+      )
+    )
+    cleanupExpiredAttachments(cacheDir, thirtyDaysMs)
+    file.absolutePath
+  }
+
+  private suspend fun cleanupExpiredAttachments(cacheDir: java.io.File, thirtyDaysMs: Long) {
+    val cutoff = System.currentTimeMillis() - thirtyDaysMs
+    val expired = attachmentCacheDao.getExpiredBefore(cutoff)
+    for (entry in expired) {
+      runCatching { java.io.File(entry.localPath).delete() }
+      attachmentCacheDao.deleteByUrlKey(entry.urlKey)
+    }
   }
 
   override suspend fun acknowledgeCommunication(detail: CommunicationDetail): Result<CommunicationDetail> {

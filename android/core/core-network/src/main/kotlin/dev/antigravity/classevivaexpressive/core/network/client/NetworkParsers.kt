@@ -218,7 +218,7 @@ internal fun normalizeCommunication(data: JsonElement): Communication {
     evtCode = obj.string("evtCode", "code").orEmpty(),
     title = sanitizeRegisterText(obj.string("cntTitle", "title", "titolo", "evtTitle")) ?: "Comunicazione",
     contentPreview = preview(
-      sanitizeRegisterText(obj.string("itemText", "texto", "content", "description", "notes", "cntCategory")).orEmpty(),
+      sanitizeRegisterText(obj.string("cntText", "itemText", "texto", "content", "description", "notes")).orEmpty(),
       "",
     ),
     sender = sanitizeRegisterText(obj.string("authorName", "mittente", "sender")) ?: "Scuola",
@@ -265,7 +265,7 @@ internal fun normalizeCommunicationDetail(root: JsonObject, base: Communication)
   val mergedActions = actions.ifEmpty { base.actions }
   val communication = base.copy(
     contentPreview = preview(
-      sanitizeRegisterText(item.string("text", "evtText", "content", "description")) ?: base.contentPreview,
+      sanitizeRegisterText(item.string("cntText", "text", "evtText", "content", "description")) ?: base.contentPreview,
       base.contentPreview,
     ),
     attachments = mergedAttachments,
@@ -279,7 +279,7 @@ internal fun normalizeCommunicationDetail(root: JsonObject, base: Communication)
   )
   return CommunicationDetail(
     communication = communication,
-    content = sanitizeRegisterText(item.string("text", "evtText", "content", "description"))
+    content = sanitizeRegisterText(item.string("cntText", "text", "evtText", "content", "description"))
       ?: base.contentPreview,
     replyText = sanitizeRegisterText(reply.string("text", "replyText", "description")),
     portalDetailUrl = portalDetailUrl,

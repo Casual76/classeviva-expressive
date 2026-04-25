@@ -1,8 +1,10 @@
 package dev.antigravity.classevivaexpressive.feature.communications
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -84,6 +86,7 @@ data class CommunicationsUiState(
   val lastMessage: String? = null,
   val isSubmittingAction: Boolean = false,
   val isRefreshing: Boolean = false,
+  val pendingOpenUri: Uri? = null,
 )
 
 @HiltViewModel
@@ -95,6 +98,7 @@ class CommunicationsViewModel @Inject constructor(
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isSubmittingAction = MutableStateFlow(false)
   private val isRefreshing = MutableStateFlow(false)
+  private val pendingOpenUri = MutableStateFlow<Uri?>(null)
 
   private val contentState = combine(
     communicationsRepository.observeCommunications(),
@@ -109,8 +113,8 @@ class CommunicationsViewModel @Inject constructor(
     selectedNote,
     lastMessage,
     isSubmittingAction,
-    isRefreshing,
-  ) { content, note, message, submitting, refreshing ->
+    combine(isRefreshing, pendingOpenUri) { r, u -> r to u },
+  ) { content, note, message, submitting, (refreshing, openUri) ->
     val (communications, notes, communication) = content
     CommunicationsUiState(
       communications = communications,
@@ -120,6 +124,7 @@ class CommunicationsViewModel @Inject constructor(
       lastMessage = message,
       isSubmittingAction = submitting,
       isRefreshing = refreshing,
+      pendingOpenUri = openUri,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CommunicationsUiState())
 
@@ -176,6 +181,24 @@ class CommunicationsViewModel @Inject constructor(
     }
   }
 
+  fun openAttachment(attachment: RemoteAttachment, context: Context) {
+    viewModelScope.launch {
+      isSubmittingAction.value = true
+      communicationsRepository.resolveAttachmentLocalPath(attachment)
+        .onSuccess { path ->
+          val file = java.io.File(path)
+          val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+          pendingOpenUri.value = uri
+        }
+        .onFailure { lastMessage.value = it.message ?: "Impossibile aprire l'allegato." }
+      isSubmittingAction.value = false
+    }
+  }
+
+  fun clearPendingUri() {
+    pendingOpenUri.value = null
+  }
+
   fun acknowledge(detail: CommunicationDetail) {
     runCommunicationAction(
       successMessage = "Conferma inviata.",
@@ -226,7 +249,16 @@ class CommunicationsViewModel @Inject constructor(
   }
 
   fun markCommunicationRead(id: String) {
-    viewModelScope.launch { communicationsRepository.markCommunicationRead(id) }
+    viewModelScope.launch {
+      communicationsRepository.markCommunicationRead(id)
+      // Immediately reflect the new read state in the open bottom sheet.
+      val current = selectedCommunication.value
+      if (current != null && current.communication.id == id) {
+        selectedCommunication.value = current.copy(
+          communication = current.communication.copy(read = true),
+        )
+      }
+    }
   }
 
   fun clearMessage() {
@@ -289,6 +321,15 @@ fun CommunicationsRoute(
       snackbarHostState.showSnackbar(message)
       viewModel.clearMessage()
     }
+  }
+
+  LaunchedEffect(state.pendingOpenUri) {
+    val uri = state.pendingOpenUri ?: return@LaunchedEffect
+    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, "Apri allegato"))
+    viewModel.clearPendingUri()
   }
 
   val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -495,19 +536,32 @@ fun CommunicationsRoute(
             RegisterListRow(
               title = attachment.name,
               subtitle = attachment.mimeType ?: "Allegato",
-              meta = if (attachment.portalOnly) "Endpoint non ufficiale non disponibile" else "Download diretto",
+              meta = if (attachment.portalOnly) "Endpoint non ufficiale non disponibile" else "Tocca per aprire",
               tone = ExpressiveTone.Neutral,
               badge = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
               onClick = {
-                viewModel.downloadAttachment(
-                  RemoteAttachment(
-                    id = attachment.id,
-                    name = attachment.name,
-                    url = attachment.url,
-                    mimeType = attachment.mimeType,
-                    portalOnly = attachment.portalOnly,
-                  ),
-                )
+                if (!attachment.portalOnly) {
+                  viewModel.openAttachment(
+                    RemoteAttachment(
+                      id = attachment.id,
+                      name = attachment.name,
+                      url = attachment.url,
+                      mimeType = attachment.mimeType,
+                      portalOnly = attachment.portalOnly,
+                    ),
+                    context,
+                  )
+                } else {
+                  viewModel.downloadAttachment(
+                    RemoteAttachment(
+                      id = attachment.id,
+                      name = attachment.name,
+                      url = attachment.url,
+                      mimeType = attachment.mimeType,
+                      portalOnly = attachment.portalOnly,
+                    ),
+                  )
+                }
               },
             )
           }

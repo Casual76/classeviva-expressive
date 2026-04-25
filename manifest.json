@@ -15,24 +15,33 @@
             "ref": ""
         },
         "stable": {
-            "version": "5.2.3",
+            "version": "5.2.4",
             "releaseDate": "2026-04-25",
-            "changelog": "Fix bacheca: eliminata la chiamata GET /noticeboard ridondante all'apertura del dettaglio. L'apertura di una comunicazione ora richiede una sola chiamata API (POST /read) invece di tre, usando la cache locale del DB come sorgente base.",
-            "releaseTag": "stable-classeviva-expressive-v5.2.3",
-            "apkAsset": "classeviva-expressive-5.2.3.apk",
+            "changelog": "Fix bacheca: segnatura lettura funzionante (400 ignorato, UI aggiornata immediatamente). Descrizione completa comunicazioni ora mostrata (campo cntText). Allegati: download una sola volta, apertura automatica, cache 30 giorni con reset timer al riclick, pulizia automatica.",
+            "releaseTag": "stable-classeviva-expressive-v5.2.4",
+            "apkAsset": "classeviva-expressive-5.2.4.apk",
             "exeAsset": "",
-            "sizeBytes": 20764247
+            "sizeBytes": 0
         },
         "beta": {
-            "version": "5.2.3",
+            "version": "5.2.4",
             "releaseDate": "2026-04-25",
-            "changelog": "Fix bacheca: eliminata la chiamata GET /noticeboard ridondante all'apertura del dettaglio. L'apertura di una comunicazione ora richiede una sola chiamata API (POST /read) invece di tre, usando la cache locale del DB come sorgente base.",
-            "releaseTag": "stable-classeviva-expressive-v5.2.3",
-            "apkAsset": "classeviva-expressive-5.2.3.apk",
+            "changelog": "Fix bacheca: segnatura lettura funzionante (400 ignorato, UI aggiornata immediatamente). Descrizione completa comunicazioni ora mostrata (campo cntText). Allegati: download una sola volta, apertura automatica, cache 30 giorni con reset timer al riclick, pulizia automatica.",
+            "releaseTag": "stable-classeviva-expressive-v5.2.4",
+            "apkAsset": "classeviva-expressive-5.2.4.apk",
             "exeAsset": "",
-            "sizeBytes": 20764247
+            "sizeBytes": 0
         },
         "history": [
+            {
+                "version": "5.2.3",
+                "releaseDate": "2026-04-25",
+                "changelog": "Fix bacheca: eliminata la chiamata GET /noticeboard ridondante all'apertura del dettaglio. L'apertura di una comunicazione ora richiede una sola chiamata API (POST /read) invece di tre, usando la cache locale del DB come sorgente base.",
+                "releaseTag": "stable-classeviva-expressive-v5.2.3",
+                "apkAsset": "classeviva-expressive-5.2.3.apk",
+                "exeAsset": "",
+                "sizeBytes": 20764247
+            },
             {
                 "version": "5.2.2",
                 "releaseDate": "2026-04-24",
