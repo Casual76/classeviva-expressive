@@ -23,6 +23,7 @@ import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
 import dev.antigravity.classevivaexpressive.core.database.database.GradeDao
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
 import dev.antigravity.classevivaexpressive.core.database.database.CommunicationDao
+import dev.antigravity.classevivaexpressive.core.database.database.CommunicationEntity
 import dev.antigravity.classevivaexpressive.core.database.database.MaterialDao
 import dev.antigravity.classevivaexpressive.core.database.database.DocumentDao
 import dev.antigravity.classevivaexpressive.core.database.database.CustomEventDao
@@ -614,27 +615,7 @@ class SchoolDataRepository @Inject constructor(
     }.flatMapLatest { (session, schoolYear) ->
       val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList<Communication>())
       communicationDao.observeByYear(studentId, schoolYear.id).map { entities ->
-        entities.map { entity ->
-          Communication(
-            id = entity.id,
-            pubId = entity.pubId,
-            evtCode = entity.evtCode,
-            title = entity.title,
-            contentPreview = entity.contentPreview,
-            sender = entity.sender,
-            date = entity.date,
-            read = entity.read,
-            attachments = json.decodeFromString(entity.attachments),
-            category = entity.category,
-            needsAck = entity.needsAck,
-            needsReply = entity.needsReply,
-            needsJoin = entity.needsJoin,
-            needsFile = entity.needsFile,
-            actions = json.decodeFromString(entity.actions),
-            noticeboardAttachments = json.decodeFromString(entity.noticeboardAttachments),
-            capabilityState = json.decodeFromString(entity.capabilityState),
-          )
-        }
+        entities.map { entity -> entity.toCommunication(json) }
       }
     }
   }
@@ -1168,3 +1149,23 @@ abstract class RepositoryModule {
   @Binds abstract fun bindSettingsRepository(impl: SchoolSettingsRepository): SettingsRepository
   @Binds abstract fun bindCapabilityResolver(impl: DefaultCapabilityResolver): CapabilityResolver
 }
+
+internal fun CommunicationEntity.toCommunication(json: Json): Communication = Communication(
+  id = id,
+  pubId = pubId,
+  evtCode = evtCode,
+  title = title,
+  contentPreview = contentPreview,
+  sender = sender,
+  date = date,
+  read = read,
+  attachments = json.decodeFromString(attachments),
+  category = category,
+  needsAck = needsAck,
+  needsReply = needsReply,
+  needsJoin = needsJoin,
+  needsFile = needsFile,
+  actions = json.decodeFromString(actions),
+  noticeboardAttachments = json.decodeFromString(noticeboardAttachments),
+  capabilityState = json.decodeFromString(capabilityState),
+)

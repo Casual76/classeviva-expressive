@@ -175,19 +175,9 @@ class ClassevivaRestClient @Inject constructor(
   }
 
   suspend fun getCommunicationDetail(pubId: String, evtCode: String): CommunicationDetail = withContext(Dispatchers.IO) {
-    val session = requireSession()
-    apiCall {
-      val base = getCommunications().firstOrNull { it.pubId == pubId && it.evtCode == evtCode }
-        ?: throw ClassevivaNetworkException("Comunicazione non trovata.")
-      normalizeCommunicationDetail(
-        apiService.readNoticeboard(
-          studentId = session.studentId,
-          evtCode = evtCode,
-          pubId = pubId,
-        ).toPayload(),
-        base,
-      ).withOfficialAttachmentUrls(session.studentId)
-    }
+    val base = getCommunications().firstOrNull { it.pubId == pubId && it.evtCode == evtCode }
+      ?: throw ClassevivaNetworkException("Comunicazione non trovata.")
+    getCommunicationDetail(base)
   }
 
   suspend fun markNoticeboardRead(pubId: String, evtCode: String): Unit = withContext(Dispatchers.IO) {
