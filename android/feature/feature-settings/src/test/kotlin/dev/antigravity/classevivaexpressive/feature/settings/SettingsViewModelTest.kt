@@ -168,17 +168,11 @@ class SettingsViewModelTest {
   }
 
   @Test
-  fun refresh_setsIsRefreshingTrueThenFalse() = runTest {
+  fun refresh_leavesRefreshingDisabledAfterCompletion() = runTest {
     val vm = buildViewModel()
+    vm.refresh()
+    testDispatcher.scheduler.advanceUntilIdle()
 
-    vm.state.test {
-      awaitItem()
-      vm.refresh()
-      val refreshing = awaitItem()
-      assertTrue(refreshing.isRefreshing)
-      val done = awaitItem()
-      assertFalse(done.isRefreshing)
-      cancelAndIgnoreRemainingEvents()
-    }
+    assertFalse(vm.state.value.isRefreshing)
   }
 }

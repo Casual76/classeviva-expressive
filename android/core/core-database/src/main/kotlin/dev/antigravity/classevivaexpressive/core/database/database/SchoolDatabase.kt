@@ -329,6 +329,15 @@ interface CommunicationDao {
 
   @Query("SELECT id FROM communications WHERE studentId = :studentId AND schoolYearId = :schoolYearId AND read = 1")
   suspend fun getReadIds(studentId: String, schoolYearId: String): List<String>
+
+  @Query("SELECT * FROM communications WHERE id = :id LIMIT 1")
+  suspend fun getById(id: String): CommunicationEntity?
+
+  @Query("SELECT * FROM communications WHERE pubId = :pubId AND evtCode = :evtCode LIMIT 1")
+  suspend fun getByPubIdAndEvtCode(pubId: String, evtCode: String): CommunicationEntity?
+
+  @Query("SELECT * FROM communications WHERE studentId = :studentId AND schoolYearId = :schoolYearId AND read = 0")
+  suspend fun getUnread(studentId: String, schoolYearId: String): List<CommunicationEntity>
 }
 
 @Dao

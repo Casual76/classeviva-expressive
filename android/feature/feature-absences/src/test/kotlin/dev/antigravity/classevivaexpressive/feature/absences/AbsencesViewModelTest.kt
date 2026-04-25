@@ -104,29 +104,34 @@ class AbsencesViewModelTest {
   fun justify_callsRepositoryWithReasonAndClearsSelection() = runTest {
     val absence = AbsenceRecord(id = "a4", date = "2026-03-23", type = AbsenceType.ABSENCE, justified = false, canJustify = true)
     every { absencesRepository.observeAbsences() } returns flowOf(listOf(absence))
-    coEvery { absencesRepository.justifyAbsence(absence, any()) } returns Result.success(listOf(absence.copy(justified = true)))
+    coEvery { absencesRepository.justifyAbsence(absence, any(), any()) } returns Result.success(listOf(absence.copy(justified = true)))
 
     val vm = buildViewModel()
 
     vm.state.test {
       awaitItem()
       vm.requestJustification(absence)
-      awaitItem() // selected updated
+      awaitItem()
+
       vm.justify("Malattia")
-      val afterJustify = awaitItem()
+
+      var afterJustify = awaitItem()
+      while (afterJustify.isSubmitting || afterJustify.lastMessage == null) {
+        afterJustify = awaitItem()
+      }
+
       assertNull(afterJustify.selectedAbsence)
       assertEquals("Giustificazione inviata.", afterJustify.lastMessage)
+      coVerify { absencesRepository.justifyAbsence(absence, "Malattia", any()) }
       cancelAndIgnoreRemainingEvents()
     }
-
-    coVerify { absencesRepository.justifyAbsence(absence, "Malattia") }
   }
 
   @Test
   fun justify_setsErrorMessageOnFailure() = runTest {
     val absence = AbsenceRecord(id = "a5", date = "2026-03-24", type = AbsenceType.ABSENCE, justified = false, canJustify = true)
     every { absencesRepository.observeAbsences() } returns flowOf(listOf(absence))
-    coEvery { absencesRepository.justifyAbsence(absence, any()) } returns Result.failure(Exception("Errore server"))
+    coEvery { absencesRepository.justifyAbsence(absence, any(), any()) } returns Result.failure(Exception("Errore server"))
 
     val vm = buildViewModel()
 
@@ -134,8 +139,14 @@ class AbsencesViewModelTest {
       awaitItem()
       vm.requestJustification(absence)
       awaitItem()
+
       vm.justify("Motivo")
-      val afterError = awaitItem()
+
+      var afterError = awaitItem()
+      while (afterError.isSubmitting || afterError.lastMessage == null) {
+        afterError = awaitItem()
+      }
+
       assertEquals("Errore server", afterError.lastMessage)
       cancelAndIgnoreRemainingEvents()
     }

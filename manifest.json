@@ -15,24 +15,42 @@
             "ref": ""
         },
         "stable": {
-            "version": "5.2.1",
-            "releaseDate": "2026-04-18",
-            "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.1. Asset rilevati: app-release.apk.",
-            "releaseTag": "stable-classeviva-expressive-v5.2.1",
-            "apkAsset": "classeviva-expressive-5.2.1.apk",
+            "version": "5.2.3",
+            "releaseDate": "2026-04-25",
+            "changelog": "Fix bacheca: eliminata la chiamata GET /noticeboard ridondante all'apertura del dettaglio. L'apertura di una comunicazione ora richiede una sola chiamata API (POST /read) invece di tre, usando la cache locale del DB come sorgente base.",
+            "releaseTag": "stable-classeviva-expressive-v5.2.3",
+            "apkAsset": "classeviva-expressive-5.2.3.apk",
             "exeAsset": "",
             "sizeBytes": 0
         },
         "beta": {
-            "version": "5.2.1",
-            "releaseDate": "2026-04-18",
-            "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.1. Asset rilevati: app-release.apk.",
-            "releaseTag": "stable-classeviva-expressive-v5.2.1",
-            "apkAsset": "classeviva-expressive-5.2.1.apk",
+            "version": "5.2.3",
+            "releaseDate": "2026-04-25",
+            "changelog": "Fix bacheca: eliminata la chiamata GET /noticeboard ridondante all'apertura del dettaglio. L'apertura di una comunicazione ora richiede una sola chiamata API (POST /read) invece di tre, usando la cache locale del DB come sorgente base.",
+            "releaseTag": "stable-classeviva-expressive-v5.2.3",
+            "apkAsset": "classeviva-expressive-5.2.3.apk",
             "exeAsset": "",
             "sizeBytes": 0
         },
         "history": [
+            {
+                "version": "5.2.2",
+                "releaseDate": "2026-04-24",
+                "changelog": "Bacheca interattiva: letture e conferme ora colpiscono l'API REST ufficiale di Classeviva, aggiunto feedback snackbar, pulsanti di azione sempre disponibili e risposta/adesione/upload piu resilienti.",
+                "releaseTag": "stable-classeviva-expressive-v5.2.2",
+                "apkAsset": "classeviva-expressive-5.2.2.apk",
+                "exeAsset": "",
+                "sizeBytes": 0
+            },
+            {
+                "version": "5.2.1",
+                "releaseDate": "2026-04-18",
+                "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.1. Asset rilevati: app-release.apk.",
+                "releaseTag": "stable-classeviva-expressive-v5.2.1",
+                "apkAsset": "classeviva-expressive-5.2.1.apk",
+                "exeAsset": "",
+                "sizeBytes": 0
+            },
             {
                 "version": "5.2.0",
                 "releaseDate": "2026-04-18",

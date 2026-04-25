@@ -1,11 +1,14 @@
 package dev.antigravity.classevivaexpressive.core.data.notifications
 
+import android.annotation.SuppressLint
+import android.app.Notification
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -90,7 +93,6 @@ private val channelDefinitions = listOf(
 
 object AppNotificationChannels {
   fun create(context: Context) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val manager = context.getSystemService(NotificationManager::class.java) ?: return
     channelDefinitions.forEach { definition ->
       val existing = manager.getNotificationChannel(definition.id)
@@ -111,17 +113,9 @@ fun readNotificationRuntimeState(context: Context): NotificationRuntimeState {
   AppNotificationChannels.create(context)
   val managerCompat = NotificationManagerCompat.from(context)
   val manager = context.getSystemService(NotificationManager::class.java)
-  val permissionGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
-  } else {
-    true
-  }
+  val permissionGranted = hasNotificationPermission(context)
   val channels = channelDefinitions.map { definition ->
-    val enabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      manager?.getNotificationChannel(definition.id)?.importance != NotificationManager.IMPORTANCE_NONE
-    } else {
-      true
-    }
+    val enabled = manager?.getNotificationChannel(definition.id)?.importance != NotificationManager.IMPORTANCE_NONE
     NotificationChannelStatus(
       id = definition.id,
       label = definition.label,
@@ -146,9 +140,10 @@ fun sendTestNotification(
   require(runtime.permissionGranted) { "Concedi il permesso notifiche per inviare il test." }
 
   AppNotificationChannels.create(context)
-  NotificationManagerCompat.from(context).notify(
-    3111,
-    NotificationCompat.Builder(context, TestChannelId)
+  notifyCompat(
+    context = context,
+    notificationId = 3111,
+    notification = NotificationCompat.Builder(context, TestChannelId)
       .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
       .setContentTitle("Classeviva Expressive")
       .setContentText("Notifica di test inviata correttamente.")
@@ -159,7 +154,7 @@ fun sendTestNotification(
       .setPriority(NotificationCompat.PRIORITY_DEFAULT)
       .setAutoCancel(true)
       .build(),
-  )
+  ).getOrThrow()
 }
 
 @Singleton
@@ -279,9 +274,10 @@ class SyncNotificationDispatcher @Inject constructor(
       )
     }
 
-    NotificationManagerCompat.from(context).notify(
-      notificationId,
-      NotificationCompat.Builder(context, channelId)
+    notifyCompat(
+      context = context,
+      notificationId = notificationId,
+      notification = NotificationCompat.Builder(context, channelId)
         .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
         .setContentTitle(title)
         .setContentText(text)
@@ -311,5 +307,27 @@ class SyncNotificationDispatcher @Inject constructor(
   private fun readableDate(value: String): String {
     val parsed = runCatching { LocalDate.parse(value) }.getOrNull() ?: return value
     return "%02d/%02d/%04d".format(parsed.dayOfMonth, parsed.monthValue, parsed.year)
+  }
+}
+
+private fun hasNotificationPermission(context: Context): Boolean {
+  return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+  } else {
+    true
+  }
+}
+
+@SuppressLint("MissingPermission")
+private fun notifyCompat(
+  context: Context,
+  notificationId: Int,
+  notification: Notification,
+): Result<Unit> {
+  if (!hasNotificationPermission(context)) {
+    return Result.failure(SecurityException("Permesso notifiche non concesso."))
+  }
+  return runCatching {
+    NotificationManagerCompat.from(context).notify(notificationId, notification)
   }
 }

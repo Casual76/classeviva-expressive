@@ -205,40 +205,103 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   suspend fun getCommunicationDetail(pubId: String, evtCode: String) = runCatching {
+    val entity = communicationDao.getByPubIdAndEvtCode(pubId, evtCode)
+    val detail = if (entity != null) {
+      restClient.getCommunicationDetail(entity.toCommunication())
+    } else {
+      restClient.getCommunicationDetail(pubId, evtCode)
+    }
+    runCatching { communicationDao.markRead(detail.communication.id) }
+    detail
+  }
+
+  suspend fun markCommunicationReadRemotely(id: String, pubId: String, evtCode: String): Result<Unit> = runCatching {
+    restClient.markNoticeboardRead(pubId = pubId, evtCode = evtCode)
+    communicationDao.markRead(id)
+  }
+
+  suspend fun markAllCommunicationsReadRemotely(): Result<Unit> = runCatching {
+    val session = activeSession ?: throw ClassevivaNetworkException("Sessione assente.")
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    restClient.getCommunicationDetail(pubId, evtCode).also {
-      refreshCommunicationsSnapshot(selectedYear)
+    val unread = communicationDao.getUnread(session.studentId, selectedYear.id)
+    val failures = mutableListOf<String>()
+    for (entity in unread) {
+      if (entity.pubId.isBlank() || entity.evtCode.isBlank()) {
+        communicationDao.markRead(entity.id)
+        continue
+      }
+
+      val result = runCatching {
+        restClient.markNoticeboardRead(pubId = entity.pubId, evtCode = entity.evtCode)
+        communicationDao.markRead(entity.id)
+      }
+      if (result.isFailure) {
+        failures += entity.title.ifBlank { entity.id }
+      }
+    }
+
+    if (failures.isNotEmpty()) {
+      val message = when (failures.size) {
+        1 -> "Una comunicazione non e stata segnata come letta sul registro."
+        else -> "${failures.size} comunicazioni non sono state segnate come lette sul registro."
+      }
+      throw ClassevivaNetworkException(message)
     }
   }
 
   suspend fun acknowledgeCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val updated = restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode)
-    refreshCommunicationsSnapshot(selectedYear)
+    val pubId = detail.communication.pubId
+    val evtCode = detail.communication.evtCode
+    runCatching { restClient.markNoticeboardRead(pubId = pubId, evtCode = evtCode) }
+    val ackUrl = detail.acknowledgeUrl
+    if (!ackUrl.isNullOrBlank()) {
+      runCatching {
+        portalClient.submitPortalAction(
+          pageUrl = ackUrl,
+          formKeywords = listOf("conferma", "presa", "visione", "sign", "firma", "ack"),
+        )
+      }
+    }
+    runCatching { communicationDao.markRead(detail.communication.id) }
+    val updated = runCatching { restClient.getCommunicationDetail(detail.communication) }.getOrNull()
+      ?: detail.copy(communication = detail.communication.copy(read = true))
+    runCatching { refreshCommunicationsSnapshot(selectedYear) }
     updated
   }
 
   suspend fun replyToCommunication(detail: CommunicationDetail, text: String): Result<CommunicationDetail> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val replyUrl = detail.replyUrl
-      ?: detail.portalDetailUrl
-      ?: throw ClassevivaNetworkException("URL risposta bacheca non disponibile.")
+    val replyUrl = detail.replyUrl ?: detail.portalDetailUrl
+    if (replyUrl.isNullOrBlank()) {
+      throw ClassevivaNetworkException(
+        "Questa comunicazione non espone un canale di risposta gestito dal registro.",
+      )
+    }
     portalClient.replyNoticeboard(replyUrl = replyUrl, text = text)
+    runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
+    runCatching { communicationDao.markRead(detail.communication.id) }
     runCatching { refreshCommunicationsSnapshot(selectedYear) }
-    runCatching {
-      restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode)
+    val updated = runCatching {
+      restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
+    updated.copy(replyText = text)
   }
 
   suspend fun joinCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val joinUrl = detail.joinUrl
-      ?: detail.portalDetailUrl
-      ?: throw ClassevivaNetworkException("URL adesione bacheca non disponibile.")
+    val joinUrl = detail.joinUrl ?: detail.portalDetailUrl
+    if (joinUrl.isNullOrBlank()) {
+      throw ClassevivaNetworkException(
+        "Questa comunicazione non espone un canale di adesione gestito dal registro.",
+      )
+    }
     portalClient.joinNoticeboard(joinUrl = joinUrl)
+    runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
+    runCatching { communicationDao.markRead(detail.communication.id) }
     runCatching { refreshCommunicationsSnapshot(selectedYear) }
     runCatching {
-      restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode)
+      restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
   }
 
@@ -249,9 +312,12 @@ class SchoolSyncCoordinator @Inject constructor(
     bytes: ByteArray,
   ): Result<CommunicationDetail> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val uploadUrl = detail.fileUploadUrl
-      ?: detail.portalDetailUrl
-      ?: throw ClassevivaNetworkException("URL upload bacheca non disponibile.")
+    val uploadUrl = detail.fileUploadUrl ?: detail.portalDetailUrl
+    if (uploadUrl.isNullOrBlank()) {
+      throw ClassevivaNetworkException(
+        "Questa comunicazione non espone un canale di upload gestito dal registro.",
+      )
+    }
     portalClient.uploadNoticeboard(
       uploadUrl = uploadUrl,
       attachment = AttachmentPayload(
@@ -260,9 +326,11 @@ class SchoolSyncCoordinator @Inject constructor(
         base64Content = Base64.getEncoder().encodeToString(bytes),
       ),
     )
+    runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
+    runCatching { communicationDao.markRead(detail.communication.id) }
     runCatching { refreshCommunicationsSnapshot(selectedYear) }
     runCatching {
-      restClient.getCommunicationDetail(detail.communication.pubId, detail.communication.evtCode)
+      restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
   }
 
@@ -896,4 +964,24 @@ class SchoolSyncCoordinator @Inject constructor(
       .toString()
       .take(16)
   }
+
+  private fun CommunicationEntity.toCommunication(): Communication = Communication(
+    id = id,
+    pubId = pubId,
+    evtCode = evtCode,
+    title = title,
+    contentPreview = contentPreview,
+    sender = sender,
+    date = date,
+    read = read,
+    attachments = json.decodeFromString(attachments),
+    category = category,
+    needsAck = needsAck,
+    needsReply = needsReply,
+    needsJoin = needsJoin,
+    needsFile = needsFile,
+    actions = json.decodeFromString(actions),
+    noticeboardAttachments = json.decodeFromString(noticeboardAttachments),
+    capabilityState = json.decodeFromString(capabilityState),
+  )
 }

@@ -2,8 +2,8 @@ package dev.antigravity.classevivaexpressive.core.data.repository
 
 import android.app.DownloadManager
 import android.content.Context
-import android.net.Uri
 import android.os.Environment
+import androidx.core.net.toUri
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -646,13 +646,21 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun markAllAsRead(): Result<Unit> = runCatching {
-    val session = sessionStore.session.value ?: return@runCatching
-    val schoolYear = schoolYearStore.observeSelectedSchoolYear().firstValue()
-    communicationDao.markAllRead(session.studentId, schoolYear.id)
+    if (sessionStore.session.value == null) return@runCatching
+    syncCoordinator.markAllCommunicationsReadRemotely().getOrThrow()
   }
 
   override suspend fun markCommunicationRead(id: String): Result<Unit> = runCatching {
-    communicationDao.markRead(id)
+    val entity = communicationDao.getById(id)
+    if (entity != null && entity.pubId.isNotBlank() && entity.evtCode.isNotBlank()) {
+      syncCoordinator.markCommunicationReadRemotely(id, entity.pubId, entity.evtCode)
+        .getOrElse {
+          communicationDao.markRead(id)
+          throw it
+        }
+    } else {
+      communicationDao.markRead(id)
+    }
   }
 
   override suspend fun getCommunicationDetail(pubId: String, evtCode: String): Result<CommunicationDetail> {
@@ -895,7 +903,7 @@ class SchoolDataRepository @Inject constructor(
   }
 
   private suspend fun queueDownloadInternal(url: String, title: String, mimeType: String?): Long {
-    val request = DownloadManager.Request(Uri.parse(url))
+    val request = DownloadManager.Request(url.toUri())
       .setTitle(title)
       .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
       .setMimeType(mimeType)
