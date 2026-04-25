@@ -21,7 +21,7 @@
             "releaseTag": "stable-classeviva-expressive-v5.2.3",
             "apkAsset": "classeviva-expressive-5.2.3.apk",
             "exeAsset": "",
-            "sizeBytes": 0
+            "sizeBytes": 20764247
         },
         "beta": {
             "version": "5.2.3",
@@ -30,7 +30,7 @@
             "releaseTag": "stable-classeviva-expressive-v5.2.3",
             "apkAsset": "classeviva-expressive-5.2.3.apk",
             "exeAsset": "",
-            "sizeBytes": 0
+            "sizeBytes": 20764247
         },
         "history": [
             {
