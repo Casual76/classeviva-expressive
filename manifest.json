@@ -1,182 +1,191 @@
 {
-    "app": {
-        "id": "classeviva-expressive",
-        "name": "classeviva-expressive",
-        "description": "Manifest app non disponibile nella repository Casual76/classeviva-expressive.",
-        "packageName": "dev.antigravity.classevivaexpressive",
-        "iconUrl": "",
-        "category": "General",
-        "developer": "Pampa",
-        "screenshots": [],
-        "repository": {
-            "repoOwner": "Casual76",
-            "repoName": "classeviva-expressive",
-            "manifestPath": "manifest.json",
-            "ref": ""
-        },
-        "stable": {
-            "version": "5.2.4",
-            "releaseDate": "2026-04-25",
-            "changelog": "Fix bacheca: segnatura lettura funzionante (400 ignorato, UI aggiornata immediatamente). Descrizione completa comunicazioni ora mostrata (campo cntText). Allegati: download una sola volta, apertura automatica, cache 30 giorni con reset timer al riclick, pulizia automatica.",
-            "releaseTag": "stable-classeviva-expressive-v5.2.4",
-            "apkAsset": "classeviva-expressive-5.2.4.apk",
-            "exeAsset": "",
-            "sizeBytes": 20764291
-        },
-        "beta": {
-            "version": "5.2.4",
-            "releaseDate": "2026-04-25",
-            "changelog": "Fix bacheca: segnatura lettura funzionante (400 ignorato, UI aggiornata immediatamente). Descrizione completa comunicazioni ora mostrata (campo cntText). Allegati: download una sola volta, apertura automatica, cache 30 giorni con reset timer al riclick, pulizia automatica.",
-            "releaseTag": "stable-classeviva-expressive-v5.2.4",
-            "apkAsset": "classeviva-expressive-5.2.4.apk",
-            "exeAsset": "",
-            "sizeBytes": 20764291
-        },
-        "history": [
-            {
-                "version": "5.2.3",
-                "releaseDate": "2026-04-25",
-                "changelog": "Fix bacheca: eliminata la chiamata GET /noticeboard ridondante all'apertura del dettaglio. L'apertura di una comunicazione ora richiede una sola chiamata API (POST /read) invece di tre, usando la cache locale del DB come sorgente base.",
-                "releaseTag": "stable-classeviva-expressive-v5.2.3",
-                "apkAsset": "classeviva-expressive-5.2.3.apk",
-                "exeAsset": "",
-                "sizeBytes": 20764247
-            },
-            {
-                "version": "5.2.2",
-                "releaseDate": "2026-04-24",
-                "changelog": "Bacheca interattiva: letture e conferme ora colpiscono l'API REST ufficiale di Classeviva, aggiunto feedback snackbar, pulsanti di azione sempre disponibili e risposta/adesione/upload piu resilienti.",
-                "releaseTag": "stable-classeviva-expressive-v5.2.2",
-                "apkAsset": "classeviva-expressive-5.2.2.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "5.2.1",
-                "releaseDate": "2026-04-18",
-                "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.1. Asset rilevati: app-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v5.2.1",
-                "apkAsset": "classeviva-expressive-5.2.1.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "5.2.0",
-                "releaseDate": "2026-04-18",
-                "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.0. Asset rilevati: app-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v5.2.0",
-                "apkAsset": "classeviva-expressive-5.2.0.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "5.1.0",
-                "releaseDate": "2026-04-13",
-                "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.1.0. Asset rilevati: app-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v5.1.0",
-                "apkAsset": "classeviva-expressive-5.1.0.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "4.1.4",
-                "releaseDate": "2026-04-10",
-                "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 4.1.4. Asset rilevati: app-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v4.1.4",
-                "apkAsset": "classeviva-expressive-4.1.4.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "4.1.4",
-                "releaseDate": "2026-04-10",
-                "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 4.1.4. Asset rilevati: app-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v4.1.4",
-                "apkAsset": "classeviva-expressive-4.1.4.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "4.0.0",
-                "releaseDate": "2026-04-05",
-                "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 4.0.0. Asset rilevati: app-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v4.0.0",
-                "apkAsset": "classeviva-expressive-4.0.0.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "4.1.2",
-                "releaseDate": "2026-04-05",
-                "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 4.1.2. Asset rilevati: app-release.apk.",
-                "releaseTag": "beta-classeviva-expressive-v4.1.2",
-                "apkAsset": "classeviva-expressive-4.1.2.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "4.1.1",
-                "releaseDate": "2026-04-05",
-                "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 4.1.1. Asset rilevati: app-release.apk.",
-                "releaseTag": "beta-classeviva-expressive-v4.1.1",
-                "apkAsset": "classeviva-expressive-4.1.1.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "4.1.0",
-                "releaseDate": "2026-04-05",
-                "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 4.1.0. Asset rilevati: app-release.apk.",
-                "releaseTag": "beta-classeviva-expressive-v4.1.0",
-                "apkAsset": "classeviva-expressive-4.1.0.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "4.0.0",
-                "releaseDate": "2026-04-05",
-                "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 4.0.0. Asset rilevati: app-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v4.0.0",
-                "apkAsset": "classeviva-expressive-4.0.0.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "3.1.4",
-                "releaseDate": "2026-04-05",
-                "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.4. Asset rilevati: app-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v3.1.4",
-                "apkAsset": "classeviva-expressive-3.1.4.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "3.1.3",
-                "releaseDate": "2026-03-29",
-                "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.3. Asset rilevati: app-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v3.1.3",
-                "apkAsset": "classeviva-expressive-3.1.3.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "3.1.2",
-                "releaseDate": "2026-03-29",
-                "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.2. Asset rilevati: app-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v3.1.2",
-                "apkAsset": "classeviva-expressive-3.1.2.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            },
-            {
-                "version": "3.1.1",
-                "releaseDate": "2026-03-28",
-                "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.1. Asset rilevati: classeviva-expressive-3.1.1-release.apk.",
-                "releaseTag": "stable-classeviva-expressive-v3.1.1",
-                "apkAsset": "classeviva-expressive-3.1.1.apk",
-                "exeAsset": "",
-                "sizeBytes": 0
-            }
-        ]
-    }
+  "app": {
+    "id": "classeviva-expressive",
+    "name": "Classeviva Expressive",
+    "description": "Manifest app non disponibile nella repository Casual76/classeviva-expressive.",
+    "packageName": "dev.antigravity.classevivaexpressive",
+    "iconUrl": "",
+    "category": "General",
+    "developer": "Pampa",
+    "screenshots": [],
+    "repository": {
+      "repoOwner": "Casual76",
+      "repoName": "classeviva-expressive",
+      "manifestPath": "manifest.json",
+      "ref": ""
+    },
+    "stable": {
+      "version": "5.4.0",
+      "releaseDate": "2026-04-26",
+      "changelog": "v5.4.0 — nuove sezioni: Compiti, Documenti e libri scolastici, Media studente; fix apertura materiali didattici (link e file)",
+      "releaseTag": "stable-classeviva-expressive-v5.4.0",
+      "apkAsset": "classeviva-expressive-5.4.0.apk",
+      "exeAsset": "",
+      "sizeBytes": 20893808
+    },
+    "beta": {
+      "version": "5.4.0",
+      "releaseDate": "2026-04-26",
+      "changelog": "v5.4.0 — nuove sezioni: Compiti, Documenti e libri scolastici, Media studente; fix apertura materiali didattici (link e file)",
+      "releaseTag": "stable-classeviva-expressive-v5.4.0",
+      "apkAsset": "classeviva-expressive-5.4.0.apk",
+      "exeAsset": "",
+      "sizeBytes": 20893808
+    },
+    "history": [
+      {
+        "version": "5.2.4",
+        "releaseDate": "2026-04-25",
+        "changelog": "Fix bacheca: segnatura lettura funzionante (400 ignorato, UI aggiornata immediatamente). Descrizione completa comunicazioni ora mostrata (campo cntText). Allegati: download una sola volta, apertura automatica, cache 30 giorni con reset timer al riclick, pulizia automatica.",
+        "releaseTag": "stable-classeviva-expressive-v5.2.4",
+        "apkAsset": "classeviva-expressive-5.2.4.apk",
+        "exeAsset": "",
+        "sizeBytes": 20764291
+      },
+      {
+        "version": "5.2.3",
+        "releaseDate": "2026-04-25",
+        "changelog": "Fix bacheca: eliminata la chiamata GET /noticeboard ridondante all'apertura del dettaglio. L'apertura di una comunicazione ora richiede una sola chiamata API (POST /read) invece di tre, usando la cache locale del DB come sorgente base.",
+        "releaseTag": "stable-classeviva-expressive-v5.2.3",
+        "apkAsset": "classeviva-expressive-5.2.3.apk",
+        "exeAsset": "",
+        "sizeBytes": 20764247
+      },
+      {
+        "version": "5.2.2",
+        "releaseDate": "2026-04-24",
+        "changelog": "Bacheca interattiva: letture e conferme ora colpiscono l'API REST ufficiale di Classeviva, aggiunto feedback snackbar, pulsanti di azione sempre disponibili e risposta/adesione/upload piu resilienti.",
+        "releaseTag": "stable-classeviva-expressive-v5.2.2",
+        "apkAsset": "classeviva-expressive-5.2.2.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "5.2.1",
+        "releaseDate": "2026-04-18",
+        "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.1. Asset rilevati: app-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v5.2.1",
+        "apkAsset": "classeviva-expressive-5.2.1.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "5.2.0",
+        "releaseDate": "2026-04-18",
+        "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.2.0. Asset rilevati: app-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v5.2.0",
+        "apkAsset": "classeviva-expressive-5.2.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "5.1.0",
+        "releaseDate": "2026-04-13",
+        "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 5.1.0. Asset rilevati: app-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v5.1.0",
+        "apkAsset": "classeviva-expressive-5.1.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "4.1.4",
+        "releaseDate": "2026-04-10",
+        "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 4.1.4. Asset rilevati: app-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v4.1.4",
+        "apkAsset": "classeviva-expressive-4.1.4.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "4.1.4",
+        "releaseDate": "2026-04-10",
+        "changelog": "Bozza generata automaticamente dal profilo classeviva-expressive per la versione 4.1.4. Asset rilevati: app-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v4.1.4",
+        "apkAsset": "classeviva-expressive-4.1.4.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "4.0.0",
+        "releaseDate": "2026-04-05",
+        "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 4.0.0. Asset rilevati: app-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v4.0.0",
+        "apkAsset": "classeviva-expressive-4.0.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "4.1.2",
+        "releaseDate": "2026-04-05",
+        "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 4.1.2. Asset rilevati: app-release.apk.",
+        "releaseTag": "beta-classeviva-expressive-v4.1.2",
+        "apkAsset": "classeviva-expressive-4.1.2.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "4.1.1",
+        "releaseDate": "2026-04-05",
+        "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 4.1.1. Asset rilevati: app-release.apk.",
+        "releaseTag": "beta-classeviva-expressive-v4.1.1",
+        "apkAsset": "classeviva-expressive-4.1.1.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "4.1.0",
+        "releaseDate": "2026-04-05",
+        "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 4.1.0. Asset rilevati: app-release.apk.",
+        "releaseTag": "beta-classeviva-expressive-v4.1.0",
+        "apkAsset": "classeviva-expressive-4.1.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "4.0.0",
+        "releaseDate": "2026-04-05",
+        "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 4.0.0. Asset rilevati: app-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v4.0.0",
+        "apkAsset": "classeviva-expressive-4.0.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "3.1.4",
+        "releaseDate": "2026-04-05",
+        "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.4. Asset rilevati: app-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v3.1.4",
+        "apkAsset": "classeviva-expressive-3.1.4.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "3.1.3",
+        "releaseDate": "2026-03-29",
+        "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.3. Asset rilevati: app-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v3.1.3",
+        "apkAsset": "classeviva-expressive-3.1.3.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "3.1.2",
+        "releaseDate": "2026-03-29",
+        "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.2. Asset rilevati: app-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v3.1.2",
+        "apkAsset": "classeviva-expressive-3.1.2.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      },
+      {
+        "version": "3.1.1",
+        "releaseDate": "2026-03-28",
+        "changelog": "Bozza generata automaticamente dal profilo Classeviva expressive per la versione 3.1.1. Asset rilevati: classeviva-expressive-3.1.1-release.apk.",
+        "releaseTag": "stable-classeviva-expressive-v3.1.1",
+        "apkAsset": "classeviva-expressive-3.1.1.apk",
+        "exeAsset": "",
+        "sizeBytes": 0
+      }
+    ]
+  }
 }
