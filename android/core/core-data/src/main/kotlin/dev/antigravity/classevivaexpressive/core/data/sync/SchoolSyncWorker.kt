@@ -12,8 +12,11 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesCacheSection
+import dev.antigravity.classevivaexpressive.core.data.notifications.AgendaCacheSection
 import dev.antigravity.classevivaexpressive.core.data.notifications.CommunicationsCacheSection
+import dev.antigravity.classevivaexpressive.core.data.notifications.GradesCacheSection
 import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkCacheSection
+import dev.antigravity.classevivaexpressive.core.data.notifications.NotesCacheSection
 import dev.antigravity.classevivaexpressive.core.data.notifications.SyncNotificationDispatcher
 import dev.antigravity.classevivaexpressive.core.data.notifications.SyncSnapshotPayloads
 import dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey
@@ -64,6 +67,9 @@ class SchoolSyncWorker @AssistedInject constructor(
       homeworks = snapshotCacheDao.getByKey(yearScopedCacheKey(HomeworkCacheSection, currentYear))?.payload,
       communications = snapshotCacheDao.getByKey(yearScopedCacheKey(CommunicationsCacheSection, currentYear))?.payload,
       absences = snapshotCacheDao.getByKey(yearScopedCacheKey(AbsencesCacheSection, currentYear))?.payload,
+      grades = snapshotCacheDao.getByKey(yearScopedCacheKey(GradesCacheSection, currentYear))?.payload,
+      agenda = snapshotCacheDao.getByKey(yearScopedCacheKey(AgendaCacheSection, currentYear))?.payload,
+      notes = snapshotCacheDao.getByKey(yearScopedCacheKey(NotesCacheSection, currentYear))?.payload,
     )
   }
 

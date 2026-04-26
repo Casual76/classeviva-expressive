@@ -11,14 +11,17 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinator
+import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.AgendaChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.AppNotificationChannels
 import dev.antigravity.classevivaexpressive.core.data.notifications.CommunicationsChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.GradesChannelId
-import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesChannelId
-import dev.antigravity.classevivaexpressive.core.data.notifications.AppNotificationChannels
 import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.NotesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.readNotificationRuntimeState
 import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNotification
+import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNotificationForChannel
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
 import dev.antigravity.classevivaexpressive.core.database.database.GradeDao
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
@@ -202,6 +205,8 @@ class SchoolSettingsRepository @Inject constructor(
           CommunicationsChannelId -> current.notificationPreferences.copy(communications = enabled)
           AbsencesChannelId -> current.notificationPreferences.copy(absences = enabled)
           GradesChannelId -> current.notificationPreferences.copy(grades = enabled)
+          AgendaChannelId -> current.notificationPreferences.copy(agenda = enabled)
+          NotesChannelId -> current.notificationPreferences.copy(notes = enabled)
           TestChannelId -> current.notificationPreferences.copy(test = enabled)
           else -> current.notificationPreferences
         },
@@ -215,6 +220,12 @@ class SchoolSettingsRepository @Inject constructor(
 
   override suspend fun sendTestNotification(): Result<Unit> {
     val result = sendTestNotification(context, settingsStore.settings.first().notificationPreferences)
+    refreshNotificationRuntimeState()
+    return result
+  }
+
+  override suspend fun sendTestNotificationForChannel(channelId: String): Result<Unit> {
+    val result = sendTestNotificationForChannel(context, channelId, settingsStore.settings.first().notificationPreferences)
     refreshNotificationRuntimeState()
     return result
   }

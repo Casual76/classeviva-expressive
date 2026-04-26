@@ -60,9 +60,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.AgendaChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.CommunicationsChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.GradesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.NotesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
@@ -215,6 +217,14 @@ class SettingsViewModel @Inject constructor(
     }
   }
 
+  fun sendTestNotificationForChannel(channelId: String) {
+    viewModelScope.launch {
+      settingsRepository.sendTestNotificationForChannel(channelId)
+        .onSuccess { lastMessage.value = "Test notifica «${channelId}» inviato." }
+        .onFailure { lastMessage.value = it.message ?: "Invio test non riuscito." }
+    }
+  }
+
   fun clearMessage() {
     lastMessage.value = null
   }
@@ -269,6 +279,8 @@ fun SettingsRoute(
     state.settings.notificationPreferences.communications,
     state.settings.notificationPreferences.absences,
     state.settings.notificationPreferences.grades,
+    state.settings.notificationPreferences.agenda,
+    state.settings.notificationPreferences.notes,
     state.settings.notificationPreferences.test,
   ).count { it }
   val enabledSystemChannels = state.runtimeState.channels.count { it.enabled }
@@ -412,10 +424,20 @@ fun SettingsRoute(
                       viewModel.setNotificationCategoryEnabled(channel.id, enabled)
                     },
                     badge = {
-                      StatusBadge(
-                        label = if (channel.enabled) "ON" else "OFF",
-                        tone = if (channel.enabled) ExpressiveTone.Success else ExpressiveTone.Warning,
-                      )
+                      Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        if (channelEnabledInSettings(channel.id, state.settings)) {
+                          TextButton(
+                            onClick = { viewModel.sendTestNotificationForChannel(channel.id) },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                          ) {
+                            Text("Test", style = MaterialTheme.typography.labelSmall)
+                          }
+                        }
+                        StatusBadge(
+                          label = if (channel.enabled) "ON" else "OFF",
+                          tone = if (channel.enabled) ExpressiveTone.Success else ExpressiveTone.Warning,
+                        )
+                      }
                     },
                   )
                 }
@@ -671,6 +693,8 @@ private fun channelEnabledInSettings(
     CommunicationsChannelId -> settings.notificationPreferences.communications
     AbsencesChannelId -> settings.notificationPreferences.absences
     GradesChannelId -> settings.notificationPreferences.grades
+    AgendaChannelId -> settings.notificationPreferences.agenda
+    NotesChannelId -> settings.notificationPreferences.notes
     TestChannelId -> settings.notificationPreferences.test
     else -> false
   }
