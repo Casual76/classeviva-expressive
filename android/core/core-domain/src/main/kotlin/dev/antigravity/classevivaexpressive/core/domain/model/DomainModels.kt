@@ -164,6 +164,8 @@ data class NotificationPreferences(
   val communications: Boolean = true,
   val absences: Boolean = true,
   val grades: Boolean = true,
+  val agenda: Boolean = true,
+  val notes: Boolean = true,
   val test: Boolean = true,
 )
 
@@ -871,5 +873,6 @@ interface SettingsRepository {
   suspend fun setNotificationCategoryEnabled(channelId: String, enabled: Boolean)
   suspend fun refreshNotificationRuntimeState()
   suspend fun sendTestNotification(): Result<Unit>
+  suspend fun sendTestNotificationForChannel(channelId: String): Result<Unit>
   suspend fun updateGatewayBaseUrl(url: String)
 }

@@ -15,14 +15,20 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.antigravity.classevivaexpressive.core.data.repository.AbsencesSection
+import dev.antigravity.classevivaexpressive.core.data.repository.AgendaSection
 import dev.antigravity.classevivaexpressive.core.data.repository.CommunicationsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.GradesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkSection
+import dev.antigravity.classevivaexpressive.core.data.repository.NotesSection
 import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
+import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
+import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationChannelStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPreferences
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
@@ -30,25 +36,30 @@ import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
 const val HomeworkChannelId = "compiti"
 const val CommunicationsChannelId = "comunicazioni"
 const val AbsencesChannelId = "assenze"
 const val GradesChannelId = "voti"
+const val AgendaChannelId = "verifiche_agenda"
+const val NotesChannelId = "annotazioni"
 const val TestChannelId = "test"
 
 internal const val HomeworkCacheSection = HomeworkSection
 internal const val CommunicationsCacheSection = CommunicationsSection
 internal const val AbsencesCacheSection = AbsencesSection
 internal const val GradesCacheSection = GradesSection
+internal const val AgendaCacheSection = AgendaSection
+internal const val NotesCacheSection = NotesSection
 
 data class SyncSnapshotPayloads(
   val homeworks: String? = null,
   val communications: String? = null,
   val absences: String? = null,
   val grades: String? = null,
+  val agenda: String? = null,
+  val notes: String? = null,
 )
 
 data class ChannelDefinition(
@@ -60,10 +71,22 @@ data class ChannelDefinition(
 
 private val channelDefinitions = listOf(
   ChannelDefinition(
+    id = GradesChannelId,
+    label = "Voti",
+    description = "Nuovi voti e aggiornamenti alle valutazioni.",
+    importance = NotificationManager.IMPORTANCE_HIGH,
+  ),
+  ChannelDefinition(
     id = HomeworkChannelId,
     label = "Compiti",
-    description = "Aggiornamenti relativi a compiti, verifiche e agenda.",
+    description = "Nuovi compiti assegnati dai docenti.",
     importance = NotificationManager.IMPORTANCE_DEFAULT,
+  ),
+  ChannelDefinition(
+    id = AgendaChannelId,
+    label = "Verifiche & Agenda",
+    description = "Verifiche, interrogazioni e altri eventi aggiunti all'agenda.",
+    importance = NotificationManager.IMPORTANCE_HIGH,
   ),
   ChannelDefinition(
     id = CommunicationsChannelId,
@@ -78,10 +101,10 @@ private val channelDefinitions = listOf(
     importance = NotificationManager.IMPORTANCE_HIGH,
   ),
   ChannelDefinition(
-    id = GradesChannelId,
-    label = "Voti",
-    description = "Nuovi voti e aggiornamenti alle valutazioni.",
-    importance = NotificationManager.IMPORTANCE_HIGH,
+    id = NotesChannelId,
+    label = "Annotazioni",
+    description = "Nuove annotazioni e note dei docenti.",
+    importance = NotificationManager.IMPORTANCE_DEFAULT,
   ),
   ChannelDefinition(
     id = TestChannelId,
@@ -132,29 +155,146 @@ fun readNotificationRuntimeState(context: Context): NotificationRuntimeState {
 fun sendTestNotification(
   context: Context,
   preferences: NotificationPreferences,
+): Result<Unit> = sendTestNotificationForChannel(context, TestChannelId, preferences)
+
+fun sendTestNotificationForChannel(
+  context: Context,
+  channelId: String,
+  preferences: NotificationPreferences,
 ): Result<Unit> = runCatching {
   require(preferences.enabled) { "Attiva prima l'interruttore generale delle notifiche." }
-  require(preferences.test) { "Il canale di test e disattivato nelle preferenze locali." }
   val runtime = readNotificationRuntimeState(context)
   require(runtime.appNotificationsEnabled) { "Le notifiche sono disattivate nelle impostazioni di sistema." }
   require(runtime.permissionGranted) { "Concedi il permesso notifiche per inviare il test." }
-
   AppNotificationChannels.create(context)
-  notifyCompat(
-    context = context,
-    notificationId = 3111,
-    notification = NotificationCompat.Builder(context, TestChannelId)
-      .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
-      .setContentTitle("Classeviva Expressive")
-      .setContentText("Notifica di test inviata correttamente.")
-      .setStyle(
-        NotificationCompat.BigTextStyle()
-          .bigText("Notifica di test inviata correttamente dal canale Test."),
-      )
-      .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-      .setAutoCancel(true)
-      .build(),
-  ).getOrThrow()
+
+  val notification = when (channelId) {
+    GradesChannelId -> buildGradeTestNotification(context)
+    HomeworkChannelId -> buildHomeworkTestNotification(context)
+    AgendaChannelId -> buildAgendaTestNotification(context)
+    CommunicationsChannelId -> buildCommunicationTestNotification(context)
+    AbsencesChannelId -> buildAbsenceTestNotification(context)
+    NotesChannelId -> buildNoteTestNotification(context)
+    else -> buildGenericTestNotification(context)
+  }
+  notifyCompat(context = context, notificationId = testNotificationId(channelId), notification = notification).getOrThrow()
+}
+
+private fun testNotificationId(channelId: String) = when (channelId) {
+  GradesChannelId -> 3100
+  HomeworkChannelId -> 3101
+  AgendaChannelId -> 3102
+  CommunicationsChannelId -> 3103
+  AbsencesChannelId -> 3104
+  NotesChannelId -> 3105
+  else -> 3111
+}
+
+private fun buildGradeTestNotification(context: Context): Notification {
+  val bigText = "Matematica — Scritto\n${gradeEmoji(7.5)} 7.5 — Buona padronanza degli argomenti trattati.\n\nPhysics — Orale\n${gradeEmoji(5.0)} 5 — Preparazione insufficiente."
+  return NotificationCompat.Builder(context, GradesChannelId)
+    .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+    .setContentTitle("2 nuovi voti")
+    .setContentText("${gradeEmoji(7.5)} 7.5 in Matematica · ${gradeEmoji(5.0)} 5 in Fisica")
+    .setStyle(
+      NotificationCompat.BigTextStyle()
+        .bigText(bigText)
+        .setSummaryText("Registro Elettronico"),
+    )
+    .setPriority(NotificationCompat.PRIORITY_HIGH)
+    .setAutoCancel(true)
+    .build()
+}
+
+private fun buildHomeworkTestNotification(context: Context): Notification {
+  val dueFormatted = readableDate(LocalDate.now().plusDays(3).toString())
+  return NotificationCompat.Builder(context, HomeworkChannelId)
+    .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+    .setContentTitle("Nuovo compito — Matematica")
+    .setContentText("Esercizi pag. 142: 1→15 · entro $dueFormatted")
+    .setStyle(
+      NotificationCompat.BigTextStyle()
+        .bigText("Matematica\nEsercizi pagina 142, esercizi da 1 a 15.\n\nConsegna entro: $dueFormatted")
+        .setSummaryText("Agenda"),
+    )
+    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+    .setAutoCancel(true)
+    .build()
+}
+
+private fun buildAgendaTestNotification(context: Context): Notification {
+  val dateFormatted = readableDate(LocalDate.now().plusDays(5).toString())
+  return NotificationCompat.Builder(context, AgendaChannelId)
+    .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+    .setContentTitle("Verifica — Matematica")
+    .setContentText("Funzioni e limiti · $dateFormatted")
+    .setStyle(
+      NotificationCompat.BigTextStyle()
+        .bigText("Matematica\nVerifica scritta su funzioni e limiti.\n\nData: $dateFormatted")
+        .setSummaryText("Agenda — Verifica"),
+    )
+    .setPriority(NotificationCompat.PRIORITY_HIGH)
+    .setAutoCancel(true)
+    .build()
+}
+
+private fun buildCommunicationTestNotification(context: Context): Notification {
+  return NotificationCompat.Builder(context, CommunicationsChannelId)
+    .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+    .setContentTitle("Nuova comunicazione")
+    .setContentText("Riunione genitori — ven 30 apr, ore 17:00 · Segreteria")
+    .setStyle(
+      NotificationCompat.BigTextStyle()
+        .bigText("Mittente: Segreteria Didattica\n\nRiunione genitori programmata per venerdì 30 aprile alle ore 17:00 nell'aula magna.")
+        .setSummaryText("Bacheca"),
+    )
+    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+    .setAutoCancel(true)
+    .build()
+}
+
+private fun buildAbsenceTestNotification(context: Context): Notification {
+  return NotificationCompat.Builder(context, AbsencesChannelId)
+    .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+    .setContentTitle("Assenza registrata")
+    .setContentText("Assenza del ${readableDate(LocalDate.now().minusDays(1).toString())} — da giustificare")
+    .setStyle(
+      NotificationCompat.BigTextStyle()
+        .bigText("È stata registrata un'assenza del ${readableDate(LocalDate.now().minusDays(1).toString())}.\n\nRicordati di presentare la giustifica.")
+        .setSummaryText("Presenze"),
+    )
+    .setPriority(NotificationCompat.PRIORITY_HIGH)
+    .setAutoCancel(true)
+    .build()
+}
+
+private fun buildNoteTestNotification(context: Context): Notification {
+  return NotificationCompat.Builder(context, NotesChannelId)
+    .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+    .setContentTitle("Nuova annotazione")
+    .setContentText("Condotta — Prof. Rossi · Nota disciplinare")
+    .setStyle(
+      NotificationCompat.BigTextStyle()
+        .bigText("Categoria: Condotta\nDocente: Prof. Rossi\n\nNota disciplinare: comportamento scorretto durante la lezione.")
+        .setSummaryText("Annotazioni"),
+    )
+    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+    .setAutoCancel(true)
+    .build()
+}
+
+private fun buildGenericTestNotification(context: Context): Notification {
+  return NotificationCompat.Builder(context, TestChannelId)
+    .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+    .setContentTitle("Classeviva Expressive")
+    .setContentText("Notifica di test inviata correttamente.")
+    .setStyle(
+      NotificationCompat.BigTextStyle()
+        .bigText("Notifica di test inviata correttamente dal canale Test."),
+    )
+    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+    .setAutoCancel(true)
+    .build()
 }
 
 @Singleton
@@ -171,86 +311,375 @@ class SyncNotificationDispatcher @Inject constructor(
     if (!runtime.permissionGranted || !runtime.appNotificationsEnabled) return
 
     AppNotificationChannels.create(context)
-
-    if (preferences.homework) {
-      val before = decodeList<Homework>(previous.homeworks)
-      val after = decodeList<Homework>(current.homeworks)
-      val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id } }
-      if (newItems.isNotEmpty()) {
-        showNotification(
-          channelId = HomeworkChannelId,
-          notificationId = 4100 + newItems.hashCode(),
-          title = if (newItems.size == 1) "Nuovo compito" else "${newItems.size} nuovi compiti",
-          text = if (newItems.size == 1) {
-            listOf(newItems.first().subject, newItems.first().description).filter { it.isNotBlank() }.joinToString(" - ")
-          } else {
-            "Agenda aggiornata con nuovi compiti o verifiche."
-          },
-        )
-      }
-    }
-
-    if (preferences.communications) {
-      val before = decodeList<Communication>(previous.communications)
-      val after = decodeList<Communication>(current.communications)
-      val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id && it.pubId == candidate.pubId } }
-      if (newItems.isNotEmpty()) {
-        showNotification(
-          channelId = CommunicationsChannelId,
-          notificationId = 4200 + newItems.hashCode(),
-          title = if (newItems.size == 1) "Nuova comunicazione" else "${newItems.size} nuove comunicazioni",
-          text = if (newItems.size == 1) {
-            newItems.first().title
-          } else {
-            "La bacheca contiene nuovi avvisi da leggere."
-          },
-        )
-      }
-    }
-
-    if (preferences.absences) {
-      val before = decodeList<AbsenceRecord>(previous.absences)
-      val after = decodeList<AbsenceRecord>(current.absences)
-      val newItems = after.filterNot { candidate ->
-        before.any { existing ->
-          existing.id == candidate.id &&
-            existing.date == candidate.date &&
-            existing.type == candidate.type
-        }
-      }
-      if (newItems.isNotEmpty()) {
-        val latest = newItems.maxByOrNull { it.date } ?: newItems.first()
-        showNotification(
-          channelId = AbsencesChannelId,
-          notificationId = 4300 + newItems.hashCode(),
-          title = if (newItems.size == 1) "Nuova presenza da controllare" else "${newItems.size} nuovi eventi presenze",
-          text = if (newItems.size == 1) {
-            "${absenceLabel(latest)} del ${readableDate(latest.date)}"
-          } else {
-            "Assenze, ritardi o uscite anticipate aggiornati nel registro."
-          },
-        )
-      }
-    }
+    val launchIntent = launchPendingIntent(context)
 
     if (preferences.grades) {
-      val before = decodeList<Grade>(previous.grades)
-      val after = decodeList<Grade>(current.grades)
-      val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id } }
-      if (newItems.isNotEmpty()) {
-        val latest = newItems.maxByOrNull { it.date } ?: newItems.first()
-        showNotification(
-          channelId = GradesChannelId,
-          notificationId = 4400 + newItems.hashCode(),
-          title = if (newItems.size == 1) "Nuovo voto" else "${newItems.size} nuovi voti",
-          text = if (newItems.size == 1) {
-            "${latest.valueLabel} in ${latest.subject}"
-          } else {
-            "Nuovi voti o valutazioni aggiornate nel registro."
-          },
+      dispatchGrades(previous, current, launchIntent)
+    }
+    if (preferences.agenda) {
+      dispatchAgendaEvents(previous, current, launchIntent)
+    }
+    if (preferences.homework) {
+      dispatchHomeworks(previous, current, launchIntent)
+    }
+    if (preferences.communications) {
+      dispatchCommunications(previous, current, launchIntent)
+    }
+    if (preferences.absences) {
+      dispatchAbsences(previous, current, launchIntent)
+    }
+    if (preferences.notes) {
+      dispatchNotes(previous, current, launchIntent)
+    }
+  }
+
+  private fun dispatchGrades(
+    previous: SyncSnapshotPayloads,
+    current: SyncSnapshotPayloads,
+    launchIntent: PendingIntent?,
+  ) {
+    val before = decodeList<Grade>(previous.grades)
+    val after = decodeList<Grade>(current.grades)
+    val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id } }
+    if (newItems.isEmpty()) return
+
+    val notification = if (newItems.size == 1) {
+      val grade = newItems.first()
+      val emoji = gradeEmoji(grade.numericValue)
+      val typeLabel = grade.type.ifBlank { null }
+      val periodLabel = grade.period?.ifBlank { null }
+      val bodyParts = buildList {
+        add("${grade.subject}${if (typeLabel != null) " — $typeLabel" else ""}")
+        add("$emoji ${grade.valueLabel}")
+        if (!grade.description.isNullOrBlank()) add(grade.description)
+        if (!grade.notes.isNullOrBlank()) add("Note: ${grade.notes}")
+        if (!grade.teacher.isNullOrBlank()) add(grade.teacher)
+        if (periodLabel != null) add("Periodo: $periodLabel")
+      }
+      val subtitle = "$emoji ${grade.valueLabel} · ${grade.subject}"
+      NotificationCompat.Builder(context, GradesChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle("Nuovo voto — ${grade.subject}")
+        .setContentText(subtitle)
+        .setStyle(
+          NotificationCompat.BigTextStyle()
+            .bigText(bodyParts.joinToString("\n"))
+            .setSummaryText("Registro Voti · ${readableDate(grade.date)}"),
         )
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchIntent)
+        .build()
+    } else {
+      val inboxStyle = NotificationCompat.InboxStyle()
+        .setSummaryText("Registro Voti — ${newItems.size} nuovi voti")
+      newItems.sortedByDescending { it.date }.forEach { grade ->
+        inboxStyle.addLine("${gradeEmoji(grade.numericValue)} ${grade.valueLabel.padEnd(5)} ${grade.subject}")
+      }
+      val preview = newItems.take(2).joinToString(" · ") { "${gradeEmoji(it.numericValue)} ${it.valueLabel} in ${it.subject}" }
+      NotificationCompat.Builder(context, GradesChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle("${newItems.size} nuovi voti")
+        .setContentText(preview)
+        .setStyle(inboxStyle)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchIntent)
+        .build()
+    }
+    notifyCompat(context, 4400, notification)
+  }
+
+  private fun dispatchAgendaEvents(
+    previous: SyncSnapshotPayloads,
+    current: SyncSnapshotPayloads,
+    launchIntent: PendingIntent?,
+  ) {
+    val before = decodeList<AgendaItem>(previous.agenda)
+    val after = decodeList<AgendaItem>(current.agenda)
+    val newRelevant = after.filter { it.category == AgendaCategory.ASSESSMENT || it.category == AgendaCategory.HOMEWORK }
+    val prevRelevant = before.filter { it.category == AgendaCategory.ASSESSMENT || it.category == AgendaCategory.HOMEWORK }
+    val newItems = newRelevant.filterNot { candidate -> prevRelevant.any { it.id == candidate.id } }
+    if (newItems.isEmpty()) return
+
+    val assessments = newItems.filter { it.category == AgendaCategory.ASSESSMENT }
+    val homeworks = newItems.filter { it.category == AgendaCategory.HOMEWORK }
+
+    if (assessments.isNotEmpty()) {
+      val notification = if (assessments.size == 1) {
+        val item = assessments.first()
+        val subject = item.subject ?: item.title
+        val detail = item.detail?.ifBlank { null } ?: item.subtitle
+        NotificationCompat.Builder(context, AgendaChannelId)
+          .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+          .setContentTitle("Verifica — $subject")
+          .setContentText("${detail.take(80)} · ${readableDate(item.date)}")
+          .setStyle(
+            NotificationCompat.BigTextStyle()
+              .bigText("$subject\n$detail\n\nData: ${readableDate(item.date)}")
+              .setSummaryText("Agenda — Verifica"),
+          )
+          .setPriority(NotificationCompat.PRIORITY_HIGH)
+          .setAutoCancel(true)
+          .applyLaunchIntent(launchIntent)
+          .build()
+      } else {
+        val inboxStyle = NotificationCompat.InboxStyle()
+          .setSummaryText("Agenda — ${assessments.size} verifiche")
+        assessments.sortedBy { it.date }.forEach { item ->
+          inboxStyle.addLine("${item.subject ?: item.title} · ${readableDate(item.date)}")
+        }
+        NotificationCompat.Builder(context, AgendaChannelId)
+          .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+          .setContentTitle("${assessments.size} verifiche in agenda")
+          .setContentText(assessments.take(2).joinToString(" · ") { it.subject ?: it.title })
+          .setStyle(inboxStyle)
+          .setPriority(NotificationCompat.PRIORITY_HIGH)
+          .setAutoCancel(true)
+          .applyLaunchIntent(launchIntent)
+          .build()
+      }
+      notifyCompat(context, 4500, notification)
+    }
+
+    if (homeworks.isNotEmpty()) {
+      val notification = if (homeworks.size == 1) {
+        val item = homeworks.first()
+        val subject = item.subject ?: item.title
+        val detail = item.detail?.ifBlank { null } ?: item.subtitle
+        NotificationCompat.Builder(context, AgendaChannelId)
+          .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+          .setContentTitle("Compito da agenda — $subject")
+          .setContentText("${detail.take(80)} · ${readableDate(item.date)}")
+          .setStyle(
+            NotificationCompat.BigTextStyle()
+              .bigText("$subject\n$detail\n\nEntro: ${readableDate(item.date)}")
+              .setSummaryText("Agenda — Compito"),
+          )
+          .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+          .setAutoCancel(true)
+          .applyLaunchIntent(launchIntent)
+          .build()
+      } else {
+        val inboxStyle = NotificationCompat.InboxStyle()
+          .setSummaryText("Agenda — ${homeworks.size} compiti")
+        homeworks.sortedBy { it.date }.forEach { item ->
+          inboxStyle.addLine("${item.subject ?: item.title} · ${readableDate(item.date)}")
+        }
+        NotificationCompat.Builder(context, AgendaChannelId)
+          .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+          .setContentTitle("${homeworks.size} compiti aggiunti in agenda")
+          .setContentText(homeworks.take(2).joinToString(" · ") { it.subject ?: it.title })
+          .setStyle(inboxStyle)
+          .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+          .setAutoCancel(true)
+          .applyLaunchIntent(launchIntent)
+          .build()
+      }
+      notifyCompat(context, 4501, notification)
+    }
+  }
+
+  private fun dispatchHomeworks(
+    previous: SyncSnapshotPayloads,
+    current: SyncSnapshotPayloads,
+    launchIntent: PendingIntent?,
+  ) {
+    val before = decodeList<Homework>(previous.homeworks)
+    val after = decodeList<Homework>(current.homeworks)
+    val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id } }
+    if (newItems.isEmpty()) return
+
+    val notification = if (newItems.size == 1) {
+      val hw = newItems.first()
+      val desc = hw.description.ifBlank { "Nessuna descrizione." }
+      NotificationCompat.Builder(context, HomeworkChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle("Nuovo compito — ${hw.subject}")
+        .setContentText("${desc.take(80)} · entro ${readableDate(hw.dueDate)}")
+        .setStyle(
+          NotificationCompat.BigTextStyle()
+            .bigText("${hw.subject}\n$desc\n\nConsegna entro: ${readableDate(hw.dueDate)}")
+            .setSummaryText("Compiti"),
+        )
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchIntent)
+        .build()
+    } else {
+      val inboxStyle = NotificationCompat.InboxStyle()
+        .setSummaryText("Compiti — ${newItems.size} nuovi")
+      newItems.sortedBy { it.dueDate }.forEach { hw ->
+        inboxStyle.addLine("${hw.subject} · entro ${readableDate(hw.dueDate)}")
+      }
+      NotificationCompat.Builder(context, HomeworkChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle("${newItems.size} nuovi compiti")
+        .setContentText(newItems.take(2).joinToString(" · ") { it.subject })
+        .setStyle(inboxStyle)
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchIntent)
+        .build()
+    }
+    notifyCompat(context, 4100, notification)
+  }
+
+  private fun dispatchCommunications(
+    previous: SyncSnapshotPayloads,
+    current: SyncSnapshotPayloads,
+    launchIntent: PendingIntent?,
+  ) {
+    val before = decodeList<Communication>(previous.communications)
+    val after = decodeList<Communication>(current.communications)
+    val newItems = after.filterNot { candidate ->
+      before.any { it.id == candidate.id && it.pubId == candidate.pubId }
+    }
+    if (newItems.isEmpty()) return
+
+    val notification = if (newItems.size == 1) {
+      val comm = newItems.first()
+      val preview = comm.contentPreview.ifBlank { comm.title }
+      val senderLabel = comm.sender.ifBlank { null }
+      val bodyLines = buildList {
+        if (senderLabel != null) add("Mittente: $senderLabel")
+        add(preview.take(300))
+        if (!comm.category.isNullOrBlank()) add("Categoria: ${comm.category}")
+        if (comm.needsAck) add("Richiede presa visione.")
+        if (comm.needsReply) add("Richiede risposta.")
+      }
+      NotificationCompat.Builder(context, CommunicationsChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle(comm.title.ifBlank { "Nuova comunicazione" })
+        .setContentText("${senderLabel ?: "Bacheca"} · ${readableDate(comm.date)}")
+        .setStyle(
+          NotificationCompat.BigTextStyle()
+            .bigText(bodyLines.joinToString("\n"))
+            .setSummaryText("Comunicazioni · ${readableDate(comm.date)}"),
+        )
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchIntent)
+        .build()
+    } else {
+      val inboxStyle = NotificationCompat.InboxStyle()
+        .setSummaryText("Bacheca — ${newItems.size} nuove comunicazioni")
+      newItems.sortedByDescending { it.date }.forEach { comm ->
+        inboxStyle.addLine("${comm.title.take(50)} · ${readableDate(comm.date)}")
+      }
+      NotificationCompat.Builder(context, CommunicationsChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle("${newItems.size} nuove comunicazioni")
+        .setContentText("La bacheca è stata aggiornata.")
+        .setStyle(inboxStyle)
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchIntent)
+        .build()
+    }
+    notifyCompat(context, 4200, notification)
+  }
+
+  private fun dispatchAbsences(
+    previous: SyncSnapshotPayloads,
+    current: SyncSnapshotPayloads,
+    launchIntent: PendingIntent?,
+  ) {
+    val before = decodeList<AbsenceRecord>(previous.absences)
+    val after = decodeList<AbsenceRecord>(current.absences)
+    val newItems = after.filterNot { candidate ->
+      before.any { existing ->
+        existing.id == candidate.id &&
+          existing.date == candidate.date &&
+          existing.type == candidate.type
       }
     }
+    if (newItems.isEmpty()) return
+
+    val notification = if (newItems.size == 1) {
+      val record = newItems.first()
+      val label = absenceLabel(record)
+      val justifyNote = if (!record.justified && record.canJustify) "\nRicordati di presentare la giustifica." else ""
+      NotificationCompat.Builder(context, AbsencesChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle("$label registrata")
+        .setContentText("$label del ${readableDate(record.date)}${if (!record.justified) " — da giustificare" else ""}")
+        .setStyle(
+          NotificationCompat.BigTextStyle()
+            .bigText("$label del ${readableDate(record.date)}.\nStato: ${if (record.justified) "Giustificata" else "Da giustificare"}$justifyNote")
+            .setSummaryText("Presenze"),
+        )
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchIntent)
+        .build()
+    } else {
+      val inboxStyle = NotificationCompat.InboxStyle()
+        .setSummaryText("Presenze — ${newItems.size} nuovi eventi")
+      newItems.sortedByDescending { it.date }.forEach { record ->
+        val justified = if (record.justified) "✓" else "!"
+        inboxStyle.addLine("$justified ${absenceLabel(record)} · ${readableDate(record.date)}")
+      }
+      NotificationCompat.Builder(context, AbsencesChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle("${newItems.size} nuovi eventi presenze")
+        .setContentText(newItems.take(2).joinToString(" · ") { "${absenceLabel(it)} del ${readableDate(it.date)}" })
+        .setStyle(inboxStyle)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchIntent)
+        .build()
+    }
+    notifyCompat(context, 4300, notification)
+  }
+
+  private fun dispatchNotes(
+    previous: SyncSnapshotPayloads,
+    current: SyncSnapshotPayloads,
+    launchIntent: PendingIntent?,
+  ) {
+    val before = decodeList<Note>(previous.notes)
+    val after = decodeList<Note>(current.notes)
+    val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id } }
+    if (newItems.isEmpty()) return
+
+    val notification = if (newItems.size == 1) {
+      val note = newItems.first()
+      val bodyLines = buildList {
+        if (note.categoryLabel.isNotBlank()) add("Categoria: ${note.categoryLabel}")
+        add("Autore: ${note.author}")
+        add(note.contentPreview.ifBlank { note.title })
+      }
+      NotificationCompat.Builder(context, NotesChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle(note.title.ifBlank { "Nuova annotazione" })
+        .setContentText("${note.author} · ${readableDate(note.date)}")
+        .setStyle(
+          NotificationCompat.BigTextStyle()
+            .bigText(bodyLines.joinToString("\n"))
+            .setSummaryText("Annotazioni · ${readableDate(note.date)}"),
+        )
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchIntent)
+        .build()
+    } else {
+      val inboxStyle = NotificationCompat.InboxStyle()
+        .setSummaryText("Annotazioni — ${newItems.size} nuove")
+      newItems.sortedByDescending { it.date }.forEach { note ->
+        inboxStyle.addLine("${note.title.take(50)} · ${note.author}")
+      }
+      NotificationCompat.Builder(context, NotesChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle("${newItems.size} nuove annotazioni")
+        .setContentText(newItems.take(2).joinToString(" · ") { it.author })
+        .setStyle(inboxStyle)
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchIntent)
+        .build()
+    }
+    notifyCompat(context, 4600, notification)
   }
 
   private inline fun <reified T> decodeList(payload: String?): List<T> {
@@ -258,56 +687,39 @@ class SyncNotificationDispatcher @Inject constructor(
     return runCatching { json.decodeFromString<List<T>>(source) }.getOrDefault(emptyList())
   }
 
-  private fun showNotification(
-    channelId: String,
-    notificationId: Int,
-    title: String,
-    text: String,
-  ) {
-    val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
-    val contentIntent = launchIntent?.let {
-      PendingIntent.getActivity(
-        context,
-        channelId.hashCode(),
-        it,
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-      )
-    }
-
-    notifyCompat(
-      context = context,
-      notificationId = notificationId,
-      notification = NotificationCompat.Builder(context, channelId)
-        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
-        .setContentTitle(title)
-        .setContentText(text)
-        .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-        .setAutoCancel(true)
-        .setPriority(
-          if (channelId == AbsencesChannelId) NotificationCompat.PRIORITY_HIGH
-          else NotificationCompat.PRIORITY_DEFAULT,
-        )
-        .apply {
-          if (contentIntent != null) {
-            setContentIntent(contentIntent)
-          }
-        }
-        .build(),
-    )
+  private fun absenceLabel(record: AbsenceRecord): String = when (record.type) {
+    AbsenceType.ABSENCE -> "Assenza"
+    AbsenceType.LATE -> "Ritardo"
+    AbsenceType.EXIT -> "Uscita anticipata"
   }
+}
 
-  private fun absenceLabel(record: AbsenceRecord): String {
-    return when (record.type) {
-      dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType.ABSENCE -> "Assenza"
-      dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType.LATE -> "Ritardo"
-      dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType.EXIT -> "Uscita anticipata"
-    }
-  }
+internal fun gradeEmoji(numericValue: Double?): String = when {
+  numericValue == null -> "📝"
+  numericValue >= 9.0 -> "⭐"
+  numericValue >= 7.5 -> "🟢"
+  numericValue >= 6.0 -> "🟡"
+  else -> "🔴"
+}
 
-  private fun readableDate(value: String): String {
-    val parsed = runCatching { LocalDate.parse(value) }.getOrNull() ?: return value
-    return "%02d/%02d/%04d".format(parsed.dayOfMonth, parsed.monthValue, parsed.year)
-  }
+internal fun readableDate(value: String): String {
+  val parsed = runCatching { LocalDate.parse(value) }.getOrNull() ?: return value
+  return "%02d/%02d/%04d".format(parsed.dayOfMonth, parsed.monthValue, parsed.year)
+}
+
+private fun launchPendingIntent(context: Context): PendingIntent? {
+  val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
+  return PendingIntent.getActivity(
+    context,
+    0,
+    intent,
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+  )
+}
+
+private fun NotificationCompat.Builder.applyLaunchIntent(intent: PendingIntent?): NotificationCompat.Builder {
+  if (intent != null) setContentIntent(intent)
+  return this
 }
 
 private fun hasNotificationPermission(context: Context): Boolean {
