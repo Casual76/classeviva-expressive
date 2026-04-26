@@ -330,6 +330,8 @@ private fun TopLevelNavigationSuitePreview() {
           onOpenMaterials = {},
           onOpenSettings = {},
           onOpenNotes = {},
+          onOpenHomework = {},
+          onOpenDocuments = {},
         )
       }
     }
@@ -448,9 +450,13 @@ private fun AuthenticatedApp() {
             onOpenAbsences = { navController.navigate("absences") },
             onOpenMaterials = { navController.navigate("materials") },
             onOpenSettings = { navController.navigate("settings") },
+            onOpenHomework = { navController.navigate("homework") },
+            onOpenDocuments = { navController.navigate("documents") },
           )
         }
         composable("materials") { MaterialsRoute(onBack = navController::navigateUp) }
+        composable("homework") { HomeworkRoute(onBack = navController::navigateUp) }
+        composable("documents") { DocumentsRoute(onBack = navController::navigateUp) }
         composable("lessons") { LessonsRoute(onBack = navController::navigateUp) }
         composable("absences") { AbsencesRoute(onBack = navController::navigateUp) }
         composable("settings") {
@@ -488,6 +494,8 @@ private fun MoreHubScreen(
   onOpenMaterials: () -> Unit,
   onOpenSettings: () -> Unit,
   onOpenNotes: () -> Unit,
+  onOpenHomework: () -> Unit,
+  onOpenDocuments: () -> Unit,
 ) {
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -532,6 +540,28 @@ private fun MoreHubScreen(
           onClick = onOpenMaterials,
           badge = { StatusBadge("DIDATTICA", tone = ExpressiveTone.Info) },
           leading = { Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Compiti",
+          subtitle = "Compiti assegnati dai docenti con data di consegna.",
+          eyebrow = "Agenda",
+          tone = ExpressiveTone.Warning,
+          onClick = onOpenHomework,
+          badge = { StatusBadge("COMPITI", tone = ExpressiveTone.Warning) },
+          leading = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Documenti e libri",
+          subtitle = "Documenti della scuola, pagelle e libri scolastici adottati.",
+          eyebrow = "Documenti",
+          tone = ExpressiveTone.Info,
+          onClick = onOpenDocuments,
+          badge = { StatusBadge("DOCUMENTI", tone = ExpressiveTone.Info) },
+          leading = { Icon(Icons.Rounded.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         )
       }
       item {
