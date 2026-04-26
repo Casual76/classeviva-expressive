@@ -25,8 +25,8 @@ android {
     applicationId configuredApplicationId
     minSdk 26
     targetSdk 36
-    versionCode 2026042601
-    versionName "5.3.0"
+    versionCode 2026042602
+    versionName "5.4.0"
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
   }
@@ -38,6 +38,8 @@ android {
         storePassword keystoreProperties["storePassword"]
         keyAlias keystoreProperties["keyAlias"]
         keyPassword keystoreProperties["keyPassword"]
+        v1SigningEnabled true
+        v2SigningEnabled true
       }
     }
   }
