@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.4.1",
+      "version": "5.4.2",
       "releaseDate": "2026-04-27",
-      "changelog": "v5.4.1 — Orario modificabile manualmente (long-press su uno slot), gestione educazione civica/orientamento nel template, nuova sezione Professori con statistiche di presenza e voti",
-      "releaseTag": "stable-classeviva-expressive-v5.4.1",
-      "apkAsset": "classeviva-expressive-5.4.1.apk",
+      "changelog": "v5.4.2 — orario modificabile manualmente (long-press su slot), filtro supplenti e algoritmo rigore multi-fattore nella sezione Professori",
+      "releaseTag": "stable-classeviva-expressive-v5.4.2",
+      "apkAsset": "classeviva-expressive-5.4.2.apk",
       "exeAsset": "",
-      "sizeBytes": 20926572
+      "sizeBytes": 20942952
     },
     "beta": {
-      "version": "5.4.1",
+      "version": "5.4.2",
       "releaseDate": "2026-04-27",
-      "changelog": "v5.4.1 — Orario modificabile manualmente (long-press su uno slot), gestione educazione civica/orientamento nel template, nuova sezione Professori con statistiche di presenza e voti",
-      "releaseTag": "stable-classeviva-expressive-v5.4.1",
-      "apkAsset": "classeviva-expressive-5.4.1.apk",
+      "changelog": "v5.4.2 — orario modificabile manualmente (long-press su slot), filtro supplenti e algoritmo rigore multi-fattore nella sezione Professori",
+      "releaseTag": "stable-classeviva-expressive-v5.4.2",
+      "apkAsset": "classeviva-expressive-5.4.2.apk",
       "exeAsset": "",
-      "sizeBytes": 20926572
+      "sizeBytes": 20942952
     },
     "history": [
+      {
+        "version": "5.4.1",
+        "releaseDate": "2026-04-27",
+        "changelog": "v5.4.1 — Orario modificabile manualmente (long-press su uno slot), gestione educazione civica/orientamento nel template, nuova sezione Professori con statistiche di presenza e voti",
+        "releaseTag": "stable-classeviva-expressive-v5.4.1",
+        "apkAsset": "classeviva-expressive-5.4.1.apk",
+        "exeAsset": "",
+        "sizeBytes": 20926572
+      },
       {
         "version": "5.4.0",
         "releaseDate": "2026-04-26",
