@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.4.2",
+      "version": "5.4.3",
       "releaseDate": "2026-04-27",
-      "changelog": "v5.4.2 — orario modificabile manualmente (long-press su slot), filtro supplenti e algoritmo rigore multi-fattore nella sezione Professori",
-      "releaseTag": "stable-classeviva-expressive-v5.4.2",
-      "apkAsset": "classeviva-expressive-5.4.2.apk",
+      "changelog": "v5.4.3 — fix crash modifica orario; conferma slot con tap (badge CONFERMATO, slot bloccato dall'algoritmo); tieni premuto per modificare",
+      "releaseTag": "stable-classeviva-expressive-v5.4.3",
+      "apkAsset": "classeviva-expressive-5.4.3.apk",
       "exeAsset": "",
-      "sizeBytes": 20942952
+      "sizeBytes": 20942947
     },
     "beta": {
-      "version": "5.4.2",
+      "version": "5.4.3",
       "releaseDate": "2026-04-27",
-      "changelog": "v5.4.2 — orario modificabile manualmente (long-press su slot), filtro supplenti e algoritmo rigore multi-fattore nella sezione Professori",
-      "releaseTag": "stable-classeviva-expressive-v5.4.2",
-      "apkAsset": "classeviva-expressive-5.4.2.apk",
+      "changelog": "v5.4.3 — fix crash modifica orario; conferma slot con tap (badge CONFERMATO, slot bloccato dall'algoritmo); tieni premuto per modificare",
+      "releaseTag": "stable-classeviva-expressive-v5.4.3",
+      "apkAsset": "classeviva-expressive-5.4.3.apk",
       "exeAsset": "",
-      "sizeBytes": 20942952
+      "sizeBytes": 20942947
     },
     "history": [
+      {
+        "version": "5.4.2",
+        "releaseDate": "2026-04-27",
+        "changelog": "v5.4.2 — orario modificabile manualmente (long-press su slot), filtro supplenti e algoritmo rigore multi-fattore nella sezione Professori",
+        "releaseTag": "stable-classeviva-expressive-v5.4.2",
+        "apkAsset": "classeviva-expressive-5.4.2.apk",
+        "exeAsset": "",
+        "sizeBytes": 20942952
+      },
       {
         "version": "5.4.1",
         "releaseDate": "2026-04-27",
