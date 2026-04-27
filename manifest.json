@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.4.0",
-      "releaseDate": "2026-04-26",
-      "changelog": "v5.4.0 — nuove sezioni: Compiti, Documenti e libri scolastici, Media studente; fix apertura materiali didattici (link e file)",
-      "releaseTag": "stable-classeviva-expressive-v5.4.0",
-      "apkAsset": "classeviva-expressive-5.4.0.apk",
+      "version": "5.4.1",
+      "releaseDate": "2026-04-27",
+      "changelog": "v5.4.1 — Orario modificabile manualmente (long-press su uno slot), gestione educazione civica/orientamento nel template, nuova sezione Professori con statistiche di presenza e voti",
+      "releaseTag": "stable-classeviva-expressive-v5.4.1",
+      "apkAsset": "classeviva-expressive-5.4.1.apk",
       "exeAsset": "",
-      "sizeBytes": 20893808
+      "sizeBytes": 20926572
     },
     "beta": {
-      "version": "5.4.0",
-      "releaseDate": "2026-04-26",
-      "changelog": "v5.4.0 — nuove sezioni: Compiti, Documenti e libri scolastici, Media studente; fix apertura materiali didattici (link e file)",
-      "releaseTag": "stable-classeviva-expressive-v5.4.0",
-      "apkAsset": "classeviva-expressive-5.4.0.apk",
+      "version": "5.4.1",
+      "releaseDate": "2026-04-27",
+      "changelog": "v5.4.1 — Orario modificabile manualmente (long-press su uno slot), gestione educazione civica/orientamento nel template, nuova sezione Professori con statistiche di presenza e voti",
+      "releaseTag": "stable-classeviva-expressive-v5.4.1",
+      "apkAsset": "classeviva-expressive-5.4.1.apk",
       "exeAsset": "",
-      "sizeBytes": 20893808
+      "sizeBytes": 20926572
     },
     "history": [
+      {
+        "version": "5.4.0",
+        "releaseDate": "2026-04-26",
+        "changelog": "v5.4.0 — nuove sezioni: Compiti, Documenti e libri scolastici, Media studente; fix apertura materiali didattici (link e file)",
+        "releaseTag": "stable-classeviva-expressive-v5.4.0",
+        "apkAsset": "classeviva-expressive-5.4.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 20893808
+      },
       {
         "version": "5.2.4",
         "releaseDate": "2026-04-25",
