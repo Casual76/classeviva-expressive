@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.4.3",
-      "releaseDate": "2026-04-27",
-      "changelog": "v5.4.3 — fix crash modifica orario; conferma slot con tap (badge CONFERMATO, slot bloccato dall'algoritmo); tieni premuto per modificare",
-      "releaseTag": "stable-classeviva-expressive-v5.4.3",
-      "apkAsset": "classeviva-expressive-5.4.3.apk",
+      "version": "5.4.4",
+      "releaseDate": "2026-04-30",
+      "changelog": "Release 5.4.4",
+      "releaseTag": "stable-classeviva-expressive-v5.4.4",
+      "apkAsset": "classeviva-expressive-5.4.4.apk",
       "exeAsset": "",
-      "sizeBytes": 20942947
+      "sizeBytes": 20942918
     },
     "beta": {
-      "version": "5.4.3",
-      "releaseDate": "2026-04-27",
-      "changelog": "v5.4.3 — fix crash modifica orario; conferma slot con tap (badge CONFERMATO, slot bloccato dall'algoritmo); tieni premuto per modificare",
-      "releaseTag": "stable-classeviva-expressive-v5.4.3",
-      "apkAsset": "classeviva-expressive-5.4.3.apk",
+      "version": "5.4.4",
+      "releaseDate": "2026-04-30",
+      "changelog": "Release 5.4.4",
+      "releaseTag": "stable-classeviva-expressive-v5.4.4",
+      "apkAsset": "classeviva-expressive-5.4.4.apk",
       "exeAsset": "",
-      "sizeBytes": 20942947
+      "sizeBytes": 20942918
     },
     "history": [
+      {
+        "version": "5.4.3",
+        "releaseDate": "2026-04-27",
+        "changelog": "v5.4.3 — fix crash modifica orario; conferma slot con tap (badge CONFERMATO, slot bloccato dall'algoritmo); tieni premuto per modificare",
+        "releaseTag": "stable-classeviva-expressive-v5.4.3",
+        "apkAsset": "classeviva-expressive-5.4.3.apk",
+        "exeAsset": "",
+        "sizeBytes": 20942947
+      },
       {
         "version": "5.4.2",
         "releaseDate": "2026-04-27",
