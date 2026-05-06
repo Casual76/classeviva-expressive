@@ -21,7 +21,7 @@
       "releaseTag": "stable-classeviva-expressive-v5.5.0",
       "apkAsset": "classeviva-expressive-5.5.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20942965
+      "sizeBytes": 20959349
     },
     "beta": {
       "version": "5.5.0",
@@ -30,9 +30,18 @@
       "releaseTag": "stable-classeviva-expressive-v5.5.0",
       "apkAsset": "classeviva-expressive-5.5.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20942965
+      "sizeBytes": 20959349
     },
     "history": [
+      {
+        "version": "5.5.0",
+        "releaseDate": "2026-05-06",
+        "changelog": "Notifiche live integrate con Now Bar Android 16 e toggle nelle impostazioni; orario: fix persistenza override + ricalcolo manuale + algoritmo migliorato; bacheca: titolo non più duplicato e contenuto HTML reso leggibile",
+        "releaseTag": "stable-classeviva-expressive-v5.5.0",
+        "apkAsset": "classeviva-expressive-5.5.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 20942965
+      },
       {
         "version": "5.4.4",
         "releaseDate": "2026-04-30",
