@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.4.4",
-      "releaseDate": "2026-04-30",
-      "changelog": "Release 5.4.4",
-      "releaseTag": "stable-classeviva-expressive-v5.4.4",
-      "apkAsset": "classeviva-expressive-5.4.4.apk",
+      "version": "5.5.0",
+      "releaseDate": "2026-05-06",
+      "changelog": "Notifiche live integrate con Now Bar Android 16 e toggle nelle impostazioni; orario: fix persistenza override + ricalcolo manuale + algoritmo migliorato; bacheca: titolo non più duplicato e contenuto HTML reso leggibile",
+      "releaseTag": "stable-classeviva-expressive-v5.5.0",
+      "apkAsset": "classeviva-expressive-5.5.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20942918
+      "sizeBytes": 20942965
     },
     "beta": {
-      "version": "5.4.4",
-      "releaseDate": "2026-04-30",
-      "changelog": "Release 5.4.4",
-      "releaseTag": "stable-classeviva-expressive-v5.4.4",
-      "apkAsset": "classeviva-expressive-5.4.4.apk",
+      "version": "5.5.0",
+      "releaseDate": "2026-05-06",
+      "changelog": "Notifiche live integrate con Now Bar Android 16 e toggle nelle impostazioni; orario: fix persistenza override + ricalcolo manuale + algoritmo migliorato; bacheca: titolo non più duplicato e contenuto HTML reso leggibile",
+      "releaseTag": "stable-classeviva-expressive-v5.5.0",
+      "apkAsset": "classeviva-expressive-5.5.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20942918
+      "sizeBytes": 20942965
     },
     "history": [
+      {
+        "version": "5.4.4",
+        "releaseDate": "2026-04-30",
+        "changelog": "Release 5.4.4",
+        "releaseTag": "stable-classeviva-expressive-v5.4.4",
+        "apkAsset": "classeviva-expressive-5.4.4.apk",
+        "exeAsset": "",
+        "sizeBytes": 20942918
+      },
       {
         "version": "5.4.3",
         "releaseDate": "2026-04-27",
