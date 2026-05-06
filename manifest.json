@@ -15,22 +15,22 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.5.0",
+      "version": "5.6.0",
       "releaseDate": "2026-05-06",
-      "changelog": "Notifiche live integrate con Now Bar Android 16 e toggle nelle impostazioni; orario: fix persistenza override + ricalcolo manuale + algoritmo migliorato; bacheca: titolo non più duplicato e contenuto HTML reso leggibile",
-      "releaseTag": "stable-classeviva-expressive-v5.5.0",
-      "apkAsset": "classeviva-expressive-5.5.0.apk",
+      "changelog": "Notifica live: rimossa la card duplicata sulla notification shade (Now Bar Android 16 / Samsung One UI 7); orario: algoritmo riscritto da zero — bell-grid discovery, snap su griglia campanella, change detection sulle ultime 3 settimane, robusto a supplenze occasionali, soglie multi-fattore (frequenza + consenso); bacheca: presa visione ora mostra l'errore reale invece di fingere successo, allegati scaricati sempre via path autenticato (RestClient con refresh token automatico).",
+      "releaseTag": "stable-classeviva-expressive-v5.6.0",
+      "apkAsset": "classeviva-expressive-5.6.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20959349
+      "sizeBytes": 20959348
     },
     "beta": {
-      "version": "5.5.0",
+      "version": "5.6.0",
       "releaseDate": "2026-05-06",
-      "changelog": "Notifiche live integrate con Now Bar Android 16 e toggle nelle impostazioni; orario: fix persistenza override + ricalcolo manuale + algoritmo migliorato; bacheca: titolo non più duplicato e contenuto HTML reso leggibile",
-      "releaseTag": "stable-classeviva-expressive-v5.5.0",
-      "apkAsset": "classeviva-expressive-5.5.0.apk",
+      "changelog": "Notifica live: rimossa la card duplicata sulla notification shade (Now Bar Android 16 / Samsung One UI 7); orario: algoritmo riscritto da zero — bell-grid discovery, snap su griglia campanella, change detection sulle ultime 3 settimane, robusto a supplenze occasionali, soglie multi-fattore (frequenza + consenso); bacheca: presa visione ora mostra l'errore reale invece di fingere successo, allegati scaricati sempre via path autenticato (RestClient con refresh token automatico).",
+      "releaseTag": "stable-classeviva-expressive-v5.6.0",
+      "apkAsset": "classeviva-expressive-5.6.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20959349
+      "sizeBytes": 20959348
     },
     "history": [
       {
