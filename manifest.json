@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.6.3",
+      "version": "5.6.5",
       "releaseDate": "2026-05-07",
-      "changelog": "v5.6.3 — Merge blocchi consecutivi nell'orario: slot dello stesso prof vengono raggruppati (es. Fisica / Matematica 10:00–12:00). Conferma slot in due click: prima confermi, poi imposti l'aula direttamente.",
-      "releaseTag": "stable-classeviva-expressive-v5.6.3",
-      "apkAsset": "classeviva-expressive-5.6.3.apk",
+      "changelog": "Import orario 4F, fix algoritmo prof, dossier segreto potenziato, gestione Ruggeri -> Riccio",
+      "releaseTag": "stable-classeviva-expressive-v5.6.5",
+      "apkAsset": "classeviva-expressive-5.6.5.apk",
       "exeAsset": "",
-      "sizeBytes": 20975725
+      "sizeBytes": 20975724
     },
     "beta": {
-      "version": "5.6.3",
+      "version": "5.6.5",
       "releaseDate": "2026-05-07",
-      "changelog": "v5.6.3 — Merge blocchi consecutivi nell'orario: slot dello stesso prof vengono raggruppati (es. Fisica / Matematica 10:00–12:00). Conferma slot in due click: prima confermi, poi imposti l'aula direttamente.",
-      "releaseTag": "stable-classeviva-expressive-v5.6.3",
-      "apkAsset": "classeviva-expressive-5.6.3.apk",
+      "changelog": "Import orario 4F, fix algoritmo prof, dossier segreto potenziato, gestione Ruggeri -> Riccio",
+      "releaseTag": "stable-classeviva-expressive-v5.6.5",
+      "apkAsset": "classeviva-expressive-5.6.5.apk",
       "exeAsset": "",
-      "sizeBytes": 20975725
+      "sizeBytes": 20975724
     },
     "history": [
+      {
+        "version": "5.6.3",
+        "releaseDate": "2026-05-07",
+        "changelog": "v5.6.3 — Merge blocchi consecutivi nell'orario: slot dello stesso prof vengono raggruppati (es. Fisica / Matematica 10:00–12:00). Conferma slot in due click: prima confermi, poi imposti l'aula direttamente.",
+        "releaseTag": "stable-classeviva-expressive-v5.6.3",
+        "apkAsset": "classeviva-expressive-5.6.3.apk",
+        "exeAsset": "",
+        "sizeBytes": 20975725
+      },
       {
         "version": "5.6.2",
         "releaseDate": "2026-05-07",
