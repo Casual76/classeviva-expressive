@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.6.5",
+      "version": "5.6.6",
       "releaseDate": "2026-05-07",
-      "changelog": "Import orario 4F, fix algoritmo prof, dossier segreto potenziato, gestione Ruggeri -> Riccio",
-      "releaseTag": "stable-classeviva-expressive-v5.6.5",
-      "apkAsset": "classeviva-expressive-5.6.5.apk",
+      "changelog": "Import orario 4F migliorato (blocco ricalcolo e tag ufficiale), fix algoritmo prof, dossier segreto potenziato, gestione Ruggeri -> Riccio",
+      "releaseTag": "stable-classeviva-expressive-v5.6.6",
+      "apkAsset": "classeviva-expressive-5.6.6.apk",
       "exeAsset": "",
-      "sizeBytes": 20975724
+      "sizeBytes": 20975723
     },
     "beta": {
-      "version": "5.6.5",
+      "version": "5.6.6",
       "releaseDate": "2026-05-07",
-      "changelog": "Import orario 4F, fix algoritmo prof, dossier segreto potenziato, gestione Ruggeri -> Riccio",
-      "releaseTag": "stable-classeviva-expressive-v5.6.5",
-      "apkAsset": "classeviva-expressive-5.6.5.apk",
+      "changelog": "Import orario 4F migliorato (blocco ricalcolo e tag ufficiale), fix algoritmo prof, dossier segreto potenziato, gestione Ruggeri -> Riccio",
+      "releaseTag": "stable-classeviva-expressive-v5.6.6",
+      "apkAsset": "classeviva-expressive-5.6.6.apk",
       "exeAsset": "",
-      "sizeBytes": 20975724
+      "sizeBytes": 20975723
     },
     "history": [
+      {
+        "version": "5.6.5",
+        "releaseDate": "2026-05-07",
+        "changelog": "Import orario 4F, fix algoritmo prof, dossier segreto potenziato, gestione Ruggeri -> Riccio",
+        "releaseTag": "stable-classeviva-expressive-v5.6.5",
+        "apkAsset": "classeviva-expressive-5.6.5.apk",
+        "exeAsset": "",
+        "sizeBytes": 20975724
+      },
       {
         "version": "5.6.3",
         "releaseDate": "2026-05-07",
