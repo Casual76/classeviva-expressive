@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.6.0",
-      "releaseDate": "2026-05-06",
-      "changelog": "Notifica live: rimossa la card duplicata sulla notification shade (Now Bar Android 16 / Samsung One UI 7); orario: algoritmo riscritto da zero — bell-grid discovery, snap su griglia campanella, change detection sulle ultime 3 settimane, robusto a supplenze occasionali, soglie multi-fattore (frequenza + consenso); bacheca: presa visione ora mostra l'errore reale invece di fingere successo, allegati scaricati sempre via path autenticato (RestClient con refresh token automatico).",
-      "releaseTag": "stable-classeviva-expressive-v5.6.0",
-      "apkAsset": "classeviva-expressive-5.6.0.apk",
+      "version": "5.6.2",
+      "releaseDate": "2026-05-07",
+      "changelog": "v5.6.2 — Fix orario predittivo: rimosso template hardcoded classe 4F che causava orari errati. L'algoritmo bell-grid ora calcola l'orario direttamente dalle lezioni reali, adattandosi automaticamente ai cambi di professori e aule.",
+      "releaseTag": "stable-classeviva-expressive-v5.6.2",
+      "apkAsset": "classeviva-expressive-5.6.2.apk",
       "exeAsset": "",
-      "sizeBytes": 20959348
+      "sizeBytes": 20959329
     },
     "beta": {
-      "version": "5.6.0",
-      "releaseDate": "2026-05-06",
-      "changelog": "Notifica live: rimossa la card duplicata sulla notification shade (Now Bar Android 16 / Samsung One UI 7); orario: algoritmo riscritto da zero — bell-grid discovery, snap su griglia campanella, change detection sulle ultime 3 settimane, robusto a supplenze occasionali, soglie multi-fattore (frequenza + consenso); bacheca: presa visione ora mostra l'errore reale invece di fingere successo, allegati scaricati sempre via path autenticato (RestClient con refresh token automatico).",
-      "releaseTag": "stable-classeviva-expressive-v5.6.0",
-      "apkAsset": "classeviva-expressive-5.6.0.apk",
+      "version": "5.6.2",
+      "releaseDate": "2026-05-07",
+      "changelog": "v5.6.2 — Fix orario predittivo: rimosso template hardcoded classe 4F che causava orari errati. L'algoritmo bell-grid ora calcola l'orario direttamente dalle lezioni reali, adattandosi automaticamente ai cambi di professori e aule.",
+      "releaseTag": "stable-classeviva-expressive-v5.6.2",
+      "apkAsset": "classeviva-expressive-5.6.2.apk",
       "exeAsset": "",
-      "sizeBytes": 20959348
+      "sizeBytes": 20959329
     },
     "history": [
+      {
+        "version": "5.6.0",
+        "releaseDate": "2026-05-06",
+        "changelog": "Notifica live: rimossa la card duplicata sulla notification shade (Now Bar Android 16 / Samsung One UI 7); orario: algoritmo riscritto da zero — bell-grid discovery, snap su griglia campanella, change detection sulle ultime 3 settimane, robusto a supplenze occasionali, soglie multi-fattore (frequenza + consenso); bacheca: presa visione ora mostra l'errore reale invece di fingere successo, allegati scaricati sempre via path autenticato (RestClient con refresh token automatico).",
+        "releaseTag": "stable-classeviva-expressive-v5.6.0",
+        "apkAsset": "classeviva-expressive-5.6.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 20959348
+      },
       {
         "version": "5.5.0",
         "releaseDate": "2026-05-06",
