@@ -9,20 +9,28 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,6 +60,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
 import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
+import dev.antigravity.classevivaexpressive.core.domain.model.slotFingerprint
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -77,6 +86,9 @@ data class LessonsUiState(
   val totalTeachersCount: Int = 0,
   val lastMessage: String? = null,
   val isRefreshing: Boolean = false,
+  val editingSlot: TemplateSlot? = null,
+  val confirmingSlot: TemplateSlot? = null,
+  val settingRoomSlot: TemplateSlot? = null,
 )
 
 private data class DayOption(
@@ -84,19 +96,27 @@ private data class DayOption(
   val label: String,
 )
 
+private sealed interface SlotAction {
+  data class Editing(val slot: TemplateSlot) : SlotAction
+  data class Confirming(val slot: TemplateSlot) : SlotAction
+  data class SettingRoom(val slot: TemplateSlot) : SlotAction
+}
+
 @HiltViewModel
 class LessonsViewModel @Inject constructor(
   private val lessonsRepository: LessonsRepository,
 ) : ViewModel() {
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isRefreshing = MutableStateFlow(false)
+  private val slotAction = MutableStateFlow<SlotAction?>(null)
 
   val state = combine(
     lessonsRepository.observeLessons(),
     lessonsRepository.observeTimetableTemplate(),
     lastMessage,
     isRefreshing,
-  ) { lessons, timetableTemplate, message, refreshing ->
+    slotAction,
+  ) { lessons, timetableTemplate, message, refreshing, action ->
     val teachers = lessons.mapNotNull { it.teacher?.takeIf(String::isNotBlank) }.distinct().size
     LessonsUiState(
       lessons = lessons.sortedBy { "${it.date}-${it.time}" },
@@ -104,6 +124,9 @@ class LessonsViewModel @Inject constructor(
       totalTeachersCount = teachers,
       lastMessage = message,
       isRefreshing = refreshing,
+      editingSlot = (action as? SlotAction.Editing)?.slot,
+      confirmingSlot = (action as? SlotAction.Confirming)?.slot,
+      settingRoomSlot = (action as? SlotAction.SettingRoom)?.slot,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LessonsUiState())
 
@@ -117,6 +140,67 @@ class LessonsViewModel @Inject constructor(
 
   fun clearMessage() {
     lastMessage.value = null
+  }
+
+  fun startEditing(slot: TemplateSlot) {
+    slotAction.value = SlotAction.Editing(slot)
+  }
+
+  fun dismissEditing() {
+    slotAction.value = null
+  }
+
+  fun startConfirming(slot: TemplateSlot) {
+    slotAction.value = SlotAction.Confirming(slot)
+  }
+
+  fun dismissConfirming() {
+    slotAction.value = null
+  }
+
+  fun saveSlotOverride(original: TemplateSlot, edited: TemplateSlot) {
+    viewModelScope.launch {
+      lessonsRepository.saveSlotOverride(original.slotFingerprint(), edited)
+      slotAction.value = null
+    }
+  }
+
+  fun confirmSlot(slot: TemplateSlot) {
+    viewModelScope.launch {
+      lessonsRepository.saveSlotOverride(slot.slotFingerprint(), slot.copy(confirmed = true))
+      slotAction.value = null
+    }
+  }
+
+  fun startSettingRoom(slot: TemplateSlot) {
+    slotAction.value = SlotAction.SettingRoom(slot)
+  }
+
+  fun confirmSlotWithRoom(slot: TemplateSlot, room: String?) {
+    viewModelScope.launch {
+      lessonsRepository.saveSlotOverride(
+        slot.slotFingerprint(),
+        slot.copy(confirmed = true, room = room ?: slot.room),
+      )
+      slotAction.value = null
+    }
+  }
+
+  fun deleteSlotOverride(slot: TemplateSlot) {
+    viewModelScope.launch {
+      lessonsRepository.deleteSlotOverride(slot.slotFingerprint())
+      slotAction.value = null
+    }
+  }
+
+  fun regenerateTemplate() {
+    viewModelScope.launch {
+      isRefreshing.value = true
+      lessonsRepository.regenerateTimetableTemplate()
+        .onSuccess { lastMessage.value = "Orario ricalcolato dal tuo storico." }
+        .onFailure { lastMessage.value = it.message ?: "Ricalcolo orario fallito." }
+      isRefreshing.value = false
+    }
   }
 
   private fun requestRefresh(force: Boolean, showIndicator: Boolean) {
@@ -168,6 +252,7 @@ fun LessonsRoute(
       ?.let { key -> templateByDay[DayOfWeek.valueOf(key)] }
       .orEmpty()
   }
+  val templateBlocks = remember(templateSlots) { templateSlots.mergeIntoBlocks() }
 
   val currentWeekStart = remember(weekOffset) {
     LocalDate.now()
@@ -218,6 +303,9 @@ fun LessonsRoute(
         onBack = onBack,
         scrollBehavior = scrollBehavior,
         actions = {
+          IconButton(onClick = viewModel::regenerateTemplate) {
+            Icon(Icons.Rounded.AutoFixHigh, contentDescription = "Ricalcola orario")
+          }
           IconButton(onClick = viewModel::refresh) {
             Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
           }
@@ -316,7 +404,15 @@ fun LessonsRoute(
                   text = selectedDay?.longLabel()?.let { "$it ricorrente" } ?: "Orario ricorrente",
                 )
               }
-              if (templateSlots.isEmpty()) {
+              item {
+                Text(
+                  text = "Tocca uno slot per confermarlo · Tieni premuto per modificarlo.",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.padding(horizontal = 4.dp),
+                )
+              }
+              if (templateBlocks.isEmpty()) {
                 item {
                   EmptyState(
                     title = "Nessuno slot stabile",
@@ -324,26 +420,45 @@ fun LessonsRoute(
                   )
                 }
               } else {
-                items(templateSlots, key = { "${it.dayOfWeek}-${it.time}-${it.subject}" }) { slot ->
+                items(templateBlocks, key = { "${it.primary.dayOfWeek}-${it.primary.time}" }) { block ->
+                  val primary = block.primary
+                  val isOverridden = block.allSlots.any {
+                    state.timetableTemplate.manualOverrides.containsKey(it.slotFingerprint())
+                  }
+                  val isConfirmed = block.allSlots.all { it.confirmed }
+                  val displayRoom = block.allSlots
+                    .mapNotNull { it.room?.trim()?.takeIf(String::isNotBlank) }
+                    .firstOrNull()
                   RegisterListRow(
-                    title = slot.subject,
-                    subtitle = slot.teacher ?: "Docente non specificato",
-                    eyebrow = slot.timeRangeLabel(),
+                    title = block.displaySubject,
+                    subtitle = primary.teacher ?: "Docente non specificato",
+                    eyebrow = block.timeRangeLabel(),
                     meta = listOfNotNull(
-                      slot.room,
-                      "Ricorrenza ${(slot.confidence * 100).toInt()}%",
-                      "${slot.sampleCount} settimane",
+                      displayRoom,
+                      when {
+                        isConfirmed -> "Confermato manualmente"
+                        isOverridden -> "Modificato manualmente"
+                        block.isMulti -> "Blocco ${block.allSlots.size}h · ${(primary.confidence * 100).toInt()}%"
+                        else -> "Ricorrenza ${(primary.confidence * 100).toInt()}% · ${primary.sampleCount} settimane"
+                      },
                     ).joinToString(" / "),
                     tone = when {
-                      slot.confidence >= 0.8f -> ExpressiveTone.Success
-                      slot.confidence >= 0.6f -> ExpressiveTone.Info
+                      isConfirmed -> ExpressiveTone.Success
+                      isOverridden -> ExpressiveTone.Info
+                      primary.confidence >= 0.8f -> ExpressiveTone.Success
+                      primary.confidence >= 0.6f -> ExpressiveTone.Info
                       else -> ExpressiveTone.Warning
                     },
+                    onClick = { viewModel.startConfirming(primary) },
+                    onLongClick = { viewModel.startEditing(primary) },
                     badge = {
-                      StatusBadge(
-                        label = if (slot.confidence >= 0.75f) "STABILE" else "DINAMICO",
-                        tone = if (slot.confidence >= 0.75f) ExpressiveTone.Success else ExpressiveTone.Warning,
-                      )
+                      when {
+                        isConfirmed -> StatusBadge("CONFERMATO", tone = ExpressiveTone.Success)
+                        isOverridden -> StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
+                        block.isMulti -> StatusBadge("BLOCCO ${block.allSlots.size}H", tone = ExpressiveTone.Info)
+                        primary.confidence >= 0.75f -> StatusBadge("STABILE", tone = ExpressiveTone.Success)
+                        else -> StatusBadge("DINAMICO", tone = ExpressiveTone.Warning)
+                      }
                     },
                   )
                 }
@@ -417,6 +532,32 @@ fun LessonsRoute(
         }
       }
     }
+  }
+
+  state.editingSlot?.let { slot ->
+    EditSlotSheet(
+      slot = slot,
+      onDismiss = viewModel::dismissEditing,
+      onSave = { edited -> viewModel.saveSlotOverride(slot, edited) },
+      onReset = { viewModel.deleteSlotOverride(slot) },
+    )
+  }
+
+  state.confirmingSlot?.let { slot ->
+    ConfirmSlotDialog(
+      slot = slot,
+      onDismiss = viewModel::dismissConfirming,
+      onConfirm = { viewModel.startSettingRoom(slot) },
+      onRemoveConfirm = { viewModel.deleteSlotOverride(slot) },
+    )
+  }
+
+  state.settingRoomSlot?.let { slot ->
+    RoomInputDialog(
+      slot = slot,
+      onDismiss = { viewModel.confirmSlotWithRoom(slot, null) },
+      onSave = { room -> viewModel.confirmSlotWithRoom(slot, room) },
+    )
   }
 }
 
@@ -498,4 +639,241 @@ private fun TemplateSlot.timeRangeLabel(): String {
 
 private fun String.toLocalDateOrNull(): LocalDate? {
   return runCatching { LocalDate.parse(this) }.getOrNull()
+}
+
+private data class SlotBlock(
+  val primary: TemplateSlot,
+  val extra: List<TemplateSlot> = emptyList(),
+) {
+  val allSlots: List<TemplateSlot> get() = listOf(primary) + extra
+  val isMulti: Boolean get() = extra.isNotEmpty()
+  val displaySubject: String get() = allSlots.map { it.subject }.distinct().joinToString(" / ")
+
+  fun timeRangeLabel(): String {
+    val start = runCatching { LocalTime.parse(primary.time) }.getOrNull() ?: return primary.time
+    val lastSlot = extra.lastOrNull() ?: primary
+    val end = lastSlot.endTime
+      ?.takeIf(String::isNotBlank)
+      ?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
+      ?: start.plusMinutes(allSlots.sumOf { it.durationMinutes }.toLong())
+    return "${start.format(DateTimeFormatter.ofPattern("HH:mm"))} - ${end.format(DateTimeFormatter.ofPattern("HH:mm"))}"
+  }
+}
+
+private fun List<TemplateSlot>.mergeIntoBlocks(): List<SlotBlock> {
+  if (isEmpty()) return emptyList()
+  val sorted = sortedBy { it.time }
+  val blocks = mutableListOf<SlotBlock>()
+  var currentPrimary = sorted[0]
+  val currentExtra = mutableListOf<TemplateSlot>()
+
+  for (i in 1 until sorted.size) {
+    val prev = currentExtra.lastOrNull() ?: currentPrimary
+    val next = sorted[i]
+    val sameTeacher = !prev.teacher.isNullOrBlank() && prev.teacher == next.teacher
+    val consecutive = run {
+      val prevEnd = runCatching { LocalTime.parse(prev.endTime ?: prev.time) }.getOrNull()
+      val nextStart = runCatching { LocalTime.parse(next.time) }.getOrNull()
+      if (prevEnd == null || nextStart == null) return@run false
+      java.time.Duration.between(prevEnd, nextStart).toMinutes() in -2..5
+    }
+    if (sameTeacher && consecutive) {
+      currentExtra.add(next)
+    } else {
+      blocks.add(SlotBlock(currentPrimary, currentExtra.toList()))
+      currentPrimary = next
+      currentExtra.clear()
+    }
+  }
+  blocks.add(SlotBlock(currentPrimary, currentExtra.toList()))
+  return blocks
+}
+
+@Composable
+private fun ConfirmSlotDialog(
+  slot: TemplateSlot,
+  onDismiss: () -> Unit,
+  onConfirm: () -> Unit,
+  onRemoveConfirm: () -> Unit,
+) {
+  if (slot.confirmed) {
+    AlertDialog(
+      onDismissRequest = onDismiss,
+      title = { Text("Slot confermato") },
+      text = { Text("Questo slot e gia confermato. Vuoi rimuovere la conferma e lasciare che l'algoritmo lo rivaluti?") },
+      confirmButton = {
+        TextButton(onClick = onRemoveConfirm) { Text("Rimuovi conferma") }
+      },
+      dismissButton = {
+        TextButton(onClick = onDismiss) { Text("Annulla") }
+      },
+    )
+  } else {
+    AlertDialog(
+      onDismissRequest = onDismiss,
+      title = { Text("È corretto?") },
+      text = {
+        Text(
+          "${slot.subject}${slot.teacher?.let { " con $it" }.orEmpty()} · ${slot.timeRangeLabel()}.",
+        )
+      },
+      confirmButton = {
+        TextButton(onClick = onConfirm) { Text("Sì, è corretto") }
+      },
+      dismissButton = {
+        TextButton(onClick = onDismiss) { Text("Annulla") }
+      },
+    )
+  }
+}
+
+@Composable
+private fun RoomInputDialog(
+  slot: TemplateSlot,
+  onDismiss: () -> Unit,
+  onSave: (room: String?) -> Unit,
+) {
+  var room by rememberSaveable { mutableStateOf(slot.room.orEmpty()) }
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Aula") },
+    text = {
+      OutlinedTextField(
+        value = room,
+        onValueChange = { room = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Aula (opzionale)") },
+        placeholder = { Text("es. P1 Aula 21") },
+        singleLine = true,
+      )
+    },
+    confirmButton = {
+      TextButton(onClick = { onSave(room.trim().ifBlank { null }) }) { Text("Salva") }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) { Text("Salta") }
+    },
+  )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditSlotSheet(
+  slot: TemplateSlot,
+  onDismiss: () -> Unit,
+  onSave: (TemplateSlot) -> Unit,
+  onReset: () -> Unit,
+) {
+  var subject by rememberSaveable { mutableStateOf(slot.subject) }
+  var teacher by rememberSaveable { mutableStateOf(slot.teacher.orEmpty()) }
+  var room by rememberSaveable { mutableStateOf(slot.room.orEmpty()) }
+  var startTime by rememberSaveable { mutableStateOf(slot.time) }
+  var endTime by rememberSaveable { mutableStateOf(slot.endTime.orEmpty()) }
+  var editingField by rememberSaveable { mutableStateOf<String?>(null) }
+
+  ModalBottomSheet(onDismissRequest = onDismiss) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .verticalScroll(rememberScrollState())
+        .padding(horizontal = 24.dp, vertical = 12.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text("Modifica slot orario", style = MaterialTheme.typography.headlineSmall)
+      OutlinedTextField(
+        value = subject,
+        onValueChange = { subject = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Materia") },
+        singleLine = true,
+      )
+      OutlinedTextField(
+        value = teacher,
+        onValueChange = { teacher = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Docente (opzionale)") },
+        singleLine = true,
+      )
+      OutlinedTextField(
+        value = room,
+        onValueChange = { room = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = { Text("Aula (opzionale)") },
+        singleLine = true,
+      )
+      RegisterListRow(
+        title = "Ora inizio",
+        subtitle = startTime.ifBlank { "Non impostata" },
+        eyebrow = "Orario",
+        tone = ExpressiveTone.Info,
+        onClick = { editingField = "start" },
+        badge = { StatusBadge("MODIFICA", tone = ExpressiveTone.Info) },
+      )
+      RegisterListRow(
+        title = "Ora fine",
+        subtitle = endTime.ifBlank { "Non impostata" },
+        eyebrow = "Orario",
+        tone = ExpressiveTone.Info,
+        onClick = { editingField = "end" },
+        badge = { StatusBadge("MODIFICA", tone = ExpressiveTone.Info) },
+      )
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        TextButton(onClick = { onReset(); onDismiss() }) { Text("Ripristina") }
+        TextButton(onClick = onDismiss) { Text("Annulla") }
+        Button(
+          onClick = {
+            val resolvedDuration = runCatching {
+              val s = LocalTime.parse(startTime)
+              val e = LocalTime.parse(endTime.ifBlank { startTime })
+              java.time.Duration.between(s, e).toMinutes().toInt().coerceAtLeast(slot.durationMinutes)
+            }.getOrDefault(slot.durationMinutes)
+            onSave(
+              slot.copy(
+                subject = subject.trim().ifBlank { slot.subject },
+                teacher = teacher.trim().ifBlank { null },
+                room = room.trim().ifBlank { null },
+                time = startTime.ifBlank { slot.time },
+                endTime = endTime.ifBlank { null },
+                durationMinutes = resolvedDuration,
+                confirmed = false,
+              ),
+            )
+          },
+          enabled = subject.isNotBlank(),
+        ) {
+          Text("Salva")
+        }
+      }
+    }
+  }
+
+  if (editingField != null) {
+    val currentValue = if (editingField == "start") startTime else endTime
+    val initialTime = runCatching { LocalTime.parse(currentValue) }.getOrElse { LocalTime.of(8, 0) }
+    val timePickerState = rememberTimePickerState(
+      initialHour = initialTime.hour,
+      initialMinute = initialTime.minute,
+      is24Hour = true,
+    )
+    AlertDialog(
+      onDismissRequest = { editingField = null },
+      title = { Text(if (editingField == "start") "Ora inizio" else "Ora fine") },
+      text = { TimePicker(state = timePickerState) },
+      confirmButton = {
+        TextButton(
+          onClick = {
+            val formatted = "%02d:%02d".format(timePickerState.hour, timePickerState.minute)
+            if (editingField == "start") startTime = formatted else endTime = formatted
+            editingField = null
+          },
+        ) { Text("Imposta") }
+      },
+      dismissButton = {
+        TextButton(onClick = { editingField = null }) { Text("Annulla") }
+      },
+    )
+  }
 }
