@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.7.8",
+      "version": "5.7.9",
       "releaseDate": "2026-05-15",
-      "changelog": "Release 5.7.8",
-      "releaseTag": "stable-classeviva-expressive-v5.7.8",
-      "apkAsset": "classeviva-expressive-5.7.8.apk",
+      "changelog": "Release 5.7.9",
+      "releaseTag": "stable-classeviva-expressive-v5.7.9",
+      "apkAsset": "classeviva-expressive-5.7.9.apk",
       "exeAsset": "",
-      "sizeBytes": 20533535
+      "sizeBytes": 20534455
     },
     "beta": {
-      "version": "5.7.8",
+      "version": "5.7.9",
       "releaseDate": "2026-05-15",
-      "changelog": "Release 5.7.8",
-      "releaseTag": "stable-classeviva-expressive-v5.7.8",
-      "apkAsset": "classeviva-expressive-5.7.8.apk",
+      "changelog": "Release 5.7.9",
+      "releaseTag": "stable-classeviva-expressive-v5.7.9",
+      "apkAsset": "classeviva-expressive-5.7.9.apk",
       "exeAsset": "",
-      "sizeBytes": 20533535
+      "sizeBytes": 20534455
     },
     "history": [
+      {
+        "version": "5.7.8",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.8",
+        "releaseTag": "stable-classeviva-expressive-v5.7.8",
+        "apkAsset": "classeviva-expressive-5.7.8.apk",
+        "exeAsset": "",
+        "sizeBytes": 20533535
+      },
       {
         "version": "5.7.7",
         "releaseDate": "2026-05-15",
