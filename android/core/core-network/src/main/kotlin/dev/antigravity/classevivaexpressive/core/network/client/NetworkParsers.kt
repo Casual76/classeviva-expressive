@@ -123,7 +123,10 @@ internal fun normalizeLesson(data: JsonElement): Lesson {
       if (raw in 1..10) raw * 60 else raw
     }
   }
-  val startTime = normalizeTime(obj.string("lessonHour", "ora", "time", "startTime", "evtDatetimeBegin")).orEmpty()
+  val hourPosition = obj.int("evtHPos", "hPos", "hourPos", "lessonHour", "ora")
+  val startTime = normalizeTime(obj.string("time", "startTime", "evtDatetimeBegin", "lessonHour", "ora"))
+    ?: hourPosition?.let(::lessonHourPositionToTime)
+    ?: ""
   val endTime = normalizeTime(endStr)
     ?: startTime.takeIf(String::isNotBlank)?.let { start ->
       runCatching { LocalTime.parse(start).plusMinutes(durationMinutes.toLong()).format(TimeFormatter) }.getOrNull()
@@ -193,10 +196,10 @@ internal fun normalizeAbsence(data: JsonElement): AbsenceRecord {
 
 internal fun normalizeCommunication(data: JsonElement): Communication {
   val obj = data.obj()
-  val needsAck = obj.bool("needSign", "needsAck") ?: false
-  val needsReply = obj.bool("needReply", "needsReply") ?: false
-  val needsJoin = obj.bool("needJoin", "needsJoin") ?: false
-  val needsFile = obj.bool("needFile", "needsFile") ?: false
+  val needsAck = obj.bool("needSign", "needsAck", "cntValidInSign", "cntValidSign") ?: false
+  val needsReply = obj.bool("needReply", "needsReply", "cntValidInReply", "cntValidReply") ?: false
+  val needsJoin = obj.bool("needJoin", "needsJoin", "cntValidInJoin", "cntValidJoin") ?: false
+  val needsFile = obj.bool("needFile", "needsFile", "cntValidInFile", "cntValidFile") ?: false
   val noticeboardAttachments = normalizeNoticeboardAttachments(obj["attachments"] ?: obj["allegati"])
   val attachments = (
     noticeboardAttachments.map(::toRemoteAttachment) +
@@ -213,7 +216,7 @@ internal fun normalizeCommunication(data: JsonElement): Communication {
     fileUploadUrl = findActionUrl(data, "upload", "file", "attach", "alleg"),
   )
   return Communication(
-    id = obj.string("id", "pubId", "commId", "evento_id").orEmpty(),
+    id = obj.string("cntId", "evento_id", "id", "commId", "pubId").orEmpty(),
     pubId = obj.string("pubId", "id", "commId", "evento_id").orEmpty(),
     evtCode = obj.string("evtCode", "code").orEmpty(),
     title = sanitizeRegisterText(obj.string("cntTitle", "title", "titolo", "evtTitle")) ?: "Comunicazione",
@@ -223,7 +226,7 @@ internal fun normalizeCommunication(data: JsonElement): Communication {
     ),
     sender = sanitizeRegisterText(obj.string("authorName", "mittente", "sender")) ?: "Scuola",
     date = normalizeDate(obj.string("evtDate", "data", "date", "pubDT")),
-    read = obj.bool("read", "letto", "isRead", "readStatus") ?: false,
+    read = obj.bool("read", "letto", "isRead", "readStatus", "cntStatus", "status") ?: false,
     attachments = attachments,
     category = sanitizeRegisterText(obj.string("cntCategory", "category")),
     needsAck = needsAck,
@@ -241,18 +244,23 @@ internal fun normalizeCommunication(data: JsonElement): Communication {
 }
 
 internal fun normalizeCommunicationDetail(root: JsonObject, base: Communication): CommunicationDetail {
-  val item = (root["item"] ?: root["event"]).obj().takeIf { it.isNotEmpty() } ?: root
+  val item = firstNoticeboardDetailObject(root)
   val reply = root["reply"].obj()
   val portalDetailUrl = findActionUrl(root, "detail", "notice", "view", "href", "link")
   val acknowledgeUrl = findActionUrl(root, "sign", "ack", "presa", "visione", "confirm")
   val replyUrl = findActionUrl(root, "reply", "response", "risposta")
   val joinUrl = findActionUrl(root, "join", "ades", "particip")
   val fileUploadUrl = findActionUrl(root, "upload", "file", "attach", "alleg")
+  val detailText = noticeboardText(item) ?: noticeboardText(root)
+  val needsAck = base.needsAck || item.bool("needSign", "needsAck", "cntValidInSign", "cntValidSign") == true
+  val needsReply = base.needsReply || item.bool("needReply", "needsReply", "cntValidInReply", "cntValidReply") == true
+  val needsJoin = base.needsJoin || item.bool("needJoin", "needsJoin", "cntValidInJoin", "cntValidJoin") == true
+  val needsFile = base.needsFile || item.bool("needFile", "needsFile", "cntValidInFile", "cntValidFile") == true
   val actions = buildNoticeboardActions(
-    needsAck = base.needsAck,
-    needsReply = base.needsReply || replyUrl != null,
-    needsJoin = base.needsJoin || joinUrl != null,
-    needsFile = base.needsFile || fileUploadUrl != null,
+    needsAck = needsAck,
+    needsReply = needsReply || replyUrl != null,
+    needsJoin = needsJoin || joinUrl != null,
+    needsFile = needsFile || fileUploadUrl != null,
     acknowledgeUrl = acknowledgeUrl,
     replyUrl = replyUrl,
     joinUrl = joinUrl,
@@ -265,10 +273,14 @@ internal fun normalizeCommunicationDetail(root: JsonObject, base: Communication)
   val mergedActions = actions.ifEmpty { base.actions }
   val communication = base.copy(
     contentPreview = preview(
-      sanitizeRegisterText(item.string("cntText", "text", "evtText", "content", "description")) ?: base.contentPreview,
+      detailText ?: base.contentPreview,
       base.contentPreview,
     ),
     attachments = mergedAttachments,
+    needsAck = needsAck,
+    needsReply = needsReply,
+    needsJoin = needsJoin,
+    needsFile = needsFile,
     actions = mergedActions,
     noticeboardAttachments = mergedNoticeboardAttachments,
     capabilityState = communicationCapability(
@@ -279,8 +291,7 @@ internal fun normalizeCommunicationDetail(root: JsonObject, base: Communication)
   )
   return CommunicationDetail(
     communication = communication,
-    content = sanitizeRegisterText(item.string("cntText", "text", "evtText", "content", "description"))
-      ?: base.contentPreview,
+    content = detailText ?: base.contentPreview,
     replyText = sanitizeRegisterText(reply.string("text", "replyText", "description")),
     portalDetailUrl = portalDetailUrl,
     acknowledgeUrl = acknowledgeUrl,
@@ -288,6 +299,30 @@ internal fun normalizeCommunicationDetail(root: JsonObject, base: Communication)
     joinUrl = joinUrl,
     fileUploadUrl = fileUploadUrl,
     actions = communication.actions,
+  )
+}
+
+private fun firstNoticeboardDetailObject(root: JsonObject): JsonObject {
+  return listOf("item", "event", "communication", "notice", "content")
+    .firstNotNullOfOrNull { key -> root[key].obj().takeIf { it.isNotEmpty() } }
+    ?: root
+}
+
+private fun noticeboardText(obj: JsonObject): String? {
+  return sanitizeRegisterText(
+    obj.string(
+      "cntText",
+      "cntTxt",
+      "cntHtml",
+      "cntBody",
+      "itemText",
+      "evtText",
+      "eventText",
+      "text",
+      "content",
+      "description",
+      "notes",
+    ),
   )
 }
 
@@ -304,9 +339,15 @@ internal fun normalizeAgendaItem(data: JsonElement): AgendaItem {
     obj.string("category", "cntCategory"),
     title,
   ).joinToString(" ").lowercase()
+  val eventCode = obj.string("evtCode", "eventCode").orEmpty().uppercase()
+  val textSource = listOfNotNull(
+    obj.string("notes", "description", "content", "title", "evtTitle"),
+    obj.string("authorName", "teacherName", "teacher"),
+  ).joinToString(" ").lowercase()
   val category = when {
-    typeSource.contains("compit") || typeSource.contains("homework") -> AgendaCategory.HOMEWORK
+    eventCode == "AGHW" || typeSource.contains("compit") || typeSource.contains("homework") -> AgendaCategory.HOMEWORK
     typeSource.contains("verific") || typeSource.contains("test") || typeSource.contains("interrog") -> AgendaCategory.ASSESSMENT
+    eventCode == "AGNT" && looksLikeAgendaHomework(textSource) -> AgendaCategory.HOMEWORK
     typeSource.contains("lezion") || typeSource.contains("lesson") -> AgendaCategory.LESSON
     else -> AgendaCategory.EVENT
   }
@@ -327,6 +368,44 @@ internal fun normalizeAgendaItem(data: JsonElement): AgendaItem {
     sharePayload = listOf(title, subject, date, time, detail).filterNotNull().joinToString(" - "),
     createdAt = normalizeDateTimeOrNull(obj.string("evtInsDatetime", "mdtPubl", "crtDT", "insertDate")),
   )
+}
+
+private fun looksLikeAgendaHomework(text: String): Boolean {
+  if (text.isBlank()) return false
+  val assessmentMarkers = listOf(
+    "verifica",
+    "interrog",
+    "test",
+    "prova scritta",
+    "orale",
+    "assemblea",
+    "uscita",
+    "entrata",
+    "recupero",
+  )
+  if (assessmentMarkers.any { text.contains(it) }) return false
+
+  val homeworkMarkers = listOf(
+    "studiare",
+    "study",
+    "svolgere",
+    "eserciz",
+    "portare",
+    "bring",
+    "leggere",
+    "read ",
+    "copy",
+    "ripassare",
+    "pag.",
+    "pag ",
+    "pagina",
+    "page ",
+    "pp.",
+    "classroom",
+    "notebook",
+    "quaderno",
+  )
+  return homeworkMarkers.any { text.contains(it) }
 }
 
 internal fun normalizeNote(data: JsonObject, categoryCode: String): Note {
@@ -637,9 +716,14 @@ internal fun JsonObject.bool(vararg keys: String): Boolean? {
   keys.forEach { key ->
     val primitive = this[key] as? JsonPrimitive ?: return@forEach
     primitive.booleanOrNull?.let { return it }
-    when (primitive.contentOrNull?.lowercase()) {
-      "1", "true", "yes", "read", "letto", "done" -> return true
-      "0", "false", "no", "unread", "nonletto" -> return false
+    val normalized = primitive.contentOrNull
+      ?.lowercase()
+      ?.replace(Regex("\\s+"), "")
+      ?.replace("-", "")
+      ?.replace("_", "")
+    when (normalized) {
+      "1", "true", "yes", "y", "s", "si", "read", "letto", "letta", "done" -> return true
+      "0", "false", "no", "n", "unread", "nonletto", "nonletta", "daleggere" -> return false
     }
   }
   return null
@@ -955,6 +1039,13 @@ internal fun normalizeTime(value: String?): String? {
     Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}").containsMatchIn(raw) -> raw.substring(11, 16)
     else -> raw
   }
+}
+
+private fun lessonHourPositionToTime(position: Int): String? {
+  if (position !in 1..12) return null
+  val hour = 8 + position - 1
+  if (hour !in 0..23) return null
+  return "%02d:00".format(hour)
 }
 
 internal fun toApiDateParam(value: String): String = value.replace("-", "")

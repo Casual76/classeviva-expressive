@@ -19,14 +19,20 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.GradesChanne
 import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.NotesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.LiveTimetableChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.refreshLiveTimetableNotification
 import dev.antigravity.classevivaexpressive.core.data.notifications.readNotificationRuntimeState
 import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNotification
 import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNotificationForChannel
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
+import dev.antigravity.classevivaexpressive.core.database.database.AgendaItemEntity
 import dev.antigravity.classevivaexpressive.core.database.database.GradeDao
+import dev.antigravity.classevivaexpressive.core.database.database.GradeEntity
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
 import dev.antigravity.classevivaexpressive.core.database.database.AttachmentCacheDao
 import dev.antigravity.classevivaexpressive.core.database.database.AttachmentCacheEntity
+import dev.antigravity.classevivaexpressive.core.database.database.ChangeHistoryDao
+import dev.antigravity.classevivaexpressive.core.database.database.ChangeHistoryEntity
 import dev.antigravity.classevivaexpressive.core.database.database.CommunicationDao
 import dev.antigravity.classevivaexpressive.core.database.database.CommunicationEntity
 import dev.antigravity.classevivaexpressive.core.database.database.MaterialDao
@@ -55,6 +61,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AbsencesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
@@ -72,6 +79,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.DocumentsRepositor
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeDistribution
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary
+import dev.antigravity.classevivaexpressive.core.domain.model.GradeVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkDetail
@@ -115,6 +123,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SubjectSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import dev.antigravity.classevivaexpressive.core.domain.model.TimelinePoint
+import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
 import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCase
@@ -129,6 +138,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.util.Base64
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -138,6 +148,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -174,6 +185,9 @@ class SchoolAuthRepository @Inject constructor(
 class SchoolSettingsRepository @Inject constructor(
   private val settingsStore: SettingsStore,
   @ApplicationContext private val context: Context,
+  private val snapshotCacheDao: SnapshotCacheDao,
+  private val schoolYearStore: SchoolYearStore,
+  private val json: Json,
 ) : SettingsRepository {
   private val notificationRuntimeState = MutableStateFlow(readNotificationRuntimeState(context))
 
@@ -208,6 +222,7 @@ class SchoolSettingsRepository @Inject constructor(
           AgendaChannelId -> current.notificationPreferences.copy(agenda = enabled)
           NotesChannelId -> current.notificationPreferences.copy(notes = enabled)
           TestChannelId -> current.notificationPreferences.copy(test = enabled)
+          LiveTimetableChannelId -> current.notificationPreferences.copy(liveTimetable = enabled)
           else -> current.notificationPreferences
         },
       )
@@ -233,6 +248,20 @@ class SchoolSettingsRepository @Inject constructor(
   override suspend fun updateGatewayBaseUrl(url: String) {
     settingsStore.update { it.copy(networkConfig = it.networkConfig.copy(gatewayBaseUrl = url)) }
   }
+
+  override suspend fun refreshLiveTimetable() = withContext(Dispatchers.IO) {
+    refreshLiveTimetableNotification(
+      context = context,
+      settingsStore = settingsStore,
+      snapshotCacheDao = snapshotCacheDao,
+      schoolYearStore = schoolYearStore,
+      json = json,
+    )
+  }
+
+  override suspend fun ignoreStableUpdateVersion(version: String) {
+    settingsStore.update { it.copy(ignoredStableUpdateVersion = version) }
+  }
 }
 
 @Singleton
@@ -246,6 +275,7 @@ class SchoolDataRepository @Inject constructor(
   private val downloadRecordDao: DownloadRecordDao,
   private val seenGradeDao: SeenGradeDao,
   private val subjectGoalDao: SubjectGoalDao,
+  private val changeHistoryDao: ChangeHistoryDao,
   private val gradeDao: GradeDao,
   private val agendaDao: AgendaDao,
   private val absenceDao: AbsenceDao,
@@ -369,23 +399,16 @@ class SchoolDataRepository @Inject constructor(
       session to schoolYear
     }.flatMapLatest { (session, schoolYear) ->
       val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList<Grade>())
-      gradeDao.observeByYear(studentId, schoolYear.id).map { entities ->
+      combine(
+        gradeDao.observeByYear(studentId, schoolYear.id),
+        changeHistoryDao.observeByYearAndKind(studentId, schoolYear.id, HistoryKindGrade),
+      ) { entities, history ->
+        val historyByGradeId = history
+          .mapNotNull { entity -> entity.toGradeVersion(json)?.let { version -> entity.itemId to version } }
+          .groupBy({ it.first }, { it.second })
+          .mapValues { (_, versions) -> versions.sortedByDescending { it.recordedAtEpochMillis } }
         entities.map { entity ->
-          Grade(
-            id = entity.id,
-            subject = entity.subject,
-            valueLabel = entity.valueLabel,
-            numericValue = entity.numericValue,
-            description = entity.description,
-            date = entity.date,
-            type = entity.type,
-            weight = entity.weight,
-            notes = entity.notes,
-            period = entity.period,
-            periodCode = entity.periodCode,
-            teacher = entity.teacher,
-            color = entity.color,
-          )
+          entity.toGrade(history = historyByGradeId[entity.id].orEmpty())
         }
       }
     }
@@ -487,7 +510,14 @@ class SchoolDataRepository @Inject constructor(
         entities.map { json.decodeFromString<CustomEvent>(it.payload) }
       },
     ) { agenda, homeworks, schoolYear, customEvents ->
-      (agenda + homeworks.map { homework ->
+      val homeworkAgendaKeys = homeworks.map { homework ->
+        agendaHomeworkKey(homework.dueDate, homework.subject, homework.description)
+      }.toSet()
+      val agendaWithoutHomeworkDuplicates = agenda.filterNot { item ->
+        item.category == AgendaCategory.HOMEWORK &&
+          agendaHomeworkKey(item.date, item.subject ?: item.subtitle, item.title) in homeworkAgendaKeys
+      }
+      (agendaWithoutHomeworkDuplicates + homeworks.map { homework ->
         AgendaItem(
           id = "homework-${homework.id}",
           title = homework.description,
@@ -518,6 +548,14 @@ class SchoolDataRepository @Inject constructor(
     }
   }
 
+  private fun agendaHomeworkKey(date: String, subject: String?, text: String): String {
+    return listOf(date, subject.orEmpty(), text)
+      .joinToString("|")
+      .lowercase()
+      .replace(Regex("\\s+"), " ")
+      .trim()
+  }
+
   private fun observeDbAgenda(): Flow<List<AgendaItem>> {
     return combine(
       sessionStore.session,
@@ -526,20 +564,18 @@ class SchoolDataRepository @Inject constructor(
       session to schoolYear
     }.flatMapLatest { (session, schoolYear) ->
       val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList<AgendaItem>())
-      agendaDao.observeByYear(studentId, schoolYear.id).map { entities ->
+      combine(
+        agendaDao.observeByYear(studentId, schoolYear.id),
+        changeHistoryDao.observeByYearAndKind(studentId, schoolYear.id, HistoryKindAgenda),
+      ) { entities, history ->
+        val historyByItemId = history
+          .mapNotNull { entity -> entity.toAgendaItemVersion(json)?.let { version -> entity.itemId to version } }
+          .groupBy({ it.first }, { it.second })
+          .mapValues { (_, versions) -> versions.sortedByDescending { it.recordedAtEpochMillis } }
         entities.map { entity ->
-          AgendaItem(
-            id = entity.id,
-            title = entity.title,
-            subtitle = entity.subtitle,
-            date = entity.date,
-            time = entity.time,
-            detail = entity.detail,
-            subject = entity.subject,
-            teacher = entity.teacher,
-            category = AgendaCategory.valueOf(entity.category),
-            sharePayload = entity.sharePayload,
-            createdAt = entity.createdAt ?: entity.firstSeenAtMs?.let(::epochMillisToCreatedAt),
+          entity.toAgendaItem(
+            history = historyByItemId[entity.id].orEmpty(),
+            fallbackCreatedAt = entity.firstSeenAtMs?.let(::epochMillisToCreatedAt),
           )
         }
       }
@@ -589,11 +625,58 @@ class SchoolDataRepository @Inject constructor(
       timetableTemplateStore.observeTemplate(schoolYear.id)
     }
     return combine(storedFlow, observeLessons()) { stored, lessons ->
-      if (stored.slots.isNotEmpty()) stored
-      else predictiveTimetableUseCase.generateTimetableTemplate(lessons)
+      // Mostra subito quello che abbiamo: stored se popolato, fallback a una computazione veloce solo
+      // se non esiste alcun template ancora (primissimo avvio). NON ricomputiamo a ogni refresh.
+      val base = if (stored.slots.isNotEmpty()) {
+        stored
+      } else if (lessons.isNotEmpty()) {
+        predictiveTimetableUseCase.generateTimetableTemplate(lessons)
+      } else {
+        stored
+      }
+      // Sempre applica gli override persistiti, anche se la base è ricomputata in volo.
+      base.copy(manualOverrides = stored.manualOverrides).withOverridesApplied()
     }
   }
+
+  override suspend fun saveSlotOverride(fingerprint: String, slot: TemplateSlot) {
+    timetableTemplateStore.writeOverride(schoolYearStore.currentSchoolYearRef().id, fingerprint, slot)
+  }
+
+  override suspend fun deleteSlotOverride(fingerprint: String) {
+    timetableTemplateStore.deleteOverride(schoolYearStore.currentSchoolYearRef().id, fingerprint)
+  }
+
+  override suspend fun importOfficialTemplate(slots: List<TemplateSlot>): Result<Unit> = runCatching {
+    val schoolYearId = schoolYearStore.currentSchoolYearRef().id
+    timetableTemplateStore.writeTemplate(
+      schoolYearId,
+      TimetableTemplate(
+        slots = slots,
+        sampledWeeks = 0,
+        lastComputedAt = System.currentTimeMillis(),
+        manualOverrides = emptyMap(),
+        isOfficial = true,
+      ),
+    )
+  }
+
+  override suspend fun regenerateTimetableTemplate(): Result<TimetableTemplate> = runCatching {
+    val schoolYearId = schoolYearStore.currentSchoolYearRef().id
+    val stored = timetableTemplateStore.observeTemplate(schoolYearId).firstValue()
+    if (stored.isOfficial) {
+      // Do not regenerate if the current template is an official imported one
+      return@runCatching stored.withOverridesApplied()
+    }
+    val lessons = observeLessons().firstValue()
+    val computed = predictiveTimetableUseCase.generateTimetableTemplate(lessons)
+    val merged = computed.copy(manualOverrides = stored.manualOverrides)
+    timetableTemplateStore.writeTemplate(schoolYearId, merged)
+    merged.withOverridesApplied()
+  }
+
   override suspend fun refreshLessons(force: Boolean): Result<List<Lesson>> = runCatching {
+    // Pull-to-refresh: solo fetch dei dati, niente ricalcolo del template (è oneroso e va in background).
     syncCoordinator.refreshAll(force)
     observeLessons().firstValue()
   }
@@ -1090,40 +1173,47 @@ internal fun buildLessonsWithFallback(
   return dates.flatMap { date ->
     val dayLessons = lessons.filter { it.date == date }
     val source = dayLessons.ifEmpty { agendaLessons.filter { it.date == date } }
-    assignLessonSlots(source, commonTimes)
+    if (source.none { !it.teacher.isNullOrBlank() }) {
+      emptyList()
+    } else {
+      assignLessonSlots(source, commonTimes, date)
+    }
   }.sortedBy { "${it.date}-${it.time}" }
 }
 
 private fun assignLessonSlots(
   lessons: List<Lesson>,
   commonTimes: List<String>,
+  date: String,
 ): List<Lesson> {
   if (lessons.isEmpty()) return emptyList()
-  val sorted = lessons.sortedWith(compareBy<Lesson> { !isClockTime(it.time) }.thenBy { it.time })
-  val usedTimes = sorted.mapNotNull { it.time.takeIf(::isClockTime) }.toMutableSet()
-  val fallbackTimes = commonTimes.filterNot { usedTimes.contains(it) }.toMutableList()
+  val ordered = lessons.sortedWith(
+    compareBy<Lesson> { lessonSortIndex(it) }
+      .thenBy { if (isClockTime(it.time)) it.time else "" }
+      .thenBy { it.id },
+  )
+  val dayTimes = ordered.map { it.time.takeIf(::isClockTime) }
+  val fullDayTimes = buildFullDayTimes(dayTimes, commonTimes, ordered.size)
   var generated = LocalTime.of(8, 0)
 
-  fun nextTime(): String {
-    val preset = fallbackTimes.firstOrNull()
-    if (preset != null) {
-      fallbackTimes.removeAt(0)
-      usedTimes += preset
-      return preset
-    }
-    while (generated.formatTime() in usedTimes) {
+  fun nextGeneratedTime(usedTimes: Set<String>): String {
+    while (generated.formatTime() in usedTimes || generated.formatTime() in commonTimes) {
       generated = generated.plusHours(1)
     }
     return generated.formatTime().also {
-      usedTimes += it
       generated = generated.plusHours(1)
     }
   }
 
-  return sorted.map { lesson ->
-    val resolvedTime = lesson.time.takeIf(::isClockTime) ?: nextTime()
+  val usedTimes = mutableSetOf<String>()
+  return ordered.mapIndexed { index, lesson ->
+    val resolvedTime = lesson.time.takeIf(::isClockTime)
+      ?: fullDayTimes.getOrNull(index)?.takeIf { it !in usedTimes }
+      ?: nextGeneratedTime(usedTimes)
+    usedTimes += resolvedTime
     val resolvedDuration = lesson.durationMinutes.takeIf { it > 0 } ?: 60
     lesson.copy(
+      date = lesson.date.ifBlank { date },
       time = resolvedTime,
       durationMinutes = resolvedDuration,
       endTime = lesson.endTime?.takeIf(String::isNotBlank) ?: runCatching {
@@ -1131,6 +1221,47 @@ private fun assignLessonSlots(
       }.getOrNull(),
     )
   }
+}
+
+private fun buildFullDayTimes(
+  dayTimes: List<String?>,
+  commonTimes: List<String>,
+  lessonCount: Int,
+): List<String> {
+  if (lessonCount <= 0) return emptyList()
+  val knownPositions = dayTimes.mapIndexedNotNull { index, time -> time?.let { index to it } }
+  if (knownPositions.isEmpty()) {
+    return commonTimes.takeIf { it.size >= lessonCount }?.take(lessonCount)
+      ?: generateSequence(LocalTime.of(8, 0)) { it.plusHours(1) }
+        .map { it.formatTime() }
+        .take(lessonCount)
+        .toList()
+  }
+
+  val firstKnown = knownPositions.first()
+  val inferredDuration = inferSlotDuration(commonTimes)
+  val anchorTime = runCatching { LocalTime.parse(firstKnown.second) }.getOrNull() ?: LocalTime.of(8, 0)
+  val inferredStart = anchorTime.minusMinutes((firstKnown.first * inferredDuration).toLong())
+  val inferred = (0 until lessonCount).map { inferredStart.plusMinutes(it * inferredDuration.toLong()).formatTime() }
+  val commonStart = commonTimes.indexOf(firstKnown.second).takeIf { it >= 0 }?.minus(firstKnown.first)
+  val alignedCommon = commonStart?.let { start ->
+    (0 until lessonCount).mapNotNull { offset -> commonTimes.getOrNull(start + offset) }
+      .takeIf { it.size == lessonCount }
+  }
+
+  return alignedCommon ?: inferred
+}
+
+private fun inferSlotDuration(commonTimes: List<String>): Int {
+  val diffs = commonTimes
+    .mapNotNull { runCatching { LocalTime.parse(it) }.getOrNull() }
+    .zipWithNext { a, b -> java.time.Duration.between(a, b).toMinutes().toInt() }
+    .filter { it > 0 }
+  return diffs.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: 60
+}
+
+private fun lessonSortIndex(lesson: Lesson): Int {
+  return Regex("""(\d+)""").find(lesson.id)?.value?.toIntOrNull() ?: Int.MAX_VALUE
 }
 
 private fun Lesson.toDashboardAgendaItem(): AgendaItem {
@@ -1188,6 +1319,8 @@ internal fun computeStudentScore(stats: StatsSnapshot, absences: List<AbsenceRec
 
 private suspend fun <T> Flow<T>.firstValue(): T = first()
 
+private const val TimetableMaxAgeMillis: Long = 24L * 60L * 60L * 1000L
+
 @Module
 @InstallIn(SingletonComponent::class)
 object PlatformModule {
@@ -1240,3 +1373,80 @@ internal fun CommunicationEntity.toCommunication(json: Json): Communication = Co
   noticeboardAttachments = json.decodeFromString(noticeboardAttachments),
   capabilityState = json.decodeFromString(capabilityState),
 )
+
+internal fun GradeEntity.toGrade(history: List<GradeVersion> = emptyList()): Grade = Grade(
+  id = id,
+  subject = subject,
+  valueLabel = valueLabel,
+  numericValue = numericValue,
+  description = description,
+  date = date,
+  type = type,
+  weight = weight,
+  notes = notes,
+  period = period,
+  periodCode = periodCode,
+  teacher = teacher,
+  color = color,
+  history = history,
+)
+
+internal fun GradeEntity.toGradeVersion(recordedAtEpochMillis: Long): GradeVersion = GradeVersion(
+  recordedAtEpochMillis = recordedAtEpochMillis,
+  subject = subject,
+  valueLabel = valueLabel,
+  numericValue = numericValue,
+  description = description,
+  date = date,
+  type = type,
+  weight = weight,
+  notes = notes,
+  period = period,
+  periodCode = periodCode,
+  teacher = teacher,
+  color = color,
+)
+
+internal fun AgendaItemEntity.toAgendaItem(
+  history: List<AgendaItemVersion> = emptyList(),
+  fallbackCreatedAt: String? = null,
+): AgendaItem = AgendaItem(
+  id = id,
+  title = title,
+  subtitle = subtitle,
+  date = date,
+  time = time,
+  detail = detail,
+  subject = subject,
+  teacher = teacher,
+  category = AgendaCategory.valueOf(category),
+  sharePayload = sharePayload,
+  createdAt = createdAt ?: fallbackCreatedAt,
+  history = history,
+)
+
+internal fun AgendaItemEntity.toAgendaItemVersion(recordedAtEpochMillis: Long): AgendaItemVersion = AgendaItemVersion(
+  recordedAtEpochMillis = recordedAtEpochMillis,
+  title = title,
+  subtitle = subtitle,
+  date = date,
+  time = time,
+  detail = detail,
+  subject = subject,
+  teacher = teacher,
+  category = AgendaCategory.valueOf(category),
+  sharePayload = sharePayload,
+  createdAt = createdAt,
+)
+
+private fun ChangeHistoryEntity.toGradeVersion(json: Json): GradeVersion? {
+  return runCatching {
+    json.decodeFromString<GradeVersion>(payload).copy(recordedAtEpochMillis = recordedAtEpochMillis)
+  }.getOrNull()
+}
+
+private fun ChangeHistoryEntity.toAgendaItemVersion(json: Json): AgendaItemVersion? {
+  return runCatching {
+    json.decodeFromString<AgendaItemVersion>(payload).copy(recordedAtEpochMillis = recordedAtEpochMillis)
+  }.getOrNull()
+}

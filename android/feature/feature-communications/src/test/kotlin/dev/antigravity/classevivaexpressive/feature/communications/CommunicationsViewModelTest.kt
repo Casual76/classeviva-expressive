@@ -1,12 +1,15 @@
 package dev.antigravity.classevivaexpressive.feature.communications
 
 import app.cash.turbine.test
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityState
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardAction
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardActionType
 import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -202,5 +205,16 @@ class CommunicationsViewModelTest {
     vm.refresh()
 
     coVerify { communicationsRepository.refreshCommunications(force = true) }
+  }
+
+  @Test
+  fun unreadCommunicationWithAction_keepsUnreadBadgePriority() {
+    val communication = buildCommunication().copy(
+      read = false,
+      actions = listOf(NoticeboardAction(NoticeboardActionType.JOIN, "Aderisci")),
+    )
+
+    assertEquals("NUOVA", communicationBadgeLabel(communication))
+    assertEquals(ExpressiveTone.Danger, communicationTone(communication))
   }
 }

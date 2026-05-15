@@ -430,6 +430,7 @@ fun CommunicationsRoute(
                   )
                 },
                 onClick = { viewModel.openCommunication(communication.pubId, communication.evtCode) },
+                animatePress = false,
               )
             }
           }
@@ -456,6 +457,7 @@ fun CommunicationsRoute(
                   )
                 },
                 onClick = { viewModel.openNote(note.id, note.categoryCode) },
+                animatePress = false,
               )
             }
           }
@@ -515,7 +517,20 @@ fun CommunicationsRoute(
             }
           }
         }
-        item { Text(text = detail.content) }
+        item {
+          val rendered = remember(detail.content, detail.communication.title) {
+            renderCommunicationContent(detail.content, detail.communication.title)
+          }
+          if (rendered.isBlank()) {
+            Text(
+              text = "Nessun contenuto fornito dal registro per questa comunicazione.",
+              style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+              color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          } else {
+            Text(text = rendered)
+          }
+        }
         val canReply = shouldShowReplyComposer(detail)
         if (canReply) {
           item { ExpressiveAccentLabel("Risposta") }
@@ -533,36 +548,34 @@ fun CommunicationsRoute(
         if (detail.communication.noticeboardAttachments.isNotEmpty()) {
           item { ExpressiveAccentLabel("Allegati") }
           items(detail.communication.noticeboardAttachments, key = { it.id }) { attachment ->
+            // Da v5.6.0: usiamo SEMPRE il path auth-aware (RestClient con
+            // refresh automatico del token). Il vecchio downloadAttachment
+            // usava DownloadManager che spesso falliva perche' non riceveva
+            // l'header Z-Auth-Token aggiornato.
+            val hasUrl = !attachment.url.isNullOrBlank()
             RegisterListRow(
               title = attachment.name,
               subtitle = attachment.mimeType ?: "Allegato",
-              meta = if (attachment.portalOnly) "Endpoint non ufficiale non disponibile" else "Tocca per aprire",
+              meta = when {
+                !hasUrl -> "Allegato non disponibile in API"
+                attachment.portalOnly -> "Tocca per scaricare e aprire"
+                else -> "Tocca per aprire"
+              },
               tone = ExpressiveTone.Neutral,
               badge = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
               onClick = {
-                if (!attachment.portalOnly) {
-                  viewModel.openAttachment(
-                    RemoteAttachment(
-                      id = attachment.id,
-                      name = attachment.name,
-                      url = attachment.url,
-                      mimeType = attachment.mimeType,
-                      portalOnly = attachment.portalOnly,
-                    ),
-                    context,
-                  )
-                } else {
-                  viewModel.downloadAttachment(
-                    RemoteAttachment(
-                      id = attachment.id,
-                      name = attachment.name,
-                      url = attachment.url,
-                      mimeType = attachment.mimeType,
-                      portalOnly = attachment.portalOnly,
-                    ),
-                  )
-                }
+                viewModel.openAttachment(
+                  RemoteAttachment(
+                    id = attachment.id,
+                    name = attachment.name,
+                    url = attachment.url,
+                    mimeType = attachment.mimeType,
+                    portalOnly = attachment.portalOnly,
+                  ),
+                  context,
+                )
               },
+              animatePress = false,
             )
           }
         }
@@ -695,11 +708,9 @@ internal fun shouldShowReplyComposer(detail: CommunicationDetail): Boolean {
 
 internal fun shouldShowJoinAction(detail: CommunicationDetail): Boolean {
   if (!detail.joinUrl.isNullOrBlank()) return true
-  return !detail.portalDetailUrl.isNullOrBlank() && (
-    detail.actions.any { it.type == NoticeboardActionType.JOIN } ||
-      detail.communication.needsJoin ||
-      detectsJoinIntent(detail)
-    )
+  return detail.actions.any { it.type == NoticeboardActionType.JOIN } ||
+    detail.communication.needsJoin ||
+    (!detail.portalDetailUrl.isNullOrBlank() && detectsJoinIntent(detail))
 }
 
 internal fun shouldShowUploadAction(detail: CommunicationDetail): Boolean {
@@ -760,18 +771,18 @@ private fun detectsUploadIntent(detail: CommunicationDetail): Boolean {
   )
 }
 
-private fun communicationTone(communication: Communication): ExpressiveTone {
+internal fun communicationTone(communication: Communication): ExpressiveTone {
   return when {
-    communication.actions.isNotEmpty() -> ExpressiveTone.Warning
     !communication.read -> ExpressiveTone.Danger
+    communication.actions.isNotEmpty() -> ExpressiveTone.Warning
     else -> ExpressiveTone.Neutral
   }
 }
 
-private fun communicationBadgeLabel(communication: Communication): String {
+internal fun communicationBadgeLabel(communication: Communication): String {
   return when {
-    communication.actions.isNotEmpty() -> "AZIONE"
     !communication.read -> "NUOVA"
+    communication.actions.isNotEmpty() -> "AZIONE"
     else -> "LETTA"
   }
 }
@@ -809,3 +820,39 @@ private fun String.toReadableDate(): String {
 }
 
 private fun tabFromRoute(value: String): String = if (value.equals("notes", ignoreCase = true)) TAB_NOTES else TAB_BOARD
+
+internal fun renderCommunicationContent(rawContent: String?, title: String): String {
+  val raw = rawContent?.trim().orEmpty()
+  if (raw.isEmpty()) return ""
+  // Se sembra HTML, estrai il testo via JSoup preservando i ritorni a capo dei <br> e dei <p>.
+  val plain = if (raw.contains('<') && raw.contains('>')) {
+    runCatching {
+      val doc = org.jsoup.Jsoup.parse(raw)
+      doc.outputSettings().prettyPrint(false)
+      val singleBreak = "[[CVEX_BR_1]]"
+      val doubleBreak = "[[CVEX_BR_2]]"
+      doc.select("br").after(singleBreak)
+      doc.select("p, div, li, tr").after(doubleBreak)
+      doc.text()
+        .replace(doubleBreak, "\n\n")
+        .replace(singleBreak, "\n")
+        .replace(Regex("\\n{3,}"), "\n\n")
+        .trim()
+    }.getOrDefault(raw)
+  } else {
+    raw
+  }
+  // Strip del titolo duplicato in cima al body (case-insensitive, anche se segue una nuova riga).
+  val normalizedTitle = title.trim()
+  val withoutDuplicateTitle = if (normalizedTitle.isNotEmpty() && plain.length >= normalizedTitle.length) {
+    val head = plain.take(normalizedTitle.length)
+    if (head.equals(normalizedTitle, ignoreCase = true)) {
+      plain.substring(normalizedTitle.length).trimStart('\n', '\r', ' ', '\t', ':', '-', '·')
+    } else {
+      plain
+    }
+  } else {
+    plain
+  }
+  return withoutDuplicateTitle.trim().ifBlank { plain.trim() }
+}

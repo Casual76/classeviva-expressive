@@ -162,15 +162,12 @@ class ClassevivaRestClient @Inject constructor(
 
   suspend fun getCommunicationDetail(base: Communication): CommunicationDetail = withContext(Dispatchers.IO) {
     val session = requireSession()
-    apiCall {
-      normalizeCommunicationDetail(
-        apiService.readNoticeboard(
-          studentId = session.studentId,
-          evtCode = base.evtCode,
-          pubId = base.pubId,
-        ).toPayload(),
-        base,
-      ).withOfficialAttachmentUrls(session.studentId)
+    runCatching {
+      readCommunicationDetail(session, base)
+    }.getOrElse { firstError ->
+      val refreshed = getCommunications().firstOrNull { it.pubId == base.pubId && it.evtCode == base.evtCode }
+      if (refreshed == null || refreshed.id == base.id) throw firstError
+      readCommunicationDetail(session, refreshed)
     }
   }
 
@@ -180,18 +177,47 @@ class ClassevivaRestClient @Inject constructor(
     getCommunicationDetail(base)
   }
 
+  /**
+   * Segna come letta una comunicazione di bacheca. Lancia eccezione quando
+   * ClasseViva rifiuta la chiamata, tollerando solo risposte esplicite da
+   * operazione gia' completata.
+   */
   suspend fun markNoticeboardRead(pubId: String, evtCode: String): Unit = withContext(Dispatchers.IO) {
     val session = requireSession()
-    // Best-effort: 400 means already acknowledged — that's fine, ignore all errors.
-    runCatching {
+    val base = getCommunications().firstOrNull { it.pubId == pubId && it.evtCode == evtCode }
+      ?: fallbackCommunication(pubId = pubId, evtCode = evtCode)
+    try {
       apiCall {
         apiService.readNoticeboard(
           studentId = session.studentId,
           evtCode = evtCode,
           pubId = pubId,
+          body = noticeboardDetailPayload(base),
         )
         Unit
       }
+    } catch (e: ClassevivaNetworkException) {
+      val msg = e.message.orEmpty()
+      // Solo gli errori espliciti "gia' letta" sono idempotenti; un payload
+      // invalido deve restare visibile per non sporcare lo stato locale.
+      val isAlreadyRead = msg.contains("already", ignoreCase = true) ||
+        msg.contains("gia", ignoreCase = true) || msg.contains("read", ignoreCase = true)
+      if (!isAlreadyRead) throw e
+    }
+  }
+
+  suspend fun joinNoticeboard(pubId: String, evtCode: String): Unit = withContext(Dispatchers.IO) {
+    val session = requireSession()
+    val base = getCommunications().firstOrNull { it.pubId == pubId && it.evtCode == evtCode }
+      ?: fallbackCommunication(pubId = pubId, evtCode = evtCode)
+    apiCall {
+      apiService.joinNoticeboard(
+        studentId = session.studentId,
+        evtCode = evtCode,
+        pubId = pubId,
+        body = noticeboardDetailPayload(base),
+      )
+      Unit
     }
   }
 
@@ -386,6 +412,54 @@ class ClassevivaRestClient @Inject constructor(
   private fun buildDocumentCheckUrl(studentId: String, documentId: String): String? {
     return documentId.takeIf(String::isNotBlank)?.let {
       "${RestBaseUrl}v1/students/$studentId/documents/check/$it"
+    }
+  }
+
+  private suspend fun readCommunicationDetail(
+    session: UserSession,
+    communication: Communication,
+  ): CommunicationDetail {
+    return apiCall {
+      normalizeCommunicationDetail(
+        apiService.readNoticeboard(
+          studentId = session.studentId,
+          evtCode = communication.evtCode,
+          pubId = communication.pubId,
+          body = noticeboardDetailPayload(communication),
+        ).toPayload(),
+        communication,
+      ).withOfficialAttachmentUrls(session.studentId)
+    }
+  }
+
+  private fun noticeboardDetailPayload(communication: Communication): GsonJsonObject {
+    return GsonJsonObject().apply {
+      addNumberOrString("pubId", communication.pubId)
+      addNumberOrString("cntId", communication.id)
+      addProperty("evtCode", communication.evtCode)
+    }
+  }
+
+  private fun fallbackCommunication(pubId: String, evtCode: String): Communication {
+    return Communication(
+      id = pubId,
+      pubId = pubId,
+      evtCode = evtCode,
+      title = "",
+      contentPreview = "",
+      sender = "",
+      date = "",
+      read = false,
+    )
+  }
+
+  private fun GsonJsonObject.addNumberOrString(name: String, value: String) {
+    val trimmed = value.trim()
+    val numeric = trimmed.toLongOrNull()
+    if (numeric != null) {
+      addProperty(name, numeric)
+    } else {
+      addProperty(name, trimmed)
     }
   }
 }

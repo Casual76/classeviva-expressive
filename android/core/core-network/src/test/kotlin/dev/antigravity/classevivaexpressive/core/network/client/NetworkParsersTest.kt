@@ -114,6 +114,130 @@ class NetworkParsersTest {
   }
 
   @Test
+  fun normalizeCommunication_readsClassevivaReadStatusLabelsAndActionFlags() {
+    val unread = normalizeCommunication(
+      Json.parseToJsonElement(
+        """
+        {
+          "pubId": "2690",
+          "evtCode": "CIR",
+          "cntTitle": "4F - entrata posticipata l'8/5",
+          "readStatus": "Da Leggere",
+          "cntValidInJoin": "S"
+        }
+        """.trimIndent(),
+      ),
+    )
+    val read = normalizeCommunication(
+      Json.parseToJsonElement(
+        """
+        {
+          "pubId": "2675",
+          "evtCode": "CIR",
+          "cntTitle": "Comunicato",
+          "readStatus": "Letta",
+          "cntValidInJoin": "N"
+        }
+        """.trimIndent(),
+      ),
+    )
+
+    assertFalse(unread.read)
+    assertTrue(unread.needsJoin)
+    assertEquals(NoticeboardActionType.JOIN, unread.actions.single().type)
+    assertTrue(read.read)
+    assertFalse(read.needsJoin)
+  }
+
+  @Test
+  fun normalizeCommunicationDetail_readsNestedClassevivaContentAndJoinFlag() {
+    val payload = Json.parseToJsonElement(
+      """
+      {
+        "communication": {
+          "cntHtml": "<p>La classe 4F entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Mucci.</p><p>L'adesione alla presente vale come presa visione della famiglia.</p>",
+          "cntValidInJoin": "1"
+        }
+      }
+      """.trimIndent(),
+    ).obj()
+    val base = Communication(
+      id = "2690",
+      pubId = "2690",
+      evtCode = "CIR",
+      title = "4F - entrata posticipata l'8/5",
+      contentPreview = "",
+      sender = "Scuola",
+      date = "2026-05-07",
+      read = false,
+    )
+
+    val detail = normalizeCommunicationDetail(payload, base)
+
+    assertTrue(detail.content.contains("La classe 4F entrerà alle ore 9:10"))
+    assertTrue(detail.content.contains("presa visione della famiglia"))
+    assertEquals(NoticeboardActionType.JOIN, detail.actions.single().type)
+    assertTrue(detail.communication.needsJoin)
+  }
+
+  @Test
+  fun normalizeCommunicationDetail_readsOfficialReadPayloadText() {
+    val payload = Json.parseToJsonElement(
+      """
+      {
+        "item": {
+          "title": "2690 - 4F - entrata posticipata l'8/5",
+          "text": "La classe 4F entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Mucci.\r\n\r\nL'adesione alla presente vale come presa visione della famiglia.\r\n\r\nper la vicepresidenza\r\nprof.ssa Martina Pomilia"
+        },
+        "reply": {
+          "replJoin": false,
+          "replText": null,
+          "replFile": null,
+          "replSign": null
+        }
+      }
+      """.trimIndent(),
+    ).obj()
+    val base = Communication(
+      id = "9357479",
+      pubId = "24510451",
+      evtCode = "CF",
+      title = "2690 - 4F - entrata posticipata l'8/5",
+      contentPreview = "",
+      sender = "Scuola",
+      date = "2026-05-07",
+      read = true,
+      needsJoin = true,
+    )
+
+    val detail = normalizeCommunicationDetail(payload, base)
+
+    assertTrue(detail.content.contains("La classe 4F entrerà alle ore 9:10"))
+    assertTrue(detail.content.contains("prof.ssa Martina Pomilia"))
+    assertEquals(NoticeboardActionType.JOIN, detail.actions.single().type)
+  }
+
+  @Test
+  fun normalizeCommunication_prefersCntIdAsStableIdAndKeepsPubId() {
+    val communication = normalizeCommunication(
+      Json.parseToJsonElement(
+        """
+        {
+          "pubId": 24510451,
+          "cntId": 9357479,
+          "evento_id": "9357479",
+          "evtCode": "CF",
+          "cntTitle": "2690 - 4F - entrata posticipata l'8/5"
+        }
+        """.trimIndent(),
+      ),
+    )
+
+    assertEquals("9357479", communication.id)
+    assertEquals("24510451", communication.pubId)
+  }
+
+  @Test
   fun normalizeAbsence_preservesPortalJustificationUrlsForGateway() {
     val absence = normalizeAbsence(
       Json.parseToJsonElement(
@@ -470,6 +594,28 @@ class NetworkParsersTest {
     assertEquals("08:00", lesson.time)
   }
 
+  @Test
+  fun normalizeLesson_derivesClockTimeFromClassevivaHourPosition() {
+    val lesson = normalizeLesson(
+      Json.parseToJsonElement(
+        """
+        {
+          "evtId": "206408",
+          "evtDate": "2026-05-07",
+          "evtHPos": 3,
+          "evtDuration": 1,
+          "subjectDesc": "LINGUA E CULTURA STRANIERA INGLESE",
+          "authorName": "DE LUCA SIMONA"
+        }
+        """.trimIndent(),
+      ),
+    )
+
+    assertEquals("10:00", lesson.time)
+    assertEquals("11:00", lesson.endTime)
+    assertEquals(60, lesson.durationMinutes)
+  }
+
   // ─── normalizeHomework ────────────────────────────────────────────────────
 
   @Test
@@ -509,6 +655,42 @@ class NetworkParsersTest {
     )
 
     assertTrue(hw.attachments.isEmpty())
+  }
+
+  @Test
+  fun normalizeAgendaItem_classifiesOfficialHomeworkRows() {
+    val first = normalizeAgendaItem(
+      Json.parseToJsonElement(
+        """
+        {
+          "evtId": "a1",
+          "evtDate": "20260507",
+          "subjectDesc": "MATEMATICA",
+          "evtTitle": "Portare matematica -- Studiare la dimostrazione ... pag 1274",
+          "evtCode": "Compiti"
+        }
+        """.trimIndent(),
+      ),
+    )
+    val second = normalizeAgendaItem(
+      Json.parseToJsonElement(
+        """
+        {
+          "evtId": "a2",
+          "evtDate": "20260507",
+          "subjectDesc": "FILOSOFIA",
+          "evtTitle": "Rousseau pp. 518-521",
+          "eventTypeDesc": "homework"
+        }
+        """.trimIndent(),
+      ),
+    )
+
+    assertEquals(AgendaCategory.HOMEWORK, first.category)
+    assertEquals("MATEMATICA", first.subject)
+    assertEquals("Portare matematica -- Studiare la dimostrazione ... pag 1274", first.title)
+    assertEquals(AgendaCategory.HOMEWORK, second.category)
+    assertEquals("Rousseau pp. 518-521", second.title)
   }
 
   // ─── normalizeAbsence (additional cases) ─────────────────────────────────

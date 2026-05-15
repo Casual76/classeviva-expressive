@@ -1,6 +1,8 @@
 package dev.antigravity.classevivaexpressive.feature.settings
 
+import android.content.Context
 import app.cash.turbine.test
+import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityResolver
@@ -40,6 +42,8 @@ class SettingsViewModelTest {
   private val authRepository = mockk<AuthRepository>(relaxed = true)
   private val schoolYearRepository = mockk<SchoolYearRepository>(relaxed = true)
   private val capabilityResolver = mockk<CapabilityResolver>(relaxed = true)
+  private val appBackupRepository = mockk<AppBackupRepository>(relaxed = true)
+  private val context = mockk<Context>(relaxed = true)
 
   @Before fun setUp() { Dispatchers.setMain(testDispatcher) }
   @After fun tearDown() { Dispatchers.resetMain() }
@@ -51,7 +55,7 @@ class SettingsViewModelTest {
     every { schoolYearRepository.observeSelectedSchoolYear() } returns flowOf(SchoolYearRef(2025, 2026))
     every { schoolYearRepository.observeAvailableSchoolYears() } returns flowOf(listOf(SchoolYearRef(2025, 2026)))
     every { capabilityResolver.observeCapabilityMatrix() } returns flowOf(emptyList())
-    return SettingsViewModel(settingsRepository, authRepository, schoolYearRepository, capabilityResolver)
+    return SettingsViewModel(settingsRepository, authRepository, schoolYearRepository, capabilityResolver, appBackupRepository, context)
   }
 
   // ─── Caricamento impostazioni ─────────────────────────────────────────────
@@ -66,7 +70,7 @@ class SettingsViewModelTest {
     every { schoolYearRepository.observeAvailableSchoolYears() } returns flowOf(emptyList())
     every { capabilityResolver.observeCapabilityMatrix() } returns flowOf(emptyList())
 
-    val vm = SettingsViewModel(settingsRepository, authRepository, schoolYearRepository, capabilityResolver)
+    val vm = SettingsViewModel(settingsRepository, authRepository, schoolYearRepository, capabilityResolver, appBackupRepository, context)
 
     vm.state.test {
       val state = awaitItem()

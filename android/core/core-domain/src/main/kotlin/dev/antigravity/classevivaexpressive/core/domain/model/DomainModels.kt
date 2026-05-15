@@ -167,6 +167,7 @@ data class NotificationPreferences(
   val agenda: Boolean = true,
   val notes: Boolean = true,
   val test: Boolean = true,
+  val liveTimetable: Boolean = true,
 )
 
 @Serializable
@@ -206,6 +207,24 @@ data class UserSession(
 @Serializable
 data class Grade(
   val id: String,
+  val subject: String,
+  val valueLabel: String,
+  val numericValue: Double? = null,
+  val description: String? = null,
+  val date: String,
+  val type: String,
+  val weight: Double? = null,
+  val notes: String? = null,
+  val period: String? = null,
+  val periodCode: String? = null,
+  val teacher: String? = null,
+  val color: String? = null,
+  val history: List<GradeVersion> = emptyList(),
+)
+
+@Serializable
+data class GradeVersion(
+  val recordedAtEpochMillis: Long,
   val subject: String,
   val valueLabel: String,
   val numericValue: Double? = null,
@@ -289,6 +308,22 @@ data class AgendaItem(
   val category: AgendaCategory,
   val sharePayload: String? = null,
   val createdAt: String? = null,
+  val history: List<AgendaItemVersion> = emptyList(),
+)
+
+@Serializable
+data class AgendaItemVersion(
+  val recordedAtEpochMillis: Long,
+  val title: String,
+  val subtitle: String,
+  val date: String,
+  val time: String? = null,
+  val detail: String? = null,
+  val subject: String? = null,
+  val teacher: String? = null,
+  val category: AgendaCategory,
+  val sharePayload: String? = null,
+  val createdAt: String? = null,
 )
 
 @Serializable
@@ -314,16 +349,21 @@ data class TemplateSlot(
   val room: String? = null,
   val confidence: Float = 0f,
   val sampleCount: Int = 0,
+  val confirmed: Boolean = false,
 ) {
   val weekday: DayOfWeek
     get() = DayOfWeek.of(dayOfWeek.coerceIn(1, 7))
 }
+
+fun TemplateSlot.slotFingerprint(): String = "${dayOfWeek}:${time}"
 
 @Serializable
 data class TimetableTemplate(
   val slots: List<TemplateSlot> = emptyList(),
   val sampledWeeks: Int = 0,
   val lastComputedAt: Long = 0L,
+  val manualOverrides: Map<String, TemplateSlot> = emptyMap(),
+  val isOfficial: Boolean = false,
 ) {
   fun slotsByDay(): Map<DayOfWeek, List<TemplateSlot>> {
     return slots
@@ -332,6 +372,11 @@ data class TimetableTemplate(
   }
 
   fun hasLessonsOn(dayOfWeek: DayOfWeek): Boolean = slots.any { it.weekday == dayOfWeek }
+
+  fun withOverridesApplied(): TimetableTemplate {
+    if (manualOverrides.isEmpty()) return this
+    return copy(slots = slots.map { manualOverrides[it.slotFingerprint()] ?: it })
+  }
 }
 
 @Serializable
@@ -712,6 +757,7 @@ data class AppSettings(
   val notificationPreferences: NotificationPreferences = NotificationPreferences(),
   val periodicSyncEnabled: Boolean = true,
   val networkConfig: NetworkConfig = NetworkConfig(),
+  val ignoredStableUpdateVersion: String = "",
 ) {
   val notificationsEnabled: Boolean
     get() = notificationPreferences.enabled
@@ -757,6 +803,10 @@ interface LessonsRepository {
   fun observeLessons(): Flow<List<Lesson>>
   fun observeTimetableTemplate(): Flow<TimetableTemplate>
   suspend fun refreshLessons(force: Boolean = false): Result<List<Lesson>>
+  suspend fun saveSlotOverride(fingerprint: String, slot: TemplateSlot)
+  suspend fun deleteSlotOverride(fingerprint: String)
+  suspend fun regenerateTimetableTemplate(): Result<TimetableTemplate>
+  suspend fun importOfficialTemplate(slots: List<TemplateSlot>): Result<Unit>
 }
 
 interface HomeworkRepository {
@@ -859,6 +909,22 @@ interface SimulationRepository {
   suspend fun clearSimulation()
 }
 
+interface AppBackupRepository {
+  suspend fun exportBackup(): Result<String>
+  suspend fun importBackup(payload: String): Result<AppBackupImportSummary>
+}
+
+@Serializable
+data class AppBackupImportSummary(
+  val settingsImported: Boolean = false,
+  val timetableTemplates: Int = 0,
+  val customEvents: Int = 0,
+  val simulatedGrades: Int = 0,
+  val seenGrades: Int = 0,
+  val subjectGoals: Int = 0,
+  val scoreSnapshots: Int = 0,
+)
+
 interface SettingsRepository {
   fun observeSettings(): Flow<AppSettings>
   fun observeNotificationRuntimeState(): Flow<NotificationRuntimeState>
@@ -875,4 +941,66 @@ interface SettingsRepository {
   suspend fun sendTestNotification(): Result<Unit>
   suspend fun sendTestNotificationForChannel(channelId: String): Result<Unit>
   suspend fun updateGatewayBaseUrl(url: String)
+  suspend fun refreshLiveTimetable()
+  suspend fun ignoreStableUpdateVersion(version: String)
 }
+
+@Serializable
+data class AvailableAppUpdate(
+  val version: String,
+  val changelog: String,
+  val releaseTag: String,
+  val apkAsset: String,
+  val downloadUrl: String,
+  val sizeBytes: Long = 0L,
+)
+
+sealed interface AppUpdateInstallState {
+  data object Idle : AppUpdateInstallState
+  data class Downloading(
+    val progress: Float,
+    val downloadedBytes: Long,
+    val totalBytes: Long,
+  ) : AppUpdateInstallState
+  data class Verifying(val message: String = "Preparazione aggiornamento...") : AppUpdateInstallState
+  data class AwaitingUserAction(val message: String) : AppUpdateInstallState
+  data class Installing(val message: String) : AppUpdateInstallState
+  data class Installed(val filePath: String) : AppUpdateInstallState
+  data class Error(val message: String) : AppUpdateInstallState
+}
+
+interface AppUpdateRepository {
+  suspend fun checkForStableUpdate(
+    currentVersionName: String,
+    ignoredVersion: String,
+  ): Result<AvailableAppUpdate?>
+
+  fun install(update: AvailableAppUpdate): Flow<AppUpdateInstallState>
+}
+
+@Serializable
+data class ProfessorStats(
+  val teacherName: String,
+  val subjects: List<String>,
+  // Presenza (basata sui giorni tipici di insegnamento nel dataset)
+  val expectedDays: Int,
+  val actualDays: Int,
+  val presenceRate: Float,
+  val absenceDays: List<String>,
+  // Voti (metadati, non valori — uguali per tutti gli studenti)
+  val gradeCount: Int,
+  val averageGrade: Double?,
+  val mostFrequentGradeType: String?,
+  // Indice di rigore multi-fattore (0–100, basato su dati oggettivi)
+  val strictnessScore: Int,
+  val strictnessLabel: String,
+  // Fattori del punteggio (mostrati nel dettaglio)
+  val evaluationDensity: Float,   // voti per lezione
+  val writtenExamRatio: Float,    // frazione di esami scritti
+  val avgGradeWeight: Float,      // peso medio dei voti
+  val topicCoverageRate: Float,   // frazione di lezioni con argomento firmato
+  // Fun stats (dossier segreto)
+  val longestPresenceStreakWeeks: Int = 0,
+  val favoriteDayOfWeek: Int? = null,  // DayOfWeek.value (1=Lun … 7=Dom)
+  val funNickname: String = "",
+)

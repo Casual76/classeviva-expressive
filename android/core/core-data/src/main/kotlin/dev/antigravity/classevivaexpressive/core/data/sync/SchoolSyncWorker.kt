@@ -16,6 +16,7 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.AgendaCacheS
 import dev.antigravity.classevivaexpressive.core.data.notifications.CommunicationsCacheSection
 import dev.antigravity.classevivaexpressive.core.data.notifications.GradesCacheSection
 import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkCacheSection
+import dev.antigravity.classevivaexpressive.core.data.notifications.LessonsCacheSection
 import dev.antigravity.classevivaexpressive.core.data.notifications.NotesCacheSection
 import dev.antigravity.classevivaexpressive.core.data.notifications.SyncNotificationDispatcher
 import dev.antigravity.classevivaexpressive.core.data.notifications.SyncSnapshotPayloads
@@ -24,10 +25,13 @@ import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCache
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
 import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
+import dev.antigravity.classevivaexpressive.core.datastore.TimetableTemplateStore
+import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.first
 
 private const val RefreshIntervalMinutes = 15L
+private const val TimetableMaxAgeMillis: Long = 24L * 60L * 60L * 1000L
 
 @HiltWorker
 class SchoolSyncWorker @AssistedInject constructor(
@@ -39,6 +43,8 @@ class SchoolSyncWorker @AssistedInject constructor(
   private val snapshotCacheDao: SnapshotCacheDao,
   private val syncCoordinator: SchoolSyncCoordinator,
   private val notificationDispatcher: SyncNotificationDispatcher,
+  private val timetableTemplateStore: TimetableTemplateStore,
+  private val lessonsRepository: LessonsRepository,
 ) : CoroutineWorker(appContext, workerParams) {
 
   override suspend fun doWork(): Result {
@@ -56,9 +62,21 @@ class SchoolSyncWorker @AssistedInject constructor(
         status.state != dev.antigravity.classevivaexpressive.core.domain.model.SyncState.OFFLINE
       ) {
         notificationDispatcher.dispatch(previous = before, current = capturePayloads())
+        // Rigenera il template orario al massimo una volta ogni 24h, in background.
+        runCatching { regenerateTemplateIfStale() }
       }
     }
     return Result.success()
+  }
+
+  private suspend fun regenerateTemplateIfStale() {
+    val schoolYearId = schoolYearStore.currentSchoolYearRef().id
+    val stored = timetableTemplateStore.observeTemplate(schoolYearId).first()
+    val ageMs = System.currentTimeMillis() - stored.lastComputedAt
+    val isStale = stored.lastComputedAt == 0L || ageMs > TimetableMaxAgeMillis
+    if (isStale) {
+      lessonsRepository.regenerateTimetableTemplate()
+    }
   }
 
   private suspend fun capturePayloads(): SyncSnapshotPayloads {
@@ -70,6 +88,7 @@ class SchoolSyncWorker @AssistedInject constructor(
       grades = snapshotCacheDao.getByKey(yearScopedCacheKey(GradesCacheSection, currentYear))?.payload,
       agenda = snapshotCacheDao.getByKey(yearScopedCacheKey(AgendaCacheSection, currentYear))?.payload,
       notes = snapshotCacheDao.getByKey(yearScopedCacheKey(NotesCacheSection, currentYear))?.payload,
+      lessons = snapshotCacheDao.getByKey(yearScopedCacheKey(LessonsCacheSection, currentYear))?.payload,
     )
   }
 

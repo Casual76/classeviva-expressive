@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,11 +33,13 @@ import androidx.compose.material.icons.rounded.PeopleAlt
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SportsScore
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -69,6 +72,8 @@ import androidx.compose.ui.autofill.contentType
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -90,6 +95,8 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.MotionTokens
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
+import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
+import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
 import dev.antigravity.classevivaexpressive.feature.absences.AbsencesRoute
 import dev.antigravity.classevivaexpressive.feature.agenda.AgendaRoute
 import dev.antigravity.classevivaexpressive.feature.communications.CommunicationsRoute
@@ -101,6 +108,7 @@ import dev.antigravity.classevivaexpressive.feature.dashboard.MeetingsRoute
 import dev.antigravity.classevivaexpressive.feature.dashboard.StudentScoreRoute
 import dev.antigravity.classevivaexpressive.feature.grades.GradesRoute
 import dev.antigravity.classevivaexpressive.feature.lessons.LessonsRoute
+import dev.antigravity.classevivaexpressive.feature.lessons.ProfessorsRoute
 import dev.antigravity.classevivaexpressive.feature.settings.SettingsRoute
 
 private data class TopLevelDestination(
@@ -125,21 +133,105 @@ fun MainApp(
   viewModel: MainViewModel = hiltViewModel(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+    viewModel.onAppResumed()
+  }
 
   ClassevivaExpressiveTheme(settings = uiState.settings) {
     ExpressiveScreenSurface(modifier = Modifier.fillMaxSize()) {
-      when {
-        uiState.isLoading -> LoadingScreen()
-        uiState.session == null -> LoginScreen(
-          isLoading = uiState.isAuthenticating,
-          error = uiState.authError,
-          onClearError = viewModel::clearAuthError,
-          onLogin = viewModel::login,
-        )
-        else -> AuthenticatedApp()
+      Box(modifier = Modifier.fillMaxSize()) {
+        when {
+          uiState.isLoading -> LoadingScreen()
+          uiState.session == null -> LoginScreen(
+            isLoading = uiState.isAuthenticating,
+            error = uiState.authError,
+            onClearError = viewModel::clearAuthError,
+            onLogin = viewModel::login,
+          )
+          else -> AuthenticatedApp(
+            isCheckingForUpdates = uiState.isCheckingUpdate,
+            updateCheckMessage = uiState.updateCheckMessage,
+            onCheckForUpdates = { viewModel.checkUpdate() },
+            onClearUpdateCheckMessage = viewModel::clearUpdateCheckMessage,
+          )
+        }
+        val update = uiState.availableUpdate
+        if (update != null && !uiState.isUpdateDismissedForSession) {
+          AppUpdateDialog(
+            update = update,
+            installState = uiState.updateInstallState,
+            onInstall = viewModel::startUpdateInstall,
+            onLater = viewModel::dismissUpdate,
+            onIgnore = viewModel::ignoreUpdateVersion,
+          )
+        }
       }
     }
   }
+}
+
+@Composable
+private fun AppUpdateDialog(
+  update: AvailableAppUpdate,
+  installState: AppUpdateInstallState,
+  onInstall: () -> Unit,
+  onLater: () -> Unit,
+  onIgnore: () -> Unit,
+) {
+  val busy = installState.isBusy()
+  val statusText = when (installState) {
+    AppUpdateInstallState.Idle -> update.changelog.ifBlank { "Nuova versione disponibile." }
+    is AppUpdateInstallState.Downloading -> {
+      val percent = (installState.progress * 100).toInt().coerceIn(0, 100)
+      "Download aggiornamento: $percent%"
+    }
+    is AppUpdateInstallState.Verifying -> installState.message
+    is AppUpdateInstallState.AwaitingUserAction -> installState.message
+    is AppUpdateInstallState.Installing -> installState.message
+    is AppUpdateInstallState.Installed -> "Aggiornamento installato."
+    is AppUpdateInstallState.Error -> installState.message
+  }
+
+  AlertDialog(
+    onDismissRequest = { if (!busy) onLater() },
+    title = { Text("Aggiornamento ${update.version}") },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(statusText)
+        if (busy) {
+          LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = onInstall,
+        enabled = !busy && installState !is AppUpdateInstallState.Installed,
+      ) {
+        Text(if (installState is AppUpdateInstallState.Error) "Riprova" else "Aggiorna")
+      }
+    },
+    dismissButton = {
+      Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        TextButton(onClick = onIgnore, enabled = !busy) {
+          Text("Ignora")
+        }
+        TextButton(onClick = onLater, enabled = !busy) {
+          Text("Piu tardi")
+        }
+      }
+    },
+  )
+}
+
+private fun AppUpdateInstallState.isBusy(): Boolean = when (this) {
+  is AppUpdateInstallState.Downloading,
+  is AppUpdateInstallState.Verifying,
+  is AppUpdateInstallState.Installing,
+  is AppUpdateInstallState.AwaitingUserAction -> true
+  AppUpdateInstallState.Idle,
+  is AppUpdateInstallState.Installed,
+  is AppUpdateInstallState.Error -> false
 }
 
 @Composable
@@ -332,6 +424,7 @@ private fun TopLevelNavigationSuitePreview() {
           onOpenNotes = {},
           onOpenHomework = {},
           onOpenDocuments = {},
+          onOpenProfessors = {},
         )
       }
     }
@@ -340,7 +433,12 @@ private fun TopLevelNavigationSuitePreview() {
 
 @OptIn(ExperimentalMaterial3AdaptiveNavigationSuiteApi::class, ExperimentalSharedTransitionApi::class)
 @Composable
-private fun AuthenticatedApp() {
+private fun AuthenticatedApp(
+  isCheckingForUpdates: Boolean,
+  updateCheckMessage: String?,
+  onCheckForUpdates: () -> Unit,
+  onClearUpdateCheckMessage: () -> Unit,
+) {
   val navController = rememberNavController()
   val navBackStackEntry by navController.currentBackStackEntryAsState()
   val currentDestination = navBackStackEntry?.destination
@@ -452,6 +550,7 @@ private fun AuthenticatedApp() {
             onOpenSettings = { navController.navigate("settings") },
             onOpenHomework = { navController.navigate("homework") },
             onOpenDocuments = { navController.navigate("documents") },
+            onOpenProfessors = { navController.navigate("professors") },
           )
         }
         composable("materials") { MaterialsRoute(onBack = navController::navigateUp) }
@@ -459,9 +558,14 @@ private fun AuthenticatedApp() {
         composable("documents") { DocumentsRoute(onBack = navController::navigateUp) }
         composable("lessons") { LessonsRoute(onBack = navController::navigateUp) }
         composable("absences") { AbsencesRoute(onBack = navController::navigateUp) }
+        composable("professors") { ProfessorsRoute(onBack = navController::navigateUp) }
         composable("settings") {
           SettingsRoute(
             onBack = navController::navigateUp,
+            isCheckingForUpdates = isCheckingForUpdates,
+            updateCheckMessage = updateCheckMessage,
+            onCheckForUpdates = onCheckForUpdates,
+            onClearUpdateCheckMessage = onClearUpdateCheckMessage,
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
           )
@@ -496,6 +600,7 @@ private fun MoreHubScreen(
   onOpenNotes: () -> Unit,
   onOpenHomework: () -> Unit,
   onOpenDocuments: () -> Unit,
+  onOpenProfessors: () -> Unit,
 ) {
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -584,6 +689,17 @@ private fun MoreHubScreen(
           onClick = onOpenAbsences,
           badge = { StatusBadge("PRESENZE", tone = ExpressiveTone.Warning) },
           leading = { Icon(Icons.Rounded.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Professori",
+          subtitle = "Statistiche di presenza, voti assegnati e rigore per ogni docente.",
+          eyebrow = "Docenti",
+          tone = ExpressiveTone.Neutral,
+          onClick = onOpenProfessors,
+          badge = { StatusBadge("PROF") },
+          leading = { Icon(Icons.Rounded.PeopleAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         )
       }
       item { ExpressiveAccentLabel("Profilo") }

@@ -111,6 +111,14 @@ interface ClassevivaApiService {
     @Body body: JsonObject = JsonObject(),
   ): JsonObject
 
+  @POST("v1/students/{id}/noticeboard/join/{evtCode}/{pubId}/101")
+  suspend fun joinNoticeboard(
+    @Path("id") studentId: String,
+    @Path("evtCode") evtCode: String,
+    @Path("pubId") pubId: String,
+    @Body body: JsonObject = JsonObject(),
+  ): JsonObject
+
   @Streaming
   @GET("v1/students/{id}/noticeboard/attach/{evtCode}/{pubId}/101")
   suspend fun downloadNoticeboardAttachment(

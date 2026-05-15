@@ -16,3 +16,6 @@ internal const val SchoolbooksSection = "schoolbooks"
 internal const val MeetingTeachersSection = "meeting_teachers"
 internal const val MeetingSlotsSection = "meeting_slots"
 internal const val MeetingBookingsSection = "meeting_bookings"
+
+internal const val HistoryKindGrade = "grade"
+internal const val HistoryKindAgenda = "agenda"
