@@ -4,8 +4,8 @@ import android.content.Intent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,12 +73,13 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.bouncyClickable
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.CustomEvent
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -195,6 +196,7 @@ fun AgendaRoute(
           category = it.category,
           sharePayload = it.sharePayload,
           createdAt = it.createdAt,
+          history = it.history,
         )
       })
       addAll(state.customEvents.map {
@@ -210,6 +212,7 @@ fun AgendaRoute(
           category = AgendaCategory.CUSTOM,
           sharePayload = listOfNotNull(it.title, it.subject, it.description).joinToString("\n"),
           createdAt = it.createdAt,
+          history = emptyList(),
         )
       })
     }.filter { it.date != null }.sortedWith(compareBy<AgendaEntry> { it.date }.thenBy { it.time ?: "" })
@@ -258,13 +261,12 @@ fun AgendaRoute(
       onRefresh = viewModel::refresh,
     ) {
       LazyColumn(
-        modifier = Modifier.fillMaxSize().animateContentSize(),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
         item {
           MonthHeader(
-            modifier = Modifier.animateItem(),
             month = selectedMonth,
             onPrevious = {
               val previous = selectedMonth.minusMonths(1)
@@ -280,7 +282,6 @@ fun AgendaRoute(
         }
         item {
           MonthGrid(
-            modifier = Modifier.animateItem(),
             month = selectedMonth,
             entriesByDate = monthEntriesByDate,
             selectedDate = selectedDate,
@@ -293,29 +294,16 @@ fun AgendaRoute(
         if (selectedDayEntries.isEmpty()) {
           item {
             EmptyState(
-              modifier = Modifier.animateItem(),
               title = "Nulla di pianificato",
               detail = "Non ci sono compiti, verifiche o eventi per questa data.",
             )
           }
         } else {
           items(selectedDayEntries, key = { it.id }) { entry ->
-            val sharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-              with(sharedTransitionScope) {
-                Modifier.sharedElement(
-                  rememberSharedContentState(key = "agenda-${entry.id}"),
-                  animatedVisibilityScope = animatedVisibilityScope,
-                )
-              }
-            } else {
-              Modifier
-            }
-
             AgendaEntryRow(
               entry = entry,
               onClick = { selectedEntry = entry },
               onLongClick = { shareEntry(context, entry) },
-              modifier = Modifier.animateItem().then(sharedModifier),
             )
           }
         }
@@ -442,7 +430,7 @@ private fun CalendarDayCell(
   Column(
     modifier = modifier
       .height(60.dp)
-      .bouncyClickable(onClick = onClick),
+      .clickable(onClick = onClick),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(2.dp),
   ) {
@@ -509,6 +497,12 @@ private fun AgendaEntryRow(
     }.joinToString(" / ").ifBlank { null },
     tone = categoryTone(entry.category),
     badge = {
+      if (entry.history.isNotEmpty()) {
+        StatusBadge(
+          label = "MODIFICATO",
+          tone = ExpressiveTone.Info,
+        )
+      }
       StatusBadge(
         label = categoryLabel(entry.category),
         tone = categoryTone(entry.category),
@@ -517,6 +511,7 @@ private fun AgendaEntryRow(
     onClick = onClick,
     onLongClick = onLongClick,
     modifier = modifier,
+    animatePress = false,
   )
 }
 
@@ -530,13 +525,14 @@ private fun AgendaDetailSheet(
   animatedVisibilityScope: AnimatedVisibilityScope?,
 ) {
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+  var showHistory by rememberSaveable(entry.id) { mutableStateOf(false) }
 
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
   ) {
     LazyColumn(
-      modifier = Modifier.fillMaxWidth().animateContentSize(),
+      modifier = Modifier.fillMaxWidth(),
       contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -554,7 +550,7 @@ private fun AgendaDetailSheet(
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           InfoLine(label = "Data evento", value = entry.eventDateLabel())
           entry.createdAtLabel()?.let { addedAt ->
-            InfoLine(label = "Aggiunto", value = addedAt)
+            InfoLine(label = if (entry.history.isEmpty()) "Aggiunto" else "Ultima modifica", value = addedAt)
           }
           entry.subject?.takeIf(String::isNotBlank)?.let { subject ->
             InfoLine(label = "Materia", value = subject)
@@ -581,26 +577,110 @@ private fun AgendaDetailSheet(
         }
       }
       item {
-        Row(
+        Column(
           modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-          FilledTonalButton(
-            onClick = onShare,
-            modifier = Modifier.weight(1f),
-          ) {
-            Text("Condividi")
+          if (entry.history.isNotEmpty()) {
+            FilledTonalButton(
+              onClick = { showHistory = !showHistory },
+              modifier = Modifier.fillMaxWidth(),
+            ) {
+              Text(if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${entry.history.size})")
+            }
           }
-          TextButton(
-            onClick = onDismiss,
-            modifier = Modifier.weight(1f),
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
           ) {
-            Text("Chiudi")
+            FilledTonalButton(
+              onClick = onShare,
+              modifier = Modifier.weight(1f),
+            ) {
+              Text("Condividi")
+            }
+            TextButton(
+              onClick = onDismiss,
+              modifier = Modifier.weight(1f),
+            ) {
+              Text("Chiudi")
+            }
           }
+        }
+      }
+      if (showHistory && entry.history.isNotEmpty()) {
+        item {
+          AgendaHistorySection(entry = entry)
         }
       }
       item { Spacer(modifier = Modifier.height(16.dp)) }
     }
+  }
+}
+
+@Composable
+private fun AgendaHistorySection(entry: AgendaEntry) {
+  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    ExpressiveAccentLabel("Cronologia versioni")
+    AgendaVersionCard(
+      label = "Versione attuale",
+      title = entry.title,
+      subtitle = entry.subject ?: entry.subtitle.ifBlank { "Agenda" },
+      eventDate = entry.eventDateLabel(),
+      detail = entry.detail,
+      teacher = entry.teacher,
+      recordedAt = entry.createdAtLabel(),
+      category = entry.category,
+    )
+    entry.history.forEachIndexed { index, version ->
+      AgendaVersionCard(
+        label = "Versione precedente ${index + 1}",
+        title = version.title,
+        subtitle = version.subject ?: version.subtitle.ifBlank { "Agenda" },
+        eventDate = version.eventDateLabel(),
+        detail = version.detail,
+        teacher = version.teacher,
+        recordedAt = version.recordedAtEpochMillis.toReadableDateTime(),
+        category = version.category,
+      )
+    }
+  }
+}
+
+@Composable
+private fun AgendaVersionCard(
+  label: String,
+  title: String,
+  subtitle: String,
+  eventDate: String,
+  detail: String?,
+  teacher: String?,
+  recordedAt: String?,
+  category: AgendaCategory,
+) {
+  ExpressiveCard(highlighted = label == "Versione attuale") {
+    Text(
+      text = label,
+      style = MaterialTheme.typography.labelLarge,
+      color = MaterialTheme.colorScheme.primary,
+      fontWeight = FontWeight.SemiBold,
+    )
+    Text(
+      text = title,
+      style = MaterialTheme.typography.titleMedium,
+      color = MaterialTheme.colorScheme.onSurface,
+      fontWeight = FontWeight.SemiBold,
+    )
+    Text(
+      text = subtitle,
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    InfoLine(label = "Data evento", value = eventDate)
+    recordedAt?.let { InfoLine(label = if (label == "Versione attuale") "Ultima modifica" else "Rilevata", value = it) }
+    teacher?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Docente", value = it) }
+    detail?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Dettagli", value = it) }
+    StatusBadge(categoryLabel(category), tone = categoryTone(category))
   }
 }
 
@@ -639,7 +719,7 @@ private fun AddEventSheet(
 
   ModalBottomSheet(onDismissRequest = onDismiss) {
     LazyColumn(
-      modifier = Modifier.fillMaxWidth().animateContentSize(),
+      modifier = Modifier.fillMaxWidth(),
       contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -647,14 +727,13 @@ private fun AddEventSheet(
         Text(
           text = "Nuovo evento",
           style = MaterialTheme.typography.headlineSmall,
-          modifier = Modifier.animateItem(),
         )
       }
       item {
         OutlinedTextField(
           value = title,
           onValueChange = { title = it },
-          modifier = Modifier.fillMaxWidth().animateItem(),
+          modifier = Modifier.fillMaxWidth(),
           label = { Text("Titolo") },
           singleLine = true,
         )
@@ -663,7 +742,7 @@ private fun AddEventSheet(
         OutlinedTextField(
           value = subject,
           onValueChange = { subject = it },
-          modifier = Modifier.fillMaxWidth().animateItem(),
+          modifier = Modifier.fillMaxWidth(),
           label = { Text("Materia o tag") },
           singleLine = true,
         )
@@ -679,7 +758,7 @@ private fun AddEventSheet(
           tone = ExpressiveTone.Primary,
           onClick = { showDatePicker = true },
           badge = { StatusBadge("SELEZIONA", tone = ExpressiveTone.Primary) },
-          modifier = Modifier.animateItem(),
+          animatePress = false,
         )
       }
       item {
@@ -690,21 +769,21 @@ private fun AddEventSheet(
           tone = ExpressiveTone.Info,
           onClick = { showTimePicker = true },
           badge = { StatusBadge(if (time.isBlank()) "OPZIONALE" else "IMPOSTATA", tone = ExpressiveTone.Info) },
-          modifier = Modifier.animateItem(),
+          animatePress = false,
         )
       }
       item {
         OutlinedTextField(
           value = description,
           onValueChange = { description = it },
-          modifier = Modifier.fillMaxWidth().animateItem(),
+          modifier = Modifier.fillMaxWidth(),
           label = { Text("Dettagli") },
           minLines = 3,
         )
       }
       item {
         Row(
-          modifier = Modifier.fillMaxWidth().animateItem(),
+          modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           TextButton(onClick = onDismiss) {
@@ -803,6 +882,7 @@ private data class AgendaEntry(
   val category: AgendaCategory,
   val sharePayload: String?,
   val createdAt: String?,
+  val history: List<AgendaItemVersion>,
 )
 
 private fun buildCalendarCells(month: YearMonth): List<LocalDate> {
@@ -858,6 +938,20 @@ private fun AgendaEntry.createdAtLabel(): String? {
       else -> LocalDate.parse(value).format(DateTimeFormatter.ofPattern("d MMM yyyy", italianLocale))
     }
   }.getOrElse { value }
+}
+
+private fun AgendaItemVersion.eventDateLabel(): String {
+  return buildList {
+    add(date.toLocalDateOrNull()?.format(eventDateFormatter)?.replaceFirstChar { it.uppercase() } ?: date)
+    time?.takeIf(String::isNotBlank)?.let(::add)
+  }.joinToString(" â€¢ ")
+}
+
+private fun Long.toReadableDateTime(): String {
+  return Instant.ofEpochMilli(this)
+    .atZone(ZoneId.systemDefault())
+    .toLocalDateTime()
+    .format(createdAtFormatter)
 }
 
 private fun shareEntry(context: android.content.Context, entry: AgendaEntry) {

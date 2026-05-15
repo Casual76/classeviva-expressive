@@ -1,0 +1,8 @@
+﻿DESC	[0,0][1080,1257]	Chiudi il foglio
+DESC	[498,1315][582,1326]	Punto di trascinamento
+TEXT	[63,1416][1017,1568]	2690 - 4F - entrata posticipata l'8/5
+TEXT	[63,1610][167,1650]	Scuola
+TEXT	[63,1661][268,1698]	7 Maggio 2026
+TEXT	[63,1740][1017,1972]	La classe 4F entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Mucci. L'adesione alla presente vale come presa visione della famiglia. per la vicepresidenza prof.ssa Martina Pomilia
+TEXT	[477,2054][603,2102]	Aderisci
+TEXT	[492,2222][589,2270]	Chiudi

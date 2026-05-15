@@ -3,7 +3,9 @@ package dev.antigravity.classevivaexpressive.core.designsystem.theme
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -287,10 +289,15 @@ fun MetricTile(
   modifier: Modifier = Modifier,
   tone: ExpressiveTone = ExpressiveTone.Neutral,
   onClick: (() -> Unit)? = null,
+  animatePress: Boolean = true,
 ) {
   val colors = toneColors(tone)
   val clickableModifier = if (onClick != null) {
-    modifier.bouncyClickable(onClick = onClick)
+    if (animatePress) {
+      modifier.bouncyClickable(onClick = onClick)
+    } else {
+      modifier.clickable(onClick = onClick)
+    }
   } else {
     modifier
   }
@@ -330,14 +337,20 @@ fun ExpressiveCard(
   modifier: Modifier = Modifier,
   highlighted: Boolean = false,
   onClick: (() -> Unit)? = null,
+  animateContent: Boolean = true,
+  animatePress: Boolean = true,
   content: @Composable ColumnScope.() -> Unit,
 ) {
   val baseModifier = modifier
     .fillMaxWidth()
-    .animateContentSize()
+    .then(if (animateContent) Modifier.animateContentSize() else Modifier)
 
   val clickableModifier = if (onClick != null) {
-    baseModifier.bouncyClickable(onClick = onClick)
+    if (animatePress) {
+      baseModifier.bouncyClickable(onClick = onClick)
+    } else {
+      baseModifier.clickable(onClick = onClick)
+    }
   } else {
     baseModifier
   }
@@ -391,6 +404,7 @@ fun QuickAction(
 }
 
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RegisterListRow(
   title: String,
@@ -403,6 +417,7 @@ fun RegisterListRow(
   leading: (@Composable () -> Unit)? = null,
   onClick: (() -> Unit)? = null,
   onLongClick: (() -> Unit)? = null,
+  animatePress: Boolean = true,
 ) {
   val colors = toneColors(tone)
   val isTinted = tone != ExpressiveTone.Neutral
@@ -411,7 +426,14 @@ fun RegisterListRow(
       .fillMaxWidth()
       .then(
         if (onClick != null || onLongClick != null) {
-          Modifier.bouncyClickable(onClick = onClick, onLongClick = onLongClick)
+          if (animatePress) {
+            Modifier.bouncyClickable(onClick = onClick, onLongClick = onLongClick)
+          } else {
+            Modifier.combinedClickable(
+              onClick = { onClick?.invoke() },
+              onLongClick = onLongClick,
+            )
+          }
         } else {
           Modifier
         },

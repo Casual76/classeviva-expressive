@@ -1,6 +1,8 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
 import app.cash.turbine.test
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
@@ -31,11 +33,15 @@ class LessonsViewModelTest {
 
   private val testDispatcher = UnconfinedTestDispatcher(TestCoroutineScheduler())
   private val lessonsRepository = mockk<LessonsRepository>(relaxed = true)
+  private val dashboardRepository = mockk<DashboardRepository>(relaxed = true)
 
-  @Before fun setUp() { Dispatchers.setMain(testDispatcher) }
+  @Before fun setUp() {
+    Dispatchers.setMain(testDispatcher)
+    every { dashboardRepository.observeDashboard() } returns flowOf(DashboardSnapshot())
+  }
   @After fun tearDown() { Dispatchers.resetMain() }
 
-  private fun buildViewModel() = LessonsViewModel(lessonsRepository)
+  private fun buildViewModel() = LessonsViewModel(lessonsRepository, dashboardRepository)
 
   @Test
   fun lessonsFromRepository_areExposedInState() = runTest {

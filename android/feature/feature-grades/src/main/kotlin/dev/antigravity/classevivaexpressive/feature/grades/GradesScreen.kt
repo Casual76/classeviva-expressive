@@ -3,7 +3,6 @@ package dev.antigravity.classevivaexpressive.feature.grades
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,7 +73,9 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SimulatedGrade
 import dev.antigravity.classevivaexpressive.core.domain.model.SimulationRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SubjectGoal
 import dev.antigravity.classevivaexpressive.core.domain.util.parseDecimal
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
@@ -88,6 +89,7 @@ import kotlinx.coroutines.launch
 private const val TAB_RECENT = "Ultimi"
 private const val TAB_SUBJECTS = "Per materia"
 private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
+private val historyDateTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", italianLocale)
 
 data class GradesUiState(
   val grades: List<Grade> = emptyList(),
@@ -274,6 +276,12 @@ fun GradesRoute(
   val chartPoints = remember(filteredGrades) {
     filteredGrades.sortedBy { it.date }.mapNotNull { it.numericValue?.toFloat() }
   }
+  val recentGrades = remember(filteredGrades) {
+    filteredGrades.sortedByDescending { it.date }
+  }
+  val periodUnseen = remember(filteredGrades, state.seenGradeIds) {
+    filteredGrades.filterNot { state.seenGradeIds.contains(it.id) }
+  }
 
   LaunchedEffect(initialGradeId, state.grades.size) {
     if (!initialGradeId.isNullOrBlank() && state.grades.any { it.id == initialGradeId } && state.selectedGradeId != initialGradeId) {
@@ -310,13 +318,13 @@ fun GradesRoute(
       onRefresh = viewModel::refresh,
     ) {
       LazyColumn(
-        modifier = Modifier.fillMaxSize().animateContentSize(),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
       ) {
         item {
           Row(
-            modifier = Modifier.fillMaxWidth().animateItem(),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
           ) {
             MetricTile(
@@ -345,7 +353,7 @@ fun GradesRoute(
         
         if (chartPoints.isNotEmpty()) {
           item {
-            ExpressiveEditorialCard(modifier = Modifier.animateItem()) {
+            ExpressiveEditorialCard {
               Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                   Text(
                     text = "ANDAMENTO",
@@ -383,7 +391,6 @@ fun GradesRoute(
         if (state.periods.isNotEmpty()) {
           item {
             PeriodSelector(
-              modifier = Modifier.animateItem(),
               periods = state.periods,
               selectedCode = effectivePeriodCode,
               onSelect = viewModel::selectPeriod,
@@ -393,14 +400,12 @@ fun GradesRoute(
         
         item {
           ExpressivePillTabs(
-            modifier = Modifier.animateItem(),
             options = listOf(TAB_RECENT, TAB_SUBJECTS),
             selected = selectedTab,
             onSelect = { selectedTab = it },
           )
         }
         
-        val periodUnseen = filteredGrades.filterNot { state.seenGradeIds.contains(it.id) }
         if (periodUnseen.isNotEmpty()) {
           item {
             QuickAction(
@@ -415,40 +420,39 @@ fun GradesRoute(
             if (filteredGrades.isEmpty()) {
               item {
                 EmptyState(
-                  modifier = Modifier.animateItem(),
                   title = "Nessun voto in questo periodo",
                   detail = "Seleziona un altro periodo oppure attendi la sincronizzazione dei dati.",
                 )
               }
             } else {
-              items(filteredGrades.sortedByDescending { it.date }, key = { it.id }) { grade ->
+              items(recentGrades, key = { it.id }) { grade ->
                 val unseen = !state.seenGradeIds.contains(grade.id)
-                val sharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-                  with(sharedTransitionScope) {
-                    Modifier.sharedElement(
-                      rememberSharedContentState(key = "grade-${grade.id}"),
-                      animatedVisibilityScope = animatedVisibilityScope
-                    )
-                  }
-                } else Modifier
+                val readableDate = remember(grade.date) { grade.date.toReadableDate() }
+                val meta = remember(grade.description, grade.notes, grade.teacher) {
+                  listOfNotNull(
+                    grade.description ?: grade.notes,
+                    grade.teacher,
+                  ).joinToString(" / ").ifBlank { null }
+                }
 
                 RegisterListRow(
-                  modifier = Modifier.animateItem().then(sharedModifier),
+                  modifier = Modifier,
                   title = grade.subject,
                   subtitle = grade.type.ifBlank { "Valutazione" },
-                  eyebrow = grade.date.toReadableDate(),
-                  meta = listOfNotNull(
-                      grade.description ?: grade.notes,
-                      grade.teacher
-                  ).joinToString(" / ").ifBlank { null },
+                  eyebrow = readableDate,
+                  meta = meta,
                   tone = gradeTone(grade.numericValue),
                   badge = {
                     if (unseen) {
                       StatusBadge(label = "NUOVO", tone = ExpressiveTone.Primary)
                     }
+                    if (grade.history.isNotEmpty()) {
+                      StatusBadge(label = "MODIFICATO", tone = ExpressiveTone.Info)
+                    }
                     GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
                   },
                   onClick = { viewModel.openGrade(grade.id) },
+                  animatePress = false,
                 )
               }
             }
@@ -458,7 +462,6 @@ fun GradesRoute(
             if (subjectRows.isEmpty()) {
               item {
                 EmptyState(
-                  modifier = Modifier.animateItem(),
                   title = "Mancano voti numerici",
                   detail = "Le medie per materia vengono calcolate solo in presenza di valutazioni con valore decimale.",
                 )
@@ -466,7 +469,7 @@ fun GradesRoute(
             } else {
               items(subjectRows, key = { it.subject }) { row ->
                 RegisterListRow(
-                  modifier = Modifier.animateItem(),
+                  modifier = Modifier,
                   title = row.subject,
                   subtitle = row.detail,
                   eyebrow = if (row.average != null && row.average < 6.0) "Materia a rischio" else "Per materia",
@@ -485,6 +488,7 @@ fun GradesRoute(
                     )
                   },
                   onClick = { detailSubject = row.subject },
+                  animatePress = false,
                 )
               }
             }
@@ -534,29 +538,104 @@ fun GradesRoute(
     )
   }
 
-  if (selectedGrade != null) {
+  selectedGrade?.let { grade ->
+    var showHistory by rememberSaveable(grade.id) { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = viewModel::dismissGrade) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        Text(text = selectedGrade.subject, style = MaterialTheme.typography.headlineSmall)
+        Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
         RegisterListRow(
-          title = selectedGrade.valueLabel,
-          subtitle = selectedGrade.type.ifBlank { "Valutazione" },
-          eyebrow = selectedGrade.date.toReadableDate(),
-          meta = listOfNotNull(selectedGrade.description, selectedGrade.notes, selectedGrade.teacher).joinToString(" / "),
-          tone = gradeTone(selectedGrade.numericValue),
+          title = grade.valueLabel,
+          subtitle = grade.type.ifBlank { "Valutazione" },
+          eyebrow = grade.date.toReadableDate(),
+          meta = listOfNotNull(grade.description, grade.notes, grade.teacher).joinToString(" / "),
+          tone = gradeTone(grade.numericValue),
           badge = {
-            GradePill(value = selectedGrade.valueLabel, numericValue = selectedGrade.numericValue)
+            if (grade.history.isNotEmpty()) {
+              StatusBadge(label = "MODIFICATO", tone = ExpressiveTone.Info)
+            }
+            GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
           }
         )
-        Button(onClick = viewModel::dismissGrade, modifier = Modifier.fillMaxWidth()) {
+        if (grade.history.isNotEmpty()) {
+          Button(
+            onClick = { showHistory = !showHistory },
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text(if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${grade.history.size})")
+          }
+        }
+        if (showHistory && grade.history.isNotEmpty()) {
+          GradeHistorySection(grade = grade)
+        }
+        TextButton(onClick = viewModel::dismissGrade, modifier = Modifier.fillMaxWidth()) {
           Text("Chiudi")
         }
       }
     }
   }
+}
+
+@Composable
+private fun GradeHistorySection(grade: Grade) {
+  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    ExpressiveAccentLabel("Cronologia versioni")
+    GradeVersionRow(
+      label = "Versione attuale",
+      valueLabel = grade.valueLabel,
+      numericValue = grade.numericValue,
+      type = grade.type,
+      date = grade.date,
+      description = grade.description,
+      notes = grade.notes,
+      teacher = grade.teacher,
+      recordedAt = null,
+    )
+    grade.history.forEachIndexed { index, version ->
+      GradeVersionRow(
+        label = "Versione precedente ${index + 1}",
+        valueLabel = version.valueLabel,
+        numericValue = version.numericValue,
+        type = version.type,
+        date = version.date,
+        description = version.description,
+        notes = version.notes,
+        teacher = version.teacher,
+        recordedAt = version.recordedAtEpochMillis.toReadableDateTime(),
+      )
+    }
+  }
+}
+
+@Composable
+private fun GradeVersionRow(
+  label: String,
+  valueLabel: String,
+  numericValue: Double?,
+  type: String,
+  date: String,
+  description: String?,
+  notes: String?,
+  teacher: String?,
+  recordedAt: String?,
+) {
+  RegisterListRow(
+    title = valueLabel,
+    subtitle = type.ifBlank { "Valutazione" },
+    eyebrow = "$label / ${date.toReadableDate()}",
+    meta = buildList {
+      description?.takeIf(String::isNotBlank)?.let(::add)
+      notes?.takeIf(String::isNotBlank)?.let(::add)
+      teacher?.takeIf(String::isNotBlank)?.let(::add)
+      recordedAt?.let { add("Rilevata $it") }
+    }.joinToString(" / ").ifBlank { null },
+    tone = gradeTone(numericValue),
+    badge = {
+      GradePill(value = valueLabel, numericValue = numericValue)
+    },
+  )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -601,7 +680,8 @@ private fun SubjectDetailSheet(
             eyebrow = grade.date.toReadableDate(),
             meta = grade.description ?: grade.notes,
             tone = gradeTone(grade.numericValue),
-            onClick = { onOpenGrade(grade.id) }
+            onClick = { onOpenGrade(grade.id) },
+            animatePress = false,
           )
       }
       item { Spacer(Modifier.height(32.dp)) }
@@ -826,6 +906,13 @@ private fun effectivePeriodLabel(periods: List<Period>, periodCode: String?): St
 private fun String.toReadableDate(): String {
   val parsed = runCatching { LocalDate.parse(this) }.getOrNull() ?: return this
   return parsed.format(DateTimeFormatter.ofPattern("d MMM yyyy", italianLocale))
+}
+
+private fun Long.toReadableDateTime(): String {
+  return Instant.ofEpochMilli(this)
+    .atZone(ZoneId.systemDefault())
+    .toLocalDateTime()
+    .format(historyDateTimeFormatter)
 }
 
 private fun String.toLocalDateOrNull(): LocalDate? {

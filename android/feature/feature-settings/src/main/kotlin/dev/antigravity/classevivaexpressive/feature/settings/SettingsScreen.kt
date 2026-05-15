@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.feature.settings
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -19,16 +20,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.FileDownload
+import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -59,6 +64,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.AgendaChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.CommunicationsChannelId
@@ -66,6 +72,7 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.GradesChanne
 import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.NotesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.LiveTimetableChannelId
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
@@ -77,6 +84,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.SectionTitle
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveAccentPresets
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
+import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityResolver
@@ -90,11 +98,15 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import javax.inject.Inject
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class SettingsUiState(
   val settings: AppSettings = AppSettings(),
@@ -113,6 +125,8 @@ class SettingsViewModel @Inject constructor(
   private val authRepository: AuthRepository,
   private val schoolYearRepository: SchoolYearRepository,
   private val capabilityResolver: CapabilityResolver,
+  private val appBackupRepository: AppBackupRepository,
+  @ApplicationContext private val applicationContext: Context,
 ) : ViewModel() {
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isRefreshing = MutableStateFlow(false)
@@ -239,6 +253,62 @@ class SettingsViewModel @Inject constructor(
       lastMessage.value = "Anno scolastico impostato su ${year.label}."
     }
   }
+
+  fun backupFileName(): String {
+    val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"))
+    return "classeviva-expressive-backup-$timestamp.json"
+  }
+
+  fun exportBackup(uri: Uri) {
+    viewModelScope.launch {
+      appBackupRepository.exportBackup()
+        .onSuccess { payload ->
+          runCatching {
+            withContext(Dispatchers.IO) {
+              applicationContext.contentResolver.openOutputStream(uri)?.use { stream ->
+                stream.write(payload.encodeToByteArray())
+              } ?: error("Impossibile aprire il file di destinazione.")
+            }
+          }.onSuccess {
+            lastMessage.value = "Backup esportato correttamente."
+          }.onFailure {
+            lastMessage.value = it.message ?: "Esportazione backup non riuscita."
+          }
+        }
+        .onFailure {
+          lastMessage.value = it.message ?: "Creazione backup non riuscita."
+        }
+    }
+  }
+
+  fun importBackup(uri: Uri) {
+    viewModelScope.launch {
+      val payload = runCatching {
+        withContext(Dispatchers.IO) {
+          applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
+            stream.readBytes().decodeToString()
+          } ?: error("Impossibile aprire il file selezionato.")
+        }
+      }.getOrElse {
+        lastMessage.value = it.message ?: "Lettura backup non riuscita."
+        return@launch
+      }
+
+      appBackupRepository.importBackup(payload)
+        .onSuccess { summary ->
+          lastMessage.value = buildString {
+            append("Backup importato: impostazioni")
+            append(", ${summary.timetableTemplates} orari")
+            append(", ${summary.subjectGoals} obiettivi")
+            append(", ${summary.simulatedGrades} voti simulati")
+            append(", ${summary.customEvents} eventi.")
+          }
+        }
+        .onFailure {
+          lastMessage.value = it.message ?: "Importazione backup non riuscita."
+        }
+    }
+  }
 }
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
@@ -246,6 +316,10 @@ class SettingsViewModel @Inject constructor(
 fun SettingsRoute(
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
+  isCheckingForUpdates: Boolean = false,
+  updateCheckMessage: String? = null,
+  onCheckForUpdates: () -> Unit = {},
+  onClearUpdateCheckMessage: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel(),
   sharedTransitionScope: SharedTransitionScope? = null,
   animatedVisibilityScope: AnimatedVisibilityScope? = null,
@@ -272,6 +346,16 @@ fun SettingsRoute(
       data = Uri.parse("package:${context.packageName}")
     }
     context.startActivity(intent)
+  }
+  val exportBackupLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.CreateDocument("application/json"),
+  ) { uri ->
+    uri?.let(viewModel::exportBackup)
+  }
+  val importBackupLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.OpenDocument(),
+  ) { uri ->
+    uri?.let(viewModel::importBackup)
   }
 
   val enabledLocalChannels = listOf(
@@ -345,6 +429,14 @@ fun SettingsRoute(
                 append(it)
               }
             },
+          )
+        }
+        item {
+          AppUpdateSettingsCard(
+            isChecking = isCheckingForUpdates,
+            message = updateCheckMessage,
+            onCheckForUpdates = onCheckForUpdates,
+            onClearMessage = onClearUpdateCheckMessage,
           )
         }
 
@@ -550,6 +642,33 @@ fun SettingsRoute(
             }
           }
         }
+        item {
+          ExpressiveCard {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              Icon(Icons.Rounded.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+              Text("Backup Impostazioni", style = MaterialTheme.typography.titleMedium)
+            }
+            Text(
+              "Esporta o ripristina preferenze, anno scolastico, orario salvato, eventi personalizzati, obiettivi materia e dati locali come voti simulati o gia visti.",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(
+              modifier = Modifier.padding(top = 8.dp),
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+              verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              OutlinedButton(onClick = { exportBackupLauncher.launch(viewModel.backupFileName()) }) {
+                Icon(Icons.Rounded.FileDownload, contentDescription = null)
+                Text("Esporta file")
+              }
+              Button(onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*", "*/*")) }) {
+                Icon(Icons.Rounded.FileUpload, contentDescription = null)
+                Text("Importa file")
+              }
+            }
+          }
+        }
         if (state.capabilities.isNotEmpty()) {
           item {
             ExpressiveCard {
@@ -598,6 +717,60 @@ fun SettingsRoute(
           }
         }
       }
+    }
+  }
+}
+
+@Composable
+private fun AppUpdateSettingsCard(
+  isChecking: Boolean,
+  message: String?,
+  onCheckForUpdates: () -> Unit,
+  onClearMessage: () -> Unit,
+) {
+  ExpressiveCard {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      Icon(Icons.Rounded.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+      Text("Aggiornamenti app", style = MaterialTheme.typography.titleMedium)
+    }
+    Text(
+      "Controlla manualmente la versione stabile pubblicata su Pampa Store.",
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(
+      modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      OutlinedButton(
+        onClick = onCheckForUpdates,
+        enabled = !isChecking,
+      ) {
+        if (isChecking) {
+          CircularProgressIndicator(
+            modifier = Modifier.size(18.dp),
+            strokeWidth = 2.dp,
+          )
+          Text("Controllo...")
+        } else {
+          Icon(Icons.Rounded.Refresh, contentDescription = null)
+          Text("Controlla aggiornamenti")
+        }
+      }
+      message?.let {
+        TextButton(onClick = onClearMessage) {
+          Text("Nascondi")
+        }
+      }
+    }
+    message?.let {
+      Text(
+        it,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp),
+      )
     }
   }
 }
@@ -696,6 +869,7 @@ private fun channelEnabledInSettings(
     AgendaChannelId -> settings.notificationPreferences.agenda
     NotesChannelId -> settings.notificationPreferences.notes
     TestChannelId -> settings.notificationPreferences.test
+    LiveTimetableChannelId -> settings.notificationPreferences.liveTimetable
     else -> false
   }
 }

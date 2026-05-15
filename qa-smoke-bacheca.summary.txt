@@ -1,0 +1,28 @@
+﻿TEXT	[747,613][819,661]	Note
+TEXT	[218,613][445,661]	Comunicazioni
+TEXT	[714,786][851,834]	Non lette
+TEXT	[292,786][371,834]	Tutte
+TEXT	[95,962][436,1002]	Segna tutte come lette
+TEXT	[95,1124][263,1161]	7 Mag 2026
+TEXT	[95,1161][750,1268]	2690 - 4F - entrata posticipata l'8/5
+TEXT	[95,1268][205,1311]	Scuola
+TEXT	[834,1169][943,1206]	AZIONE
+TEXT	[95,1421][263,1458]	6 Mag 2026
+TEXT	[95,1458][756,1623]	2686 - Comunicato progetto FSL Campus Spark 2026 incontro con il referente esterno
+TEXT	[95,1623][205,1666]	Scuola
+TEXT	[840,1466][943,1503]	NUOVA
+TEXT	[95,1776][263,1813]	6 Mag 2026
+TEXT	[95,1813][756,1920]	2675 - Comunicato esito studenti selezionati Ispro II° sessione 2526
+TEXT	[95,1920][205,1963]	Scuola
+TEXT	[840,1821][943,1858]	NUOVA
+TEXT	[95,2073][263,2110]	4 Mag 2026
+TEXT	[95,2110][756,2130]	2624 - Circ. n. 225 - Comparto Istruzione e Ricerca settore Scuola - sciopero del 06 e 07 maggio 2026.
+TEXT	[840,2118][943,2130]	NUOVA
+DESC	[975,160][1038,223]	Aggiorna
+TEXT	[43,279][530,365]	Comunicazioni
+TEXT	[43,376][1058,472]	Comunicazioni e note scolastiche in una vista unica, con azioni ufficiali e allegati disponibili.
+TEXT	[58,2256][142,2298]	Home
+TEXT	[292,2256][348,2298]	Voti
+TEXT	[487,2256][594,2298]	Agenda
+TEXT	[700,2256][820,2298]	Bacheca
+TEXT	[946,2256][1014,2298]	Altro

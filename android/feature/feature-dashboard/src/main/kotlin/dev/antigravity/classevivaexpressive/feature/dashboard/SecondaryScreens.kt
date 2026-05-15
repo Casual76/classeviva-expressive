@@ -188,6 +188,7 @@ fun MaterialsRoute(
               badge = {
                 StatusBadge(if (item.objectType == "link") "LINK" else "FILE", tone = ExpressiveTone.Info)
               },
+              animatePress = false,
             )
           }
         }
@@ -342,6 +343,7 @@ fun HomeworkRoute(
               tone = ExpressiveTone.Warning,
               onClick = { viewModel.selectHomework(item) },
               badge = { StatusBadge("COMPITO", tone = ExpressiveTone.Warning) },
+              animatePress = false,
             )
           }
         }
@@ -546,6 +548,7 @@ fun DocumentsRoute(
                 tone = ExpressiveTone.Info,
                 onClick = { viewModel.openDocument(doc) },
                 badge = { StatusBadge("DOCUMENTO", tone = ExpressiveTone.Info) },
+                animatePress = false,
               )
             }
           }

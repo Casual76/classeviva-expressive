@@ -3,7 +3,6 @@ package dev.antigravity.classevivaexpressive.feature.dashboard
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -42,9 +41,9 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.bouncyClickable
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
+import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -56,6 +55,37 @@ data class DashboardUiState(
   val snapshot: DashboardSnapshot = DashboardSnapshot(),
   val isRefreshing: Boolean = false,
 )
+
+internal data class DashboardLessonPresentation(
+  val subtitle: String,
+  val timeRangeLabel: String,
+  val tone: ExpressiveTone,
+  val badgeLabel: String,
+  val badgeTone: ExpressiveTone,
+)
+
+internal fun Lesson.toDashboardPresentation(): DashboardLessonPresentation {
+  val isSigned = !teacher.isNullOrBlank()
+  val topicText = topic?.trim().orEmpty()
+  val start = runCatching { java.time.LocalTime.parse(time) }.getOrNull()
+  val timeRangeLabel = if (start != null) {
+    val formatter = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+    "${start.format(formatter)} - ${start.plusMinutes(durationMinutes.toLong()).format(formatter)}"
+  } else {
+    time
+  }
+  return DashboardLessonPresentation(
+    subtitle = when {
+      topicText.isNotBlank() -> topicText
+      isSigned -> "Lezione firmata senza argomento"
+      else -> "Argomento non disponibile"
+    },
+    timeRangeLabel = timeRangeLabel,
+    tone = if (isSigned || topicText.isNotBlank()) ExpressiveTone.Success else ExpressiveTone.Neutral,
+    badgeLabel = if (isSigned) "FIRMATA" else "${durationMinutes} min",
+    badgeTone = if (isSigned) ExpressiveTone.Success else ExpressiveTone.Info,
+  )
+}
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
@@ -107,6 +137,7 @@ fun DashboardRoute(
   val recentGrades = remember(snapshot.recentGrades) { snapshot.recentGrades.take(4) }
   val upcomingItems = remember(snapshot.upcomingItems) { snapshot.upcomingItems.take(4) }
   val unreadCommunications = remember(snapshot.unreadCommunications) { snapshot.unreadCommunications.take(3) }
+  val unseenGradeIds = remember(snapshot.unseenGrades) { snapshot.unseenGrades.mapTo(mutableSetOf()) { it.id } }
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
   val firstName = snapshot.profile.name.takeIf { it.isNotBlank() }?.split(" ")?.firstOrNull()?.replaceFirstChar { it.titlecase() } ?: "Studente"
@@ -132,7 +163,7 @@ fun DashboardRoute(
       onRefresh = viewModel::refresh,
     ) {
       LazyColumn(
-        modifier = Modifier.fillMaxSize().animateContentSize(),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
       ) {
@@ -150,14 +181,15 @@ fun DashboardRoute(
                   tone = dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone(snapshot.averageNumeric),
                 )
               },
-              modifier = Modifier.animateItem()
+              animatePress = false
             )
           }
         }
-        item { ExpressiveAccentLabel("Ultime novità", modifier = Modifier.animateItem()) }
+        item { ExpressiveAccentLabel("Ultime novità") }
         item {
           dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard(
-              modifier = Modifier.fillMaxWidth().animateItem(),
+              modifier = Modifier.fillMaxWidth(),
+              animateContent = false,
           ) {
               Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -168,14 +200,18 @@ fun DashboardRoute(
                   value = snapshot.unseenGrades.size.toString(),
                   detail = "Da aprire",
                   tone = if (snapshot.unseenGrades.isNotEmpty()) ExpressiveTone.Primary else ExpressiveTone.Neutral,
-                  modifier = Modifier.weight(1f).bouncyClickable(onClick = onNavigateGrades),
+                  modifier = Modifier.weight(1f),
+                  onClick = onNavigateGrades,
+                  animatePress = false,
                 )
                 MetricTile(
                   label = "Bacheca",
                   value = snapshot.unreadCommunications.size.toString(),
                   detail = "Non lette",
                   tone = if (snapshot.unreadCommunications.isNotEmpty()) ExpressiveTone.Warning else ExpressiveTone.Neutral,
-                  modifier = Modifier.weight(1f).bouncyClickable(onClick = onNavigateCommunications),
+                  modifier = Modifier.weight(1f),
+                  onClick = onNavigateCommunications,
+                  animatePress = false,
                 )
                 MetricTile(
                   label = "Note non lette",
@@ -188,55 +224,45 @@ fun DashboardRoute(
           }
         }
         
-        item { ExpressiveAccentLabel("Lezioni di oggi", modifier = Modifier.animateItem()) }
+        item { ExpressiveAccentLabel("Lezioni di oggi") }
         if (snapshot.todayLessons.isEmpty()) {
             item {
                 EmptyState(
                   title = "Nessuna lezione oggi",
                   detail = "Non ci sono lezioni previste o registrate per la giornata odierna.",
-                  modifier = Modifier.animateItem()
                 )
             }
         } else {
             items(snapshot.todayLessons, key = { it.id }) { lesson ->
+                val presentation = remember(lesson) { lesson.toDashboardPresentation() }
                 RegisterListRow(
                   title = lesson.subject,
-                  subtitle = lesson.topic?.takeIf(String::isNotBlank) ?: "Argomento non disponibile",
-                  eyebrow = "${java.time.LocalTime.parse(lesson.time).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))} - ${java.time.LocalTime.parse(lesson.time).plusMinutes(lesson.durationMinutes.toLong()).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}",
+                  subtitle = presentation.subtitle,
+                  eyebrow = presentation.timeRangeLabel,
                   meta = listOfNotNull(
                     lesson.teacher?.takeIf(String::isNotBlank),
                   ).joinToString(" / "),
-                  tone = if (lesson.topic.isNullOrBlank()) ExpressiveTone.Neutral else ExpressiveTone.Success,
+                  tone = presentation.tone,
                   badge = {
                     StatusBadge(
-                      label = "${lesson.durationMinutes} min",
-                      tone = ExpressiveTone.Info,
+                      label = presentation.badgeLabel,
+                      tone = presentation.badgeTone,
                     )
                   },
-                  modifier = Modifier.animateItem()
                 )
             }
         }
-        item { ExpressiveAccentLabel("Voti recenti", modifier = Modifier.animateItem()) }
+        item { ExpressiveAccentLabel("Voti recenti") }
         if (recentGrades.isEmpty()) {
           item {
             EmptyState(
               title = "Nessun voto disponibile",
               detail = "I voti recenti appariranno qui dopo la prossima sincronizzazione.",
-              modifier = Modifier.animateItem()
             )
           }
         } else {
           items(recentGrades, key = { it.id }) { grade ->
-            val isUnseen = snapshot.unseenGrades.any { it.id == grade.id }
-            val sharedModifier = if (sharedTransitionScope != null && animatedVisibilityScope != null) {
-              with(sharedTransitionScope) {
-                Modifier.sharedElement(
-                  rememberSharedContentState(key = "grade-${grade.id}"),
-                  animatedVisibilityScope = animatedVisibilityScope
-                )
-              }
-            } else Modifier
+            val isUnseen = unseenGradeIds.contains(grade.id)
 
             RegisterListRow(
               title = grade.subject,
@@ -251,17 +277,16 @@ fun DashboardRoute(
                   tone = if (isUnseen) ExpressiveTone.Primary else ExpressiveTone.Neutral,
                 )
               },
-              modifier = Modifier.animateItem().then(sharedModifier)
+              animatePress = false
             )
           }
         }
-        item { ExpressiveAccentLabel("In arrivo", modifier = Modifier.animateItem()) }
+        item { ExpressiveAccentLabel("In arrivo") }
         if (upcomingItems.isEmpty()) {
           item {
             EmptyState(
               title = "Nessun elemento imminente",
               detail = "I prossimi compiti, verifiche o eventi appariranno qui.",
-              modifier = Modifier.animateItem()
             )
           }
         } else {
@@ -274,17 +299,16 @@ fun DashboardRoute(
               tone = ExpressiveTone.Success,
               onClick = onNavigateAgenda,
               badge = { StatusBadge("AGENDA", tone = ExpressiveTone.Success) },
-              modifier = Modifier.animateItem()
+              animatePress = false
             )
           }
         }
-        item { ExpressiveAccentLabel("Bacheca", modifier = Modifier.animateItem()) }
+        item { ExpressiveAccentLabel("Bacheca") }
         if (unreadCommunications.isEmpty()) {
           item {
             EmptyState(
               title = "Nessuna comunicazione urgente",
               detail = "I nuovi avvisi della scuola appariranno qui.",
-              modifier = Modifier.animateItem()
             )
           }
         } else {
@@ -297,7 +321,7 @@ fun DashboardRoute(
               tone = ExpressiveTone.Warning,
               onClick = onNavigateCommunications,
               badge = { StatusBadge("NUOVA", tone = ExpressiveTone.Warning) },
-              modifier = Modifier.animateItem()
+              animatePress = false
             )
           }
         }
@@ -305,7 +329,6 @@ fun DashboardRoute(
           item {
             Text(
               text = snapshot.syncStatus.message.orEmpty(),
-              modifier = Modifier.animateItem()
             )
           }
         }

@@ -9,17 +9,23 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.Icon
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.annotation.RequiresApi
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.antigravity.classevivaexpressive.core.data.repository.LessonsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.AbsencesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.AgendaSection
 import dev.antigravity.classevivaexpressive.core.data.repository.CommunicationsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.GradesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkSection
 import dev.antigravity.classevivaexpressive.core.data.repository.NotesSection
+import dev.antigravity.classevivaexpressive.core.data.repository.buildLessonsWithFallback
 import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType
@@ -28,11 +34,15 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
+import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationChannelStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPreferences
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
@@ -45,6 +55,9 @@ const val GradesChannelId = "voti"
 const val AgendaChannelId = "verifiche_agenda"
 const val NotesChannelId = "annotazioni"
 const val TestChannelId = "test"
+const val LiveTimetableChannelId = "orario_live_v2"
+private const val LegacyLiveTimetableChannelId = "orario_live"
+private const val RequestPromotedOngoingExtra = "android.requestPromotedOngoing"
 
 internal const val HomeworkCacheSection = HomeworkSection
 internal const val CommunicationsCacheSection = CommunicationsSection
@@ -52,6 +65,7 @@ internal const val AbsencesCacheSection = AbsencesSection
 internal const val GradesCacheSection = GradesSection
 internal const val AgendaCacheSection = AgendaSection
 internal const val NotesCacheSection = NotesSection
+internal const val LessonsCacheSection = LessonsSection
 
 data class SyncSnapshotPayloads(
   val homeworks: String? = null,
@@ -60,6 +74,7 @@ data class SyncSnapshotPayloads(
   val grades: String? = null,
   val agenda: String? = null,
   val notes: String? = null,
+  val lessons: String? = null,
 )
 
 data class ChannelDefinition(
@@ -112,11 +127,18 @@ private val channelDefinitions = listOf(
     description = "Notifiche di test e diagnostica locale.",
     importance = NotificationManager.IMPORTANCE_DEFAULT,
   ),
+  ChannelDefinition(
+    id = LiveTimetableChannelId,
+    label = "Orario live",
+    description = "Stato live delle lezioni della mattinata (Now Bar / Live Updates).",
+    importance = NotificationManager.IMPORTANCE_HIGH,
+  ),
 )
 
 object AppNotificationChannels {
   fun create(context: Context) {
     val manager = context.getSystemService(NotificationManager::class.java) ?: return
+    runCatching { manager.deleteNotificationChannel(LegacyLiveTimetableChannelId) }
     channelDefinitions.forEach { definition ->
       val existing = manager.getNotificationChannel(definition.id)
       if (existing == null) {
@@ -331,6 +353,45 @@ class SyncNotificationDispatcher @Inject constructor(
     if (preferences.notes) {
       dispatchNotes(previous, current, launchIntent)
     }
+    if (preferences.liveTimetable) {
+      dispatchLiveTimetable(current, launchIntent)
+    } else {
+      NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+    }
+  }
+
+  private fun dispatchLiveTimetable(
+    current: SyncSnapshotPayloads,
+    launchIntent: PendingIntent?,
+  ) {
+    if (Build.VERSION.SDK_INT < 36) return
+
+    val lessons = buildLessonsWithFallback(
+      lessons = decodeList<Lesson>(current.lessons),
+      agenda = decodeList<AgendaItem>(current.agenda),
+    )
+    val today = LocalDate.now()
+    val todayLessons = lessons
+      .filter { it.date == today.toString() }
+      .filterNot { it.subject.isBlank() && it.teacher.isNullOrBlank() }
+      .sortedBy { it.time }
+
+    if (todayLessons.isEmpty() || todayLessons.none { !it.teacher.isNullOrBlank() }) {
+      NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+      return
+    }
+
+    val snapshot = LiveTimetableSnapshot.from(today, LocalTime.now(), todayLessons)
+    if (snapshot == null) {
+      NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+      return
+    }
+
+    notifyCompat(
+      context = context,
+      notificationId = LiveTimetableNotificationId,
+      notification = buildLiveTimetableNotification(context, snapshot, launchIntent),
+    )
   }
 
   private fun dispatchGrades(
@@ -692,6 +753,190 @@ class SyncNotificationDispatcher @Inject constructor(
     AbsenceType.LATE -> "Ritardo"
     AbsenceType.EXIT -> "Uscita anticipata"
   }
+}
+
+private const val LiveTimetableNotificationId = 4700
+
+private data class LiveTimetableSnapshot(
+  val current: Lesson,
+  val next: Lesson?,
+  val progress: Int,
+  val progressMax: Int,
+  val endAtEpochMillis: Long,
+) {
+  companion object {
+    fun from(date: LocalDate, now: LocalTime, lessons: List<Lesson>): LiveTimetableSnapshot? {
+      val parsed = lessons.mapNotNull { lesson ->
+        val start = runCatching { LocalTime.parse(lesson.time) }.getOrNull() ?: return@mapNotNull null
+        val end = lesson.endTime
+          ?.takeIf(String::isNotBlank)
+          ?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
+          ?: start.plusMinutes(lesson.durationMinutes.coerceAtLeast(60).toLong())
+        ParsedLiveLesson(lesson, start, end)
+      }.filter { it.end.isAfter(it.start) }
+
+      if (parsed.isEmpty()) return null
+      val first = parsed.first()
+      val last = parsed.last()
+      if (now.isBefore(first.start.minusMinutes(30)) || !now.isBefore(last.end)) return null
+
+      val activeIndex = parsed.indexOfFirst { !now.isBefore(it.start) && now.isBefore(it.end) }
+      val selectedIndex = if (activeIndex >= 0) activeIndex else parsed.indexOfFirst { now.isBefore(it.start) }
+      val selected = parsed.getOrNull(selectedIndex) ?: return null
+      val elapsed = java.time.Duration.between(selected.start, now.coerceAtLeast(selected.start)).toMinutes().toInt()
+      val total = java.time.Duration.between(selected.start, selected.end).toMinutes().toInt().coerceAtLeast(1)
+      val endMillis = LocalDateTime.of(date, selected.end)
+        .atZone(ZoneId.systemDefault())
+        .toInstant()
+        .toEpochMilli()
+
+      return LiveTimetableSnapshot(
+        current = selected.lesson,
+        next = parsed.getOrNull(selectedIndex + 1)?.lesson,
+        progress = elapsed.coerceIn(0, total),
+        progressMax = total,
+        endAtEpochMillis = endMillis,
+      )
+    }
+  }
+}
+
+private data class ParsedLiveLesson(
+  val lesson: Lesson,
+  val start: LocalTime,
+  val end: LocalTime,
+)
+
+@RequiresApi(36)
+private fun buildLiveTimetableNotification(
+  context: Context,
+  snapshot: LiveTimetableSnapshot,
+  launchIntent: PendingIntent?,
+): Notification {
+  val current = snapshot.current
+  val next = snapshot.next
+  val currentLine = listOfNotNull(
+    current.teacher?.takeIf(String::isNotBlank),
+    current.room?.takeIf(String::isNotBlank)?.let { "Aula $it" },
+  ).joinToString(" / ").ifBlank { "Docente in corso" }
+  val nextLine = next?.let { lesson ->
+    buildString {
+      append("Dopo: ${lesson.subject}")
+      lesson.teacher?.takeIf(String::isNotBlank)?.let { append(" / $it") }
+      lesson.room?.takeIf(String::isNotBlank)?.let { append(" / Aula $it") }
+    }
+  } ?: "Ultima ora della mattinata"
+  val style = Notification.ProgressStyle()
+    .setStyledByProgress(true)
+    .setProgress(snapshot.progress)
+    .setProgressSegments(
+      listOf(
+        Notification.ProgressStyle.Segment(snapshot.progressMax).setColor(Color.rgb(66, 133, 244)),
+      ),
+    )
+    .setProgressTrackerIcon(Icon.createWithResource(context, dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo))
+
+  // Costruzione notifica Live Update / Samsung Now Bar (Android 16+ — API 36).
+  // Usiamo SOLO le API ufficiali — niente extras hack — perché il flag legacy
+  // creava una seconda card duplicata nella shade su Samsung One UI 7.
+  val builder = Notification.Builder(context, LiveTimetableChannelId)
+    .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+    .setContentTitle(current.subject)
+    .setContentText(currentLine)
+    .setStyle(style)
+    .setSubText(nextLine)
+    .setShortCriticalText(current.subject.take(10))
+    .setWhen(snapshot.endAtEpochMillis)
+    .setShowWhen(true)
+    .setUsesChronometer(true)
+    .setChronometerCountDown(true)
+    .setOngoing(true)
+    .setOnlyAlertOnce(true)
+    .setColor(Color.rgb(66, 133, 244))
+    .setCategory(Notification.CATEGORY_PROGRESS)
+    .setVisibility(Notification.VISIBILITY_PUBLIC)
+    .setContentIntent(launchIntent)
+
+  // API 36+: richiediamo esplicitamente la promozione a Live Update / Now Bar.
+  // Niente più extras.putBoolean — il sistema deduplicava male e mostrava due card.
+  // Usiamo reflection perché la firma esatta varia tra build SDK e questo modulo
+  // non sempre vede l'API stable; il fallback è una notifica ongoing classica.
+  // Fallback compatibile: se il metodo non e' esposto dal runtime aggiungiamo l'extra.
+  val promotionRequested = runCatching {
+    val method = builder.javaClass.methods.firstOrNull {
+      (it.name == "setRequestPromotedOngoing" || it.name == "requestPromotedOngoing") &&
+        it.parameterTypes.size == 1
+    }
+    method?.invoke(builder, true) != null
+  }.getOrDefault(false)
+  if (!promotionRequested) {
+    builder.addExtras(Bundle().apply { putBoolean(RequestPromotedOngoingExtra, true) })
+  }
+  return builder.build()
+}
+
+/**
+ * Esposto per ricalcolare la notifica live on-demand (es. avvio app, cambio lezione)
+ * senza dover passare dal worker periodico.
+ */
+suspend fun refreshLiveTimetableNotification(
+  context: Context,
+  settingsStore: SettingsStore,
+  snapshotCacheDao: dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao,
+  schoolYearStore: dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore,
+  json: Json,
+) {
+  if (Build.VERSION.SDK_INT < 36) return
+  val prefs = settingsStore.settings.first().notificationPreferences
+  if (!prefs.enabled || !prefs.liveTimetable) {
+    NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+    return
+  }
+  val runtime = readNotificationRuntimeState(context)
+  if (!runtime.permissionGranted || !runtime.appNotificationsEnabled) return
+  AppNotificationChannels.create(context)
+
+  val currentYear = schoolYearStore.currentSchoolYearRef()
+  val lessonsPayload = snapshotCacheDao
+    .getByKey(dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey(LessonsCacheSection, currentYear))
+    ?.payload
+  val agendaPayload = snapshotCacheDao
+    .getByKey(dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey(AgendaCacheSection, currentYear))
+    ?.payload
+  val lessons = dev.antigravity.classevivaexpressive.core.data.repository.buildLessonsWithFallback(
+    lessons = runCatching { json.decodeFromString<List<Lesson>>(lessonsPayload ?: "") }.getOrDefault(emptyList()),
+    agenda = runCatching { json.decodeFromString<List<AgendaItem>>(agendaPayload ?: "") }.getOrDefault(emptyList()),
+  )
+  val today = LocalDate.now()
+  val todayLessons = lessons
+    .filter { it.date == today.toString() }
+    .filterNot { it.subject.isBlank() && it.teacher.isNullOrBlank() }
+    .sortedBy { it.time }
+  if (todayLessons.isEmpty() || todayLessons.none { !it.teacher.isNullOrBlank() }) {
+    NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+    return
+  }
+  val snapshot = LiveTimetableSnapshot.from(today, LocalTime.now(), todayLessons)
+  if (snapshot == null) {
+    NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+    return
+  }
+  val launchIntent = launchPendingIntentInternal(context)
+  notifyCompat(
+    context = context,
+    notificationId = LiveTimetableNotificationId,
+    notification = buildLiveTimetableNotification(context, snapshot, launchIntent),
+  )
+}
+
+private fun launchPendingIntentInternal(context: Context): PendingIntent? {
+  val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
+  return PendingIntent.getActivity(
+    context,
+    0,
+    intent,
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+  )
 }
 
 internal fun gradeEmoji(numericValue: Double?): String = when {

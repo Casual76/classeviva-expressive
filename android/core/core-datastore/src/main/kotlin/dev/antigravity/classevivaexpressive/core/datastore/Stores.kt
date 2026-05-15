@@ -19,6 +19,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPrefer
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
+import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
 import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import java.time.LocalDate
@@ -44,9 +45,13 @@ private val SettingsNotificationsHomeworkKey = booleanPreferencesKey("notificati
 private val SettingsNotificationsCommunicationsKey = booleanPreferencesKey("notifications_communications")
 private val SettingsNotificationsAbsencesKey = booleanPreferencesKey("notifications_absences")
 private val SettingsNotificationsGradesKey = booleanPreferencesKey("notifications_grades")
+private val SettingsNotificationsAgendaKey = booleanPreferencesKey("notifications_agenda")
+private val SettingsNotificationsNotesKey = booleanPreferencesKey("notifications_notes")
 private val SettingsNotificationsTestKey = booleanPreferencesKey("notifications_test")
+private val SettingsNotificationsLiveTimetableKey = booleanPreferencesKey("notifications_live_timetable")
 private val SettingsPeriodicSyncKey = booleanPreferencesKey("periodic_sync")
 private val SettingsNetworkConfigKey = stringPreferencesKey("network_config")
+private val SettingsIgnoredStableUpdateVersionKey = stringPreferencesKey("ignored_stable_update_version")
 private val SelectedSchoolYearKey = stringPreferencesKey("selected_school_year")
 private val TimetableTemplatesKey = stringPreferencesKey("timetable_templates")
 
@@ -75,10 +80,14 @@ class SettingsStore(@ApplicationContext context: Context) {
           communications = prefs[SettingsNotificationsCommunicationsKey] ?: true,
           absences = prefs[SettingsNotificationsAbsencesKey] ?: true,
           grades = prefs[SettingsNotificationsGradesKey] ?: true,
+          agenda = prefs[SettingsNotificationsAgendaKey] ?: true,
+          notes = prefs[SettingsNotificationsNotesKey] ?: true,
           test = prefs[SettingsNotificationsTestKey] ?: true,
+          liveTimetable = prefs[SettingsNotificationsLiveTimetableKey] ?: true,
         ),
         periodicSyncEnabled = prefs[SettingsPeriodicSyncKey] ?: true,
         networkConfig = networkConfig,
+        ignoredStableUpdateVersion = prefs[SettingsIgnoredStableUpdateVersionKey] ?: "",
       )
     }
 
@@ -96,10 +105,20 @@ class SettingsStore(@ApplicationContext context: Context) {
       prefs[SettingsNotificationsCommunicationsKey] = next.notificationPreferences.communications
       prefs[SettingsNotificationsAbsencesKey] = next.notificationPreferences.absences
       prefs[SettingsNotificationsGradesKey] = next.notificationPreferences.grades
+      prefs[SettingsNotificationsAgendaKey] = next.notificationPreferences.agenda
+      prefs[SettingsNotificationsNotesKey] = next.notificationPreferences.notes
       prefs[SettingsNotificationsTestKey] = next.notificationPreferences.test
+      prefs[SettingsNotificationsLiveTimetableKey] = next.notificationPreferences.liveTimetable
       prefs[SettingsPeriodicSyncKey] = next.periodicSyncEnabled
       prefs[SettingsNetworkConfigKey] = json.encodeToString(next.networkConfig)
+      prefs[SettingsIgnoredStableUpdateVersionKey] = next.ignoredStableUpdateVersion
     }
+  }
+
+  suspend fun readSettings(): AppSettings = settings.first()
+
+  suspend fun writeSettings(settings: AppSettings) {
+    update { settings }
   }
 }
 
@@ -126,6 +145,8 @@ class SchoolYearStore(@ApplicationContext context: Context) : SchoolYearReposito
       prefs[SelectedSchoolYearKey] = year.id
     }
   }
+
+  suspend fun selectedSchoolYear(): SchoolYearRef = observeSelectedSchoolYear().first()
 
   fun currentSchoolYearRef(): SchoolYearRef = current
 
@@ -181,6 +202,46 @@ class TimetableTemplateStore(@ApplicationContext context: Context) {
           templates = stored.templates + (schoolYearId to template),
         ),
       )
+    }
+  }
+
+  suspend fun writeOverride(schoolYearId: String, fingerprint: String, slot: TemplateSlot) {
+    dataStore.edit { prefs ->
+      val stored = prefs[TimetableTemplatesKey]?.let {
+        runCatching { json.decodeFromString<StoredTimetableTemplates>(it) }.getOrNull()
+      } ?: StoredTimetableTemplates()
+      val existing = stored.templates[schoolYearId] ?: TimetableTemplate()
+      val updated = existing.copy(manualOverrides = existing.manualOverrides + (fingerprint to slot))
+      prefs[TimetableTemplatesKey] = json.encodeToString(
+        stored.copy(templates = stored.templates + (schoolYearId to updated)),
+      )
+    }
+  }
+
+  suspend fun deleteOverride(schoolYearId: String, fingerprint: String) {
+    dataStore.edit { prefs ->
+      val stored = prefs[TimetableTemplatesKey]?.let {
+        runCatching { json.decodeFromString<StoredTimetableTemplates>(it) }.getOrNull()
+      } ?: return@edit
+      val existing = stored.templates[schoolYearId] ?: return@edit
+      val updated = existing.copy(manualOverrides = existing.manualOverrides - fingerprint)
+      prefs[TimetableTemplatesKey] = json.encodeToString(
+        stored.copy(templates = stored.templates + (schoolYearId to updated)),
+      )
+    }
+  }
+
+  suspend fun readAllTemplates(): Map<String, TimetableTemplate> {
+    val prefs = dataStore.data.first()
+    val stored = prefs[TimetableTemplatesKey]?.let {
+      runCatching { json.decodeFromString<StoredTimetableTemplates>(it) }.getOrNull()
+    } ?: StoredTimetableTemplates()
+    return stored.templates
+  }
+
+  suspend fun writeAllTemplates(templates: Map<String, TimetableTemplate>) {
+    dataStore.edit { prefs ->
+      prefs[TimetableTemplatesKey] = json.encodeToString(StoredTimetableTemplates(templates = templates))
     }
   }
 }

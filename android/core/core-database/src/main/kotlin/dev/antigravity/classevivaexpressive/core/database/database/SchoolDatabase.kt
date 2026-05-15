@@ -17,7 +17,9 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.Serializable
 
+@Serializable
 @Entity(tableName = "snapshot_cache")
 data class SnapshotCacheEntity(
   @PrimaryKey val cacheKey: String,
@@ -25,6 +27,7 @@ data class SnapshotCacheEntity(
   val updatedAtEpochMillis: Long,
 )
 
+@Serializable
 @Entity(tableName = "custom_events")
 data class CustomEventEntity(
   @PrimaryKey val id: String,
@@ -34,6 +37,7 @@ data class CustomEventEntity(
   val createdAt: String? = null,
 )
 
+@Serializable
 @Entity(tableName = "simulated_grades")
 data class SimulatedGradeEntity(
   @PrimaryKey val id: String,
@@ -42,6 +46,7 @@ data class SimulatedGradeEntity(
   val date: String,
 )
 
+@Serializable
 @Entity(tableName = "student_score_snapshots")
 data class StudentScoreSnapshotEntity(
   @PrimaryKey val id: String,
@@ -49,6 +54,7 @@ data class StudentScoreSnapshotEntity(
   val createdAtEpochMillis: Long,
 )
 
+@Serializable
 @Entity(tableName = "download_records")
 data class DownloadRecordEntity(
   @PrimaryKey val id: String,
@@ -60,6 +66,7 @@ data class DownloadRecordEntity(
   val updatedAtEpochMillis: Long,
 )
 
+@Serializable
 @Entity(tableName = "seen_grades")
 data class SeenGradeEntity(
   @PrimaryKey val id: String,
@@ -68,6 +75,7 @@ data class SeenGradeEntity(
   val seenAtEpochMillis: Long,
 )
 
+@Serializable
 @Entity(tableName = "subject_goals")
 data class SubjectGoalEntity(
   @PrimaryKey val id: String,
@@ -78,6 +86,19 @@ data class SubjectGoalEntity(
   val updatedAtEpochMillis: Long,
 )
 
+@Serializable
+@Entity(tableName = "change_history")
+data class ChangeHistoryEntity(
+  @PrimaryKey val id: String,
+  val studentId: String,
+  val schoolYearId: String,
+  val itemKind: String,
+  val itemId: String,
+  val recordedAtEpochMillis: Long,
+  val payload: String,
+)
+
+@Serializable
 @Entity(tableName = "grades")
 data class GradeEntity(
   @PrimaryKey val id: String,
@@ -97,6 +118,7 @@ data class GradeEntity(
   val color: String?,
 )
 
+@Serializable
 @Entity(tableName = "agenda_items")
 data class AgendaItemEntity(
   @PrimaryKey val id: String,
@@ -115,6 +137,7 @@ data class AgendaItemEntity(
   val firstSeenAtMs: Long? = null,
 )
 
+@Serializable
 @Entity(tableName = "absences")
 data class AbsenceEntity(
   @PrimaryKey val id: String,
@@ -131,6 +154,7 @@ data class AbsenceEntity(
   val detailUrl: String?,
 )
 
+@Serializable
 @Entity(tableName = "communications")
 data class CommunicationEntity(
   @PrimaryKey val id: String,
@@ -154,6 +178,7 @@ data class CommunicationEntity(
   val capabilityState: String, // JSON
 )
 
+@Serializable
 @Entity(tableName = "attachment_cache")
 data class AttachmentCacheEntity(
   @PrimaryKey val urlKey: String,
@@ -165,6 +190,7 @@ data class AttachmentCacheEntity(
   val lastAccessedMs: Long,
 )
 
+@Serializable
 @Entity(tableName = "materials")
 data class MaterialEntity(
   @PrimaryKey val id: String,
@@ -182,6 +208,7 @@ data class MaterialEntity(
   val attachments: String, // JSON
 )
 
+@Serializable
 @Entity(tableName = "documents")
 data class DocumentEntity(
   @PrimaryKey val id: String,
@@ -194,6 +221,7 @@ data class DocumentEntity(
   val capabilityState: String, // JSON
 )
 
+@Serializable
 @Entity(tableName = "read_notes", primaryKeys = ["studentId", "noteId"])
 data class ReadNoteEntity(
   val studentId: String,
@@ -218,8 +246,14 @@ interface CustomEventDao {
   @Query("SELECT * FROM custom_events ORDER BY date ASC, time ASC")
   fun observeAll(): Flow<List<CustomEventEntity>>
 
+  @Query("SELECT * FROM custom_events ORDER BY date ASC, time ASC")
+  suspend fun getAll(): List<CustomEventEntity>
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsert(entity: CustomEventEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertAll(entities: List<CustomEventEntity>)
 
   @Query("DELETE FROM custom_events WHERE id = :id")
   suspend fun deleteById(id: String)
@@ -230,8 +264,14 @@ interface SimulationDao {
   @Query("SELECT * FROM simulated_grades ORDER BY date ASC")
   fun observeAll(): Flow<List<SimulatedGradeEntity>>
 
+  @Query("SELECT * FROM simulated_grades ORDER BY date ASC")
+  suspend fun getAll(): List<SimulatedGradeEntity>
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsert(entity: SimulatedGradeEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertAll(entities: List<SimulatedGradeEntity>)
 
   @Query("DELETE FROM simulated_grades WHERE id = :id")
   suspend fun deleteById(id: String)
@@ -245,11 +285,17 @@ interface StudentScoreDao {
   @Query("SELECT * FROM student_score_snapshots ORDER BY createdAtEpochMillis DESC")
   fun observeAll(): Flow<List<StudentScoreSnapshotEntity>>
 
+  @Query("SELECT * FROM student_score_snapshots ORDER BY createdAtEpochMillis DESC")
+  suspend fun getAll(): List<StudentScoreSnapshotEntity>
+
   @Query("SELECT * FROM student_score_snapshots ORDER BY createdAtEpochMillis DESC LIMIT 1")
   fun observeLatest(): Flow<StudentScoreSnapshotEntity?>
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsert(entity: StudentScoreSnapshotEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertAll(entities: List<StudentScoreSnapshotEntity>)
 }
 
 @Dao
@@ -266,8 +312,14 @@ interface SeenGradeDao {
   @Query("SELECT * FROM seen_grades WHERE studentId = :studentId ORDER BY seenAtEpochMillis DESC")
   fun observeByStudent(studentId: String): Flow<List<SeenGradeEntity>>
 
+  @Query("SELECT * FROM seen_grades ORDER BY seenAtEpochMillis DESC")
+  suspend fun getAll(): List<SeenGradeEntity>
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsert(entity: SeenGradeEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertAll(entities: List<SeenGradeEntity>)
 }
 
 @Dao
@@ -275,17 +327,35 @@ interface SubjectGoalDao {
   @Query("SELECT * FROM subject_goals WHERE studentId = :studentId ORDER BY subject ASC, periodCode ASC")
   fun observeByStudent(studentId: String): Flow<List<SubjectGoalEntity>>
 
+  @Query("SELECT * FROM subject_goals ORDER BY subject ASC, periodCode ASC")
+  suspend fun getAll(): List<SubjectGoalEntity>
+
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsert(entity: SubjectGoalEntity)
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertAll(entities: List<SubjectGoalEntity>)
 
   @Query("DELETE FROM subject_goals WHERE studentId = :studentId AND subject = :subject AND ((periodCode IS NULL AND :periodCode IS NULL) OR periodCode = :periodCode)")
   suspend fun delete(studentId: String, subject: String, periodCode: String?)
 }
 
 @Dao
+interface ChangeHistoryDao {
+  @Query("SELECT * FROM change_history WHERE studentId = :studentId AND schoolYearId = :schoolYearId AND itemKind = :itemKind ORDER BY recordedAtEpochMillis DESC")
+  fun observeByYearAndKind(studentId: String, schoolYearId: String, itemKind: String): Flow<List<ChangeHistoryEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertAll(entities: List<ChangeHistoryEntity>)
+}
+
+@Dao
 interface GradeDao {
   @Query("SELECT * FROM grades WHERE studentId = :studentId AND schoolYearId = :schoolYearId ORDER BY date DESC")
   fun observeByYear(studentId: String, schoolYearId: String): Flow<List<GradeEntity>>
+
+  @Query("SELECT * FROM grades WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
+  suspend fun getByYearOnce(studentId: String, schoolYearId: String): List<GradeEntity>
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsertAll(entities: List<GradeEntity>)
@@ -408,6 +478,7 @@ interface AttachmentCacheDao {
     DownloadRecordEntity::class,
     SeenGradeEntity::class,
     SubjectGoalEntity::class,
+    ChangeHistoryEntity::class,
     GradeEntity::class,
     AgendaItemEntity::class,
     AbsenceEntity::class,
@@ -417,7 +488,7 @@ interface AttachmentCacheDao {
     ReadNoteEntity::class,
     AttachmentCacheEntity::class,
   ],
-  version = 7,
+  version = 8,
   exportSchema = false,
 )
 abstract class SchoolDatabase : RoomDatabase() {
@@ -428,6 +499,7 @@ abstract class SchoolDatabase : RoomDatabase() {
   abstract fun downloadRecordDao(): DownloadRecordDao
   abstract fun seenGradeDao(): SeenGradeDao
   abstract fun subjectGoalDao(): SubjectGoalDao
+  abstract fun changeHistoryDao(): ChangeHistoryDao
   abstract fun gradeDao(): GradeDao
   abstract fun agendaDao(): AgendaDao
   abstract fun absenceDao(): AbsenceDao
@@ -470,6 +542,9 @@ object DatabaseModule {
 
   @Provides
   fun provideSubjectGoalDao(database: SchoolDatabase): SubjectGoalDao = database.subjectGoalDao()
+
+  @Provides
+  fun provideChangeHistoryDao(database: SchoolDatabase): ChangeHistoryDao = database.changeHistoryDao()
 
   @Provides
   fun provideGradeDao(database: SchoolDatabase): GradeDao = database.gradeDao()

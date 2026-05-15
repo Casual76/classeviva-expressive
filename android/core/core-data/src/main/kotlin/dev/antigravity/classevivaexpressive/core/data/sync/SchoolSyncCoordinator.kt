@@ -5,6 +5,8 @@ import dev.antigravity.classevivaexpressive.core.data.repository.AgendaSection
 import dev.antigravity.classevivaexpressive.core.data.repository.CommunicationsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.DocumentsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.GradesSection
+import dev.antigravity.classevivaexpressive.core.data.repository.HistoryKindAgenda
+import dev.antigravity.classevivaexpressive.core.data.repository.HistoryKindGrade
 import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkSection
 import dev.antigravity.classevivaexpressive.core.data.repository.LessonsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.MaterialsSection
@@ -16,11 +18,15 @@ import dev.antigravity.classevivaexpressive.core.data.repository.PeriodsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.ProfileSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SchoolbooksSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SubjectsSection
+import dev.antigravity.classevivaexpressive.core.data.repository.toAgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.data.repository.buildLessonsWithFallback
 import dev.antigravity.classevivaexpressive.core.data.repository.toCommunication
+import dev.antigravity.classevivaexpressive.core.data.repository.toGradeVersion
 import dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceEntity
+import dev.antigravity.classevivaexpressive.core.database.database.ChangeHistoryDao
+import dev.antigravity.classevivaexpressive.core.database.database.ChangeHistoryEntity
 import dev.antigravity.classevivaexpressive.core.database.database.CommunicationDao
 import dev.antigravity.classevivaexpressive.core.database.database.CommunicationEntity
 import dev.antigravity.classevivaexpressive.core.database.database.MaterialDao
@@ -58,6 +64,8 @@ import dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot
 import dev.antigravity.classevivaexpressive.core.domain.model.MeetingTeacher
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardAction
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardActionType
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolbookCourse
@@ -97,6 +105,7 @@ class SchoolSyncCoordinator @Inject constructor(
   private val snapshotCacheDao: SnapshotCacheDao,
   private val gradeDao: GradeDao,
   private val agendaDao: AgendaDao,
+  private val changeHistoryDao: ChangeHistoryDao,
   private val absenceDao: AbsenceDao,
   private val communicationDao: CommunicationDao,
   private val materialDao: MaterialDao,
@@ -219,7 +228,7 @@ class SchoolSyncCoordinator @Inject constructor(
   suspend fun getCommunicationDetail(pubId: String, evtCode: String) = runCatching {
     val entity = communicationDao.getByPubIdAndEvtCode(pubId, evtCode)
     val base = entity?.toCommunication(json)
-    val detail = if (base != null) {
+    val restDetail = if (base != null) {
       runCatching { restClient.getCommunicationDetail(base) }
         .getOrElse {
           // API rejected the read (e.g. 400 for already-acknowledged or 404) —
@@ -233,7 +242,7 @@ class SchoolSyncCoordinator @Inject constructor(
     } else {
       restClient.getCommunicationDetail(pubId, evtCode)
     }
-    runCatching { communicationDao.markRead(detail.communication.id) }
+    val detail = enrichCommunicationDetailFromPortalIfNeeded(restDetail)
     detail
   }
 
@@ -277,16 +286,38 @@ class SchoolSyncCoordinator @Inject constructor(
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val pubId = detail.communication.pubId
     val evtCode = detail.communication.evtCode
-    runCatching { restClient.markNoticeboardRead(pubId = pubId, evtCode = evtCode) }
+
+    // Tracciamo separatamente i due tentativi cosi' possiamo restituire un
+    // errore vero se entrambi falliscono, invece di mostrare "Conferma inviata"
+    // fingendo che sia tutto a posto.
+    val restResult = runCatching {
+      restClient.markNoticeboardRead(pubId = pubId, evtCode = evtCode)
+    }
     val ackUrl = detail.acknowledgeUrl
-    if (!ackUrl.isNullOrBlank()) {
+    val portalResult: Result<Unit>? = if (!ackUrl.isNullOrBlank()) {
       runCatching {
         portalClient.submitPortalAction(
           pageUrl = ackUrl,
           formKeywords = listOf("conferma", "presa", "visione", "sign", "firma", "ack"),
         )
+        Unit
       }
+    } else {
+      null
     }
+
+    // Sopravvive se ALMENO una delle due strade ha funzionato.
+    val anyOk = restResult.isSuccess || portalResult?.isSuccess == true
+    if (!anyOk) {
+      val restErr = restResult.exceptionOrNull()?.message
+      val portalErr = portalResult?.exceptionOrNull()?.message
+      val composed = listOfNotNull(
+        restErr?.let { "REST: $it" },
+        portalErr?.let { "Portale: $it" },
+      ).joinToString(" — ").ifBlank { "Errore sconosciuto durante la presa visione." }
+      throw ClassevivaNetworkException(composed)
+    }
+
     runCatching { communicationDao.markRead(detail.communication.id) }
     val updated = runCatching { restClient.getCommunicationDetail(detail.communication) }.getOrNull()
       ?: detail.copy(communication = detail.communication.copy(read = true))
@@ -316,11 +347,13 @@ class SchoolSyncCoordinator @Inject constructor(
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val joinUrl = detail.joinUrl ?: detail.portalDetailUrl
     if (joinUrl.isNullOrBlank()) {
-      throw ClassevivaNetworkException(
-        "Questa comunicazione non espone un canale di adesione gestito dal registro.",
+      restClient.joinNoticeboard(
+        pubId = detail.communication.pubId,
+        evtCode = detail.communication.evtCode,
       )
+    } else {
+      portalClient.joinNoticeboard(joinUrl = joinUrl)
     }
-    portalClient.joinNoticeboard(joinUrl = joinUrl)
     runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
     runCatching { communicationDao.markRead(detail.communication.id) }
     runCatching { refreshCommunicationsSnapshot(selectedYear) }
@@ -517,7 +550,11 @@ class SchoolSyncCoordinator @Inject constructor(
     }
     if (selectedSections.contains(HomeworkSection)) {
       syncYearScoped(HomeworkSection, selectedYear, errors) {
-        filterHomeworksForYear(restClient.getHomeworks(), selectedYear)
+        val homeworks = filterHomeworksForYear(restClient.getHomeworks(), selectedYear)
+        val agendaHomeworks = restClient.getAgenda(yearStart.toString(), yearEnd.toString())
+          .filter { it.category == AgendaCategory.HOMEWORK }
+          .map(::agendaItemToHomework)
+        mergeHomeworks(homeworks + agendaHomeworks)
       }
     }
     if (selectedSections.contains(AgendaSection)) {
@@ -598,6 +635,26 @@ class SchoolSyncCoordinator @Inject constructor(
   ) {
     runCatching {
       val grades = fetch()
+      val existingById = gradeDao.getByYearOnce(session.studentId, schoolYear.id).associateBy { it.id }
+      val now = System.currentTimeMillis()
+      val historyEntries = grades.mapNotNull { grade ->
+        val existing = existingById[grade.id] ?: return@mapNotNull null
+        if (existing.hasSameContentAs(grade)) {
+          null
+        } else {
+          val version = existing.toGradeVersion(now)
+          val payload = json.encodeToString(version)
+          ChangeHistoryEntity(
+            id = historyEntryId(HistoryKindGrade, session.studentId, schoolYear.id, grade.id, now, payload),
+            studentId = session.studentId,
+            schoolYearId = schoolYear.id,
+            itemKind = HistoryKindGrade,
+            itemId = grade.id,
+            recordedAtEpochMillis = now,
+            payload = payload,
+          )
+        }
+      }
       val entities = grades.map { grade ->
         GradeEntity(
           id = grade.id,
@@ -617,6 +674,9 @@ class SchoolSyncCoordinator @Inject constructor(
           color = grade.color,
         )
       }
+      if (historyEntries.isNotEmpty()) {
+        changeHistoryDao.upsertAll(historyEntries)
+      }
       gradeDao.deleteByYear(session.studentId, schoolYear.id)
       gradeDao.upsertAll(entities)
       storeYearScopedValue(GradesSection, schoolYear, grades)
@@ -635,6 +695,24 @@ class SchoolSyncCoordinator @Inject constructor(
       val agenda = fetch()
       val existingById = agendaDao.getByYearOnce(session.studentId, schoolYear.id).associateBy { it.id }
       val now = System.currentTimeMillis()
+      val historyEntries = agenda.mapNotNull { item ->
+        val existing = existingById[item.id] ?: return@mapNotNull null
+        if (existing.hasSameContentAs(item)) {
+          null
+        } else {
+          val version = existing.toAgendaItemVersion(now)
+          val payload = json.encodeToString(version)
+          ChangeHistoryEntity(
+            id = historyEntryId(HistoryKindAgenda, session.studentId, schoolYear.id, item.id, now, payload),
+            studentId = session.studentId,
+            schoolYearId = schoolYear.id,
+            itemKind = HistoryKindAgenda,
+            itemId = item.id,
+            recordedAtEpochMillis = now,
+            payload = payload,
+          )
+        }
+      }
       val entities = agenda.map { item ->
         val existing = existingById[item.id]
         AgendaItemEntity(
@@ -653,6 +731,9 @@ class SchoolSyncCoordinator @Inject constructor(
           createdAt = item.createdAt ?: existing?.createdAt,
           firstSeenAtMs = existing?.firstSeenAtMs ?: now,
         )
+      }
+      if (historyEntries.isNotEmpty()) {
+        changeHistoryDao.upsertAll(historyEntries)
       }
       agendaDao.deleteByYear(session.studentId, schoolYear.id)
       agendaDao.upsertAll(entities)
@@ -702,7 +783,6 @@ class SchoolSyncCoordinator @Inject constructor(
   ) {
     runCatching {
       val communications = fetch()
-      val localReadIds = communicationDao.getReadIds(session.studentId, schoolYear.id).toSet()
       val entities = communications.map { comm ->
         CommunicationEntity(
           id = comm.id,
@@ -714,7 +794,7 @@ class SchoolSyncCoordinator @Inject constructor(
           contentPreview = comm.contentPreview,
           sender = comm.sender,
           date = comm.date,
-          read = comm.read || localReadIds.contains(comm.id),
+          read = comm.read,
           attachments = json.encodeToString(comm.attachments),
           category = comm.category,
           needsAck = comm.needsAck,
@@ -860,6 +940,51 @@ class SchoolSyncCoordinator @Inject constructor(
     }
   }
 
+  private suspend fun enrichCommunicationDetailFromPortalIfNeeded(
+    detail: CommunicationDetail,
+  ): CommunicationDetail {
+    val portalUrl = detail.portalDetailUrl?.takeIf(String::isNotBlank) ?: return detail
+    val hasUsefulContent = detail.content.isNotBlank() &&
+      detail.content != detail.communication.contentPreview &&
+      detail.content != detail.communication.title
+    if (hasUsefulContent) return detail
+    val portal = runCatching { portalClient.getNoticeboardDetail(portalUrl) }.getOrNull() ?: return detail
+    val content = portal.content?.takeIf(String::isNotBlank) ?: detail.content
+    val actions = (
+      detail.actions +
+        listOfNotNull(
+          portal.acknowledgeUrl?.let {
+            NoticeboardAction(NoticeboardActionType.ACKNOWLEDGE, "Conferma", it)
+          },
+          portal.replyUrl?.let {
+            NoticeboardAction(NoticeboardActionType.REPLY, "Rispondi", it)
+          },
+          portal.joinUrl?.let {
+            NoticeboardAction(NoticeboardActionType.JOIN, "Aderisci", it)
+          },
+          portal.fileUploadUrl?.let {
+            NoticeboardAction(NoticeboardActionType.UPLOAD, "Carica file", it)
+          },
+        )
+      ).distinctBy { "${it.type}:${it.url.orEmpty()}" }
+    return detail.copy(
+      communication = detail.communication.copy(
+        contentPreview = content.take(150),
+        actions = actions,
+        needsAck = detail.communication.needsAck || portal.acknowledgeUrl != null,
+        needsReply = detail.communication.needsReply || portal.replyUrl != null,
+        needsJoin = detail.communication.needsJoin || portal.joinUrl != null,
+        needsFile = detail.communication.needsFile || portal.fileUploadUrl != null,
+      ),
+      content = content,
+      acknowledgeUrl = detail.acknowledgeUrl ?: portal.acknowledgeUrl,
+      replyUrl = detail.replyUrl ?: portal.replyUrl,
+      joinUrl = detail.joinUrl ?: portal.joinUrl,
+      fileUploadUrl = detail.fileUploadUrl ?: portal.fileUploadUrl,
+      actions = actions,
+    )
+  }
+
   private suspend fun refreshNotesSnapshot(schoolYear: SchoolYearRef) {
     if (schoolYear.id != schoolYearStore.currentSchoolYearRef().id) return
     storeYearScopedValue(
@@ -885,6 +1010,12 @@ class SchoolSyncCoordinator @Inject constructor(
     schoolYear: SchoolYearRef,
     session: UserSession,
   ) {
+    val currentTemplate = timetableTemplateStore.observeTemplate(schoolYear.id).first()
+    if (currentTemplate.isOfficial == true) {
+      // Do not overwrite official imported template
+      return
+    }
+    
     val lessons = readYearScopedValue(LessonsSection, schoolYear, emptyList<Lesson>())
     val agenda = agendaDao.getByYearOnce(session.studentId, schoolYear.id).map { entity ->
       AgendaItem(
@@ -902,9 +1033,13 @@ class SchoolSyncCoordinator @Inject constructor(
       )
     }
     val preparedLessons = buildLessonsWithFallback(lessons, agenda)
+    
+    val newTemplate = predictiveTimetableUseCase.generateTimetableTemplate(preparedLessons)
+    val merged = newTemplate.copy(manualOverrides = currentTemplate?.manualOverrides ?: emptyMap())
+    
     timetableTemplateStore.writeTemplate(
       schoolYear.id,
-      predictiveTimetableUseCase.generateTimetableTemplate(preparedLessons),
+      merged,
     )
   }
 
@@ -932,6 +1067,34 @@ class SchoolSyncCoordinator @Inject constructor(
     }
   }
 
+  private fun agendaItemToHomework(item: AgendaItem): Homework {
+    val id = item.id.takeIf(String::isNotBlank)?.let { "agenda-$it" }
+      ?: "agenda-${homeworkKey(item.date, item.subject, item.title)}"
+    return Homework(
+      id = id,
+      subject = item.subject ?: item.subtitle,
+      description = item.title,
+      dueDate = item.date,
+      notes = item.detail,
+      attachments = emptyList(),
+    )
+  }
+
+  private fun mergeHomeworks(homeworks: List<Homework>): List<Homework> {
+    return homeworks
+      .filter { it.description.isNotBlank() && it.dueDate.isNotBlank() }
+      .distinctBy { homeworkKey(it.dueDate, it.subject, it.description) }
+      .sortedWith(compareBy<Homework> { it.dueDate }.thenBy { it.subject }.thenBy { it.description })
+  }
+
+  private fun homeworkKey(date: String, subject: String?, text: String): String {
+    return listOf(date, subject.orEmpty(), text)
+      .joinToString("|")
+      .lowercase()
+      .replace(Regex("\\s+"), " ")
+      .trim()
+  }
+
   private fun filterGradesForYear(grades: List<Grade>, schoolYear: SchoolYearRef): List<Grade> {
     val start = schoolYearStart(schoolYear)
     val end = schoolYearEnd(schoolYear)
@@ -940,6 +1103,46 @@ class SchoolSyncCoordinator @Inject constructor(
         !date.isBefore(start) && !date.isAfter(end)
       } ?: true
     }
+  }
+
+  private fun GradeEntity.hasSameContentAs(grade: Grade): Boolean {
+    return subject == grade.subject &&
+      valueLabel == grade.valueLabel &&
+      numericValue == grade.numericValue &&
+      description == grade.description &&
+      date == grade.date &&
+      type == grade.type &&
+      weight == grade.weight &&
+      notes == grade.notes &&
+      period == grade.period &&
+      periodCode == grade.periodCode &&
+      teacher == grade.teacher &&
+      color == grade.color
+  }
+
+  private fun AgendaItemEntity.hasSameContentAs(item: AgendaItem): Boolean {
+    val incomingCreatedAt = item.createdAt ?: createdAt
+    return title == item.title &&
+      subtitle == item.subtitle &&
+      date == item.date &&
+      time == item.time &&
+      detail == item.detail &&
+      subject == item.subject &&
+      teacher == item.teacher &&
+      category == item.category.name &&
+      sharePayload == item.sharePayload &&
+      createdAt == incomingCreatedAt
+  }
+
+  private fun historyEntryId(
+    kind: String,
+    studentId: String,
+    schoolYearId: String,
+    itemId: String,
+    recordedAtEpochMillis: Long,
+    payload: String,
+  ): String {
+    return "$kind::$studentId::$schoolYearId::$itemId::$recordedAtEpochMillis::${payload.hashCode()}"
   }
 
   private fun filterByDate(date: String?, start: LocalDate, end: LocalDate): Boolean {

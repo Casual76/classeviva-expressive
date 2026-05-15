@@ -26,7 +26,16 @@ import android.util.Base64
 
 private const val PortalLoginUrl = "https://web.spaggiari.eu/home/app/default/login.php"
 private const val PortalBaseUrl = "https://web.spaggiari.eu"
+private const val PortalUserAgent = "CVVS/std/4.1.7 Android/10"
 const val PortalMeetingsUrl = "https://web.spaggiari.eu/fml/app/default/colloqui.php"
+
+data class PortalNoticeboardDetail(
+  val content: String?,
+  val acknowledgeUrl: String? = null,
+  val replyUrl: String? = null,
+  val joinUrl: String? = null,
+  val fileUploadUrl: String? = null,
+)
 
 @Singleton
 class PortalClient @Inject constructor(
@@ -71,7 +80,7 @@ class PortalClient @Inject constructor(
       val loginPageResponse = portalHttpClient.newCall(
         Request.Builder()
           .url(PortalLoginUrl)
-          .header("User-Agent", UserAgent)
+          .header("User-Agent", PortalUserAgent)
           .build()
       ).execute()
 
@@ -97,7 +106,7 @@ class PortalClient @Inject constructor(
       portalHttpClient.newCall(
         Request.Builder()
           .url(formAction)
-          .header("User-Agent", UserAgent)
+          .header("User-Agent", PortalUserAgent)
           .post(formBody.build())
           .build()
       ).execute().close()
@@ -114,7 +123,7 @@ class PortalClient @Inject constructor(
 
     for (candidate in listOf(pageUrl)) {
       val response = portalHttpClient.newCall(
-        Request.Builder().url(candidate).header("User-Agent", UserAgent).build()
+        Request.Builder().url(candidate).header("User-Agent", PortalUserAgent).build()
       ).execute()
       val html = response.body?.string() ?: continue
       val responseUrl = response.request.url.toString()
@@ -129,7 +138,7 @@ class PortalClient @Inject constructor(
       val link = findMatchingLink(doc, formKeywords, responseUrl)
       if (link != null) {
         portalHttpClient.newCall(
-          Request.Builder().url(link).header("User-Agent", UserAgent).build()
+          Request.Builder().url(link).header("User-Agent", PortalUserAgent).build()
         ).execute().close()
         return@withContext
       }
@@ -137,7 +146,7 @@ class PortalClient @Inject constructor(
 
     if (textValue == null && fileAttachment == null) {
       portalHttpClient.newCall(
-        Request.Builder().url(pageUrl).header("User-Agent", UserAgent).build()
+        Request.Builder().url(pageUrl).header("User-Agent", PortalUserAgent).build()
       ).execute().close()
       return@withContext
     }
@@ -194,6 +203,35 @@ class PortalClient @Inject constructor(
     discoverPortalPage(listOf("colloqui", "ricevimento", "prenot"))
   }
 
+  suspend fun getNoticeboardDetail(pageUrl: String): PortalNoticeboardDetail? = withContext(Dispatchers.IO) {
+    ensurePortalSession()
+    val response = portalHttpClient.newCall(
+      Request.Builder().url(pageUrl).header("User-Agent", PortalUserAgent).build()
+    ).execute()
+    val html = response.body?.string() ?: return@withContext null
+    val responseUrl = response.request.url.toString()
+    val doc = Jsoup.parse(html, responseUrl)
+    doc.select("script, style, nav, header, footer").remove()
+    val content = listOf(
+      ".comunicazione",
+      ".notice",
+      ".cnt",
+      ".content",
+      "article",
+      "main",
+      "body",
+    ).firstNotNullOfOrNull { selector ->
+      doc.selectFirst(selector)?.text()?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.length > 20 }
+    }
+    PortalNoticeboardDetail(
+      content = content,
+      acknowledgeUrl = findNoticeboardActionUrl(doc, listOf("conferma", "presa", "visione", "sign", "firma", "ack")),
+      replyUrl = findNoticeboardActionUrl(doc, listOf("rispondi", "risposta", "reply")),
+      joinUrl = findNoticeboardActionUrl(doc, listOf("adesione", "aderisci", "join", "partecipa")),
+      fileUploadUrl = findNoticeboardActionUrl(doc, listOf("carica", "upload", "allega", "file")),
+    )
+  }
+
   fun getSessionCookies(): List<PortalCookieDto> {
     return cookieStore["web.spaggiari.eu"]?.map {
       PortalCookieDto(name = it.name, value = it.value)
@@ -206,7 +244,7 @@ class PortalClient @Inject constructor(
 
   private suspend fun discoverPortalPage(keywords: List<String>): Pair<String, String>? {
     val landingResponse = portalHttpClient.newCall(
-      Request.Builder().url(PortalLoginUrl).header("User-Agent", UserAgent).build()
+      Request.Builder().url(PortalLoginUrl).header("User-Agent", PortalUserAgent).build()
     ).execute()
     val landingHtml = landingResponse.body?.string() ?: return null
     val landingUrl = landingResponse.request.url.toString()
@@ -225,7 +263,7 @@ class PortalClient @Inject constructor(
       ).filter(String::isNotBlank).joinToString(" ").lowercase()
       if (keywords.any { elementText.contains(it) }) {
         val response = portalHttpClient.newCall(
-          Request.Builder().url(href).header("User-Agent", UserAgent).build()
+          Request.Builder().url(href).header("User-Agent", PortalUserAgent).build()
         ).execute()
         val html = response.body?.string() ?: continue
         return html to response.request.url.toString()
@@ -246,6 +284,28 @@ class PortalClient @Inject constructor(
       val text = (link.text() + " " + link.attr("href")).lowercase()
       keywords.any { text.contains(it) }
     }?.absUrl("href")?.takeIf(String::isNotBlank)
+  }
+
+  private fun findNoticeboardActionUrl(doc: Document, keywords: List<String>): String? {
+    return doc.select("a[href], form[action], button[formaction], input[formaction]").firstNotNullOfOrNull { element ->
+      val text = listOf(
+        element.text(),
+        element.attr("value"),
+        element.attr("title"),
+        element.attr("aria-label"),
+        element.attr("href"),
+        element.attr("action"),
+        element.attr("formaction"),
+      ).joinToString(" ").lowercase()
+      if (keywords.any { text.contains(it) }) {
+        element.absUrl("href")
+          .ifBlank { element.absUrl("action") }
+          .ifBlank { element.absUrl("formaction") }
+          .takeIf(String::isNotBlank)
+      } else {
+        null
+      }
+    }
   }
 
   private fun submitForm(
@@ -274,7 +334,7 @@ class PortalClient @Inject constructor(
       val mediaType = (fileAttachment.mimeType ?: "application/octet-stream").toMediaType()
       multipart.addFormDataPart("file", fileAttachment.fileName, bytes.toRequestBody(mediaType))
       portalHttpClient.newCall(
-        Request.Builder().url(action).header("User-Agent", UserAgent).post(multipart.build()).build()
+        Request.Builder().url(action).header("User-Agent", PortalUserAgent).post(multipart.build()).build()
       ).execute().close()
     } else {
       val formBody = FormBody.Builder()
@@ -287,7 +347,7 @@ class PortalClient @Inject constructor(
         formBody.add(name, value)
       }
       portalHttpClient.newCall(
-        Request.Builder().url(action).header("User-Agent", UserAgent).post(formBody.build()).build()
+        Request.Builder().url(action).header("User-Agent", PortalUserAgent).post(formBody.build()).build()
       ).execute().close()
     }
   }

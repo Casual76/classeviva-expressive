@@ -102,7 +102,7 @@ class RestClientNetworkTest {
   }
 
   @Test
-  fun getCommunicationDetail_postsEmptyBodyToReadEndpoint() = runBlocking {
+  fun getCommunicationDetail_postsOfficialPayloadToReadEndpoint() = runBlocking {
     setActiveSession(token = "token-notice", studentId = "312345")
     server.enqueue(
       jsonResponse(
@@ -131,7 +131,10 @@ class RestClientNetworkTest {
     val readRequest = server.takeRequest()
     assertEquals("/rest/v1/students/312345/noticeboard/read/CIR/99/101", readRequest.path)
     assertEquals("POST", readRequest.method)
-    assertEquals("{}", readRequest.body.readUtf8())
+    val body = readRequest.body.readUtf8()
+    assertTrue(body.contains("\"pubId\":99"))
+    assertTrue(body.contains("\"cntId\":99"))
+    assertTrue(body.contains("\"evtCode\":\"CIR\""))
   }
 
   @Test

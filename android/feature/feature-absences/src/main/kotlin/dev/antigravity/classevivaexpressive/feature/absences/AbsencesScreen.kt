@@ -335,6 +335,7 @@ private fun AbsenceRow(
       )
     },
     onClick = onJustify,
+    animatePress = false,
   )
 }
 

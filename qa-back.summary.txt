@@ -1,0 +1,28 @@
+﻿TEXT	[53,573][214,613]	REGISTRO
+TEXT	[200,692][301,729]	Lezioni
+TEXT	[200,729][317,778]	Orario
+TEXT	[200,778][747,927]	Lezioni del giorno e settimana corrente, generato automaticamente.
+TEXT	[831,737][943,774]	ORARIO
+TEXT	[200,1037][323,1074]	Didattica
+TEXT	[200,1074][369,1123]	Didattica
+TEXT	[200,1123][702,1219]	Materiali condivisi, link e file dei docenti.
+TEXT	[786,1082][943,1119]	DIDATTICA
+TEXT	[200,1329][307,1366]	Agenda
+TEXT	[200,1366][347,1415]	Compiti
+TEXT	[200,1415][734,1511]	Compiti assegnati dai docenti con data di consegna.
+TEXT	[818,1374][943,1411]	COMPITI
+TEXT	[200,1621][350,1658]	Documenti
+TEXT	[200,1658][518,1707]	Documenti e libri
+TEXT	[200,1707][684,1856]	Documenti della scuola, pagelle e libri scolastici adottati.
+TEXT	[768,1666][943,1703]	DOCUMENTI
+TEXT	[200,1966][407,2003]	Comunicazioni
+TEXT	[200,2003][509,2052]	Note disciplinari
+TEXT	[200,2052][780,2130]	Storico delle note e sanzioni disciplinari.
+TEXT	[864,2011][943,2048]	NOTE
+TEXT	[43,279][203,365]	Altro
+TEXT	[43,376][1058,472]	Le sezioni secondarie restano ordinate per compito, con orario, assenze e profilo in una vista unica.
+TEXT	[58,2256][142,2298]	Home
+TEXT	[292,2256][348,2298]	Voti
+TEXT	[487,2256][594,2298]	Agenda
+TEXT	[700,2256][820,2298]	Bacheca
+TEXT	[946,2256][1014,2298]	Altro

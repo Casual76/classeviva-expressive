@@ -1,0 +1,39 @@
+﻿TEXT	[678,382][887,430]	Lezioni svolte
+TEXT	[285,382][378,430]	Orario
+TEXT	[95,557][290,594]	SLOT STABILI
+TEXT	[95,615][167,688]	25
+TEXT	[95,709][315,794]	Template riutilizzabile.
+TEXT	[431,557][604,594]	SETTIMANE
+TEXT	[431,615][503,688]	33
+TEXT	[431,709][650,794]	Storico usato per il template.
+TEXT	[766,557][895,594]	DOCENTI
+TEXT	[766,615][838,688]	27
+TEXT	[766,709][985,794]	Nomi distinti rilevati.
+TEXT	[107,923][163,971]	Lun
+TEXT	[267,923][327,971]	Mar
+TEXT	[429,923][489,971]	Mer
+TEXT	[595,923][646,971]	Gio
+TEXT	[753,923][812,971]	Ven
+TEXT	[950,923][1008,971]	Sab
+TEXT	[53,1056][396,1096]	SABATO RICORRENTE
+TEXT	[64,1143][859,1177]	Tocca uno slot per confermarlo · Tieni premuto per modificarlo.
+TEXT	[95,1256][282,1293]	08:00 - 10:00
+TEXT	[95,1293][313,1342]	Sc. Motorie
+TEXT	[95,1342][341,1385]	PISANO ELENA
+TEXT	[95,1396][738,1481]	Palestre Sesto / Ricorrenza 100% · 33 settimane
+TEXT	[822,1301][943,1338]	STABILE
+TEXT	[95,1591][282,1628]	10:00 - 11:00
+TEXT	[95,1628][207,1677]	Fisica
+TEXT	[95,1677][318,1720]	MUCCI SILVIA
+TEXT	[95,1731][738,1816]	P1 Aula Lab info 1 / Ricorrenza 100% · 33 settimane
+TEXT	[822,1636][943,1673]	STABILE
+TEXT	[95,1926][282,1963]	11:00 - 12:00
+TEXT	[95,1963][321,2012]	Matematica
+TEXT	[95,2012][318,2055]	MUCCI SILVIA
+TEXT	[95,2066][738,2151]	P1 Aula Lab info 1 / Ricorrenza 100% · 33 settimane
+TEXT	[822,1971][943,2008]	STABILE
+DESC	[43,160][106,223]	Back
+TEXT	[148,103][293,172]	Orario
+TEXT	[148,183][806,279]	Template settimanale stabile e storico delle lezioni svolte in una sola vista.
+DESC	[849,160][912,223]	Ricalcola orario
+DESC	[975,160][1038,223]	Aggiorna
