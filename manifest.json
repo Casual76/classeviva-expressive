@@ -15,24 +15,114 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.7.3",
-      "releaseDate": "2026-05-15",
-      "changelog": "Release 5.7.3",
-      "releaseTag": "stable-classeviva-expressive-v5.7.3",
-      "apkAsset": "classeviva-expressive-5.7.3.apk",
+      "version": "5.7.13",
+      "releaseDate": "2026-05-16",
+      "changelog": "Corretto il rilevamento delle lezioni firmate: ora le lezioni non firmate non vengono piu mostrate come firmate senza argomento.",
+      "releaseTag": "stable-classeviva-expressive-v5.7.13",
+      "apkAsset": "classeviva-expressive-5.7.13.apk",
       "exeAsset": "",
-      "sizeBytes": 21074166
+      "sizeBytes": 20772486
     },
     "beta": {
-      "version": "5.7.3",
-      "releaseDate": "2026-05-15",
-      "changelog": "Release 5.7.3",
-      "releaseTag": "stable-classeviva-expressive-v5.7.3",
-      "apkAsset": "classeviva-expressive-5.7.3.apk",
+      "version": "5.7.13",
+      "releaseDate": "2026-05-16",
+      "changelog": "Corretto il rilevamento delle lezioni firmate: ora le lezioni non firmate non vengono piu mostrate come firmate senza argomento.",
+      "releaseTag": "stable-classeviva-expressive-v5.7.13",
+      "apkAsset": "classeviva-expressive-5.7.13.apk",
       "exeAsset": "",
-      "sizeBytes": 21074166
+      "sizeBytes": 20772486
     },
     "history": [
+      {
+        "version": "5.7.12",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.12",
+        "releaseTag": "stable-classeviva-expressive-v5.7.12",
+        "apkAsset": "classeviva-expressive-5.7.12.apk",
+        "exeAsset": "",
+        "sizeBytes": 20772487
+      },
+      {
+        "version": "5.7.11",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.11",
+        "releaseTag": "stable-classeviva-expressive-v5.7.11",
+        "apkAsset": "classeviva-expressive-5.7.11.apk",
+        "exeAsset": "",
+        "sizeBytes": 20772471
+      },
+      {
+        "version": "5.7.10",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.10",
+        "releaseTag": "stable-classeviva-expressive-v5.7.10",
+        "apkAsset": "classeviva-expressive-5.7.10.apk",
+        "exeAsset": "",
+        "sizeBytes": 20534462
+      },
+      {
+        "version": "5.7.9",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.9",
+        "releaseTag": "stable-classeviva-expressive-v5.7.9",
+        "apkAsset": "classeviva-expressive-5.7.9.apk",
+        "exeAsset": "",
+        "sizeBytes": 20534455
+      },
+      {
+        "version": "5.7.8",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.8",
+        "releaseTag": "stable-classeviva-expressive-v5.7.8",
+        "apkAsset": "classeviva-expressive-5.7.8.apk",
+        "exeAsset": "",
+        "sizeBytes": 20533535
+      },
+      {
+        "version": "5.7.7",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.7",
+        "releaseTag": "stable-classeviva-expressive-v5.7.7",
+        "apkAsset": "classeviva-expressive-5.7.7.apk",
+        "exeAsset": "",
+        "sizeBytes": 20533536
+      },
+      {
+        "version": "5.7.6",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.6",
+        "releaseTag": "stable-classeviva-expressive-v5.7.6",
+        "apkAsset": "classeviva-expressive-5.7.6.apk",
+        "exeAsset": "",
+        "sizeBytes": 20533574
+      },
+      {
+        "version": "5.7.5",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.5",
+        "releaseTag": "stable-classeviva-expressive-v5.7.5",
+        "apkAsset": "classeviva-expressive-5.7.5.apk",
+        "exeAsset": "",
+        "sizeBytes": 20531871
+      },
+      {
+        "version": "5.7.4",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.4",
+        "releaseTag": "stable-classeviva-expressive-v5.7.4",
+        "apkAsset": "classeviva-expressive-5.7.4.apk",
+        "exeAsset": "",
+        "sizeBytes": 20532817
+      },
+      {
+        "version": "5.7.3",
+        "releaseDate": "2026-05-15",
+        "changelog": "Release 5.7.3",
+        "releaseTag": "stable-classeviva-expressive-v5.7.3",
+        "apkAsset": "classeviva-expressive-5.7.3.apk",
+        "exeAsset": "",
+        "sizeBytes": 21074166
+      },
       {
         "version": "5.7.2",
         "releaseDate": "2026-05-15",
