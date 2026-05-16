@@ -53,6 +53,7 @@ class PredictiveTimetableUseCase {
     val confidence: Float,
     val isPredicted: Boolean = true,
     val topic: String? = null,
+    val isSigned: Boolean = false,
   )
 
   fun generateTimetableTemplate(
@@ -337,6 +338,7 @@ class PredictiveTimetableUseCase {
       confidence = 1f,
       isPredicted = false,
       topic = lesson.topic,
+      isSigned = lesson.isSigned,
     )
   }
 

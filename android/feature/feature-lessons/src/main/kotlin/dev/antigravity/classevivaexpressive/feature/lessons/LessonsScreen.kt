@@ -564,17 +564,22 @@ fun LessonsRoute(
                 items(lessonsForSelectedDay, key = { it.id }) { lesson ->
                   RegisterListRow(
                     title = lesson.subject,
-                    subtitle = lesson.topic?.takeIf(String::isNotBlank) ?: "Argomento non inserito",
+                    subtitle = lesson.topic?.takeIf(String::isNotBlank)
+                      ?: if (lesson.isSigned) "Argomento non inserito" else "Lezione non firmata",
                     eyebrow = lesson.timeRangeLabel(),
                     meta = listOfNotNull(
                       lesson.teacher?.takeIf(String::isNotBlank),
                       lesson.room?.takeIf(String::isNotBlank),
                     ).joinToString(" / ").ifBlank { null },
-                    tone = if (lesson.topic.isNullOrBlank()) ExpressiveTone.Neutral else ExpressiveTone.Success,
+                    tone = if (lesson.isSigned || !lesson.topic.isNullOrBlank()) {
+                      ExpressiveTone.Success
+                    } else {
+                      ExpressiveTone.Neutral
+                    },
                     badge = {
                       StatusBadge(
-                        label = "SVOLTA",
-                        tone = ExpressiveTone.Success,
+                        label = if (lesson.isSigned) "FIRMATA" else "NON FIRMATA",
+                        tone = if (lesson.isSigned) ExpressiveTone.Success else ExpressiveTone.Neutral,
                       )
                     },
                   )

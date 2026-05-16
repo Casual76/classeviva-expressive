@@ -250,6 +250,7 @@ data class Lesson(
   val teacher: String? = null,
   val room: String? = null,
   val endTime: String? = null,
+  val isSigned: Boolean = false,
 )
 
 @Serializable

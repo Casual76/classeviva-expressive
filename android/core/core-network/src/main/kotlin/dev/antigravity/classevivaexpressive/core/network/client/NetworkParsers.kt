@@ -131,17 +131,25 @@ internal fun normalizeLesson(data: JsonElement): Lesson {
     ?: startTime.takeIf(String::isNotBlank)?.let { start ->
       runCatching { LocalTime.parse(start).plusMinutes(durationMinutes.toLong()).format(TimeFormatter) }.getOrNull()
     }
+  val topic = sanitizeRegisterText(obj.string("argomento", "topic", "lessonArg"))
   return Lesson(
     id = obj.string("id", "lessonId", "evtId").orEmpty(),
     subject = resolveSubject(obj).orEmpty(),
     date = normalizeDate(obj.string("data", "date", "evtDate", "evtDatetimeBegin")),
     time = startTime,
     durationMinutes = durationMinutes,
-    topic = sanitizeRegisterText(obj.string("argomento", "topic", "lessonArg")),
+    topic = topic,
     teacher = sanitizeRegisterText(obj.string("teacherName", "authorName", "teacher")),
     room = sanitizeRegisterText(obj.string("classroom", "room")),
     endTime = endTime,
+    isSigned = resolveLessonSignedState(obj, topic),
   )
+}
+
+private fun resolveLessonSignedState(obj: JsonObject, topic: String?): Boolean {
+  obj.bool("isSigned", "signed", "firmata", "firma", "hasSignature", "lessonSigned")?.let { return it }
+  val eventCode = obj.string("evtCode", "eventCode", "code").orEmpty().uppercase()
+  return eventCode.startsWith("LSF") || !topic.isNullOrBlank()
 }
 
 internal fun normalizeHomework(data: JsonElement): Homework {

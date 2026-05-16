@@ -16,6 +16,7 @@ class DashboardLessonPresentationTest {
       durationMinutes = 60,
       topic = "",
       teacher = "Rossi",
+      isSigned = true,
     )
 
     val presentation = lesson.toDashboardPresentation()
@@ -34,6 +35,26 @@ class DashboardLessonPresentationTest {
       date = "2026-05-15",
       time = "09:00",
       durationMinutes = 60,
+    )
+
+    val presentation = lesson.toDashboardPresentation()
+
+    assertEquals("Argomento non disponibile", presentation.subtitle)
+    assertEquals(ExpressiveTone.Neutral, presentation.tone)
+    assertEquals("60 min", presentation.badgeLabel)
+    assertEquals(ExpressiveTone.Info, presentation.badgeTone)
+  }
+
+  @Test
+  fun lessonWithTeacherButUnsigned_staysNeutral() {
+    val lesson = Lesson(
+      id = "lesson-3",
+      subject = "Fisica",
+      date = "2026-05-15",
+      time = "10:00",
+      durationMinutes = 60,
+      teacher = "Bianchi",
+      isSigned = false,
     )
 
     val presentation = lesson.toDashboardPresentation()

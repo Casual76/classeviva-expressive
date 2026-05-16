@@ -65,7 +65,6 @@ internal data class DashboardLessonPresentation(
 )
 
 internal fun Lesson.toDashboardPresentation(): DashboardLessonPresentation {
-  val isSigned = !teacher.isNullOrBlank()
   val topicText = topic?.trim().orEmpty()
   val start = runCatching { java.time.LocalTime.parse(time) }.getOrNull()
   val timeRangeLabel = if (start != null) {
