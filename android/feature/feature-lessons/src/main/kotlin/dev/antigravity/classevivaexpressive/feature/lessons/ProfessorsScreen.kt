@@ -117,7 +117,7 @@ private fun computeProfessorStats(
   // viene trattato come chiusura e non pesa sulle presenze attese.
   val openSchoolDates = lessons
     .groupBy { it.date }
-    .filterValues { dayLessons -> dayLessons.any { !it.teacher.isNullOrBlank() } }
+    .filterValues { dayLessons -> dayLessons.any { it.isSigned && !it.teacher.isNullOrBlank() } }
     .keys
     .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
     .distinct()
@@ -131,7 +131,9 @@ private fun computeProfessorStats(
   val officialNormalized: Set<String> = officialTeachers.map { it.lowercase() }.toSet()
 
   // Tutti i teacher presenti nelle lezioni e voti
-  val fromLessons = lessons.mapNotNull { it.teacher?.trim()?.takeIf { t -> t.isNotBlank() } }.distinct()
+  val fromLessons = lessons.mapNotNull { lesson ->
+    lesson.teacher?.trim()?.takeIf { lesson.isSigned && it.isNotBlank() }
+  }.distinct()
   val fromGrades = grades.mapNotNull { it.teacher?.trim()?.takeIf { t -> t.isNotBlank() } }.distinct()
   val candidates = (fromLessons + fromGrades).distinct()
 
@@ -142,7 +144,7 @@ private fun computeProfessorStats(
       teacher.lowercase() in officialNormalized
     } else {
       val teacherDates = lessons
-        .filter { it.teacher?.trim() == teacher }
+        .filter { it.isSigned && it.teacher?.trim() == teacher }
         .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
       val distinctWeeks = teacherDates
         .map { it.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)) }
@@ -162,7 +164,7 @@ private fun buildProfessorStats(
   allGrades: List<Grade>,
   allDatasetDates: List<LocalDate>,
 ): ProfessorStats {
-  val teacherLessons = allLessons.filter { it.teacher?.trim() == teacher }
+  val teacherLessons = allLessons.filter { it.isSigned && it.teacher?.trim() == teacher }
   val teacherGrades = allGrades.filter { it.teacher?.trim() == teacher }
 
   val subjectsFromLessons = teacherLessons.map { it.subject.trim() }.distinct()
@@ -191,7 +193,7 @@ private fun buildProfessorStats(
       .filter { lesson ->
         val subj = lesson.subject.trim().lowercase()
         val lessonTeacher = lesson.teacher?.trim()?.lowercase().orEmpty()
-        subj in teacherSubjectsLower && (
+        lesson.isSigned && subj in teacherSubjectsLower && (
           lessonTeacher == teacherNameLower ||
           lessonTeacher.startsWith(teacherSurname)
         )

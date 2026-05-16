@@ -76,22 +76,15 @@ class HttpPampaUpdateRemoteDataSource @Inject constructor(
     val app = manifest.app
     val stable = app.stable ?: error("Nessuna release stable disponibile.")
     val repository = app.repository
-    val release = json.decodeFromString<GithubRelease>(
-      readText(githubReleaseUrl(repository.repoOwner, repository.repoName, stable.releaseTag)),
-    )
-    val asset = release.assets.firstOrNull { it.name == stable.apkAsset }
-      ?: error("Asset APK '${stable.apkAsset}' non trovato nella release '${stable.releaseTag}'.")
-    val downloadUrl = asset.browserDownloadUrl.ifBlank { asset.apiUrl }
-    if (downloadUrl.isBlank()) {
-      error("La release '${stable.releaseTag}' non espone un URL di download APK.")
-    }
+    val downloadUrl = "https://github.com/${repository.repoOwner}/${repository.repoName}/releases/download/${stable.releaseTag}/${stable.apkAsset}"
+    
     return AvailableAppUpdate(
       version = stable.version,
       changelog = stable.changelog,
       releaseTag = stable.releaseTag,
       apkAsset = stable.apkAsset,
       downloadUrl = downloadUrl,
-      sizeBytes = asset.sizeBytes.takeIf { it > 0 } ?: stable.sizeBytes,
+      sizeBytes = stable.sizeBytes,
     )
   }
 
@@ -190,20 +183,63 @@ class AndroidAppUpdateInstaller @Inject constructor(
     val temp = File(updateDir, "${target.name}.part")
     temp.delete()
 
-    val connection = (URL(update.downloadUrl).openConnection() as HttpURLConnection).apply {
-      connectTimeout = 15_000
-      readTimeout = 60_000
-      instanceFollowRedirects = true
-      setRequestProperty("User-Agent", UserAgent)
-      setRequestProperty("Accept", "application/octet-stream")
-    }
+    var targetDownloadUrl = update.downloadUrl
     try {
-      val code = connection.responseCode
-      if (code !in 200..299) {
-        error("Download APK fallito ($code).")
+      // Attempt to use the API to get the asset URL directly (faster routing)
+      val apiUrl = "https://api.github.com/repos/Casual76/classeviva-expressive/releases/tags/${update.releaseTag}"
+      val apiConn = URL(apiUrl).openConnection() as HttpURLConnection
+      apiConn.setRequestProperty("User-Agent", "ClassevivaExpressiveUpdater")
+      if (apiConn.responseCode in 200..299) {
+        val response = apiConn.inputStream.bufferedReader().use { it.readText() }
+        val json = org.json.JSONObject(response)
+        val assets = json.getJSONArray("assets")
+        for (i in 0 until assets.length()) {
+          val asset = assets.getJSONObject(i)
+          if (asset.getString("name") == update.apkAsset) {
+            val directUrl = asset.optString("url", "")
+            if (directUrl.isNotBlank()) {
+              targetDownloadUrl = directUrl
+              break
+            }
+          }
+        }
       }
-      val total = connection.contentLengthLong.takeIf { it > 0 } ?: update.sizeBytes
-      connection.inputStream.use { input ->
+      apiConn.disconnect()
+    } catch (e: Exception) {
+      // Fallback to the manual downloadUrl
+    }
+
+    var currentUrl = targetDownloadUrl
+    var connection: HttpURLConnection? = null
+    try {
+      var redirects = 0
+      while (true) {
+        connection = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
+          connectTimeout = 15_000
+          readTimeout = 60_000
+          instanceFollowRedirects = false
+          setRequestProperty("User-Agent", UserAgent)
+          setRequestProperty("Accept", "application/octet-stream")
+        }
+        val code = connection.responseCode
+        if (code in 300..399) {
+          val location = connection.getHeaderField("Location")
+          if (location != null && redirects < 5) {
+            currentUrl = location
+            redirects++
+            connection.disconnect()
+            continue
+          }
+        }
+        if (code !in 200..299) {
+          error("Download APK fallito ($code).")
+        }
+        break
+      }
+
+      val finalConnection = connection!!
+      val total = finalConnection.contentLengthLong.takeIf { it > 0 } ?: update.sizeBytes
+      finalConnection.inputStream.use { input ->
         temp.outputStream().use { output ->
           val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
           var downloaded = 0L
@@ -223,7 +259,7 @@ class AndroidAppUpdateInstaller @Inject constructor(
       }
       target
     } finally {
-      connection.disconnect()
+      connection?.disconnect()
       if (temp.exists()) temp.delete()
     }
   }
@@ -450,22 +486,6 @@ private data class PampaVersion(
   val apkAsset: String = "",
   val sizeBytes: Long = 0L,
 )
-
-@Serializable
-private data class GithubRelease(
-  val assets: List<GithubAsset> = emptyList(),
-)
-
-@Serializable
-private data class GithubAsset(
-  val name: String = "",
-  val size: Long = 0L,
-  @SerialName("url") val apiUrl: String = "",
-  @SerialName("browser_download_url") val browserDownloadUrl: String = "",
-) {
-  val sizeBytes: Long
-    get() = size
-}
 
 @Module
 @InstallIn(SingletonComponent::class)

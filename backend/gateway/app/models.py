@@ -220,6 +220,7 @@ class LessonModel(BaseModel):
     topic: str | None = None
     teacher: str | None = None
     room: str | None = None
+    isSigned: bool = False
 
 
 class MaterialItemModel(BaseModel):

@@ -353,6 +353,7 @@ class SchoolDataRepository @Inject constructor(
             teacher = slot.teacher,
             room = slot.room,
             endTime = slot.endTime?.formatTime(),
+            isSigned = slot.isSigned,
         )
       }
       val unseenGradeIds = academic.seenGradeStates.map { it.gradeId }.toSet()
@@ -1158,6 +1159,7 @@ internal fun buildLessonsWithFallback(
         endTime = item.time?.takeIf(String::isNotBlank)?.let { start ->
           runCatching { LocalTime.parse(start).plusMinutes(60).formatTime() }.getOrNull()
         },
+        isSigned = false,
       )
     }
 

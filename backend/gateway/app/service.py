@@ -707,15 +707,21 @@ def normalize_agenda_item(item: dict[str, Any]) -> AgendaItemModel:
 
 
 def normalize_lesson(item: dict[str, Any]) -> LessonModel:
+    topic = normalize_text(item.get("lessonArg") or item.get("argomento"))
+    evt_code = str(item.get("evtCode") or item.get("eventCode") or item.get("code") or "").upper()
+    is_signed = normalize_bool(item.get("isSigned") or item.get("signed") or item.get("firmata"))
+    if not is_signed:
+        is_signed = evt_code.startswith("LSF") or bool(topic)
     return LessonModel(
         id=str(item.get("id") or item.get("lessonId") or ""),
         subject=normalize_text(item.get("subjectDesc") or item.get("materia") or "Materia"),
         date=normalize_date(item.get("evtDate") or item.get("data")),
         time=str(item.get("evtTime") or "00:00"),
         durationMinutes=int(item.get("duration") or 60),
-        topic=normalize_text(item.get("lessonArg") or item.get("argomento")),
+        topic=topic,
         teacher=normalize_text(item.get("authorName") or item.get("docente")),
         room=normalize_text(item.get("room") or item.get("aula")),
+        isSigned=is_signed,
     )
 
 
@@ -877,6 +883,15 @@ def normalize_text(value: Any) -> str:
         return ""
     text = BeautifulSoup(str(value), "html.parser").get_text(" ", strip=True)
     return re.sub(r"\s+", " ", text.replace("\xa0", " ")).strip()
+
+
+def normalize_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    normalized = re.sub(r"[\s_-]+", "", str(value).lower())
+    return normalized in {"1", "true", "yes", "y", "s", "si", "done", "signed", "firmata"}
 
 
 def encode_action_token(payload: dict[str, Any]) -> str:

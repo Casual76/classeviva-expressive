@@ -619,6 +619,52 @@ class NetworkParsersTest {
   // ─── normalizeHomework ────────────────────────────────────────────────────
 
   @Test
+  fun normalizeLesson_marksClassevivaSignedLessonEvenWithoutTopic() {
+    val lesson = normalizeLesson(
+      Json.parseToJsonElement(
+        """
+        {
+          "evtId": "1715771",
+          "evtDate": "2026-05-07",
+          "evtCode": "LSF0",
+          "evtHPos": 3,
+          "evtDuration": 1,
+          "subjectDesc": "DISEGNO E STORIA DELL'ARTE",
+          "authorName": "RUGGERI CONCETTA",
+          "lessonArg": ""
+        }
+        """.trimIndent(),
+      ),
+    )
+
+    assertTrue(lesson.isSigned)
+    assertNull(lesson.topic)
+  }
+
+  @Test
+  fun normalizeLesson_keepsPlannedLessonUnsignedEvenWithTeacher() {
+    val lesson = normalizeLesson(
+      Json.parseToJsonElement(
+        """
+        {
+          "evtId": "planned-1",
+          "evtDate": "2026-05-07",
+          "evtCode": "AGD",
+          "evtHPos": 4,
+          "evtDuration": 1,
+          "subjectDesc": "Matematica",
+          "authorName": "ROSSI MARIO",
+          "lessonArg": ""
+        }
+        """.trimIndent(),
+      ),
+    )
+
+    assertFalse(lesson.isSigned)
+    assertEquals("ROSSI MARIO", lesson.teacher)
+  }
+
+  @Test
   fun normalizeHomework_parsesDueDateAndDescription() {
     val hw = normalizeHomework(
       Json.parseToJsonElement(
