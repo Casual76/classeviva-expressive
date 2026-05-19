@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.7.13",
-      "releaseDate": "2026-05-16",
-      "changelog": "Corretto il rilevamento delle lezioni firmate: ora le lezioni non firmate non vengono piu mostrate come firmate senza argomento.",
-      "releaseTag": "stable-classeviva-expressive-v5.7.13",
-      "apkAsset": "classeviva-expressive-5.7.13.apk",
+      "version": "5.7.14",
+      "releaseDate": "2026-05-19",
+      "changelog": "Corretto il riconoscimento di voti e agenda nuovi/modificati dopo gli aggiornamenti; aggiunto Segnala bug con avviso di issue GitHub pubblica; sistemato header Altro e migrazioni database.",
+      "releaseTag": "stable-classeviva-expressive-v5.7.14",
+      "apkAsset": "classeviva-expressive-5.7.14.apk",
       "exeAsset": "",
-      "sizeBytes": 20772486
+      "sizeBytes": 20788854
     },
     "beta": {
-      "version": "5.7.13",
-      "releaseDate": "2026-05-16",
-      "changelog": "Corretto il rilevamento delle lezioni firmate: ora le lezioni non firmate non vengono piu mostrate come firmate senza argomento.",
-      "releaseTag": "stable-classeviva-expressive-v5.7.13",
-      "apkAsset": "classeviva-expressive-5.7.13.apk",
+      "version": "5.7.14",
+      "releaseDate": "2026-05-19",
+      "changelog": "Corretto il riconoscimento di voti e agenda nuovi/modificati dopo gli aggiornamenti; aggiunto Segnala bug con avviso di issue GitHub pubblica; sistemato header Altro e migrazioni database.",
+      "releaseTag": "stable-classeviva-expressive-v5.7.14",
+      "apkAsset": "classeviva-expressive-5.7.14.apk",
       "exeAsset": "",
-      "sizeBytes": 20772486
+      "sizeBytes": 20788854
     },
     "history": [
+      {
+        "version": "5.7.13",
+        "releaseDate": "2026-05-16",
+        "changelog": "Corretto il rilevamento delle lezioni firmate: ora le lezioni non firmate non vengono piu mostrate come firmate senza argomento.",
+        "releaseTag": "stable-classeviva-expressive-v5.7.13",
+        "apkAsset": "classeviva-expressive-5.7.13.apk",
+        "exeAsset": "",
+        "sizeBytes": 20772486
+      },
       {
         "version": "5.7.12",
         "releaseDate": "2026-05-15",
