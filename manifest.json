@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.8.0",
+      "version": "6.0.0",
       "releaseDate": "2026-05-21",
-      "changelog": "Agenda e Compiti mostrano data e ora di aggiunta e lo stato modificato quando presente. Sync automatico in background ridotto a 2 minuti. Allegati Bacheca corretti con download autenticato, cache locale 30 giorni, riapertura immediata se gia scaricati e dialog Material 3 per download/errori.",
-      "releaseTag": "stable-classeviva-expressive-v5.8.0",
-      "apkAsset": "classeviva-expressive-5.8.0.apk",
+      "changelog": "Release 6.0.0: polish Material 3 Expressive mirato, animazioni e feedback di pressione più coerenti con ripple Material, transizioni di contenuto più morbide, loading state Expressive, correzioni testi e accenti italiani, fix apertura dettaglio note con fallback cache, QA su device per schermate principali e secondarie.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.0",
+      "apkAsset": "classeviva-expressive-6.0.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20805247
+      "sizeBytes": 20805243
     },
     "beta": {
-      "version": "5.8.0",
+      "version": "6.0.0",
       "releaseDate": "2026-05-21",
-      "changelog": "Agenda e Compiti mostrano data e ora di aggiunta e lo stato modificato quando presente. Sync automatico in background ridotto a 2 minuti. Allegati Bacheca corretti con download autenticato, cache locale 30 giorni, riapertura immediata se gia scaricati e dialog Material 3 per download/errori.",
-      "releaseTag": "stable-classeviva-expressive-v5.8.0",
-      "apkAsset": "classeviva-expressive-5.8.0.apk",
+      "changelog": "Release 6.0.0: polish Material 3 Expressive mirato, animazioni e feedback di pressione più coerenti con ripple Material, transizioni di contenuto più morbide, loading state Expressive, correzioni testi e accenti italiani, fix apertura dettaglio note con fallback cache, QA su device per schermate principali e secondarie.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.0",
+      "apkAsset": "classeviva-expressive-6.0.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20805247
+      "sizeBytes": 20805243
     },
     "history": [
+      {
+        "version": "5.8.0",
+        "releaseDate": "2026-05-21",
+        "changelog": "Agenda e Compiti mostrano data e ora di aggiunta e lo stato modificato quando presente. Sync automatico in background ridotto a 2 minuti. Allegati Bacheca corretti con download autenticato, cache locale 30 giorni, riapertura immediata se gia scaricati e dialog Material 3 per download/errori.",
+        "releaseTag": "stable-classeviva-expressive-v5.8.0",
+        "apkAsset": "classeviva-expressive-5.8.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 20805247
+      },
       {
         "version": "5.7.19",
         "releaseDate": "2026-05-21",
