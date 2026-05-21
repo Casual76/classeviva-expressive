@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.7.19",
+      "version": "5.8.0",
       "releaseDate": "2026-05-21",
-      "changelog": "Corretto il dettaglio dei compiti: ora conserva e mostra data e ora di aggiunta quando disponibili dalle API/agenda. Migliorato anche il merge tra compiti REST e agenda per non perdere la data di inserimento.",
-      "releaseTag": "stable-classeviva-expressive-v5.7.19",
-      "apkAsset": "classeviva-expressive-5.7.19.apk",
+      "changelog": "Agenda e Compiti mostrano data e ora di aggiunta e lo stato modificato quando presente. Sync automatico in background ridotto a 2 minuti. Allegati Bacheca corretti con download autenticato, cache locale 30 giorni, riapertura immediata se gia scaricati e dialog Material 3 per download/errori.",
+      "releaseTag": "stable-classeviva-expressive-v5.8.0",
+      "apkAsset": "classeviva-expressive-5.8.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20805235
+      "sizeBytes": 20805247
     },
     "beta": {
-      "version": "5.7.19",
+      "version": "5.8.0",
       "releaseDate": "2026-05-21",
-      "changelog": "Corretto il dettaglio dei compiti: ora conserva e mostra data e ora di aggiunta quando disponibili dalle API/agenda. Migliorato anche il merge tra compiti REST e agenda per non perdere la data di inserimento.",
-      "releaseTag": "stable-classeviva-expressive-v5.7.19",
-      "apkAsset": "classeviva-expressive-5.7.19.apk",
+      "changelog": "Agenda e Compiti mostrano data e ora di aggiunta e lo stato modificato quando presente. Sync automatico in background ridotto a 2 minuti. Allegati Bacheca corretti con download autenticato, cache locale 30 giorni, riapertura immediata se gia scaricati e dialog Material 3 per download/errori.",
+      "releaseTag": "stable-classeviva-expressive-v5.8.0",
+      "apkAsset": "classeviva-expressive-5.8.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20805235
+      "sizeBytes": 20805247
     },
     "history": [
+      {
+        "version": "5.7.19",
+        "releaseDate": "2026-05-21",
+        "changelog": "Corretto il dettaglio dei compiti: ora conserva e mostra data e ora di aggiunta quando disponibili dalle API/agenda. Migliorato anche il merge tra compiti REST e agenda per non perdere la data di inserimento.",
+        "releaseTag": "stable-classeviva-expressive-v5.7.19",
+        "apkAsset": "classeviva-expressive-5.7.19.apk",
+        "exeAsset": "",
+        "sizeBytes": 20805235
+      },
       {
         "version": "5.7.18",
         "releaseDate": "2026-05-19",
