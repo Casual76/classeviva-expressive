@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "5.7.18",
-      "releaseDate": "2026-05-19",
-      "changelog": "Corretto il riconoscimento dei voti gia presenti dopo aggiornamento: i cambi di periodo non vengono piu mostrati come modifiche. Migliorato il match stabile di voti e agenda, aggiunta segnalazione bug pubblica su GitHub con diagnostica anonima e reso leggibile l header della sezione Altro durante lo scroll.",
-      "releaseTag": "stable-classeviva-expressive-v5.7.18",
-      "apkAsset": "classeviva-expressive-5.7.18.apk",
+      "version": "5.7.19",
+      "releaseDate": "2026-05-21",
+      "changelog": "Corretto il dettaglio dei compiti: ora conserva e mostra data e ora di aggiunta quando disponibili dalle API/agenda. Migliorato anche il merge tra compiti REST e agenda per non perdere la data di inserimento.",
+      "releaseTag": "stable-classeviva-expressive-v5.7.19",
+      "apkAsset": "classeviva-expressive-5.7.19.apk",
       "exeAsset": "",
-      "sizeBytes": 20788843
+      "sizeBytes": 20805235
     },
     "beta": {
-      "version": "5.7.18",
-      "releaseDate": "2026-05-19",
-      "changelog": "Corretto il riconoscimento dei voti gia presenti dopo aggiornamento: i cambi di periodo non vengono piu mostrati come modifiche. Migliorato il match stabile di voti e agenda, aggiunta segnalazione bug pubblica su GitHub con diagnostica anonima e reso leggibile l header della sezione Altro durante lo scroll.",
-      "releaseTag": "stable-classeviva-expressive-v5.7.18",
-      "apkAsset": "classeviva-expressive-5.7.18.apk",
+      "version": "5.7.19",
+      "releaseDate": "2026-05-21",
+      "changelog": "Corretto il dettaglio dei compiti: ora conserva e mostra data e ora di aggiunta quando disponibili dalle API/agenda. Migliorato anche il merge tra compiti REST e agenda per non perdere la data di inserimento.",
+      "releaseTag": "stable-classeviva-expressive-v5.7.19",
+      "apkAsset": "classeviva-expressive-5.7.19.apk",
       "exeAsset": "",
-      "sizeBytes": 20788843
+      "sizeBytes": 20805235
     },
     "history": [
+      {
+        "version": "5.7.18",
+        "releaseDate": "2026-05-19",
+        "changelog": "Corretto il riconoscimento dei voti gia presenti dopo aggiornamento: i cambi di periodo non vengono piu mostrati come modifiche. Migliorato il match stabile di voti e agenda, aggiunta segnalazione bug pubblica su GitHub con diagnostica anonima e reso leggibile l header della sezione Altro durante lo scroll.",
+        "releaseTag": "stable-classeviva-expressive-v5.7.18",
+        "apkAsset": "classeviva-expressive-5.7.18.apk",
+        "exeAsset": "",
+        "sizeBytes": 20788843
+      },
       {
         "version": "5.7.15",
         "releaseDate": "2026-05-19",
