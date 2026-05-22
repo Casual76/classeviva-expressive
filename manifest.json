@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.5",
+      "version": "6.0.6",
       "releaseDate": "2026-05-22",
-      "changelog": "Rimosse tutte le funzionalità di firma speculativa per le comunicazioni di bacheca, ottimizzando la conferma lettura nativa (Conferma Lettura) tramite l'endpoint ufficiale.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.5",
-      "apkAsset": "classeviva-expressive-6.0.5.apk",
+      "changelog": "Richiesta dei permessi di notifica al primo avvio su Android 13+ e fix completo delle notifiche live per Android 16 (Now Bar/status chip) con aggiunta degli orari delle lezioni.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.6",
+      "apkAsset": "classeviva-expressive-6.0.6.apk",
       "exeAsset": "",
-      "sizeBytes": 20821626
+      "sizeBytes": 20821617
     },
     "beta": {
-      "version": "6.0.5",
+      "version": "6.0.6",
       "releaseDate": "2026-05-22",
-      "changelog": "Rimosse tutte le funzionalità di firma speculativa per le comunicazioni di bacheca, ottimizzando la conferma lettura nativa (Conferma Lettura) tramite l'endpoint ufficiale.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.5",
-      "apkAsset": "classeviva-expressive-6.0.5.apk",
+      "changelog": "Richiesta dei permessi di notifica al primo avvio su Android 13+ e fix completo delle notifiche live per Android 16 (Now Bar/status chip) con aggiunta degli orari delle lezioni.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.6",
+      "apkAsset": "classeviva-expressive-6.0.6.apk",
       "exeAsset": "",
-      "sizeBytes": 20821626
+      "sizeBytes": 20821617
     },
     "history": [
+      {
+        "version": "6.0.5",
+        "releaseDate": "2026-05-22",
+        "changelog": "Rimosse tutte le funzionalità di firma speculativa per le comunicazioni di bacheca, ottimizzando la conferma lettura nativa (Conferma Lettura) tramite l'endpoint ufficiale.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.5",
+        "apkAsset": "classeviva-expressive-6.0.5.apk",
+        "exeAsset": "",
+        "sizeBytes": 20821626
+      },
       {
         "version": "6.0.4",
         "releaseDate": "2026-05-22",
