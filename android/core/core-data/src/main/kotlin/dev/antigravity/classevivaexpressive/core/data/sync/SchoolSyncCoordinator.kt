@@ -245,6 +245,7 @@ class SchoolSyncCoordinator @Inject constructor(
       restClient.getCommunicationDetail(pubId, evtCode)
     }
     val detail = enrichCommunicationDetailFromPortalIfNeeded(restDetail)
+    runCatching { communicationDao.markRead(detail.communication.id) }
     detail
   }
 

@@ -635,7 +635,7 @@ class SchoolSyncCoordinatorTest {
   }
 
   @Test
-  fun getCommunicationDetail_doesNotMarkReadWhenOnlyOpeningDetail() = runTest {
+  fun getCommunicationDetail_marksReadWhenOpeningDetail() = runTest {
     val coordinator = buildCoordinator()
     val entity = communicationEntity(id = "2690", pubId = "2690", evtCode = "CIR")
     val base = Communication(
@@ -659,7 +659,7 @@ class SchoolSyncCoordinatorTest {
 
     assertTrue(result.isSuccess)
     assertFalse(result.getOrThrow().communication.read)
-    coVerify(exactly = 0) { communicationDao.markRead("2690") }
+    coVerify(exactly = 1) { communicationDao.markRead("2690") }
   }
 
   private fun stubLog() {
