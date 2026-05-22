@@ -464,7 +464,7 @@ fun LessonsRoute(
                 item {
                   EmptyState(
                     title = "Nessuno slot stabile",
-                    detail = "Per questo giorno servono piu settimane coerenti prima di proporre un template affidabile.",
+                    detail = "Per questo giorno servono più settimane coerenti prima di proporre un template affidabile.",
                   )
                 }
               } else {
@@ -512,7 +512,7 @@ fun LessonsRoute(
                         else -> StatusBadge("DINAMICO", tone = ExpressiveTone.Warning)
                       }
                     },
-                    animatePress = false,
+                    animatePress = true,
                   )
                 }
               }
@@ -667,11 +667,11 @@ private fun DayOfWeek.shortLabel(): String {
 
 private fun DayOfWeek.longLabel(): String {
   return when (this) {
-    DayOfWeek.MONDAY -> "Lunedi"
-    DayOfWeek.TUESDAY -> "Martedi"
-    DayOfWeek.WEDNESDAY -> "Mercoledi"
-    DayOfWeek.THURSDAY -> "Giovedi"
-    DayOfWeek.FRIDAY -> "Venerdi"
+    DayOfWeek.MONDAY -> "Lunedì"
+    DayOfWeek.TUESDAY -> "Martedì"
+    DayOfWeek.WEDNESDAY -> "Mercoledì"
+    DayOfWeek.THURSDAY -> "Giovedì"
+    DayOfWeek.FRIDAY -> "Venerdì"
     DayOfWeek.SATURDAY -> "Sabato"
     DayOfWeek.SUNDAY -> "Domenica"
   }
@@ -758,7 +758,7 @@ private fun ConfirmSlotDialog(
     AlertDialog(
       onDismissRequest = onDismiss,
       title = { Text("Slot confermato") },
-      text = { Text("Questo slot e gia confermato. Vuoi rimuovere la conferma e lasciare che l'algoritmo lo rivaluti?") },
+      text = { Text("Questo slot è già confermato. Vuoi rimuovere la conferma e lasciare che l'algoritmo lo rivaluti?") },
       confirmButton = {
         TextButton(onClick = onRemoveConfirm) { Text("Rimuovi conferma") }
       },
@@ -866,7 +866,7 @@ private fun EditSlotSheet(
         tone = ExpressiveTone.Info,
         onClick = { editingField = "start" },
         badge = { StatusBadge("MODIFICA", tone = ExpressiveTone.Info) },
-        animatePress = false,
+        animatePress = true,
       )
       RegisterListRow(
         title = "Ora fine",
@@ -875,7 +875,7 @@ private fun EditSlotSheet(
         tone = ExpressiveTone.Info,
         onClick = { editingField = "end" },
         badge = { StatusBadge("MODIFICA", tone = ExpressiveTone.Info) },
-        animatePress = false,
+        animatePress = true,
       )
       Row(
         modifier = Modifier.fillMaxWidth(),

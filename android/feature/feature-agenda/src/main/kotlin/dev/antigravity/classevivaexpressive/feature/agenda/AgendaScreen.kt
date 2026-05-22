@@ -1,11 +1,14 @@
 package dev.antigravity.classevivaexpressive.feature.agenda
 
 import android.content.Intent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -415,11 +418,19 @@ private fun CalendarDayCell(
   modifier: Modifier = Modifier,
 ) {
   val isSunday = date.dayOfWeek == DayOfWeek.SUNDAY
-  val containerColor = when {
+  val interactionSource = remember { MutableInteractionSource() }
+  val isPressed by interactionSource.collectIsPressedAsState()
+  val targetContainerColor = when {
     selected -> MaterialTheme.colorScheme.primary
+    isPressed -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.38f)
     isToday -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
     else -> Color.Transparent
   }
+  val containerColor by animateColorAsState(
+    targetValue = targetContainerColor,
+    animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
+    label = "calendarDayPressColor",
+  )
   val textColor = when {
     selected -> MaterialTheme.colorScheme.onPrimary
     isSunday -> MaterialTheme.colorScheme.primary
@@ -430,7 +441,11 @@ private fun CalendarDayCell(
   Column(
     modifier = modifier
       .height(60.dp)
-      .clickable(onClick = onClick),
+      .clickable(
+        interactionSource = interactionSource,
+        indication = null,
+        onClick = onClick,
+      ),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(2.dp),
   ) {
@@ -492,6 +507,8 @@ private fun AgendaEntryRow(
     subtitle = entry.subject ?: entry.subtitle,
     eyebrow = entry.time ?: categoryLabel(entry.category),
     meta = buildList {
+      entry.createdAtLabel()?.let { add("Aggiunto: $it") }
+      entry.modifiedAtLabel()?.let { add("Modificato: $it") }
       entry.detail?.takeIf(String::isNotBlank)?.let(::add)
       entry.teacher?.takeIf(String::isNotBlank)?.let(::add)
     }.joinToString(" / ").ifBlank { null },
@@ -511,7 +528,7 @@ private fun AgendaEntryRow(
     onClick = onClick,
     onLongClick = onLongClick,
     modifier = modifier,
-    animatePress = false,
+    animatePress = true,
   )
 }
 
@@ -550,7 +567,10 @@ private fun AgendaDetailSheet(
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           InfoLine(label = "Data evento", value = entry.eventDateLabel())
           entry.createdAtLabel()?.let { addedAt ->
-            InfoLine(label = if (entry.history.isEmpty()) "Aggiunto" else "Ultima modifica", value = addedAt)
+            InfoLine(label = "Aggiunto", value = addedAt)
+          }
+          entry.modifiedAtLabel()?.let { modifiedAt ->
+            InfoLine(label = "Modificato", value = modifiedAt)
           }
           entry.subject?.takeIf(String::isNotBlank)?.let { subject ->
             InfoLine(label = "Materia", value = subject)
@@ -629,7 +649,7 @@ private fun AgendaHistorySection(entry: AgendaEntry) {
       eventDate = entry.eventDateLabel(),
       detail = entry.detail,
       teacher = entry.teacher,
-      recordedAt = entry.createdAtLabel(),
+      recordedAt = entry.modifiedAtLabel(),
       category = entry.category,
     )
     entry.history.forEachIndexed { index, version ->
@@ -758,7 +778,7 @@ private fun AddEventSheet(
           tone = ExpressiveTone.Primary,
           onClick = { showDatePicker = true },
           badge = { StatusBadge("SELEZIONA", tone = ExpressiveTone.Primary) },
-          animatePress = false,
+          animatePress = true,
         )
       }
       item {
@@ -769,7 +789,7 @@ private fun AddEventSheet(
           tone = ExpressiveTone.Info,
           onClick = { showTimePicker = true },
           badge = { StatusBadge(if (time.isBlank()) "OPZIONALE" else "IMPOSTATA", tone = ExpressiveTone.Info) },
-          animatePress = false,
+          animatePress = true,
         )
       }
       item {
@@ -940,11 +960,17 @@ private fun AgendaEntry.createdAtLabel(): String? {
   }.getOrElse { value }
 }
 
+private fun AgendaEntry.modifiedAtLabel(): String? {
+  return history.maxByOrNull { it.recordedAtEpochMillis }
+    ?.recordedAtEpochMillis
+    ?.toReadableDateTime()
+}
+
 private fun AgendaItemVersion.eventDateLabel(): String {
   return buildList {
     add(date.toLocalDateOrNull()?.format(eventDateFormatter)?.replaceFirstChar { it.uppercase() } ?: date)
     time?.takeIf(String::isNotBlank)?.let(::add)
-  }.joinToString(" â€¢ ")
+  }.joinToString(" • ")
 }
 
 private fun Long.toReadableDateTime(): String {

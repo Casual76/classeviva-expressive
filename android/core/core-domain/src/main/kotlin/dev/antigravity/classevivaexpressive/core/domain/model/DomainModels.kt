@@ -259,6 +259,8 @@ data class Homework(
   val subject: String,
   val description: String,
   val dueDate: String,
+  val createdAt: String? = null,
+  val history: List<AgendaItemVersion> = emptyList(),
   val notes: String? = null,
   val attachments: List<RemoteAttachment> = emptyList(),
 )

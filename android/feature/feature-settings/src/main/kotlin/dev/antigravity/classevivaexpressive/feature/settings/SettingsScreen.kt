@@ -33,7 +33,6 @@ import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.ColorLens
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -74,6 +73,7 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.NotesChannel
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.LiveTimetableChannelId
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
@@ -469,7 +469,7 @@ fun SettingsRoute(
         item {
           SettingToggleRow(
             title = "Sincronizzazione periodica",
-            subtitle = "Mantiene aggiornati i dati in background ogni 5 minuti.",
+            subtitle = "Mantiene aggiornati i dati in background ogni 2 minuti.",
             checked = state.settings.periodicSyncEnabled,
             onCheckedChange = viewModel::setPeriodicSync,
             icon = { Icon(Icons.Rounded.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
@@ -561,7 +561,7 @@ fun SettingsRoute(
           ExpressiveCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               Icon(Icons.Rounded.ColorLens, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-              Text("Modalita Colore", style = MaterialTheme.typography.titleMedium)
+              Text("Modalità colore", style = MaterialTheme.typography.titleMedium)
             }
             FlowRow(
               horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -622,7 +622,7 @@ fun SettingsRoute(
         item {
           SectionTitle(
             eyebrow = "Configurazione",
-            title = "Connettivita e Registro",
+            title = "Connettività e registro",
           )
         }
         item {
@@ -649,7 +649,7 @@ fun SettingsRoute(
               Text("Backup Impostazioni", style = MaterialTheme.typography.titleMedium)
             }
             Text(
-              "Esporta o ripristina preferenze, anno scolastico, orario salvato, eventi personalizzati, obiettivi materia e dati locali come voti simulati o gia visti.",
+              "Esporta o ripristina preferenze, anno scolastico, orario salvato, eventi personalizzati, obiettivi materia e dati locali come voti simulati o già visti.",
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -748,9 +748,8 @@ private fun AppUpdateSettingsCard(
         enabled = !isChecking,
       ) {
         if (isChecking) {
-          CircularProgressIndicator(
+          ExpressiveLoading(
             modifier = Modifier.size(18.dp),
-            strokeWidth = 2.dp,
           )
           Text("Controllo...")
         } else {

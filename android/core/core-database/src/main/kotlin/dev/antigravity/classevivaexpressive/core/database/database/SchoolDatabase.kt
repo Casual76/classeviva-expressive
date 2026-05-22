@@ -10,6 +10,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -116,6 +118,7 @@ data class GradeEntity(
   val periodCode: String?,
   val teacher: String?,
   val color: String?,
+  val firstSeenAtMs: Long? = null,
 )
 
 @Serializable
@@ -488,7 +491,7 @@ interface AttachmentCacheDao {
     ReadNoteEntity::class,
     AttachmentCacheEntity::class,
   ],
-  version = 8,
+  version = 9,
   exportSchema = false,
 )
 abstract class SchoolDatabase : RoomDatabase() {
@@ -510,6 +513,50 @@ abstract class SchoolDatabase : RoomDatabase() {
   abstract fun attachmentCacheDao(): AttachmentCacheDao
 }
 
+val MIGRATION_6_7 = object : Migration(6, 7) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL(
+      """
+      CREATE TABLE IF NOT EXISTS `attachment_cache` (
+        `urlKey` TEXT NOT NULL,
+        `sourceUrl` TEXT NOT NULL,
+        `localPath` TEXT NOT NULL,
+        `fileName` TEXT NOT NULL,
+        `mimeType` TEXT,
+        `downloadedAtMs` INTEGER NOT NULL,
+        `lastAccessedMs` INTEGER NOT NULL,
+        PRIMARY KEY(`urlKey`)
+      )
+      """.trimIndent(),
+    )
+  }
+}
+
+val MIGRATION_7_8 = object : Migration(7, 8) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL(
+      """
+      CREATE TABLE IF NOT EXISTS `change_history` (
+        `id` TEXT NOT NULL,
+        `studentId` TEXT NOT NULL,
+        `schoolYearId` TEXT NOT NULL,
+        `itemKind` TEXT NOT NULL,
+        `itemId` TEXT NOT NULL,
+        `recordedAtEpochMillis` INTEGER NOT NULL,
+        `payload` TEXT NOT NULL,
+        PRIMARY KEY(`id`)
+      )
+      """.trimIndent(),
+    )
+  }
+}
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL("ALTER TABLE grades ADD COLUMN firstSeenAtMs INTEGER")
+  }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -518,7 +565,7 @@ object DatabaseModule {
   fun provideDatabase(@ApplicationContext context: Context): SchoolDatabase {
     return Room
       .databaseBuilder(context, SchoolDatabase::class.java, "classeviva_expressive_native.db")
-      .fallbackToDestructiveMigration()
+      .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
       .build()
   }
 

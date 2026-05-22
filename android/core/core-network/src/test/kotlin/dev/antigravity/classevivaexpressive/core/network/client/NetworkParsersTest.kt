@@ -114,6 +114,26 @@ class NetworkParsersTest {
   }
 
   @Test
+  fun noticeboardAttachmentUrls_useFileIndexForDownloads() {
+    assertEquals(
+      "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/attach/CF/99/1",
+      buildNoticeboardAttachmentUrl("55", "CF", "99", 1),
+    )
+    assertEquals(
+      "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/attach/CF/99/1",
+      normalizeNoticeboardAttachmentUrl("https://web.spaggiari.eu/rest/v1/students/55/noticeboard/attach/CF/99/101"),
+    )
+    assertEquals(
+      listOf(
+        "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/attach/CF/99/1",
+        "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/attach/CF/99/101",
+        "https://web.spaggiari.eu/rest/v1/students/55/noticeboard/attach/CF/99/0",
+      ),
+      noticeboardAttachmentDownloadCandidates("https://web.spaggiari.eu/rest/v1/students/55/noticeboard/attach/CF/99/101"),
+    )
+  }
+
+  @Test
   fun normalizeCommunication_readsClassevivaReadStatusLabelsAndActionFlags() {
     val unread = normalizeCommunication(
       Json.parseToJsonElement(
@@ -673,7 +693,8 @@ class NetworkParsersTest {
           "hwId": "hw1",
           "subjectDesc": "Matematica",
           "contenuto": "Esercizi pag. 45-47",
-          "dataConsegna": "2026-03-25"
+          "dataConsegna": "2026-03-25",
+          "evtInsDatetime": "2026-03-20T18:45:00+01:00"
         }
         """.trimIndent(),
       ),
@@ -683,6 +704,7 @@ class NetworkParsersTest {
     assertEquals("Matematica", hw.subject)
     assertEquals("Esercizi pag. 45-47", hw.description)
     assertEquals("2026-03-25", hw.dueDate)
+    assertEquals("2026-03-20T18:45", hw.createdAt)
   }
 
   @Test

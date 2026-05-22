@@ -14,6 +14,8 @@ import dev.antigravity.classevivaexpressive.core.domain.model.MaterialAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardAction
+import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardActionType
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolbookCourse
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
@@ -29,6 +31,7 @@ import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 
 private const val RestBaseUrl = "https://web.spaggiari.eu/rest/"
+private val NoticeboardAttachmentIndexedUrl = Regex("""(.*/noticeboard/attach/[^/]+/[^/?#]+)/(\d+)([?#].*)?$""")
 
 class ClassevivaNetworkException(message: String, cause: Throwable? = null) : IOException(message, cause)
 
@@ -203,6 +206,21 @@ class ClassevivaRestClient @Inject constructor(
       val isAlreadyRead = msg.contains("already", ignoreCase = true) ||
         msg.contains("gia", ignoreCase = true) || msg.contains("read", ignoreCase = true)
       if (!isAlreadyRead) throw e
+    }
+  }
+
+  /**
+   * Conferma una comunicazione di bacheca ("Conferma lettura") richiamando direttamente
+   * l'endpoint di lettura, che su Classeviva registra la ricezione ed è pienamente supportato.
+   */
+  suspend fun confirmNoticeboard(communication: Communication): Unit = withContext(Dispatchers.IO) {
+    android.util.Log.i("RestClient", "CONFIRM NOTICEBOARD: starting for pubId=${communication.pubId}, evtCode=${communication.evtCode}")
+    try {
+      markNoticeboardRead(pubId = communication.pubId, evtCode = communication.evtCode)
+      android.util.Log.i("RestClient", "CONFIRM NOTICEBOARD - Read confirmation succeeded!")
+    } catch (e: Exception) {
+      android.util.Log.e("RestClient", "CONFIRM NOTICEBOARD - Read confirmation failed", e)
+      throw e
     }
   }
 
@@ -391,7 +409,7 @@ class ClassevivaRestClient @Inject constructor(
     cause: Throwable? = null,
   ): ClassevivaNetworkException {
     val message = when (code) {
-      401 -> "Sessione scaduta o credenziali non piu valide."
+      401 -> "Sessione scaduta o credenziali non più valide."
       404 -> "Risorsa Classeviva non trovata."
       500 -> "Classeviva ha restituito un errore server."
       else -> "Classeviva ha risposto con $code${payload.takeIf(String::isNotBlank)?.let { ": $it" } ?: ""}"
@@ -420,13 +438,14 @@ class ClassevivaRestClient @Inject constructor(
     communication: Communication,
   ): CommunicationDetail {
     return apiCall {
+      val root = apiService.readNoticeboard(
+        studentId = session.studentId,
+        evtCode = communication.evtCode,
+        pubId = communication.pubId,
+        body = noticeboardDetailPayload(communication),
+      ).toPayload()
       normalizeCommunicationDetail(
-        apiService.readNoticeboard(
-          studentId = session.studentId,
-          evtCode = communication.evtCode,
-          pubId = communication.pubId,
-          body = noticeboardDetailPayload(communication),
-        ).toPayload(),
+        root,
         communication,
       ).withOfficialAttachmentUrls(session.studentId)
     }
@@ -466,20 +485,45 @@ class ClassevivaRestClient @Inject constructor(
 
 private fun Communication.withOfficialAttachmentUrls(studentId: String): Communication {
   if (attachments.isEmpty() && noticeboardAttachments.isEmpty()) return this
-  val officialUrl = "${RestBaseUrl}v1/students/$studentId/noticeboard/attach/$evtCode/$pubId/101"
 
-  val updatedAttachments = attachments.map { attachment ->
-    if (attachment.url.isNullOrBlank()) attachment.copy(url = officialUrl, portalOnly = false) else attachment
-  }
-  val updatedNoticeboardAttachments = noticeboardAttachments.map { attachment ->
-    if (attachment.url.isNullOrBlank()) {
-      attachment.copy(
-        url = officialUrl,
+  val updatedAttachments = attachments.mapIndexed { index, attachment ->
+    val officialUrl = buildNoticeboardAttachmentUrl(studentId, evtCode, pubId, index + 1)
+    when {
+      attachment.url.isNullOrBlank() -> attachment.copy(url = officialUrl, portalOnly = false)
+      attachment.url.isLegacyNoticeboardAttachmentUrl() -> attachment.copy(
+        url = normalizeNoticeboardAttachmentUrl(attachment.url.orEmpty()),
         portalOnly = false,
-        action = attachment.action?.copy(url = officialUrl),
       )
-    } else {
-      attachment
+      else -> attachment
+    }
+  }
+  val updatedNoticeboardAttachments = noticeboardAttachments.mapIndexed { index, attachment ->
+    val officialUrl = buildNoticeboardAttachmentUrl(studentId, evtCode, pubId, index + 1)
+    when {
+      attachment.url.isNullOrBlank() -> {
+        attachment.copy(
+          url = officialUrl,
+          portalOnly = false,
+          action = attachment.action?.copy(url = officialUrl) ?: NoticeboardAction(
+            type = NoticeboardActionType.DOWNLOAD,
+            label = "Scarica allegato",
+            url = officialUrl,
+          ),
+        )
+      }
+      attachment.url.isLegacyNoticeboardAttachmentUrl() -> {
+        val normalizedUrl = normalizeNoticeboardAttachmentUrl(attachment.url.orEmpty())
+        attachment.copy(
+          url = normalizedUrl,
+          portalOnly = false,
+          action = attachment.action?.copy(url = normalizedUrl) ?: NoticeboardAction(
+            type = NoticeboardActionType.DOWNLOAD,
+            label = "Scarica allegato",
+            url = normalizedUrl,
+          ),
+        )
+      }
+      else -> attachment
     }
   }
   return copy(
@@ -497,11 +541,48 @@ private fun Communication.withOfficialAttachmentUrls(studentId: String): Communi
         detail = "Il dettaglio e gli allegati ufficiali sono disponibili in app.",
       )
       else -> capabilityState
-    },
+    }
   )
 }
 
 private fun CommunicationDetail.withOfficialAttachmentUrls(studentId: String): CommunicationDetail {
   val updatedCommunication = communication.withOfficialAttachmentUrls(studentId)
   return copy(communication = updatedCommunication)
+}
+
+private fun Communication.requiresAdvancedNoticeboardAnswer(): Boolean {
+  return needsAck || needsReply || needsJoin || needsFile
+}
+
+fun buildNoticeboardAttachmentUrl(
+  studentId: String,
+  evtCode: String,
+  pubId: String,
+  oneBasedAttachmentIndex: Int,
+): String {
+  val safeIndex = oneBasedAttachmentIndex.coerceAtLeast(1)
+  return "${RestBaseUrl}v1/students/$studentId/noticeboard/attach/$evtCode/$pubId/$safeIndex"
+}
+
+fun normalizeNoticeboardAttachmentUrl(url: String): String {
+  val match = NoticeboardAttachmentIndexedUrl.matchEntire(url) ?: return url
+  return if (match.groupValues[2] == "101") {
+    "${match.groupValues[1]}/1${match.groupValues[3]}"
+  } else {
+    url
+  }
+}
+
+fun noticeboardAttachmentDownloadCandidates(url: String): List<String> {
+  val normalized = normalizeNoticeboardAttachmentUrl(url)
+  val zeroBased = NoticeboardAttachmentIndexedUrl.matchEntire(url)
+    ?.takeIf { it.groupValues[2] == "101" }
+    ?.let { "${it.groupValues[1]}/0${it.groupValues[3]}" }
+  return listOfNotNull(normalized, url, zeroBased).distinct()
+}
+
+private fun String?.isLegacyNoticeboardAttachmentUrl(): Boolean {
+  if (this.isNullOrBlank()) return false
+  val match = NoticeboardAttachmentIndexedUrl.matchEntire(this) ?: return false
+  return match.groupValues[2] == "101"
 }

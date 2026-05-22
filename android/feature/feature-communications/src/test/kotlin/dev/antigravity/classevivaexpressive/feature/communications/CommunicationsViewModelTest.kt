@@ -89,6 +89,36 @@ class CommunicationsViewModelTest {
     }
   }
 
+  @Test
+  fun openNote_setsSelectedNoteInState() = runTest {
+    stubBase()
+    val note = Note(
+      id = "n1",
+      categoryCode = "NTWN",
+      categoryLabel = "Richiamo",
+      title = "Richiamo",
+      contentPreview = "Nota breve",
+      date = "2026-03-20",
+      author = "Prof",
+      read = false,
+      severity = "warning",
+    )
+    coEvery { communicationsRepository.getNoteDetail("n1", "NTWN") } returns Result.success(
+      NoteDetail(note = note, content = "Dettaglio della nota"),
+    )
+
+    val vm = buildViewModel()
+
+    vm.state.test {
+      awaitItem()
+      vm.openNote("n1", "NTWN")
+      val updated = awaitItem()
+      assertNotNull(updated.selectedNote)
+      assertEquals("Dettaglio della nota", updated.selectedNote?.content)
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
   // ─── Apertura dettaglio comunicazione ─────────────────────────────────────
 
   @Test

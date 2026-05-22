@@ -1,6 +1,14 @@
 package dev.antigravity.classevivaexpressive
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
@@ -9,6 +17,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,9 +28,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Grade
@@ -33,16 +46,18 @@ import androidx.compose.material.icons.rounded.PeopleAlt
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SportsScore
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -60,6 +75,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -88,6 +104,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaEx
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveScreenSurface
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
@@ -110,6 +127,10 @@ import dev.antigravity.classevivaexpressive.feature.grades.GradesRoute
 import dev.antigravity.classevivaexpressive.feature.lessons.LessonsRoute
 import dev.antigravity.classevivaexpressive.feature.lessons.ProfessorsRoute
 import dev.antigravity.classevivaexpressive.feature.settings.SettingsRoute
+
+private const val BugReportRepositoryOwner = "Casual76"
+private const val BugReportRepositoryName = "classeviva-expressive"
+private const val BugReportTemplateName = "app_bug_report.md"
 
 private data class TopLevelDestination(
   val baseRoute: String,
@@ -135,6 +156,20 @@ fun MainApp(
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     viewModel.onAppResumed()
+  }
+
+  val context = LocalContext.current
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+    val permissionLauncher = rememberLauncherForActivityResult(
+      contract = ActivityResultContracts.RequestPermission(),
+      onResult = { }
+    )
+    LaunchedEffect(Unit) {
+      val permission = android.Manifest.permission.POST_NOTIFICATIONS
+      if (context.checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        permissionLauncher.launch(permission)
+      }
+    }
   }
 
   ClassevivaExpressiveTheme(settings = uiState.settings) {
@@ -168,6 +203,230 @@ fun MainApp(
       }
     }
   }
+}
+
+@Composable
+private fun BugReportDialog(
+  currentRoute: String,
+  onDismiss: () -> Unit,
+) {
+  val context = LocalContext.current
+  var title by rememberSaveable { mutableStateOf("") }
+  var description by rememberSaveable { mutableStateOf("") }
+  var steps by rememberSaveable { mutableStateOf("") }
+  var expected by rememberSaveable { mutableStateOf("") }
+  var actual by rememberSaveable { mutableStateOf("") }
+  var copied by rememberSaveable { mutableStateOf(false) }
+
+  val reportBody = remember(title, description, steps, expected, actual, currentRoute) {
+    buildBugReportBody(
+      context = context,
+      currentRoute = currentRoute,
+      description = description,
+      steps = steps,
+      expected = expected,
+      actual = actual,
+    )
+  }
+  val issueUri = remember(title, reportBody) {
+    buildBugReportIssueUri(title = title, body = reportBody)
+  }
+  val canOpenIssue = title.isNotBlank() && description.isNotBlank()
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Segnala bug") },
+    text = {
+      Column(
+        modifier = Modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        Surface(
+          modifier = Modifier.fillMaxWidth(),
+          shape = MaterialTheme.shapes.medium,
+          color = MaterialTheme.colorScheme.errorContainer,
+          contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ) {
+          Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Top,
+          ) {
+            Icon(
+              imageVector = Icons.Rounded.WarningAmber,
+              contentDescription = null,
+              modifier = Modifier.size(20.dp),
+            )
+            Text(
+              text = "Il report aprirà una issue GitHub pubblica, visibile da chiunque. Non inserire token, credenziali, nomi di studenti, nomi di docenti, screenshot con dati personali o dettagli scolastici sensibili.",
+              style = MaterialTheme.typography.bodyMedium,
+            )
+          }
+        }
+        OutlinedTextField(
+          value = title,
+          onValueChange = {
+            title = it
+            copied = false
+          },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Titolo") },
+          singleLine = true,
+        )
+        OutlinedTextField(
+          value = description,
+          onValueChange = {
+            description = it
+            copied = false
+          },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Descrizione") },
+          minLines = 3,
+        )
+        OutlinedTextField(
+          value = steps,
+          onValueChange = {
+            steps = it
+            copied = false
+          },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Passaggi per riprodurre") },
+          minLines = 3,
+        )
+        OutlinedTextField(
+          value = expected,
+          onValueChange = {
+            expected = it
+            copied = false
+          },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Comportamento atteso") },
+          minLines = 2,
+        )
+        OutlinedTextField(
+          value = actual,
+          onValueChange = {
+            actual = it
+            copied = false
+          },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Comportamento ottenuto") },
+          minLines = 2,
+        )
+        if (copied) {
+          Text(
+            text = "Report copiato negli appunti.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+          )
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          context.startActivity(Intent(Intent.ACTION_VIEW, issueUri))
+          onDismiss()
+        },
+        enabled = canOpenIssue,
+      ) {
+        Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
+        Text("Apri GitHub")
+      }
+    },
+    dismissButton = {
+      Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        OutlinedButton(
+          onClick = {
+            context.copyBugReport(reportBody)
+            copied = true
+          },
+        ) {
+          Icon(Icons.Rounded.ContentCopy, contentDescription = null)
+          Text("Copia report")
+        }
+        TextButton(onClick = onDismiss) {
+          Text("Chiudi")
+        }
+      }
+    },
+  )
+}
+
+private fun buildBugReportIssueUri(
+  title: String,
+  body: String,
+): Uri {
+  val issueTitle = "[Bug] ${title.trim().ifBlank { "Segnalazione app" }.take(90)}"
+  return Uri.Builder()
+    .scheme("https")
+    .authority("github.com")
+    .appendPath(BugReportRepositoryOwner)
+    .appendPath(BugReportRepositoryName)
+    .appendPath("issues")
+    .appendPath("new")
+    .appendQueryParameter("template", BugReportTemplateName)
+    .appendQueryParameter("labels", "bug,app-report")
+    .appendQueryParameter("title", issueTitle)
+    .appendQueryParameter("body", body)
+    .build()
+}
+
+private fun buildBugReportBody(
+  context: Context,
+  currentRoute: String,
+  description: String,
+  steps: String,
+  expected: String,
+  actual: String,
+): String {
+  return """
+    ## Descrizione
+    ${reportValue(description)}
+
+    ## Passaggi per riprodurre
+    ${reportValue(steps)}
+
+    ## Comportamento atteso
+    ${reportValue(expected)}
+
+    ## Comportamento ottenuto
+    ${reportValue(actual)}
+
+    ## Diagnostica anonima
+    - App: ${context.appVersionLabel()}
+    - Package: ${context.packageName}
+    - Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})
+    - Dispositivo: ${Build.MANUFACTURER} ${Build.MODEL}
+    - Schermata: $currentRoute
+    - Timestamp: ${java.time.OffsetDateTime.now()}
+  """.trimIndent()
+}
+
+private fun reportValue(value: String): String {
+  return value.trim().ifBlank { "_Non specificato._" }
+}
+
+private fun Context.appVersionLabel(): String {
+  return runCatching {
+    val info = packageManager.getPackageInfo(packageName, 0)
+    val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      info.longVersionCode
+    } else {
+      @Suppress("DEPRECATION")
+      info.versionCode.toLong()
+    }
+    "${info.versionName ?: BuildConfig.VERSION_NAME} ($versionCode)"
+  }.getOrElse {
+    "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+  }
+}
+
+private fun Context.copyBugReport(report: String) {
+  val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+  clipboard.setPrimaryClip(
+    ClipData.newPlainText("Classeviva Expressive bug report", report),
+  )
 }
 
 @Composable
@@ -217,7 +476,7 @@ private fun AppUpdateDialog(
           Text("Ignora")
         }
         TextButton(onClick = onLater, enabled = !busy) {
-          Text("Piu tardi")
+          Text("Più tardi")
         }
       }
     },
@@ -240,7 +499,7 @@ private fun LoadingScreen() {
     modifier = Modifier.fillMaxSize(),
     contentAlignment = Alignment.Center,
   ) {
-    CircularProgressIndicator()
+    ExpressiveLoading()
   }
 }
 
@@ -331,9 +590,8 @@ internal fun LoginScreen(
           enabled = username.isNotBlank() && password.isNotBlank() && !isLoading,
         ) {
           if (isLoading) {
-            CircularProgressIndicator(
+            ExpressiveLoading(
               modifier = Modifier.size(18.dp),
-              strokeWidth = 2.dp,
               color = MaterialTheme.colorScheme.onPrimary,
             )
           } else {
@@ -543,6 +801,7 @@ private fun AuthenticatedApp(
         }
         composable("more") {
           MoreHubScreen(
+            currentRoute = currentRoute ?: "more",
             onOpenNotes = { navController.navigate("communications?tab=notes") },
             onOpenLessons = { navController.navigate("lessons") },
             onOpenAbsences = { navController.navigate("absences") },
@@ -593,6 +852,7 @@ private fun AuthenticatedApp(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MoreHubScreen(
+  currentRoute: String = "more",
   onOpenLessons: () -> Unit,
   onOpenAbsences: () -> Unit,
   onOpenMaterials: () -> Unit,
@@ -603,6 +863,7 @@ private fun MoreHubScreen(
   onOpenProfessors: () -> Unit,
 ) {
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+  var showBugReport by rememberSaveable { mutableStateOf(false) }
 
   Scaffold(
     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -705,6 +966,17 @@ private fun MoreHubScreen(
       item { ExpressiveAccentLabel("Profilo") }
       item {
         RegisterListRow(
+          title = "Segnala bug",
+          subtitle = "Prepara una issue GitHub con descrizione e diagnostica anonima.",
+          eyebrow = "Feedback",
+          tone = ExpressiveTone.Info,
+          onClick = { showBugReport = true },
+          badge = { StatusBadge("BUG", tone = ExpressiveTone.Info) },
+          leading = { Icon(Icons.Rounded.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        )
+      }
+      item {
+        RegisterListRow(
           title = "Profilo e impostazioni",
           subtitle = "Tema, notifiche, canali Android, sync periodica e account attivo.",
           eyebrow = "Profilo",
@@ -715,5 +987,12 @@ private fun MoreHubScreen(
         )
       }
     }
+  }
+
+  if (showBugReport) {
+    BugReportDialog(
+      currentRoute = currentRoute,
+      onDismiss = { showBugReport = false },
+    )
   }
 }

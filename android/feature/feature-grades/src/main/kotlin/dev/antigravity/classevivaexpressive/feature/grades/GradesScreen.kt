@@ -409,7 +409,7 @@ fun GradesRoute(
         if (periodUnseen.isNotEmpty()) {
           item {
             QuickAction(
-              label = "Segna tutto come gia visto",
+              label = "Segna tutto come già visto",
               onClick = { viewModel.markGradesSeen(periodUnseen.map(Grade::id)) },
             )
           }
@@ -452,7 +452,7 @@ fun GradesRoute(
                     GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
                   },
                   onClick = { viewModel.openGrade(grade.id) },
-                  animatePress = false,
+                  animatePress = true,
                 )
               }
             }
@@ -488,7 +488,7 @@ fun GradesRoute(
                     )
                   },
                   onClick = { detailSubject = row.subject },
-                  animatePress = false,
+                  animatePress = true,
                 )
               }
             }
@@ -681,7 +681,7 @@ private fun SubjectDetailSheet(
             meta = grade.description ?: grade.notes,
             tone = gradeTone(grade.numericValue),
             onClick = { onOpenGrade(grade.id) },
-            animatePress = false,
+            animatePress = true,
           )
       }
       item { Spacer(Modifier.height(32.dp)) }

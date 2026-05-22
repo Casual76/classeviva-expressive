@@ -159,6 +159,7 @@ internal fun normalizeHomework(data: JsonElement): Homework {
     subject = resolveSubject(obj).orEmpty(),
     description = sanitizeRegisterText(obj.string("contenuto", "description", "notes", "title")).orEmpty(),
     dueDate = normalizeDate(obj.string("dataConsegna", "dueDate", "date", "evtDate", "evtDatetimeEnd")),
+    createdAt = normalizeDateTimeOrNull(obj.string("evtInsDatetime", "mdtPubl", "crtDT", "insertDate", "assignedDate")),
     notes = sanitizeRegisterText(obj.string("note", "notesForFamily", "notes")),
     attachments = normalizeAttachments(obj["allegati"] ?: obj["attachments"]),
   )

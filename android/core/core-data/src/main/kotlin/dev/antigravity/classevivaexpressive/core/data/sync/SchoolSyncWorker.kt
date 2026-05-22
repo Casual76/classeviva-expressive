@@ -4,9 +4,9 @@ import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
@@ -30,7 +30,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.first
 
-private const val RefreshIntervalMinutes = 15L
+private const val RefreshIntervalMinutes = 2L
 private const val TimetableMaxAgeMillis: Long = 24L * 60L * 60L * 1000L
 
 @HiltWorker
@@ -66,6 +66,9 @@ class SchoolSyncWorker @AssistedInject constructor(
         runCatching { regenerateTemplateIfStale() }
       }
     }
+    if (settingsStore.settings.first().periodicSyncEnabled) {
+      SyncWorkScheduler.scheduleNext(applicationContext)
+    }
     return Result.success()
   }
 
@@ -93,27 +96,36 @@ class SchoolSyncWorker @AssistedInject constructor(
   }
 
   companion object {
-    const val UniquePeriodicWorkName = "classeviva-expressive-periodic-sync"
+    const val UniqueWorkName = "classeviva-expressive-periodic-sync"
   }
 }
 
 object SyncWorkScheduler {
   fun schedule(context: Context) {
-    val request = PeriodicWorkRequestBuilder<SchoolSyncWorker>(RefreshIntervalMinutes, TimeUnit.MINUTES)
+    enqueue(context, ExistingWorkPolicy.REPLACE)
+  }
+
+  internal fun scheduleNext(context: Context) {
+    enqueue(context, ExistingWorkPolicy.APPEND_OR_REPLACE)
+  }
+
+  private fun enqueue(context: Context, policy: ExistingWorkPolicy) {
+    val request = OneTimeWorkRequestBuilder<SchoolSyncWorker>()
+      .setInitialDelay(RefreshIntervalMinutes, TimeUnit.MINUTES)
       .setConstraints(
         Constraints.Builder()
           .setRequiredNetworkType(NetworkType.CONNECTED)
           .build(),
       )
       .build()
-    WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-      SchoolSyncWorker.UniquePeriodicWorkName,
-      ExistingPeriodicWorkPolicy.KEEP,
+    WorkManager.getInstance(context).enqueueUniqueWork(
+      SchoolSyncWorker.UniqueWorkName,
+      policy,
       request,
     )
   }
 
   fun cancel(context: Context) {
-    WorkManager.getInstance(context).cancelUniqueWork(SchoolSyncWorker.UniquePeriodicWorkName)
+    WorkManager.getInstance(context).cancelUniqueWork(SchoolSyncWorker.UniqueWorkName)
   }
 }

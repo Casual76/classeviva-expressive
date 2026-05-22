@@ -25,8 +25,8 @@ android {
     applicationId configuredApplicationId
     minSdk 26
     targetSdk 36
-    versionCode 2026051601
-    versionName "5.7.13"
+    versionCode 2026052206
+    versionName "6.0.6"
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
   }
@@ -117,6 +117,9 @@ dependencies {
   ksp libs.androidx.hilt.compiler
 
   testImplementation libs.junit4
+  testImplementation libs.mockk
+  testImplementation libs.kotlinx.coroutines.test
+  testImplementation libs.turbine
   androidTestImplementation platform(libs.compose.bom)
   androidTestImplementation libs.androidx.test.ext.junit
   androidTestImplementation libs.espresso.core

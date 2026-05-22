@@ -120,11 +120,12 @@ interface ClassevivaApiService {
   ): JsonObject
 
   @Streaming
-  @GET("v1/students/{id}/noticeboard/attach/{evtCode}/{pubId}/101")
+  @GET("v1/students/{id}/noticeboard/attach/{evtCode}/{pubId}/{attachmentIndex}")
   suspend fun downloadNoticeboardAttachment(
     @Path("id") studentId: String,
     @Path("evtCode") evtCode: String,
     @Path("pubId") pubId: String,
+    @Path("attachmentIndex") attachmentIndex: Int = 1,
   ): ResponseBody
 
   @GET("v1/students/{id}/notes/all")

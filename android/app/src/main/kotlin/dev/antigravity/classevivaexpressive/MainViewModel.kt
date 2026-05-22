@@ -177,7 +177,11 @@ class MainViewModel @Inject constructor(
       isCheckingUpdate.value = true
       if (showNoUpdateMessage) updateCheckMessage.value = null
       try {
-        val ignoredVersion = settingsRepository.observeSettings().first().ignoredStableUpdateVersion
+        val ignoredVersion = if (showNoUpdateMessage) {
+          ""
+        } else {
+          settingsRepository.observeSettings().first().ignoredStableUpdateVersion
+        }
         appUpdateRepository.checkForStableUpdate(
           currentVersionName = BuildConfig.VERSION_NAME,
           ignoredVersion = ignoredVersion,
