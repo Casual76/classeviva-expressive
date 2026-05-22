@@ -779,10 +779,7 @@ private fun CommunicationActions(
     verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
     if (canAck) {
-      val ackLabel = when {
-        detail.communication.needsAck || !detail.acknowledgeUrl.isNullOrBlank() -> "Firma presa visione"
-        else -> "Conferma lettura"
-      }
+      val ackLabel = "Conferma lettura"
       FilledTonalButton(onClick = onAcknowledge, modifier = Modifier.fillMaxWidth()) {
         Text(ackLabel)
       }
