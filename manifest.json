@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.4",
+      "version": "6.0.5",
       "releaseDate": "2026-05-22",
-      "changelog": "Release 6.0.4",
-      "releaseTag": "stable-classeviva-expressive-v6.0.4",
-      "apkAsset": "classeviva-expressive-6.0.4.apk",
+      "changelog": "Rimosse tutte le funzionalità di firma speculativa per le comunicazioni di bacheca, ottimizzando la conferma lettura nativa (Conferma Lettura) tramite l'endpoint ufficiale.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.5",
+      "apkAsset": "classeviva-expressive-6.0.5.apk",
       "exeAsset": "",
-      "sizeBytes": 20821623
+      "sizeBytes": 20821626
     },
     "beta": {
-      "version": "6.0.4",
+      "version": "6.0.5",
       "releaseDate": "2026-05-22",
-      "changelog": "Release 6.0.4",
-      "releaseTag": "stable-classeviva-expressive-v6.0.4",
-      "apkAsset": "classeviva-expressive-6.0.4.apk",
+      "changelog": "Rimosse tutte le funzionalità di firma speculativa per le comunicazioni di bacheca, ottimizzando la conferma lettura nativa (Conferma Lettura) tramite l'endpoint ufficiale.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.5",
+      "apkAsset": "classeviva-expressive-6.0.5.apk",
       "exeAsset": "",
-      "sizeBytes": 20821623
+      "sizeBytes": 20821626
     },
     "history": [
+      {
+        "version": "6.0.4",
+        "releaseDate": "2026-05-22",
+        "changelog": "Release 6.0.4",
+        "releaseTag": "stable-classeviva-expressive-v6.0.4",
+        "apkAsset": "classeviva-expressive-6.0.4.apk",
+        "exeAsset": "",
+        "sizeBytes": 20821623
+      },
       {
         "version": "6.0.3",
         "releaseDate": "2026-05-22",
