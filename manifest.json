@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.3",
+      "version": "6.0.4",
       "releaseDate": "2026-05-22",
-      "changelog": "Ripristina il controllo manuale aggiornamenti dalle impostazioni: il tap esplicito ora ignora le versioni precedentemente nascoste e mostra correttamente l'aggiornamento disponibile o il messaggio nessun aggiornamento.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.3",
-      "apkAsset": "classeviva-expressive-6.0.3.apk",
+      "changelog": "Release 6.0.4",
+      "releaseTag": "stable-classeviva-expressive-v6.0.4",
+      "apkAsset": "classeviva-expressive-6.0.4.apk",
       "exeAsset": "",
-      "sizeBytes": 20805230
+      "sizeBytes": 20821623
     },
     "beta": {
-      "version": "6.0.3",
+      "version": "6.0.4",
       "releaseDate": "2026-05-22",
-      "changelog": "Ripristina il controllo manuale aggiornamenti dalle impostazioni: il tap esplicito ora ignora le versioni precedentemente nascoste e mostra correttamente l'aggiornamento disponibile o il messaggio nessun aggiornamento.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.3",
-      "apkAsset": "classeviva-expressive-6.0.3.apk",
+      "changelog": "Release 6.0.4",
+      "releaseTag": "stable-classeviva-expressive-v6.0.4",
+      "apkAsset": "classeviva-expressive-6.0.4.apk",
       "exeAsset": "",
-      "sizeBytes": 20805230
+      "sizeBytes": 20821623
     },
     "history": [
+      {
+        "version": "6.0.3",
+        "releaseDate": "2026-05-22",
+        "changelog": "Ripristina il controllo manuale aggiornamenti dalle impostazioni: il tap esplicito ora ignora le versioni precedentemente nascoste e mostra correttamente l'aggiornamento disponibile o il messaggio nessun aggiornamento.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.3",
+        "apkAsset": "classeviva-expressive-6.0.3.apk",
+        "exeAsset": "",
+        "sizeBytes": 20805230
+      },
       {
         "version": "6.0.2",
         "releaseDate": "2026-05-22",
