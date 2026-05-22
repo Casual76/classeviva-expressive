@@ -20,6 +20,16 @@ class CommunicationActionHeuristicsTest {
   }
 
   @Test
+  fun shouldShowAcknowledgeAction_staysHiddenIfAlreadyRead() {
+    val detail = buildDetail(
+      communication = buildCommunication(read = true, needsAck = true),
+      content = "Messaggio con presa visione ma già letto.",
+    )
+
+    assertFalse(shouldShowAcknowledgeAction(detail))
+  }
+
+  @Test
   fun shouldShowReplyComposer_requiresAnActionableEndpoint() {
     val detail = buildDetail(
       content = "Autorizzazione uscita. Conferma adesione entro domani.",

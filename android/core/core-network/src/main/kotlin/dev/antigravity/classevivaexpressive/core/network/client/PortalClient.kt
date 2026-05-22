@@ -26,6 +26,7 @@ import android.util.Base64
 
 private const val PortalLoginUrl = "https://web.spaggiari.eu/home/app/default/login.php"
 private const val PortalBaseUrl = "https://web.spaggiari.eu"
+private const val PortalNoticeboardUrl = "$PortalBaseUrl/sif/app/default/bacheca_personale.php"
 private const val PortalUserAgent = "CVVS/std/4.1.7 Android/10"
 const val PortalMeetingsUrl = "https://web.spaggiari.eu/fml/app/default/colloqui.php"
 
@@ -36,6 +37,67 @@ data class PortalNoticeboardDetail(
   val joinUrl: String? = null,
   val fileUploadUrl: String? = null,
 )
+
+internal data class PortalNoticeboardSubmission(
+  val action: String,
+  val relationId: String,
+  val textFieldName: String? = null,
+  val fileFieldName: String? = null,
+)
+
+private data class PortalNoticeboardActionCandidate(
+  val selector: String,
+  val action: String,
+  val textFieldName: String? = null,
+  val fileFieldName: String? = null,
+)
+
+internal fun findPortalNoticeboardSubmission(
+  doc: Document,
+  keywords: List<String>,
+  textValue: String? = null,
+  fileAttachment: AttachmentPayload? = null,
+): PortalNoticeboardSubmission? {
+  val normalizedKeywords = keywords.map { it.lowercase() }
+  val candidates = when {
+    fileAttachment != null || normalizedKeywords.any { it in listOf("carica", "upload", "allega", "file") } -> listOf(
+      PortalNoticeboardActionCandidate(
+        selector = ".rispondi_file",
+        action = "insert_risposta_file",
+        fileFieldName = "file_risposta",
+      ),
+    )
+    textValue != null || normalizedKeywords.any { it in listOf("rispondi", "risposta", "reply", "invia") } -> listOf(
+      PortalNoticeboardActionCandidate(
+        selector = ".rispondi_testo",
+        action = "insert_risposta_testo",
+        textFieldName = "testo_risposta",
+      ),
+    )
+    normalizedKeywords.any { it in listOf("adesione", "aderisci", "join", "partecipa") } -> listOf(
+      PortalNoticeboardActionCandidate(".rispondi_bottone", "insert_risposta_bottone"),
+      PortalNoticeboardActionCandidate(".rispondi_conferma", "insert_risposta_conferma"),
+    )
+    normalizedKeywords.any { it in listOf("conferma", "presa", "visione", "sign", "firma", "ack") } -> listOf(
+      PortalNoticeboardActionCandidate(".rispondi_conferma", "insert_risposta_conferma"),
+      PortalNoticeboardActionCandidate(".rispondi_bottone", "insert_risposta_bottone"),
+    )
+    else -> emptyList()
+  }
+
+  return candidates.firstNotNullOfOrNull { candidate ->
+    val relationId = doc.selectFirst("${candidate.selector}[relazione_id]")
+      ?.attr("relazione_id")
+      ?.takeIf(String::isNotBlank)
+      ?: return@firstNotNullOfOrNull null
+    PortalNoticeboardSubmission(
+      action = candidate.action,
+      relationId = relationId,
+      textFieldName = candidate.textFieldName,
+      fileFieldName = candidate.fileFieldName,
+    )
+  }
+}
 
 @Singleton
 class PortalClient @Inject constructor(
@@ -129,6 +191,17 @@ class PortalClient @Inject constructor(
       val responseUrl = response.request.url.toString()
       val doc = Jsoup.parse(html, responseUrl)
 
+      val noticeboardSubmission = findPortalNoticeboardSubmission(
+        doc = doc,
+        keywords = formKeywords,
+        textValue = textValue,
+        fileAttachment = fileAttachment,
+      )
+      if (noticeboardSubmission != null) {
+        submitNoticeboardSubmission(noticeboardSubmission, textValue, fileAttachment)
+        return@withContext
+      }
+
       val form = findMatchingForm(doc, formKeywords)
       if (form != null) {
         submitForm(form, responseUrl, formKeywords, textValue, fileAttachment)
@@ -137,18 +210,11 @@ class PortalClient @Inject constructor(
 
       val link = findMatchingLink(doc, formKeywords, responseUrl)
       if (link != null) {
-        portalHttpClient.newCall(
+        executePortalRequest(
           Request.Builder().url(link).header("User-Agent", PortalUserAgent).build()
-        ).execute().close()
+        )
         return@withContext
       }
-    }
-
-    if (textValue == null && fileAttachment == null) {
-      portalHttpClient.newCall(
-        Request.Builder().url(pageUrl).header("User-Agent", PortalUserAgent).build()
-      ).execute().close()
-      return@withContext
     }
 
     throw ClassevivaNetworkException("Azione portale non riconosciuta per questo tenant.")
@@ -225,10 +291,14 @@ class PortalClient @Inject constructor(
     }
     PortalNoticeboardDetail(
       content = content,
-      acknowledgeUrl = findNoticeboardActionUrl(doc, listOf("conferma", "presa", "visione", "sign", "firma", "ack")),
-      replyUrl = findNoticeboardActionUrl(doc, listOf("rispondi", "risposta", "reply")),
-      joinUrl = findNoticeboardActionUrl(doc, listOf("adesione", "aderisci", "join", "partecipa")),
-      fileUploadUrl = findNoticeboardActionUrl(doc, listOf("carica", "upload", "allega", "file")),
+      acknowledgeUrl = findNoticeboardActionUrl(doc, listOf("conferma", "presa", "visione", "sign", "firma", "ack"))
+        ?: responseUrl.takeIf { hasPortalNoticeboardAcceptance(doc) },
+      replyUrl = findNoticeboardActionUrl(doc, listOf("rispondi", "risposta", "reply"))
+        ?: responseUrl.takeIf { hasPortalNoticeboardClass(doc, ".rispondi_testo") },
+      joinUrl = findNoticeboardActionUrl(doc, listOf("adesione", "aderisci", "join", "partecipa"))
+        ?: responseUrl.takeIf { hasPortalNoticeboardClass(doc, ".rispondi_bottone") },
+      fileUploadUrl = findNoticeboardActionUrl(doc, listOf("carica", "upload", "allega", "file"))
+        ?: responseUrl.takeIf { hasPortalNoticeboardClass(doc, ".rispondi_file") },
     )
   }
 
@@ -274,9 +344,11 @@ class PortalClient @Inject constructor(
 
   private fun findMatchingForm(doc: Document, keywords: List<String>): Element? {
     return doc.select("form").firstOrNull { form ->
-      val text = (form.text() + " " + form.attr("action")).lowercase()
+      val inputNames = form.select("input, textarea, select, button")
+        .joinToString(" ") { "${it.attr("name")} ${it.attr("id")} ${it.attr("value")} ${it.attr("placeholder")}" }
+      val text = (form.text() + " " + form.attr("action") + " " + inputNames).lowercase()
       keywords.any { text.contains(it) }
-    } ?: doc.selectFirst("form")
+    }
   }
 
   private fun findMatchingLink(doc: Document, keywords: List<String>, baseUrl: String): String? {
@@ -308,6 +380,48 @@ class PortalClient @Inject constructor(
     }
   }
 
+  private fun hasPortalNoticeboardAcceptance(doc: Document): Boolean {
+    return hasPortalNoticeboardClass(doc, ".rispondi_conferma") ||
+      hasPortalNoticeboardClass(doc, ".rispondi_bottone")
+  }
+
+  private fun hasPortalNoticeboardClass(doc: Document, selector: String): Boolean {
+    return doc.selectFirst("$selector[relazione_id]") != null
+  }
+
+  private fun submitNoticeboardSubmission(
+    submission: PortalNoticeboardSubmission,
+    textValue: String?,
+    fileAttachment: AttachmentPayload?,
+  ) {
+    if (fileAttachment != null) {
+      val multipart = MultipartBody.Builder().setType(MultipartBody.FORM)
+        .addFormDataPart("action", submission.action)
+        .addFormDataPart("relazione_id", submission.relationId)
+      val bytes = Base64.decode(fileAttachment.base64Content, Base64.DEFAULT)
+      val mediaType = (fileAttachment.mimeType ?: "application/octet-stream").toMediaType()
+      multipart.addFormDataPart(
+        submission.fileFieldName ?: "file_risposta",
+        fileAttachment.fileName,
+        bytes.toRequestBody(mediaType),
+      )
+      executePortalRequest(
+        Request.Builder().url(PortalNoticeboardUrl).header("User-Agent", PortalUserAgent).post(multipart.build()).build()
+      )
+      return
+    }
+
+    val form = FormBody.Builder()
+      .add("action", submission.action)
+      .add("relazione_id", submission.relationId)
+    if (textValue != null) {
+      form.add(submission.textFieldName ?: "testo_risposta", textValue)
+    }
+    executePortalRequest(
+      Request.Builder().url(PortalNoticeboardUrl).header("User-Agent", PortalUserAgent).post(form.build()).build()
+    )
+  }
+
   private fun submitForm(
     form: Element,
     baseUrl: String,
@@ -332,10 +446,12 @@ class PortalClient @Inject constructor(
       }
       val bytes = Base64.decode(fileAttachment.base64Content, Base64.DEFAULT)
       val mediaType = (fileAttachment.mimeType ?: "application/octet-stream").toMediaType()
-      multipart.addFormDataPart("file", fileAttachment.fileName, bytes.toRequestBody(mediaType))
-      portalHttpClient.newCall(
+      val fileFieldName = form.selectFirst("input[type=file][name]")?.attr("name")?.takeIf(String::isNotBlank)
+        ?: "file"
+      multipart.addFormDataPart(fileFieldName, fileAttachment.fileName, bytes.toRequestBody(mediaType))
+      executePortalRequest(
         Request.Builder().url(action).header("User-Agent", PortalUserAgent).post(multipart.build()).build()
-      ).execute().close()
+      )
     } else {
       val formBody = FormBody.Builder()
       form.select("input, textarea, select").forEach { input ->
@@ -346,9 +462,23 @@ class PortalClient @Inject constructor(
         }
         formBody.add(name, value)
       }
-      portalHttpClient.newCall(
+      executePortalRequest(
         Request.Builder().url(action).header("User-Agent", PortalUserAgent).post(formBody.build()).build()
-      ).execute().close()
+      )
+    }
+  }
+
+  private fun executePortalRequest(request: Request) {
+    portalHttpClient.newCall(request).execute().use { response ->
+      if (!response.isSuccessful) {
+        throw ClassevivaNetworkException("Il portale Classeviva ha rifiutato l'azione (${response.code}).")
+      }
+      val finalUrl = response.request.url
+      val finalHost = finalUrl.host.lowercase()
+      val finalPath = finalUrl.encodedPath.lowercase()
+      if (finalHost != "web.spaggiari.eu" || "login" in finalPath) {
+        throw ClassevivaNetworkException("Sessione portale scaduta o non valida.")
+      }
     }
   }
 

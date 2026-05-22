@@ -180,7 +180,7 @@ fun DashboardRoute(
                   tone = dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone(snapshot.averageNumeric),
                 )
               },
-              animatePress = false
+              animatePress = true
             )
           }
         }
@@ -201,7 +201,7 @@ fun DashboardRoute(
                   tone = if (snapshot.unseenGrades.isNotEmpty()) ExpressiveTone.Primary else ExpressiveTone.Neutral,
                   modifier = Modifier.weight(1f),
                   onClick = onNavigateGrades,
-                  animatePress = false,
+                  animatePress = true,
                 )
                 MetricTile(
                   label = "Bacheca",
@@ -210,7 +210,7 @@ fun DashboardRoute(
                   tone = if (snapshot.unreadCommunications.isNotEmpty()) ExpressiveTone.Warning else ExpressiveTone.Neutral,
                   modifier = Modifier.weight(1f),
                   onClick = onNavigateCommunications,
-                  animatePress = false,
+                  animatePress = true,
                 )
                 MetricTile(
                   label = "Note non lette",
@@ -276,7 +276,7 @@ fun DashboardRoute(
                   tone = if (isUnseen) ExpressiveTone.Primary else ExpressiveTone.Neutral,
                 )
               },
-              animatePress = false
+              animatePress = true
             )
           }
         }
@@ -298,7 +298,7 @@ fun DashboardRoute(
               tone = ExpressiveTone.Success,
               onClick = onNavigateAgenda,
               badge = { StatusBadge("AGENDA", tone = ExpressiveTone.Success) },
-              animatePress = false
+              animatePress = true
             )
           }
         }
@@ -320,7 +320,7 @@ fun DashboardRoute(
               tone = ExpressiveTone.Warning,
               onClick = onNavigateCommunications,
               badge = { StatusBadge("NUOVA", tone = ExpressiveTone.Warning) },
-              animatePress = false
+              animatePress = true
             )
           }
         }

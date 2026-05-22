@@ -486,7 +486,7 @@ fun ProfessorsRoute(
               tone = presenceTone,
               onClick = { viewModel.selectProfessor(prof) },
               badge = { StatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
-              animatePress = false,
+              animatePress = true,
             )
           }
         }
@@ -652,7 +652,7 @@ private fun ProfessorDetailSheet(
               MetricTile(
                 label = "Tipo prevalente",
                 value = type,
-                detail = "Tipologia piu comune.",
+                detail = "Tipologia più comune.",
                 modifier = Modifier.weight(1f),
                 tone = ExpressiveTone.Info,
               )
@@ -714,7 +714,7 @@ private fun ProfessorDetailSheet(
           MetricTile(
             label = "Giorno top",
             value = prof.favoriteDayOfWeek?.let { DayOfWeek.of(it).shortLabel() } ?: "N/D",
-            detail = "Giorno con piu firme.",
+            detail = "Giorno con più firme.",
             modifier = Modifier.weight(1f),
             tone = ExpressiveTone.Info,
           )

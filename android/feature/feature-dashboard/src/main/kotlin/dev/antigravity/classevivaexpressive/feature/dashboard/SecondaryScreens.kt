@@ -20,7 +20,6 @@ import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +51,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
@@ -71,8 +71,11 @@ import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreCompar
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreSnapshot
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import javax.inject.Inject
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -98,13 +101,19 @@ class MaterialsViewModel @Inject constructor(
   val refreshing = isRefreshing.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
   init {
-    refresh()
+    refresh(force = false, showIndicator = false)
   }
 
   fun refresh() {
+    refresh(force = true, showIndicator = true)
+  }
+
+  private fun refresh(force: Boolean, showIndicator: Boolean) {
     viewModelScope.launch {
-      isRefreshing.value = true
-      materialsRepository.refreshMaterials(force = true)
+      if (showIndicator) {
+        isRefreshing.value = true
+      }
+      materialsRepository.refreshMaterials(force = force)
       isRefreshing.value = false
     }
   }
@@ -188,7 +197,7 @@ fun MaterialsRoute(
               badge = {
                 StatusBadge(if (item.objectType == "link") "LINK" else "FILE", tone = ExpressiveTone.Info)
               },
-              animatePress = false,
+              animatePress = true,
             )
           }
         }
@@ -338,12 +347,17 @@ fun HomeworkRoute(
             RegisterListRow(
               title = item.subject,
               subtitle = item.description,
-              eyebrow = "SCADENZA",
-              meta = item.dueDate,
+              eyebrow = "COMPITO",
+              meta = item.homeworkMeta(),
               tone = ExpressiveTone.Warning,
               onClick = { viewModel.selectHomework(item) },
-              badge = { StatusBadge("COMPITO", tone = ExpressiveTone.Warning) },
-              animatePress = false,
+              badge = {
+                if (item.history.isNotEmpty()) {
+                  StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
+                }
+                StatusBadge("COMPITO", tone = ExpressiveTone.Warning)
+              },
+              animatePress = true,
             )
           }
         }
@@ -365,7 +379,14 @@ fun HomeworkRoute(
           Text(text = detail.fullText, style = MaterialTheme.typography.bodyMedium)
           detail.assignedDate?.let {
             Text(
-              text = "Assegnato: $it",
+              text = "Aggiunto: ${it.homeworkCreatedAtLabel()}",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+          hw.modifiedAtLabel()?.let {
+            Text(
+              text = "Modificato: $it",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -389,6 +410,9 @@ fun HomeworkRoute(
             }
           }
         }
+        if (hw.history.isNotEmpty()) {
+          StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
+        }
         if (hw.dueDate.isNotBlank()) {
           Text(
             text = "Scadenza: ${hw.dueDate}",
@@ -404,6 +428,42 @@ fun HomeworkRoute(
 // ─────────────────────────────────────────────────────────────────────────────
 // MEETINGS (COLLOQUI) — placeholder mantenuto
 // ─────────────────────────────────────────────────────────────────────────────
+
+private val homeworkCreatedAtFormatter: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", Locale.ITALIAN)
+
+private fun Homework.homeworkMeta(): String? {
+  return buildList {
+    addedAtLabel()?.let { add("Aggiunto: $it") }
+    modifiedAtLabel()?.let { add("Modificato: $it") }
+    dueDate.takeIf(String::isNotBlank)?.let { add("Scadenza: $it") }
+  }.joinToString(" / ").ifBlank { null }
+}
+
+private fun Homework.addedAtLabel(): String? = createdAt
+  ?.trim()
+  ?.takeIf(String::isNotBlank)
+  ?.homeworkCreatedAtLabel()
+
+private fun Homework.modifiedAtLabel(): String? {
+  return history.maxByOrNull { it.recordedAtEpochMillis }
+    ?.recordedAtEpochMillis
+    ?.let { millis ->
+      Instant.ofEpochMilli(millis)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDateTime()
+        .format(homeworkCreatedAtFormatter)
+    }
+}
+
+private fun String.homeworkCreatedAtLabel(): String {
+  val value = trim().takeIf { it.isNotBlank() } ?: return this
+  return runCatching {
+    OffsetDateTime.parse(value).toLocalDateTime().format(homeworkCreatedAtFormatter)
+  }.recoverCatching {
+    LocalDateTime.parse(value).format(homeworkCreatedAtFormatter)
+  }.getOrDefault(value)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -548,7 +608,7 @@ fun DocumentsRoute(
                 tone = ExpressiveTone.Info,
                 onClick = { viewModel.openDocument(doc) },
                 badge = { StatusBadge("DOCUMENTO", tone = ExpressiveTone.Info) },
-                animatePress = false,
+                animatePress = true,
               )
             }
           }
@@ -606,7 +666,7 @@ fun DocumentsRoute(
         when {
           state.isOpeningDocument -> {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-              CircularProgressIndicator()
+              ExpressiveLoading()
             }
           }
           state.selectedAsset != null -> {

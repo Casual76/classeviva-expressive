@@ -3,6 +3,7 @@ package dev.antigravity.classevivaexpressive.core.network.client
 import com.google.gson.GsonBuilder
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStorage
 import dev.antigravity.classevivaexpressive.core.datastore.StoredCredentials
+import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import kotlinx.coroutines.runBlocking
@@ -32,6 +33,10 @@ class RestClientNetworkTest {
 
   @Before
   fun setUp() {
+    io.mockk.mockkStatic(android.util.Log::class)
+    io.mockk.every { android.util.Log.i(any(), any()) } returns 0
+    io.mockk.every { android.util.Log.e(any(), any(), any()) } returns 0
+
     server = MockWebServer()
     server.start()
     sessionStorage = TestSessionStorage()
@@ -135,6 +140,54 @@ class RestClientNetworkTest {
     assertTrue(body.contains("\"pubId\":99"))
     assertTrue(body.contains("\"cntId\":99"))
     assertTrue(body.contains("\"evtCode\":\"CIR\""))
+  }
+
+  @Test
+  fun confirmNoticeboard_callsReadEndpointDirectly() = runBlocking {
+    setActiveSession(token = "token-notice", studentId = "312345")
+    val communication = Communication(
+      id = "25849227",
+      pubId = "25849227",
+      evtCode = "CIR",
+      title = "Circolare",
+      contentPreview = "Preview",
+      sender = "Scuola",
+      date = "20260520",
+      read = false,
+      needsAck = true,
+    )
+    server.enqueue(
+      jsonResponse(
+        """
+        {
+          "items": [
+            {
+              "id": "25849227",
+              "pubId": "25849227",
+              "evtCode": "CIR",
+              "cntTitle": "Circolare",
+              "itemText": "Preview",
+              "authorName": "Scuola",
+              "evtDate": "20260520"
+            }
+          ]
+        }
+        """.trimIndent(),
+      ),
+    )
+    server.enqueue(jsonResponse("""{ "item": { "text": "Dettaglio" } }"""))
+
+    restClient.confirmNoticeboard(communication)
+
+    server.takeRequest() // Consume getCommunications list request
+    val readRequest = server.takeRequest()
+    assertEquals("/rest/v1/students/312345/noticeboard/read/CIR/25849227/101", readRequest.path)
+    assertEquals("POST", readRequest.method)
+    assertEquals("token-notice", readRequest.getHeader("Z-Auth-Token"))
+    val readBody = readRequest.body.readUtf8()
+    assertTrue(readBody.contains("\"pubId\":25849227"))
+    assertTrue(readBody.contains("\"cntId\":25849227"))
+    assertTrue(readBody.contains("\"evtCode\":\"CIR\""))
   }
 
   @Test

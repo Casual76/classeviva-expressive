@@ -232,7 +232,7 @@ fun AbsencesRoute(
           item {
             EmptyState(
               title = "Nessuna giustificazione in sospeso",
-              detail = "Assenze, ritardi e uscite risultano gia allineati con lo stato corrente.",
+              detail = "Assenze, ritardi e uscite risultano già allineati con lo stato corrente.",
             )
           }
         } else {
@@ -322,7 +322,7 @@ private fun AbsenceRow(
       absence.justificationDate?.let { "Giustificata il ${it.toReadableDate()}" },
     ).joinToString(" / ").ifBlank {
       when {
-        absence.justified -> "Stato gia confermato."
+        absence.justified -> "Stato già confermato."
         absence.canJustify -> "Tocca per inviare la giustificazione."
         else -> "Nessun endpoint ufficiale disponibile per la giustificazione."
       }
@@ -335,7 +335,7 @@ private fun AbsenceRow(
       )
     },
     onClick = onJustify,
-    animatePress = false,
+    animatePress = true,
   )
 }
 

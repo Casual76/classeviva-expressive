@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.core.data.sync
 
+import dev.antigravity.classevivaexpressive.core.data.change.hasMeaningfulChangeComparedTo
 import dev.antigravity.classevivaexpressive.core.data.repository.AbsencesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.AgendaSection
 import dev.antigravity.classevivaexpressive.core.data.repository.CommunicationsSection
@@ -46,6 +47,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceJustificati
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.AttachmentPayload
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
@@ -94,6 +96,9 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+private const val InteractiveRefreshCooldownMillis = 5L * 60L * 1000L
+private const val InteractiveRefreshCacheMaxAgeMillis = 5L * 60L * 1000L
+
 @Singleton
 class SchoolSyncCoordinator @Inject constructor(
   private val json: Json,
@@ -115,6 +120,7 @@ class SchoolSyncCoordinator @Inject constructor(
   private var activeSession: UserSession? = null
   val syncStatus = MutableStateFlow(SyncStatus())
   private val syncMutex = Mutex()
+  private val lastInteractiveRefreshAttempts = mutableMapOf<String, Long>()
 
   fun attachSession(session: UserSession?) {
     activeSession = session
@@ -150,25 +156,21 @@ class SchoolSyncCoordinator @Inject constructor(
   suspend fun refreshAll(force: Boolean = false): SyncStatus {
     if (!force && syncMutex.isLocked) return syncStatus.value
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    return syncMutex.withLock {
-      refreshSchoolYear(selectedYear = selectedYear, force = force, refreshProfile = true)
-    }
+    return refreshSelectedSections(selectedYear = selectedYear, force = force, refreshProfile = true)
   }
 
   suspend fun refreshCurrentSchoolYearForNotifications(force: Boolean = false): SyncStatus {
     if (!force && syncMutex.isLocked) return syncStatus.value
-    return syncMutex.withLock {
-      refreshSchoolYear(
-        selectedYear = schoolYearStore.currentSchoolYearRef(),
-        force = force,
-        refreshProfile = false,
-      )
-    }
+    return refreshSelectedSections(
+      selectedYear = schoolYearStore.currentSchoolYearRef(),
+      force = force,
+      refreshProfile = false,
+    )
   }
 
   suspend fun refreshAbsences(force: Boolean = false): Result<List<AbsenceRecord>> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val status = refreshSchoolYear(
+    val status = refreshSelectedSections(
       selectedYear = selectedYear,
       force = force,
       refreshProfile = false,
@@ -182,7 +184,7 @@ class SchoolSyncCoordinator @Inject constructor(
 
   suspend fun refreshHomeworks(force: Boolean = false): List<Homework> {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    refreshSchoolYear(
+    refreshSelectedSections(
       selectedYear = selectedYear,
       force = force,
       refreshProfile = false,
@@ -193,7 +195,7 @@ class SchoolSyncCoordinator @Inject constructor(
 
   suspend fun refreshMeetings(force: Boolean = false): List<MeetingBooking> {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    refreshSchoolYear(
+    refreshSelectedSections(
       selectedYear = selectedYear,
       force = force,
       refreshProfile = false,
@@ -275,7 +277,7 @@ class SchoolSyncCoordinator @Inject constructor(
 
     if (failures.isNotEmpty()) {
       val message = when (failures.size) {
-        1 -> "Una comunicazione non e stata segnata come letta sul registro."
+        1 -> "Una comunicazione non è stata segnata come letta sul registro."
         else -> "${failures.size} comunicazioni non sono state segnate come lette sul registro."
       }
       throw ClassevivaNetworkException(message)
@@ -287,41 +289,49 @@ class SchoolSyncCoordinator @Inject constructor(
     val pubId = detail.communication.pubId
     val evtCode = detail.communication.evtCode
 
-    // Tracciamo separatamente i due tentativi cosi' possiamo restituire un
-    // errore vero se entrambi falliscono, invece di mostrare "Conferma inviata"
-    // fingendo che sia tutto a posto.
+    System.out.println("ACKNOWLEDGE COMMUNICATION: starting for pubId=$pubId, evtCode=$evtCode")
+
     val restResult = runCatching {
-      restClient.markNoticeboardRead(pubId = pubId, evtCode = evtCode)
+      restClient.confirmNoticeboard(detail.communication)
+    }.onFailure { e ->
+      System.err.println("ACKNOWLEDGE COMMUNICATION - REST confirmation failed: ${e.message}")
+      e.printStackTrace()
     }
     val ackUrl = detail.acknowledgeUrl
     val portalResult: Result<Unit>? = if (!ackUrl.isNullOrBlank()) {
+      System.out.println("ACKNOWLEDGE COMMUNICATION - Portal action URL found: $ackUrl")
       runCatching {
         portalClient.submitPortalAction(
           pageUrl = ackUrl,
           formKeywords = listOf("conferma", "presa", "visione", "sign", "firma", "ack"),
         )
         Unit
+      }.onFailure { e ->
+        System.err.println("ACKNOWLEDGE COMMUNICATION - Portal action failed: ${e.message}")
+        e.printStackTrace()
       }
     } else {
+      System.out.println("ACKNOWLEDGE COMMUNICATION - No portal action URL found.")
       null
     }
 
-    // Sopravvive se ALMENO una delle due strade ha funzionato.
     val anyOk = restResult.isSuccess || portalResult?.isSuccess == true
     if (!anyOk) {
       val restErr = restResult.exceptionOrNull()?.message
       val portalErr = portalResult?.exceptionOrNull()?.message
       val composed = listOfNotNull(
         restErr?.let { "REST: $it" },
-        portalErr?.let { "Portale: $it" },
-      ).joinToString(" — ").ifBlank { "Errore sconosciuto durante la presa visione." }
-      throw ClassevivaNetworkException(composed)
+        portalErr?.let { "PORTALE: $it" }
+      ).joinToString(" | ")
+      throw ClassevivaNetworkException("Nessuna delle due modalità di conferma è riuscita: $composed")
     }
 
+    System.out.println("ACKNOWLEDGE COMMUNICATION - Confirmation succeeded (anyOk=true). Marking read locally and refetching snapshot...")
     runCatching { communicationDao.markRead(detail.communication.id) }
-    val updated = runCatching { restClient.getCommunicationDetail(detail.communication) }.getOrNull()
-      ?: detail.copy(communication = detail.communication.copy(read = true))
     runCatching { refreshCommunicationsSnapshot(selectedYear) }
+    val updated = runCatching {
+      restClient.getCommunicationDetail(detail.communication)
+    }.getOrDefault(detail)
     updated
   }
 
@@ -345,7 +355,7 @@ class SchoolSyncCoordinator @Inject constructor(
 
   suspend fun joinCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    val joinUrl = detail.joinUrl ?: detail.portalDetailUrl
+    val joinUrl = detail.joinUrl
     if (joinUrl.isNullOrBlank()) {
       restClient.joinNoticeboard(
         pubId = detail.communication.pubId,
@@ -393,8 +403,20 @@ class SchoolSyncCoordinator @Inject constructor(
 
   suspend fun getNoteDetail(id: String, categoryCode: String): Result<NoteDetail> = runCatching {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    restClient.getNoteDetail(id, categoryCode).also {
-      refreshNotesSnapshot(selectedYear)
+    runCatching {
+      restClient.getNoteDetail(id, categoryCode)
+    }.getOrElse { error ->
+      val cached = readYearScopedValue(NotesSection, selectedYear, emptyList<Note>())
+        .firstOrNull { note -> note.id == id && note.categoryCode == categoryCode }
+        ?: throw error
+      NoteDetail(
+        note = cached,
+        content = cached.contentPreview
+          .takeIf(String::isNotBlank)
+          ?: cached.title.ifBlank { cached.categoryLabel },
+      )
+    }.also {
+      runCatching { refreshNotesSnapshot(selectedYear) }
     }
   }
 
@@ -500,6 +522,29 @@ class SchoolSyncCoordinator @Inject constructor(
 
   fun getPortalSessionCookies() = portalClient.getSessionCookies()
 
+  private suspend fun refreshSelectedSections(
+    selectedYear: SchoolYearRef,
+    force: Boolean,
+    refreshProfile: Boolean,
+    sections: Set<String>? = null,
+  ): SyncStatus {
+    if (!force && syncMutex.isLocked) return syncStatus.value
+    return syncMutex.withLock {
+      refreshSchoolYear(
+        selectedYear = selectedYear,
+        force = force,
+        refreshProfile = refreshProfile,
+        sections = sections,
+      )
+    }
+  }
+
+  private fun CommunicationDetail.requiresVerifiedRestAcknowledgement(): Boolean {
+    return communication.needsAck ||
+      !acknowledgeUrl.isNullOrBlank() ||
+      actions.any { action -> action.type == NoticeboardActionType.ACKNOWLEDGE }
+  }
+
   private suspend fun refreshSchoolYear(
     selectedYear: SchoolYearRef,
     force: Boolean,
@@ -513,6 +558,18 @@ class SchoolSyncCoordinator @Inject constructor(
             message = "Sessione assente (Coordinator).",
         )
     }
+    val currentYear = schoolYearStore.currentSchoolYearRef()
+    val yearStart = schoolYearStart(selectedYear)
+    val yearEnd = schoolYearEnd(selectedYear)
+    val isCurrentYear = selectedYear.id == currentYear.id
+    val selectedSections = sections ?: allSections()
+    val now = System.currentTimeMillis()
+
+    if (!force && shouldSkipInteractiveRefresh(selectedYear, selectedSections, now)) {
+      return syncStatus.value
+    }
+    recordInteractiveRefreshAttempt(selectedYear, selectedSections, now)
+
     android.util.Log.i("SyncCoordinator", "Avvio sincronizzazione per anno: ${selectedYear.id}")
     attachSession(session)
     syncStatus.value = SyncStatus(
@@ -522,11 +579,6 @@ class SchoolSyncCoordinator @Inject constructor(
     )
 
     val errors = mutableListOf<String>()
-    val currentYear = schoolYearStore.currentSchoolYearRef()
-    val yearStart = schoolYearStart(selectedYear)
-    val yearEnd = schoolYearEnd(selectedYear)
-    val isCurrentYear = selectedYear.id == currentYear.id
-    val selectedSections = sections ?: allSections()
 
     if (refreshProfile && selectedSections.contains(ProfileSection)) {
       syncGlobal(ProfileSection, errors) { restClient.getProfile() }
@@ -609,23 +661,63 @@ class SchoolSyncCoordinator @Inject constructor(
       }
     }
 
-    val now = System.currentTimeMillis()
+    val completedAt = System.currentTimeMillis()
     val next = if (errors.isEmpty()) {
       SyncStatus(
         state = SyncState.IDLE,
-        lastSuccessfulSyncEpochMillis = now,
+        lastSuccessfulSyncEpochMillis = completedAt,
         message = if (force) "Sincronizzazione completa." else null,
       )
     } else {
       SyncStatus(
         state = SyncState.PARTIAL,
-        lastSuccessfulSyncEpochMillis = syncStatus.value.lastSuccessfulSyncEpochMillis ?: now,
+        lastSuccessfulSyncEpochMillis = syncStatus.value.lastSuccessfulSyncEpochMillis ?: completedAt,
         message = "Sincronizzazione parziale: ${errors.distinct().joinToString()}",
       )
     }
     syncStatus.value = next
     return next
   }
+
+  private suspend fun shouldSkipInteractiveRefresh(
+    schoolYear: SchoolYearRef,
+    sections: Set<String>,
+    now: Long,
+  ): Boolean {
+    val key = interactiveRefreshKey(schoolYear, sections)
+    val lastAttempt = lastInteractiveRefreshAttempts[key]
+    if (lastAttempt != null && now - lastAttempt in 0 until InteractiveRefreshCooldownMillis) {
+      return true
+    }
+    return sections.all { section -> isSectionCacheFresh(section, schoolYear, now) }
+  }
+
+  private fun recordInteractiveRefreshAttempt(
+    schoolYear: SchoolYearRef,
+    sections: Set<String>,
+    now: Long,
+  ) {
+    lastInteractiveRefreshAttempts[interactiveRefreshKey(schoolYear, sections)] = now
+  }
+
+  private suspend fun isSectionCacheFresh(
+    section: String,
+    schoolYear: SchoolYearRef,
+    now: Long,
+  ): Boolean {
+    val cacheKey = if (section == ProfileSection) {
+      ProfileSection
+    } else {
+      yearScopedCacheKey(section, schoolYear)
+    }
+    val updatedAt = snapshotCacheDao.getByKey(cacheKey)?.updatedAtEpochMillis ?: return false
+    return now - updatedAt in 0..InteractiveRefreshCacheMaxAgeMillis
+  }
+
+  private fun interactiveRefreshKey(
+    schoolYear: SchoolYearRef,
+    sections: Set<String>,
+  ): String = "${schoolYear.id}:${sections.sorted().joinToString("|")}"
 
   private suspend fun syncGrades(
     schoolYear: SchoolYearRef,
@@ -635,29 +727,47 @@ class SchoolSyncCoordinator @Inject constructor(
   ) {
     runCatching {
       val grades = fetch()
-      val existingById = gradeDao.getByYearOnce(session.studentId, schoolYear.id).associateBy { it.id }
+      val existingGrades = gradeDao.getByYearOnce(session.studentId, schoolYear.id)
+      val existingById = existingGrades.associateBy { it.id }
+      val existingByIdentity = uniqueByIdentityKeys(existingGrades) { it.gradeIdentityKeys() }
+      val incomingIdentityCounts = identityKeyCounts(grades) { it.gradeIdentityKeys() }
       val now = System.currentTimeMillis()
-      val historyEntries = grades.mapNotNull { grade ->
-        val existing = existingById[grade.id] ?: return@mapNotNull null
-        if (existing.hasSameContentAs(grade)) {
+      val resolvedGrades = grades.map { grade ->
+        val existing = resolveStableMatch(
+          incomingId = grade.id,
+          incomingKeys = grade.gradeIdentityKeys(),
+          incomingIdentityCounts = incomingIdentityCounts,
+          existingById = existingById,
+          existingByIdentity = existingByIdentity,
+        )
+        ResolvedGrade(
+          grade = grade,
+          existing = existing,
+          localId = existing?.id ?: grade.fallbackLocalId(),
+        )
+      }
+      val historyEntries = resolvedGrades.mapNotNull { resolved ->
+        val existing = resolved.existing ?: return@mapNotNull null
+        if (!existing.hasMeaningfulChangeComparedTo(resolved.grade, includeOneSidedText = existing.firstSeenAtMs != null)) {
           null
         } else {
           val version = existing.toGradeVersion(now)
           val payload = json.encodeToString(version)
           ChangeHistoryEntity(
-            id = historyEntryId(HistoryKindGrade, session.studentId, schoolYear.id, grade.id, now, payload),
+            id = historyEntryId(HistoryKindGrade, session.studentId, schoolYear.id, resolved.localId, now, payload),
             studentId = session.studentId,
             schoolYearId = schoolYear.id,
             itemKind = HistoryKindGrade,
-            itemId = grade.id,
+            itemId = resolved.localId,
             recordedAtEpochMillis = now,
             payload = payload,
           )
         }
       }
-      val entities = grades.map { grade ->
+      val entities = resolvedGrades.map { resolved ->
+        val grade = resolved.grade
         GradeEntity(
-          id = grade.id,
+          id = resolved.localId,
           studentId = session.studentId,
           schoolYearId = schoolYear.id,
           subject = grade.subject,
@@ -672,6 +782,7 @@ class SchoolSyncCoordinator @Inject constructor(
           periodCode = grade.periodCode,
           teacher = grade.teacher,
           color = grade.color,
+          firstSeenAtMs = resolved.existing?.firstSeenAtMs ?: now,
         )
       }
       if (historyEntries.isNotEmpty()) {
@@ -679,7 +790,11 @@ class SchoolSyncCoordinator @Inject constructor(
       }
       gradeDao.deleteByYear(session.studentId, schoolYear.id)
       gradeDao.upsertAll(entities)
-      storeYearScopedValue(GradesSection, schoolYear, grades)
+      storeYearScopedValue(
+        GradesSection,
+        schoolYear,
+        resolvedGrades.map { it.grade.copy(id = it.localId) },
+      )
     }.onFailure {
       errors += GradesSection
     }
@@ -693,30 +808,48 @@ class SchoolSyncCoordinator @Inject constructor(
   ) {
     runCatching {
       val agenda = fetch()
-      val existingById = agendaDao.getByYearOnce(session.studentId, schoolYear.id).associateBy { it.id }
+      val existingAgenda = agendaDao.getByYearOnce(session.studentId, schoolYear.id)
+      val existingById = existingAgenda.associateBy { it.id }
+      val existingByIdentity = uniqueByIdentityKeys(existingAgenda) { it.agendaIdentityKeys() }
+      val incomingIdentityCounts = identityKeyCounts(agenda) { it.agendaIdentityKeys() }
       val now = System.currentTimeMillis()
-      val historyEntries = agenda.mapNotNull { item ->
-        val existing = existingById[item.id] ?: return@mapNotNull null
-        if (existing.hasSameContentAs(item)) {
+      val resolvedAgenda = agenda.map { item ->
+        val existing = resolveStableMatch(
+          incomingId = item.id,
+          incomingKeys = item.agendaIdentityKeys(),
+          incomingIdentityCounts = incomingIdentityCounts,
+          existingById = existingById,
+          existingByIdentity = existingByIdentity,
+        )
+        ResolvedAgendaItem(
+          item = item,
+          existing = existing,
+          localId = existing?.id ?: item.fallbackLocalId(),
+        )
+      }
+      val historyEntries = resolvedAgenda.mapNotNull { resolved ->
+        val existing = resolved.existing ?: return@mapNotNull null
+        if (!existing.hasMeaningfulChangeComparedTo(resolved.item, includeOneSidedText = existing.firstSeenAtMs != null)) {
           null
         } else {
           val version = existing.toAgendaItemVersion(now)
           val payload = json.encodeToString(version)
           ChangeHistoryEntity(
-            id = historyEntryId(HistoryKindAgenda, session.studentId, schoolYear.id, item.id, now, payload),
+            id = historyEntryId(HistoryKindAgenda, session.studentId, schoolYear.id, resolved.localId, now, payload),
             studentId = session.studentId,
             schoolYearId = schoolYear.id,
             itemKind = HistoryKindAgenda,
-            itemId = item.id,
+            itemId = resolved.localId,
             recordedAtEpochMillis = now,
             payload = payload,
           )
         }
       }
-      val entities = agenda.map { item ->
-        val existing = existingById[item.id]
+      val entities = resolvedAgenda.map { resolved ->
+        val item = resolved.item
+        val existing = resolved.existing
         AgendaItemEntity(
-          id = item.id,
+          id = resolved.localId,
           studentId = session.studentId,
           schoolYearId = schoolYear.id,
           title = item.title,
@@ -737,7 +870,19 @@ class SchoolSyncCoordinator @Inject constructor(
       }
       agendaDao.deleteByYear(session.studentId, schoolYear.id)
       agendaDao.upsertAll(entities)
-      storeYearScopedValue(AgendaSection, schoolYear, agenda)
+      storeYearScopedValue(
+        AgendaSection,
+        schoolYear,
+        resolvedAgenda.map { resolved ->
+          val existing = resolved.existing
+          resolved.item.copy(
+            id = resolved.localId,
+            createdAt = resolved.item.createdAt
+              ?: existing?.createdAt
+              ?: existing?.firstSeenAtMs?.let(::epochMillisToCreatedAt),
+          )
+        },
+      )
     }.onFailure {
       errors += AgendaSection
     }
@@ -947,7 +1092,12 @@ class SchoolSyncCoordinator @Inject constructor(
     val hasUsefulContent = detail.content.isNotBlank() &&
       detail.content != detail.communication.contentPreview &&
       detail.content != detail.communication.title
-    if (hasUsefulContent) return detail
+    val needsPortalActionDiscovery =
+      (detail.communication.needsAck && detail.acknowledgeUrl.isNullOrBlank()) ||
+        (detail.communication.needsReply && detail.replyUrl.isNullOrBlank()) ||
+        (detail.communication.needsJoin && detail.joinUrl.isNullOrBlank()) ||
+        (detail.communication.needsFile && detail.fileUploadUrl.isNullOrBlank())
+    if (hasUsefulContent && !needsPortalActionDiscovery) return detail
     val portal = runCatching { portalClient.getNoticeboardDetail(portalUrl) }.getOrNull() ?: return detail
     val content = portal.content?.takeIf(String::isNotBlank) ?: detail.content
     val actions = (
@@ -1075,6 +1225,8 @@ class SchoolSyncCoordinator @Inject constructor(
       subject = item.subject ?: item.subtitle,
       description = item.title,
       dueDate = item.date,
+      createdAt = item.createdAt,
+      history = item.history,
       notes = item.detail,
       attachments = emptyList(),
     )
@@ -1083,8 +1235,37 @@ class SchoolSyncCoordinator @Inject constructor(
   private fun mergeHomeworks(homeworks: List<Homework>): List<Homework> {
     return homeworks
       .filter { it.description.isNotBlank() && it.dueDate.isNotBlank() }
-      .distinctBy { homeworkKey(it.dueDate, it.subject, it.description) }
+      .groupBy { homeworkKey(it.dueDate, it.subject, it.description) }
+      .values
+      .map { duplicates ->
+        duplicates.reduce { accumulated, candidate ->
+          accumulated.copy(
+            createdAt = accumulated.createdAt ?: candidate.createdAt,
+            history = mergeHomeworkHistory(accumulated.history, candidate.history),
+            notes = accumulated.notes ?: candidate.notes,
+            attachments = accumulated.attachments.ifEmpty { candidate.attachments },
+          )
+        }
+      }
       .sortedWith(compareBy<Homework> { it.dueDate }.thenBy { it.subject }.thenBy { it.description })
+  }
+
+  private fun mergeHomeworkHistory(
+    first: List<AgendaItemVersion>,
+    second: List<AgendaItemVersion>,
+  ): List<AgendaItemVersion> {
+    return (first + second)
+      .distinctBy { version ->
+        listOf(
+          version.recordedAtEpochMillis.toString(),
+          version.title,
+          version.subtitle,
+          version.date,
+          version.time.orEmpty(),
+          version.detail.orEmpty(),
+        ).joinToString("|")
+      }
+      .sortedByDescending { it.recordedAtEpochMillis }
   }
 
   private fun homeworkKey(date: String, subject: String?, text: String): String {
@@ -1105,33 +1286,190 @@ class SchoolSyncCoordinator @Inject constructor(
     }
   }
 
-  private fun GradeEntity.hasSameContentAs(grade: Grade): Boolean {
-    return subject == grade.subject &&
-      valueLabel == grade.valueLabel &&
-      numericValue == grade.numericValue &&
-      description == grade.description &&
-      date == grade.date &&
-      type == grade.type &&
-      weight == grade.weight &&
-      notes == grade.notes &&
-      period == grade.period &&
-      periodCode == grade.periodCode &&
-      teacher == grade.teacher &&
-      color == grade.color
+  private data class ResolvedGrade(
+    val grade: Grade,
+    val existing: GradeEntity?,
+    val localId: String,
+  )
+
+  private data class ResolvedAgendaItem(
+    val item: AgendaItem,
+    val existing: AgendaItemEntity?,
+    val localId: String,
+  )
+
+  private fun GradeEntity.gradeIdentityKeys(): List<String> {
+    return gradeIdentityKeys(
+      date = date,
+      subject = subject,
+      type = type,
+      periodCode = periodCode,
+      period = period,
+    )
   }
 
-  private fun AgendaItemEntity.hasSameContentAs(item: AgendaItem): Boolean {
-    val incomingCreatedAt = item.createdAt ?: createdAt
-    return title == item.title &&
-      subtitle == item.subtitle &&
-      date == item.date &&
-      time == item.time &&
-      detail == item.detail &&
-      subject == item.subject &&
-      teacher == item.teacher &&
-      category == item.category.name &&
-      sharePayload == item.sharePayload &&
-      createdAt == incomingCreatedAt
+  private fun Grade.gradeIdentityKeys(): List<String> {
+    return gradeIdentityKeys(
+      date = date,
+      subject = subject,
+      type = type,
+      periodCode = periodCode,
+      period = period,
+    )
+  }
+
+  private fun gradeIdentityKeys(
+    date: String,
+    subject: String?,
+    type: String?,
+    periodCode: String?,
+    period: String?,
+  ): List<String> {
+    val periodLabel = periodCode?.takeIf(String::isNotBlank) ?: period
+    return listOfNotNull(
+      identityKey("grade:v2", required = listOf(date, subject), optional = listOf(type, periodLabel)),
+      identityKey("grade:v1", required = listOf(date, subject), optional = listOf(type)),
+      identityKey("grade:v0", required = listOf(date, subject)),
+    ).distinct()
+  }
+
+  private fun AgendaItemEntity.agendaIdentityKeys(): List<String> {
+    return agendaIdentityKeys(
+      date = date,
+      time = time,
+      category = category,
+      subject = agendaSubjectLabel(),
+      createdAt = createdAt,
+    )
+  }
+
+  private fun AgendaItem.agendaIdentityKeys(): List<String> {
+    return agendaIdentityKeys(
+      date = date,
+      time = time,
+      category = category.name,
+      subject = subject ?: subtitle,
+      createdAt = createdAt,
+    )
+  }
+
+  private fun agendaIdentityKeys(
+    date: String,
+    time: String?,
+    category: String,
+    subject: String?,
+    createdAt: String?,
+  ): List<String> {
+    return listOfNotNull(
+      identityKey("agenda:v2", required = listOf(date, category, subject), optional = listOf(time, createdAt)),
+      identityKey("agenda:v1", required = listOf(date, category, subject), optional = listOf(time)),
+      identityKey("agenda:v0", required = listOf(date, category, subject)),
+      identityKey("agenda:time", required = listOf(date, category, time)),
+      identityKey("agenda:created", required = listOf(date, category, createdAt)),
+      identityKey("agenda:day", required = listOf(date, category)),
+    ).distinct()
+  }
+
+  private fun AgendaItemEntity.agendaSubjectLabel(): String {
+    return subject?.takeIf(String::isNotBlank) ?: subtitle
+  }
+
+  private fun Grade.fallbackLocalId(): String {
+    return id.takeIf(String::isNotBlank)
+      ?: generatedLocalId("grade", gradeIdentityKeys().firstOrNull() ?: gradeCoreFingerprint())
+  }
+
+  private fun AgendaItem.fallbackLocalId(): String {
+    return id.takeIf(String::isNotBlank)
+      ?: generatedLocalId("agenda", agendaIdentityKeys().firstOrNull() ?: agendaCoreFingerprint())
+  }
+
+  private fun Grade.gradeCoreFingerprint(): String {
+    return listOf(
+      "grade:core",
+      identityPart(date),
+      identityPart(subject),
+      identityPart(valueLabel),
+      numericValue?.toString().orEmpty(),
+      identityPart(description),
+      identityPart(type),
+      weight?.toString().orEmpty(),
+      identityPart(notes),
+      identityPart(period),
+      identityPart(periodCode),
+    ).joinToString("|")
+  }
+
+  private fun AgendaItem.agendaCoreFingerprint(): String {
+    return listOf(
+      "agenda:core",
+      identityPart(date),
+      identityPart(time),
+      identityPart(category.name),
+      identityPart(subject ?: subtitle),
+      identityPart(title),
+      identityPart(detail),
+    ).joinToString("|")
+  }
+
+  private fun <Existing> resolveStableMatch(
+    incomingId: String,
+    incomingKeys: List<String>,
+    incomingIdentityCounts: Map<String, Int>,
+    existingById: Map<String, Existing>,
+    existingByIdentity: Map<String, Existing>,
+  ): Existing? {
+    incomingId.takeIf(String::isNotBlank)?.let { id ->
+      existingById[id]?.let { return it }
+    }
+    return incomingKeys.firstNotNullOfOrNull { key ->
+      if (incomingIdentityCounts[key] == 1) existingByIdentity[key] else null
+    }
+  }
+
+  private fun <T> identityKeyCounts(
+    items: List<T>,
+    keySelector: (T) -> List<String>,
+  ): Map<String, Int> {
+    return items
+      .flatMap { keySelector(it).distinct() }
+      .groupingBy { it }
+      .eachCount()
+  }
+
+  private fun <T> uniqueByIdentityKeys(
+    items: List<T>,
+    keySelector: (T) -> List<String>,
+  ): Map<String, T> {
+    return items
+      .flatMap { item -> keySelector(item).distinct().map { key -> key to item } }
+      .groupBy(keySelector = { it.first }, valueTransform = { it.second })
+      .mapNotNull { (key, matchedItems) ->
+        matchedItems.distinct().singleOrNull()?.let { key to it }
+      }
+      .toMap()
+  }
+
+  private fun identityKey(
+    prefix: String,
+    required: List<String?>,
+    optional: List<String?> = emptyList(),
+  ): String? {
+    val requiredParts = required.map(::identityPart)
+    if (requiredParts.any(String::isBlank)) return null
+    val optionalParts = optional.map { identityPart(it).ifBlank { "-" } }
+    return (listOf(prefix) + requiredParts + optionalParts).joinToString("|")
+  }
+
+  private fun identityPart(value: String?): String {
+    return value.orEmpty()
+      .trim()
+      .lowercase()
+      .replace(Regex("\\s+"), " ")
+  }
+
+  private fun generatedLocalId(prefix: String, seed: String): String {
+    return "$prefix-${Integer.toUnsignedString(seed.hashCode(), 36)}"
   }
 
   private fun historyEntryId(

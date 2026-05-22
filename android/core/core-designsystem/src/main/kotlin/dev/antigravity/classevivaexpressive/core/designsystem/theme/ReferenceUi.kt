@@ -24,12 +24,14 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.SegmentedButton
@@ -106,8 +108,8 @@ fun ExpressiveTopHeader(
     },
     actions = actions,
     colors = TopAppBarDefaults.largeTopAppBarColors(
-      containerColor = Color.Transparent,
-      scrolledContainerColor = Color.Transparent,
+      containerColor = MaterialTheme.colorScheme.background,
+      scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
       navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
       actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
       titleContentColor = MaterialTheme.colorScheme.onSurface,
@@ -294,16 +296,18 @@ fun MetricTile(
   val colors = toneColors(tone)
   val clickableModifier = if (onClick != null) {
     if (animatePress) {
-      modifier.bouncyClickable(onClick = onClick)
+      modifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick)
     } else {
-      modifier.clickable(onClick = onClick)
+      modifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick)
     }
   } else {
     modifier
   }
 
   ElevatedCard(
-    modifier = clickableModifier,
+    modifier = clickableModifier.animateContentSize(
+      animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+    ),
     colors = CardDefaults.elevatedCardColors(containerColor = colors.container),
   ) {
     Column(
@@ -343,13 +347,21 @@ fun ExpressiveCard(
 ) {
   val baseModifier = modifier
     .fillMaxWidth()
-    .then(if (animateContent) Modifier.animateContentSize() else Modifier)
+    .then(
+      if (animateContent) {
+        Modifier.animateContentSize(
+          animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+        )
+      } else {
+        Modifier
+      },
+    )
 
   val clickableModifier = if (onClick != null) {
     if (animatePress) {
-      baseModifier.bouncyClickable(onClick = onClick)
+      baseModifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick)
     } else {
-      baseModifier.clickable(onClick = onClick)
+      baseModifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick)
     }
   } else {
     baseModifier
@@ -418,6 +430,7 @@ fun RegisterListRow(
   onClick: (() -> Unit)? = null,
   onLongClick: (() -> Unit)? = null,
   animatePress: Boolean = true,
+  animateContent: Boolean = false,
 ) {
   val colors = toneColors(tone)
   val isTinted = tone != ExpressiveTone.Neutral
@@ -425,14 +438,20 @@ fun RegisterListRow(
     modifier = modifier
       .fillMaxWidth()
       .then(
+        if (animateContent) {
+          Modifier.animateContentSize(
+            animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+          )
+        } else {
+          Modifier
+        },
+      )
+      .then(
         if (onClick != null || onLongClick != null) {
           if (animatePress) {
-            Modifier.bouncyClickable(onClick = onClick, onLongClick = onLongClick)
+            Modifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick, onLongClick = onLongClick)
           } else {
-            Modifier.combinedClickable(
-              onClick = { onClick?.invoke() },
-              onLongClick = onLongClick,
-            )
+            Modifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick, onLongClick = onLongClick)
           }
         } else {
           Modifier
@@ -640,7 +659,7 @@ fun EmptyState(
   detail: String,
   modifier: Modifier = Modifier,
 ) {
-  ExpressiveCard(modifier = modifier, highlighted = true) {
+  ExpressiveCard(modifier = modifier, highlighted = true, animateContent = true) {
     Text(
       text = title,
       style = MaterialTheme.typography.titleMedium,
@@ -653,6 +672,18 @@ fun EmptyState(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
   }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun ExpressiveLoading(
+  modifier: Modifier = Modifier,
+  color: Color = MaterialTheme.colorScheme.primary,
+) {
+  LoadingIndicator(
+    modifier = modifier,
+    color = color,
+  )
 }
 
 @Composable
@@ -669,7 +700,7 @@ fun AppListItem(
       .fillMaxWidth()
       .then(
         if (onClick != null) {
-          Modifier.bouncyClickable(onClick = onClick)
+          Modifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick)
         } else {
           Modifier
         },

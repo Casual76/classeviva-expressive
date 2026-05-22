@@ -8,6 +8,7 @@ import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,12 +18,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -50,6 +53,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
@@ -87,6 +91,21 @@ data class CommunicationsUiState(
   val isSubmittingAction: Boolean = false,
   val isRefreshing: Boolean = false,
   val pendingOpenUri: Uri? = null,
+  val attachmentDialog: AttachmentDownloadDialogState? = null,
+)
+
+data class AttachmentDownloadDialogState(
+  val fileName: String,
+  val title: String,
+  val message: String,
+  val isWorking: Boolean,
+  val isError: Boolean = false,
+)
+
+private data class CommunicationsRuntimeState(
+  val isRefreshing: Boolean,
+  val pendingOpenUri: Uri?,
+  val attachmentDialog: AttachmentDownloadDialogState?,
 )
 
 @HiltViewModel
@@ -99,6 +118,7 @@ class CommunicationsViewModel @Inject constructor(
   private val isSubmittingAction = MutableStateFlow(false)
   private val isRefreshing = MutableStateFlow(false)
   private val pendingOpenUri = MutableStateFlow<Uri?>(null)
+  private val attachmentDialog = MutableStateFlow<AttachmentDownloadDialogState?>(null)
 
   private val contentState = combine(
     communicationsRepository.observeCommunications(),
@@ -113,8 +133,10 @@ class CommunicationsViewModel @Inject constructor(
     selectedNote,
     lastMessage,
     isSubmittingAction,
-    combine(isRefreshing, pendingOpenUri) { r, u -> r to u },
-  ) { content, note, message, submitting, (refreshing, openUri) ->
+    combine(isRefreshing, pendingOpenUri, attachmentDialog) { refreshing, openUri, dialog ->
+      CommunicationsRuntimeState(refreshing, openUri, dialog)
+    },
+  ) { content, note, message, submitting, runtime ->
     val (communications, notes, communication) = content
     CommunicationsUiState(
       communications = communications,
@@ -123,8 +145,9 @@ class CommunicationsViewModel @Inject constructor(
       selectedNote = note,
       lastMessage = message,
       isSubmittingAction = submitting,
-      isRefreshing = refreshing,
-      pendingOpenUri = openUri,
+      isRefreshing = runtime.isRefreshing,
+      pendingOpenUri = runtime.pendingOpenUri,
+      attachmentDialog = runtime.attachmentDialog,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CommunicationsUiState())
 
@@ -183,20 +206,66 @@ class CommunicationsViewModel @Inject constructor(
 
   fun openAttachment(attachment: RemoteAttachment, context: Context) {
     viewModelScope.launch {
+      val fileName = attachment.name.ifBlank { "allegato" }
       isSubmittingAction.value = true
+      attachmentDialog.value = AttachmentDownloadDialogState(
+        fileName = fileName,
+        title = "Preparazione allegato",
+        message = "Controllo la memoria locale. Se il file non è già salvato, lo scarico e lo conservo per 30 giorni.",
+        isWorking = true,
+      )
       communicationsRepository.resolveAttachmentLocalPath(attachment)
         .onSuccess { path ->
           val file = java.io.File(path)
           val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+          attachmentDialog.value = AttachmentDownloadDialogState(
+            fileName = fileName,
+            title = "Allegato pronto",
+            message = "Il file è disponibile in memoria locale. Lo apro ora.",
+            isWorking = false,
+          )
           pendingOpenUri.value = uri
         }
-        .onFailure { lastMessage.value = it.message ?: "Impossibile aprire l'allegato." }
+        .onFailure {
+          val message = it.message ?: "Impossibile aprire l'allegato."
+          attachmentDialog.value = AttachmentDownloadDialogState(
+            fileName = fileName,
+            title = "Download non riuscito",
+            message = message,
+            isWorking = false,
+            isError = true,
+          )
+          lastMessage.value = message
+        }
       isSubmittingAction.value = false
     }
   }
 
   fun clearPendingUri() {
     pendingOpenUri.value = null
+    if (attachmentDialog.value?.isError != true) {
+      attachmentDialog.value = null
+    }
+  }
+
+  fun reportAttachmentOpenFailure(error: Throwable) {
+    val current = attachmentDialog.value
+    val message = error.message ?: "Nessuna app disponibile per aprire questo allegato."
+    pendingOpenUri.value = null
+    attachmentDialog.value = AttachmentDownloadDialogState(
+      fileName = current?.fileName ?: "allegato",
+      title = "Apertura non riuscita",
+      message = message,
+      isWorking = false,
+      isError = true,
+    )
+    lastMessage.value = message
+  }
+
+  fun dismissAttachmentDialog() {
+    if (attachmentDialog.value?.isWorking != true) {
+      attachmentDialog.value = null
+    }
   }
 
   fun acknowledge(detail: CommunicationDetail) {
@@ -328,8 +397,13 @@ fun CommunicationsRoute(
     val intent = Intent(Intent.ACTION_VIEW, uri).apply {
       addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(Intent.createChooser(intent, "Apri allegato"))
-    viewModel.clearPendingUri()
+    runCatching {
+      context.startActivity(Intent.createChooser(intent, "Apri allegato"))
+    }.onSuccess {
+      viewModel.clearPendingUri()
+    }.onFailure { error ->
+      viewModel.reportAttachmentOpenFailure(error)
+    }
   }
 
   val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -430,7 +504,7 @@ fun CommunicationsRoute(
                   )
                 },
                 onClick = { viewModel.openCommunication(communication.pubId, communication.evtCode) },
-                animatePress = false,
+                animatePress = true,
               )
             }
           }
@@ -457,7 +531,7 @@ fun CommunicationsRoute(
                   )
                 },
                 onClick = { viewModel.openNote(note.id, note.categoryCode) },
-                animatePress = false,
+                animatePress = true,
               )
             }
           }
@@ -558,30 +632,39 @@ fun CommunicationsRoute(
               subtitle = attachment.mimeType ?: "Allegato",
               meta = when {
                 !hasUrl -> "Allegato non disponibile in API"
-                attachment.portalOnly -> "Tocca per scaricare e aprire"
-                else -> "Tocca per aprire"
+                attachment.portalOnly -> "Tocca per aprire. Se manca, lo scarico e lo tengo per 30 giorni"
+                else -> "Tocca per aprire. Se è già in memoria non riscarico nulla"
               },
               tone = ExpressiveTone.Neutral,
-              badge = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
-              onClick = {
-                viewModel.openAttachment(
-                  RemoteAttachment(
-                    id = attachment.id,
-                    name = attachment.name,
-                    url = attachment.url,
-                    mimeType = attachment.mimeType,
-                    portalOnly = attachment.portalOnly,
-                  ),
-                  context,
-                )
+              badge = {
+                Icon(Icons.Rounded.AttachFile, contentDescription = null)
+                if (hasUrl) {
+                  StatusBadge("CACHE 30G", tone = ExpressiveTone.Info)
+                }
               },
-              animatePress = false,
+              onClick = if (hasUrl) {
+                {
+                  viewModel.openAttachment(
+                    RemoteAttachment(
+                      id = attachment.id,
+                      name = attachment.name,
+                      url = attachment.url,
+                      mimeType = attachment.mimeType,
+                      portalOnly = attachment.portalOnly,
+                    ),
+                    context,
+                  )
+                }
+              } else {
+                null
+              },
+              animatePress = true,
             )
           }
         }
         item {
           if (state.isSubmittingAction) {
-            CircularProgressIndicator()
+            ExpressiveLoading()
           } else {
             CommunicationActions(
               detail = detail,
@@ -636,6 +719,45 @@ fun CommunicationsRoute(
       }
     }
   }
+
+  state.attachmentDialog?.let { dialog ->
+    AttachmentDownloadDialog(
+      state = dialog,
+      onDismiss = viewModel::dismissAttachmentDialog,
+    )
+  }
+}
+
+@Composable
+private fun AttachmentDownloadDialog(
+  state: AttachmentDownloadDialogState,
+  onDismiss: () -> Unit,
+) {
+  AlertDialog(
+    onDismissRequest = { if (!state.isWorking) onDismiss() },
+    title = { Text(state.title) },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+          text = state.fileName,
+          style = MaterialTheme.typography.labelLarge,
+          color = MaterialTheme.colorScheme.primary,
+        )
+        Text(state.message)
+        if (state.isWorking) {
+          LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+      }
+    },
+    confirmButton = {
+      TextButton(
+        onClick = onDismiss,
+        enabled = !state.isWorking,
+      ) {
+        Text(if (state.isError) "Chiudi" else "Ok")
+      }
+    },
+  )
 }
 
 @Composable
@@ -671,7 +793,7 @@ private fun CommunicationActions(
         enabled = replyDraft.isNotBlank() && detail.replyText == null,
         modifier = Modifier.fillMaxWidth(),
       ) {
-        Text(if (detail.replyText != null) "Risposta gia inviata" else "Invia risposta")
+        Text(if (detail.replyText != null) "Risposta già inviata" else "Invia risposta")
       }
     }
     if (canJoin) {
@@ -690,6 +812,7 @@ private fun CommunicationActions(
 }
 
 internal fun shouldShowAcknowledgeAction(detail: CommunicationDetail): Boolean {
+  if (detail.communication.read) return false
   val parsedTypes = detail.actions.map { it.type }.toSet()
   return NoticeboardActionType.ACKNOWLEDGE in parsedTypes ||
     detail.communication.needsAck ||

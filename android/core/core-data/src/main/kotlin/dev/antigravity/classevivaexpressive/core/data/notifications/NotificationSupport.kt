@@ -815,24 +815,35 @@ private fun buildLiveTimetableNotification(
 ): Notification {
   val current = snapshot.current
   val next = snapshot.next
+  val currentInterval = if (!current.endTime.isNullOrBlank()) {
+    "${current.time} - ${current.endTime}"
+  } else {
+    current.time
+  }
   val currentLine = listOfNotNull(
+    currentInterval,
     current.teacher?.takeIf(String::isNotBlank),
     current.room?.takeIf(String::isNotBlank)?.let { "Aula $it" },
   ).joinToString(" / ").ifBlank { "Docente in corso" }
+
   val nextLine = next?.let { lesson ->
+    val nextInterval = if (!lesson.endTime.isNullOrBlank()) {
+      "${lesson.time} - ${lesson.endTime}"
+    } else {
+      lesson.time
+    }
     buildString {
-      append("Dopo: ${lesson.subject}")
+      append("Dopo: ${lesson.subject} ($nextInterval)")
       lesson.teacher?.takeIf(String::isNotBlank)?.let { append(" / $it") }
       lesson.room?.takeIf(String::isNotBlank)?.let { append(" / Aula $it") }
     }
   } ?: "Ultima ora della mattinata"
+
   val style = Notification.ProgressStyle()
     .setStyledByProgress(true)
     .setProgress(snapshot.progress)
-    .setProgressSegments(
-      listOf(
-        Notification.ProgressStyle.Segment(snapshot.progressMax).setColor(Color.rgb(66, 133, 244)),
-      ),
+    .addProgressSegment(
+      Notification.ProgressStyle.Segment(snapshot.progressMax).setColor(Color.rgb(66, 133, 244))
     )
     .setProgressTrackerIcon(Icon.createWithResource(context, dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo))
 
@@ -862,15 +873,17 @@ private fun buildLiveTimetableNotification(
   // Usiamo reflection perché la firma esatta varia tra build SDK e questo modulo
   // non sempre vede l'API stable; il fallback è una notifica ongoing classica.
   // Fallback compatibile: se il metodo non e' esposto dal runtime aggiungiamo l'extra.
-  val promotionRequested = runCatching {
-    val method = builder.javaClass.methods.firstOrNull {
-      (it.name == "setRequestPromotedOngoing" || it.name == "requestPromotedOngoing") &&
-        it.parameterTypes.size == 1
+  if (Build.VERSION.SDK_INT >= 36) {
+    val promotionRequested = runCatching {
+      val method = builder.javaClass.methods.firstOrNull {
+        (it.name == "setRequestPromotedOngoing" || it.name == "requestPromotedOngoing") &&
+          it.parameterTypes.size == 1
+      }
+      method?.invoke(builder, true) != null
+    }.getOrDefault(false)
+    if (!promotionRequested) {
+      builder.addExtras(Bundle().apply { putBoolean(RequestPromotedOngoingExtra, true) })
     }
-    method?.invoke(builder, true) != null
-  }.getOrDefault(false)
-  if (!promotionRequested) {
-    builder.addExtras(Bundle().apply { putBoolean(RequestPromotedOngoingExtra, true) })
   }
   return builder.build()
 }

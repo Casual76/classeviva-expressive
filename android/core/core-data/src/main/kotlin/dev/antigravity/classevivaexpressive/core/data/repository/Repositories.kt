@@ -10,6 +10,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import dev.antigravity.classevivaexpressive.core.data.change.hasMeaningfulChangeComparedTo
 import dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinator
 import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.AgendaChannelId
@@ -131,6 +132,8 @@ import dev.antigravity.classevivaexpressive.core.network.client.ApiSessionManage
 
 import dev.antigravity.classevivaexpressive.core.network.client.DevApiKey
 import dev.antigravity.classevivaexpressive.core.network.client.UserAgent
+import dev.antigravity.classevivaexpressive.core.network.client.normalizeNoticeboardAttachmentUrl
+import dev.antigravity.classevivaexpressive.core.network.client.noticeboardAttachmentDownloadCandidates
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
@@ -146,6 +149,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -384,7 +388,7 @@ class SchoolDataRepository @Inject constructor(
         schoolDocuments = school.documents.take(2),
         syncStatus = syncStatus,
       )
-    }
+    }.flowOn(Dispatchers.Default)
   }
 
   override suspend fun refreshDashboard(force: Boolean): Result<DashboardSnapshot> = runCatching {
@@ -405,13 +409,23 @@ class SchoolDataRepository @Inject constructor(
         changeHistoryDao.observeByYearAndKind(studentId, schoolYear.id, HistoryKindGrade),
       ) { entities, history ->
         val historyByGradeId = history
-          .mapNotNull { entity -> entity.toGradeVersion(json)?.let { version -> entity.itemId to version } }
+          .mapNotNull { entity -> entity.toGradeVersion(json)?.let { version -> entity.itemId to (entity to version) } }
           .groupBy({ it.first }, { it.second })
-          .mapValues { (_, versions) -> versions.sortedByDescending { it.recordedAtEpochMillis } }
+          .mapValues { (_, versions) -> versions.sortedByDescending { it.first.recordedAtEpochMillis } }
         entities.map { entity ->
-          entity.toGrade(history = historyByGradeId[entity.id].orEmpty())
+          entity.toGrade(
+            history = historyByGradeId[entity.id]
+              .orEmpty()
+              .filter { (historyEntity, version) ->
+                entity.hasMeaningfulChangeComparedTo(
+                  version,
+                  includeOneSidedText = historyEntity.wasRecordedAfterFirstSeen(entity.firstSeenAtMs),
+                )
+              }
+              .map { (_, version) -> version },
+          )
         }
-      }
+      }.flowOn(Dispatchers.Default)
     }
   }
   override fun observePeriods(): Flow<List<Period>> = observeYearScopedValue(PeriodsSection, emptyList())
@@ -494,7 +508,7 @@ class SchoolDataRepository @Inject constructor(
   override fun observeStats(): Flow<StatsSnapshot> {
     return combine(observeGrades(), observeAbsences(), observeAgenda()) { grades, absences, agenda ->
       buildStats(grades, absences, agenda)
-    }
+    }.flowOn(Dispatchers.Default)
   }
 
   override suspend fun refreshStats(force: Boolean): Result<StatsSnapshot> = runCatching {
@@ -529,6 +543,8 @@ class SchoolDataRepository @Inject constructor(
           subject = homework.subject,
           category = AgendaCategory.HOMEWORK,
           sharePayload = "${homework.subject} - ${homework.description} - ${homework.dueDate}",
+          createdAt = homework.createdAt,
+          history = homework.history,
         )
       } + customEvents.filter { event ->
         isInSchoolYear(event.date, schoolYear)
@@ -546,7 +562,7 @@ class SchoolDataRepository @Inject constructor(
           createdAt = event.createdAt,
         )
       }).sortedBy { "${it.date}-${it.time.orEmpty()}" }
-    }
+    }.flowOn(Dispatchers.Default)
   }
 
   private fun agendaHomeworkKey(date: String, subject: String?, text: String): String {
@@ -570,16 +586,24 @@ class SchoolDataRepository @Inject constructor(
         changeHistoryDao.observeByYearAndKind(studentId, schoolYear.id, HistoryKindAgenda),
       ) { entities, history ->
         val historyByItemId = history
-          .mapNotNull { entity -> entity.toAgendaItemVersion(json)?.let { version -> entity.itemId to version } }
+          .mapNotNull { entity -> entity.toAgendaItemVersion(json)?.let { version -> entity.itemId to (entity to version) } }
           .groupBy({ it.first }, { it.second })
-          .mapValues { (_, versions) -> versions.sortedByDescending { it.recordedAtEpochMillis } }
+          .mapValues { (_, versions) -> versions.sortedByDescending { it.first.recordedAtEpochMillis } }
         entities.map { entity ->
           entity.toAgendaItem(
-            history = historyByItemId[entity.id].orEmpty(),
+            history = historyByItemId[entity.id]
+              .orEmpty()
+              .filter { (historyEntity, version) ->
+                entity.hasMeaningfulChangeComparedTo(
+                  version,
+                  includeOneSidedText = historyEntity.wasRecordedAfterFirstSeen(entity.firstSeenAtMs),
+                )
+              }
+              .map { (_, version) -> version },
             fallbackCreatedAt = entity.firstSeenAtMs?.let(::epochMillisToCreatedAt),
           )
         }
-      }
+      }.flowOn(Dispatchers.Default)
     }
   }
 
@@ -588,7 +612,7 @@ class SchoolDataRepository @Inject constructor(
       val decoded = json.decodeFromString<CustomEvent>(entity.payload)
       decoded.copy(createdAt = decoded.createdAt ?: entity.createdAt)
     }
-  }
+  }.flowOn(Dispatchers.Default)
 
   override suspend fun addCustomEvent(event: CustomEvent) {
     val createdAt = event.createdAt ?: java.time.LocalDateTime.now().toString().take(16)
@@ -618,7 +642,7 @@ class SchoolDataRepository @Inject constructor(
       observeDbAgenda(),
     ) { lessons, agenda ->
       buildLessonsWithFallback(lessons, agenda)
-    }
+    }.flowOn(Dispatchers.Default)
   }
 
   override fun observeTimetableTemplate(): Flow<TimetableTemplate> {
@@ -637,7 +661,7 @@ class SchoolDataRepository @Inject constructor(
       }
       // Sempre applica gli override persistiti, anche se la base è ricomputata in volo.
       base.copy(manualOverrides = stored.manualOverrides).withOverridesApplied()
-    }
+    }.flowOn(Dispatchers.Default)
   }
 
   override suspend fun saveSlotOverride(fingerprint: String, slot: TemplateSlot) {
@@ -682,7 +706,31 @@ class SchoolDataRepository @Inject constructor(
     observeLessons().firstValue()
   }
 
-  override fun observeHomeworks(): Flow<List<Homework>> = observeYearScopedValue(HomeworkSection, emptyList())
+  override fun observeHomeworks(): Flow<List<Homework>> {
+    return combine(
+      observeYearScopedValue(HomeworkSection, emptyList<Homework>()),
+      observeDbAgenda(),
+    ) { homeworks, agenda ->
+      val agendaHomeworkByKey = agenda
+        .filter { it.category == AgendaCategory.HOMEWORK }
+        .groupBy { agendaHomeworkKey(it.date, it.subject ?: it.subtitle, it.title) }
+        .mapValues { (_, items) ->
+          items.sortedWith(
+            compareByDescending<AgendaItem> { it.history.size }
+              .thenByDescending { it.history.maxOfOrNull { version -> version.recordedAtEpochMillis } ?: Long.MIN_VALUE },
+          ).first()
+        }
+      homeworks.map { homework ->
+        val matchingAgenda = agendaHomeworkByKey[agendaHomeworkKey(homework.dueDate, homework.subject, homework.description)]
+        homework.copy(
+          createdAt = homework.createdAt ?: matchingAgenda?.createdAt,
+          history = homework.history.ifEmpty { matchingAgenda?.history.orEmpty() },
+          notes = homework.notes ?: matchingAgenda?.detail,
+        )
+      }
+    }.flowOn(Dispatchers.Default)
+  }
+
   override suspend fun refreshHomeworks(force: Boolean): Result<List<Homework>> = runCatching {
     syncCoordinator.refreshHomeworks(force)
   }
@@ -694,7 +742,7 @@ class SchoolDataRepository @Inject constructor(
     HomeworkDetail(
       homework = homework,
       fullText = listOfNotNull(homework.description, homework.notes).joinToString("\n\n").ifBlank { homework.description },
-      assignedDate = homework.dueDate,
+      assignedDate = homework.createdAt,
       capability = capabilityResolver.observeCapability(RegistroFeature.HOMEWORKS).first(),
     )
   }
@@ -714,7 +762,7 @@ class SchoolDataRepository @Inject constructor(
       val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList<Communication>())
       communicationDao.observeByYear(studentId, schoolYear.id).map { entities ->
         entities.map { entity -> entity.toCommunication(json) }
-      }
+      }.flowOn(Dispatchers.Default)
     }
   }
 
@@ -754,7 +802,8 @@ class SchoolDataRepository @Inject constructor(
 
   override suspend fun resolveAttachmentLocalPath(attachment: RemoteAttachment): Result<String> = runCatching {
     require(!attachment.url.isNullOrBlank()) { "Nessun URL disponibile per l'allegato." }
-    val url = attachment.url!!
+    val originalUrl = attachment.url!!
+    val url = normalizeNoticeboardAttachmentUrl(originalUrl)
     val urlKey = url.trim().take(250)
     val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000
 
@@ -774,8 +823,21 @@ class SchoolDataRepository @Inject constructor(
       attachmentCacheDao.deleteByUrlKey(urlKey)
     }
 
-    // Download with auth headers via the RestClient.
-    val bytes = syncCoordinator.downloadAttachmentBytes(url)
+    // Download with auth headers via the RestClient. Older cached noticeboard URLs used /101;
+    // attachments download from the one-based file index instead.
+    var downloadedFromUrl = url
+    var lastFailure: Throwable? = null
+    var bytes: ByteArray? = null
+    for (candidateUrl in noticeboardAttachmentDownloadCandidates(originalUrl)) {
+      try {
+        bytes = syncCoordinator.downloadAttachmentBytes(candidateUrl)
+        downloadedFromUrl = candidateUrl
+        break
+      } catch (error: Throwable) {
+        lastFailure = error
+      }
+    }
+    val resolvedBytes = bytes ?: throw lastFailure ?: IllegalStateException("Download allegato non riuscito.")
     val safeBase = sanitizeFileName(attachment.name.ifBlank { "allegato" })
     val hashSuffix = url.hashCode().let { if (it < 0) "m${-it}" else "$it" }
     val fileName = run {
@@ -785,13 +847,13 @@ class SchoolDataRepository @Inject constructor(
     }
     cacheDir.mkdirs()
     val file = java.io.File(cacheDir, fileName)
-    file.writeBytes(bytes)
+    file.writeBytes(resolvedBytes)
 
     val now = System.currentTimeMillis()
     attachmentCacheDao.upsert(
       AttachmentCacheEntity(
         urlKey = urlKey,
-        sourceUrl = url,
+        sourceUrl = downloadedFromUrl,
         localPath = file.absolutePath,
         fileName = fileName,
         mimeType = attachment.mimeType,
@@ -857,7 +919,7 @@ class SchoolDataRepository @Inject constructor(
             attachments = json.decodeFromString(entity.attachments),
           )
         }
-      }
+      }.flowOn(Dispatchers.Default)
     }
   }
 
@@ -887,7 +949,7 @@ class SchoolDataRepository @Inject constructor(
             capabilityState = json.decodeFromString(entity.capabilityState),
           )
         }
-      }
+      }.flowOn(Dispatchers.Default)
     }
   }
 
@@ -927,7 +989,7 @@ class SchoolDataRepository @Inject constructor(
             detailUrl = entity.detailUrl,
           )
         }
-      }
+      }.flowOn(Dispatchers.Default)
     }
   }
   override suspend fun refreshAbsences(force: Boolean): Result<List<AbsenceRecord>> {
@@ -982,12 +1044,12 @@ class SchoolDataRepository @Inject constructor(
   override fun observeCurrentScore(): Flow<StudentScoreSnapshot?> {
     return combine(observeStats(), observeAbsences(), studentScoreDao.observeLatest()) { stats, absences, cached ->
       cached?.let { json.decodeFromString<StudentScoreSnapshot>(it.payload) } ?: computeStudentScore(stats, absences)
-    }
+    }.flowOn(Dispatchers.Default)
   }
 
   override fun observeSnapshots(): Flow<List<StudentScoreSnapshot>> = studentScoreDao.observeAll().map { entries ->
     entries.map { json.decodeFromString<StudentScoreSnapshot>(it.payload) }
-  }
+  }.flowOn(Dispatchers.Default)
 
   override suspend fun refreshStudentScore(force: Boolean): Result<StudentScoreSnapshot> = runCatching {
     syncCoordinator.refreshAll(force)
@@ -1023,7 +1085,7 @@ class SchoolDataRepository @Inject constructor(
         delta = (simulatedAverage ?: realAverage ?: 0.0) - (realAverage ?: 0.0),
         grades = simulated,
       )
-    }
+    }.flowOn(Dispatchers.Default)
   }
 
   override suspend fun addSimulatedGrade(grade: SimulatedGrade) {
@@ -1066,7 +1128,7 @@ class SchoolDataRepository @Inject constructor(
   private inline fun <reified T> observeGlobalValue(key: String, default: T): Flow<T> {
     return snapshotCacheDao.observeByKey(key).map { entity ->
       entity?.payload?.let { runCatching { json.decodeFromString<T>(it) }.getOrDefault(default) } ?: default
-    }
+    }.flowOn(Dispatchers.Default)
   }
 
   private inline fun <reified T> observeYearScopedValue(section: String, default: T): Flow<T> {
@@ -1074,7 +1136,7 @@ class SchoolDataRepository @Inject constructor(
       snapshotCacheDao.observeByKey(yearScopedCacheKey(section, schoolYear)).map { entity ->
         entity?.payload?.let { runCatching { json.decodeFromString<T>(it) }.getOrDefault(default) } ?: default
       }
-    }
+    }.flowOn(Dispatchers.Default)
   }
 
   private fun todayIso(): String = java.time.LocalDate.now().toString()
@@ -1451,4 +1513,8 @@ private fun ChangeHistoryEntity.toAgendaItemVersion(json: Json): AgendaItemVersi
   return runCatching {
     json.decodeFromString<AgendaItemVersion>(payload).copy(recordedAtEpochMillis = recordedAtEpochMillis)
   }.getOrNull()
+}
+
+private fun ChangeHistoryEntity.wasRecordedAfterFirstSeen(firstSeenAtMs: Long?): Boolean {
+  return firstSeenAtMs != null && recordedAtEpochMillis > firstSeenAtMs
 }
