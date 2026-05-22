@@ -2,7 +2,7 @@
   "app": {
     "id": "classeviva-expressive",
     "name": "Classeviva Expressive",
-    "description": "Client Android nativo per Classeviva con interfaccia Material 3 Expressive.",
+    "description": "Client Android nativo per ClasseViva con interfaccia Material 3 Expressive.",
     "packageName": "dev.antigravity.classevivaexpressive",
     "iconUrl": "",
     "category": "Education",
@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.0",
-      "releaseDate": "2026-05-21",
-      "changelog": "Release 6.0.0: polish Material 3 Expressive mirato, animazioni e feedback di pressione più coerenti con ripple Material, transizioni di contenuto più morbide, loading state Expressive, correzioni testi e accenti italiani, fix apertura dettaglio note con fallback cache, QA su device per schermate principali e secondarie.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.0",
-      "apkAsset": "classeviva-expressive-6.0.0.apk",
+      "version": "6.0.1",
+      "releaseDate": "2026-05-22",
+      "changelog": "Migliora la fluidità del registro e dei cambi pagina riducendo refresh interattivi ripetuti, spostando trasformazioni dati fuori dal main thread e rimuovendo animazioni di layout costose dalle righe.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.1",
+      "apkAsset": "classeviva-expressive-6.0.1.apk",
       "exeAsset": "",
-      "sizeBytes": 20805243
+      "sizeBytes": 20805241
     },
     "beta": {
-      "version": "6.0.0",
-      "releaseDate": "2026-05-21",
-      "changelog": "Release 6.0.0: polish Material 3 Expressive mirato, animazioni e feedback di pressione più coerenti con ripple Material, transizioni di contenuto più morbide, loading state Expressive, correzioni testi e accenti italiani, fix apertura dettaglio note con fallback cache, QA su device per schermate principali e secondarie.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.0",
-      "apkAsset": "classeviva-expressive-6.0.0.apk",
+      "version": "6.0.1",
+      "releaseDate": "2026-05-22",
+      "changelog": "Migliora la fluidità del registro e dei cambi pagina riducendo refresh interattivi ripetuti, spostando trasformazioni dati fuori dal main thread e rimuovendo animazioni di layout costose dalle righe.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.1",
+      "apkAsset": "classeviva-expressive-6.0.1.apk",
       "exeAsset": "",
-      "sizeBytes": 20805243
+      "sizeBytes": 20805241
     },
     "history": [
+      {
+        "version": "6.0.0",
+        "releaseDate": "2026-05-21",
+        "changelog": "Release 6.0.0: polish Material 3 Expressive mirato, animazioni e feedback di pressione più coerenti con ripple Material, transizioni di contenuto più morbide, loading state Expressive, correzioni testi e accenti italiani, fix apertura dettaglio note con fallback cache, QA su device per schermate principali e secondarie.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.0",
+        "apkAsset": "classeviva-expressive-6.0.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 20805243
+      },
       {
         "version": "5.8.0",
         "releaseDate": "2026-05-21",
