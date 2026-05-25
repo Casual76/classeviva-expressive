@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.8",
+      "version": "6.0.9",
       "releaseDate": "2026-05-25",
-      "changelog": "Corrette le notifiche live Android 16 con richiesta di promozione ufficiale, timeline orario piu' ricca e tap sulle notifiche verso voto, comunicazione, nota, compito, agenda, assenza e orario.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.8",
-      "apkAsset": "classeviva-expressive-6.0.8.apk",
+      "changelog": "Corrette le notifiche dei voti: gestione affidabile dei voti duplicati senza ID remoto, notifiche anche per aggiornamenti significativi dei voti, test dei canali Android piu chiari e fix richiesta esonero batteria.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.9",
+      "apkAsset": "classeviva-expressive-6.0.9.apk",
       "exeAsset": "",
-      "sizeBytes": 20838010
+      "sizeBytes": 20838040
     },
     "beta": {
-      "version": "6.0.8",
+      "version": "6.0.9",
       "releaseDate": "2026-05-25",
-      "changelog": "Corrette le notifiche live Android 16 con richiesta di promozione ufficiale, timeline orario piu' ricca e tap sulle notifiche verso voto, comunicazione, nota, compito, agenda, assenza e orario.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.8",
-      "apkAsset": "classeviva-expressive-6.0.8.apk",
+      "changelog": "Corrette le notifiche dei voti: gestione affidabile dei voti duplicati senza ID remoto, notifiche anche per aggiornamenti significativi dei voti, test dei canali Android piu chiari e fix richiesta esonero batteria.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.9",
+      "apkAsset": "classeviva-expressive-6.0.9.apk",
       "exeAsset": "",
-      "sizeBytes": 20838010
+      "sizeBytes": 20838040
     },
     "history": [
+      {
+        "version": "6.0.8",
+        "releaseDate": "2026-05-25",
+        "changelog": "Corrette le notifiche live Android 16 con richiesta di promozione ufficiale, timeline orario piu' ricca e tap sulle notifiche verso voto, comunicazione, nota, compito, agenda, assenza e orario.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.8",
+        "apkAsset": "classeviva-expressive-6.0.8.apk",
+        "exeAsset": "",
+        "sizeBytes": 20838010
+      },
       {
         "version": "6.0.7",
         "releaseDate": "2026-05-22",
