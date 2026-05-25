@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.7",
-      "releaseDate": "2026-05-22",
-      "changelog": "Ripristinata e corretta la visibilita del pulsante 'Conferma lettura' nella bacheca (visibile solo per circolari non ancora lette). Rimossa completamente ogni dicitura relativa alla firma/presa visione. Aggiunta la richiesta di accesso alle notifiche al primo avvio ed ottimizzate le notifiche live per Android 16.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.7",
-      "apkAsset": "classeviva-expressive-6.0.7.apk",
+      "version": "6.0.8",
+      "releaseDate": "2026-05-25",
+      "changelog": "Corrette le notifiche live Android 16 con richiesta di promozione ufficiale, timeline orario piu' ricca e tap sulle notifiche verso voto, comunicazione, nota, compito, agenda, assenza e orario.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.8",
+      "apkAsset": "classeviva-expressive-6.0.8.apk",
       "exeAsset": "",
-      "sizeBytes": 20821625
+      "sizeBytes": 20838010
     },
     "beta": {
-      "version": "6.0.7",
-      "releaseDate": "2026-05-22",
-      "changelog": "Ripristinata e corretta la visibilita del pulsante 'Conferma lettura' nella bacheca (visibile solo per circolari non ancora lette). Rimossa completamente ogni dicitura relativa alla firma/presa visione. Aggiunta la richiesta di accesso alle notifiche al primo avvio ed ottimizzate le notifiche live per Android 16.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.7",
-      "apkAsset": "classeviva-expressive-6.0.7.apk",
+      "version": "6.0.8",
+      "releaseDate": "2026-05-25",
+      "changelog": "Corrette le notifiche live Android 16 con richiesta di promozione ufficiale, timeline orario piu' ricca e tap sulle notifiche verso voto, comunicazione, nota, compito, agenda, assenza e orario.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.8",
+      "apkAsset": "classeviva-expressive-6.0.8.apk",
       "exeAsset": "",
-      "sizeBytes": 20821625
+      "sizeBytes": 20838010
     },
     "history": [
+      {
+        "version": "6.0.7",
+        "releaseDate": "2026-05-22",
+        "changelog": "Ripristinata e corretta la visibilita del pulsante 'Conferma lettura' nella bacheca (visibile solo per circolari non ancora lette). Rimossa completamente ogni dicitura relativa alla firma/presa visione. Aggiunta la richiesta di accesso alle notifiche al primo avvio ed ottimizzate le notifiche live per Android 16.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.7",
+        "apkAsset": "classeviva-expressive-6.0.7.apk",
+        "exeAsset": "",
+        "sizeBytes": 20821625
+      },
       {
         "version": "6.0.6",
         "releaseDate": "2026-05-22",
