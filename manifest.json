@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.12",
+      "version": "6.0.13",
       "releaseDate": "2026-06-03",
-      "changelog": "Ottimizzata la sincronizzazione in background con cadenza adattiva e polling leggero per le notifiche. Ridotte le chiamate rete e le scritture cache quando i dati non cambiano, mantenendo le notifiche rapide nelle fasce utili. Disattivato il logging HTTP in release e aggiornata la manutenzione giornaliera dei dati completi.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.12",
-      "apkAsset": "classeviva-expressive-6.0.12.apk",
+      "changelog": "Migliorata gestione notifiche e diagnostica; aggiunti stato ultimo aggiornamento, deep link notifiche stabili, schermata Colloqui reale, pattern messaggi uniforme e pulizia log.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.13",
+      "apkAsset": "classeviva-expressive-6.0.13.apk",
       "exeAsset": "",
-      "sizeBytes": 20854427
+      "sizeBytes": 20870794
     },
     "beta": {
-      "version": "6.0.12",
+      "version": "6.0.13",
       "releaseDate": "2026-06-03",
-      "changelog": "Ottimizzata la sincronizzazione in background con cadenza adattiva e polling leggero per le notifiche. Ridotte le chiamate rete e le scritture cache quando i dati non cambiano, mantenendo le notifiche rapide nelle fasce utili. Disattivato il logging HTTP in release e aggiornata la manutenzione giornaliera dei dati completi.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.12",
-      "apkAsset": "classeviva-expressive-6.0.12.apk",
+      "changelog": "Migliorata gestione notifiche e diagnostica; aggiunti stato ultimo aggiornamento, deep link notifiche stabili, schermata Colloqui reale, pattern messaggi uniforme e pulizia log.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.13",
+      "apkAsset": "classeviva-expressive-6.0.13.apk",
       "exeAsset": "",
-      "sizeBytes": 20854427
+      "sizeBytes": 20870794
     },
     "history": [
+      {
+        "version": "6.0.12",
+        "releaseDate": "2026-06-03",
+        "changelog": "Ottimizzata la sincronizzazione in background con cadenza adattiva e polling leggero per le notifiche. Ridotte le chiamate rete e le scritture cache quando i dati non cambiano, mantenendo le notifiche rapide nelle fasce utili. Disattivato il logging HTTP in release e aggiornata la manutenzione giornaliera dei dati completi.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.12",
+        "apkAsset": "classeviva-expressive-6.0.12.apk",
+        "exeAsset": "",
+        "sizeBytes": 20854427
+      },
       {
         "version": "6.0.11",
         "releaseDate": "2026-05-29",
