@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.14",
+      "version": "6.0.15",
       "releaseDate": "2026-06-03",
-      "changelog": "Corretto lo stato di sincronizzazione parziale mostrato in Home quando falliscono sezioni accessorie. Ridotti i refresh globali e gli endpoint pesanti nel background sync, con polling notifiche piu stabile e meno rallentamenti da manutenzione o errori non critici. Card di sincronizzazione resa piu compatta e visibile solo quando serve.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.14",
-      "apkAsset": "classeviva-expressive-6.0.14.apk",
+      "changelog": "Stato sincronizzazione spostato in un pallino compatto negli header di Home, Voti, Agenda e Bacheca; rimosse le card di aggiornamento parziale dalle sezioni principali; escluse le assenze dalla sincronizzazione automatica per evitare falsi aggiornamenti incompleti.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.15",
+      "apkAsset": "classeviva-expressive-6.0.15.apk",
       "exeAsset": "",
-      "sizeBytes": 20887197
+      "sizeBytes": 20887176
     },
     "beta": {
-      "version": "6.0.14",
+      "version": "6.0.15",
       "releaseDate": "2026-06-03",
-      "changelog": "Corretto lo stato di sincronizzazione parziale mostrato in Home quando falliscono sezioni accessorie. Ridotti i refresh globali e gli endpoint pesanti nel background sync, con polling notifiche piu stabile e meno rallentamenti da manutenzione o errori non critici. Card di sincronizzazione resa piu compatta e visibile solo quando serve.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.14",
-      "apkAsset": "classeviva-expressive-6.0.14.apk",
+      "changelog": "Stato sincronizzazione spostato in un pallino compatto negli header di Home, Voti, Agenda e Bacheca; rimosse le card di aggiornamento parziale dalle sezioni principali; escluse le assenze dalla sincronizzazione automatica per evitare falsi aggiornamenti incompleti.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.15",
+      "apkAsset": "classeviva-expressive-6.0.15.apk",
       "exeAsset": "",
-      "sizeBytes": 20887197
+      "sizeBytes": 20887176
     },
     "history": [
+      {
+        "version": "6.0.14",
+        "releaseDate": "2026-06-03",
+        "changelog": "Corretto lo stato di sincronizzazione parziale mostrato in Home quando falliscono sezioni accessorie. Ridotti i refresh globali e gli endpoint pesanti nel background sync, con polling notifiche piu stabile e meno rallentamenti da manutenzione o errori non critici. Card di sincronizzazione resa piu compatta e visibile solo quando serve.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.14",
+        "apkAsset": "classeviva-expressive-6.0.14.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887197
+      },
       {
         "version": "6.0.13",
         "releaseDate": "2026-06-03",
