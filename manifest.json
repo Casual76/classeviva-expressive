@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.17",
+      "version": "6.1.0",
       "releaseDate": "2026-06-04",
-      "changelog": "Animazioni di navigazione piu fluide e coerenti, supporto migliorato alla predictive back gesture, correzioni di stabilita e notifiche.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.17",
-      "apkAsset": "classeviva-expressive-6.0.17.apk",
+      "changelog": "Navigazione resa piu fluida: bottom bar senza transizioni di pagina incoerenti, shared container attivati solo da card e liste, motion piu stabile con predictive back gesture mantenuta.",
+      "releaseTag": "stable-classeviva-expressive-v6.1.0",
+      "apkAsset": "classeviva-expressive-6.1.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20887181
+      "sizeBytes": 20887188
     },
     "beta": {
-      "version": "6.0.17",
+      "version": "6.1.0",
       "releaseDate": "2026-06-04",
-      "changelog": "Animazioni di navigazione piu fluide e coerenti, supporto migliorato alla predictive back gesture, correzioni di stabilita e notifiche.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.17",
-      "apkAsset": "classeviva-expressive-6.0.17.apk",
+      "changelog": "Navigazione resa piu fluida: bottom bar senza transizioni di pagina incoerenti, shared container attivati solo da card e liste, motion piu stabile con predictive back gesture mantenuta.",
+      "releaseTag": "stable-classeviva-expressive-v6.1.0",
+      "apkAsset": "classeviva-expressive-6.1.0.apk",
       "exeAsset": "",
-      "sizeBytes": 20887181
+      "sizeBytes": 20887188
     },
     "history": [
+      {
+        "version": "6.0.17",
+        "releaseDate": "2026-06-04",
+        "changelog": "Animazioni di navigazione piu fluide e coerenti, supporto migliorato alla predictive back gesture, correzioni di stabilita e notifiche.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.17",
+        "apkAsset": "classeviva-expressive-6.0.17.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887181
+      },
       {
         "version": "6.0.16",
         "releaseDate": "2026-06-04",
