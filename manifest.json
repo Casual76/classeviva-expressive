@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.16",
+      "version": "6.0.17",
       "releaseDate": "2026-06-04",
-      "changelog": "Le notifiche dei voti vengono rimosse anche quando il voto viene aperto manualmente dall'app, segnandolo comunque come visto.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.16",
-      "apkAsset": "classeviva-expressive-6.0.16.apk",
+      "changelog": "Animazioni di navigazione piu fluide e coerenti, supporto migliorato alla predictive back gesture, correzioni di stabilita e notifiche.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.17",
+      "apkAsset": "classeviva-expressive-6.0.17.apk",
       "exeAsset": "",
-      "sizeBytes": 20887170
+      "sizeBytes": 20887181
     },
     "beta": {
-      "version": "6.0.16",
+      "version": "6.0.17",
       "releaseDate": "2026-06-04",
-      "changelog": "Le notifiche dei voti vengono rimosse anche quando il voto viene aperto manualmente dall'app, segnandolo comunque come visto.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.16",
-      "apkAsset": "classeviva-expressive-6.0.16.apk",
+      "changelog": "Animazioni di navigazione piu fluide e coerenti, supporto migliorato alla predictive back gesture, correzioni di stabilita e notifiche.",
+      "releaseTag": "stable-classeviva-expressive-v6.0.17",
+      "apkAsset": "classeviva-expressive-6.0.17.apk",
       "exeAsset": "",
-      "sizeBytes": 20887170
+      "sizeBytes": 20887181
     },
     "history": [
+      {
+        "version": "6.0.16",
+        "releaseDate": "2026-06-04",
+        "changelog": "Le notifiche dei voti vengono rimosse anche quando il voto viene aperto manualmente dall'app, segnandolo comunque come visto.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.16",
+        "apkAsset": "classeviva-expressive-6.0.16.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887170
+      },
       {
         "version": "6.0.15",
         "releaseDate": "2026-06-03",
