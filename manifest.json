@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.1.0",
+      "version": "6.1.1",
       "releaseDate": "2026-06-04",
-      "changelog": "Navigazione resa piu fluida: bottom bar senza transizioni di pagina incoerenti, shared container attivati solo da card e liste, motion piu stabile con predictive back gesture mantenuta.",
-      "releaseTag": "stable-classeviva-expressive-v6.1.0",
-      "apkAsset": "classeviva-expressive-6.1.0.apk",
+      "changelog": "Ripristinata una transizione leggera nella bottom bar e corretti i passaggi tab-to-tab per evitare flash o caricamenti percepiti dalla Home, mantenendo il supporto alla predictive back gesture.",
+      "releaseTag": "stable-classeviva-expressive-v6.1.1",
+      "apkAsset": "classeviva-expressive-6.1.1.apk",
       "exeAsset": "",
-      "sizeBytes": 20887188
+      "sizeBytes": 20887170
     },
     "beta": {
-      "version": "6.1.0",
+      "version": "6.1.1",
       "releaseDate": "2026-06-04",
-      "changelog": "Navigazione resa piu fluida: bottom bar senza transizioni di pagina incoerenti, shared container attivati solo da card e liste, motion piu stabile con predictive back gesture mantenuta.",
-      "releaseTag": "stable-classeviva-expressive-v6.1.0",
-      "apkAsset": "classeviva-expressive-6.1.0.apk",
+      "changelog": "Ripristinata una transizione leggera nella bottom bar e corretti i passaggi tab-to-tab per evitare flash o caricamenti percepiti dalla Home, mantenendo il supporto alla predictive back gesture.",
+      "releaseTag": "stable-classeviva-expressive-v6.1.1",
+      "apkAsset": "classeviva-expressive-6.1.1.apk",
       "exeAsset": "",
-      "sizeBytes": 20887188
+      "sizeBytes": 20887170
     },
     "history": [
+      {
+        "version": "6.1.0",
+        "releaseDate": "2026-06-04",
+        "changelog": "Navigazione resa piu fluida: bottom bar senza transizioni di pagina incoerenti, shared container attivati solo da card e liste, motion piu stabile con predictive back gesture mantenuta.",
+        "releaseTag": "stable-classeviva-expressive-v6.1.0",
+        "apkAsset": "classeviva-expressive-6.1.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887188
+      },
       {
         "version": "6.0.17",
         "releaseDate": "2026-06-04",
