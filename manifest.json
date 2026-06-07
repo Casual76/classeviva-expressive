@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.1.2",
+      "version": "6.1.3",
       "releaseDate": "2026-06-07",
-      "changelog": "Corretto lo stato di aggiornamento nelle schede principali: ora usa anche la sync in background e non mostra piu Mai aggiornato quando esiste una sincronizzazione riuscita.",
-      "releaseTag": "stable-classeviva-expressive-v6.1.2",
-      "apkAsset": "classeviva-expressive-6.1.2.apk",
+      "changelog": "Corretto il pallino dello stato di aggiornamento: durante Aggiornamento in corso usa un tono informativo/primario e non rosso, lasciando il rosso solo agli errori reali.",
+      "releaseTag": "stable-classeviva-expressive-v6.1.3",
+      "apkAsset": "classeviva-expressive-6.1.3.apk",
       "exeAsset": "",
-      "sizeBytes": 20887183
+      "sizeBytes": 20887179
     },
     "beta": {
-      "version": "6.1.2",
+      "version": "6.1.3",
       "releaseDate": "2026-06-07",
-      "changelog": "Corretto lo stato di aggiornamento nelle schede principali: ora usa anche la sync in background e non mostra piu Mai aggiornato quando esiste una sincronizzazione riuscita.",
-      "releaseTag": "stable-classeviva-expressive-v6.1.2",
-      "apkAsset": "classeviva-expressive-6.1.2.apk",
+      "changelog": "Corretto il pallino dello stato di aggiornamento: durante Aggiornamento in corso usa un tono informativo/primario e non rosso, lasciando il rosso solo agli errori reali.",
+      "releaseTag": "stable-classeviva-expressive-v6.1.3",
+      "apkAsset": "classeviva-expressive-6.1.3.apk",
       "exeAsset": "",
-      "sizeBytes": 20887183
+      "sizeBytes": 20887179
     },
     "history": [
+      {
+        "version": "6.1.2",
+        "releaseDate": "2026-06-07",
+        "changelog": "Corretto lo stato di aggiornamento nelle schede principali: ora usa anche la sync in background e non mostra piu Mai aggiornato quando esiste una sincronizzazione riuscita.",
+        "releaseTag": "stable-classeviva-expressive-v6.1.2",
+        "apkAsset": "classeviva-expressive-6.1.2.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887183
+      },
       {
         "version": "6.1.1",
         "releaseDate": "2026-06-04",
