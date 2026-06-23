@@ -2,7 +2,7 @@
   "app": {
     "id": "classeviva-expressive",
     "name": "Classeviva Expressive",
-    "description": "Client Android nativo per Classeviva con UI Material 3 Expressive.",
+    "description": "Client Android nativo per Classeviva con UI Material 3 Expressive, dashboard scolastica e widget home-screen.",
     "packageName": "dev.antigravity.classevivaexpressive",
     "iconUrl": "",
     "category": "Education",
@@ -15,24 +15,159 @@
       "ref": ""
     },
     "stable": {
-      "version": "6.0.7",
-      "releaseDate": "2026-05-22",
-      "changelog": "Ripristinata e corretta la visibilita del pulsante 'Conferma lettura' nella bacheca (visibile solo per circolari non ancora lette). Rimossa completamente ogni dicitura relativa alla firma/presa visione. Aggiunta la richiesta di accesso alle notifiche al primo avvio ed ottimizzate le notifiche live per Android 16.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.7",
-      "apkAsset": "classeviva-expressive-6.0.7.apk",
+      "version": "6.1.4",
+      "releaseDate": "2026-06-23",
+      "changelog": "Aggiunto il widget home-screen Classeviva Oggi con riepilogo compiti, verifiche, comunicazioni non lette e voti non visti. Aggiunta configurazione del widget, refresh manuale e aggiornamenti automatici dopo la sincronizzazione. Migliorata la sincronizzazione comunicazioni preservando le letture locali.",
+      "releaseTag": "stable-classeviva-expressive-v6.1.4",
+      "apkAsset": "classeviva-expressive-6.1.4.apk",
       "exeAsset": "",
-      "sizeBytes": 20821625
+      "sizeBytes": 22294908
     },
     "beta": {
-      "version": "6.0.7",
-      "releaseDate": "2026-05-22",
-      "changelog": "Ripristinata e corretta la visibilita del pulsante 'Conferma lettura' nella bacheca (visibile solo per circolari non ancora lette). Rimossa completamente ogni dicitura relativa alla firma/presa visione. Aggiunta la richiesta di accesso alle notifiche al primo avvio ed ottimizzate le notifiche live per Android 16.",
-      "releaseTag": "stable-classeviva-expressive-v6.0.7",
-      "apkAsset": "classeviva-expressive-6.0.7.apk",
+      "version": "6.1.4",
+      "releaseDate": "2026-06-23",
+      "changelog": "Aggiunto il widget home-screen Classeviva Oggi con riepilogo compiti, verifiche, comunicazioni non lette e voti non visti. Aggiunta configurazione del widget, refresh manuale e aggiornamenti automatici dopo la sincronizzazione. Migliorata la sincronizzazione comunicazioni preservando le letture locali.",
+      "releaseTag": "stable-classeviva-expressive-v6.1.4",
+      "apkAsset": "classeviva-expressive-6.1.4.apk",
       "exeAsset": "",
-      "sizeBytes": 20821625
+      "sizeBytes": 22294908
     },
     "history": [
+      {
+        "version": "6.1.3",
+        "releaseDate": "2026-06-07",
+        "changelog": "Corretto il pallino dello stato di aggiornamento: durante Aggiornamento in corso usa un tono informativo/primario e non rosso, lasciando il rosso solo agli errori reali.",
+        "releaseTag": "stable-classeviva-expressive-v6.1.3",
+        "apkAsset": "classeviva-expressive-6.1.3.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887179
+      },
+      {
+        "version": "6.1.2",
+        "releaseDate": "2026-06-07",
+        "changelog": "Corretto lo stato di aggiornamento nelle schede principali: ora usa anche la sync in background e non mostra piu Mai aggiornato quando esiste una sincronizzazione riuscita.",
+        "releaseTag": "stable-classeviva-expressive-v6.1.2",
+        "apkAsset": "classeviva-expressive-6.1.2.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887183
+      },
+      {
+        "version": "6.1.1",
+        "releaseDate": "2026-06-04",
+        "changelog": "Ripristinata una transizione leggera nella bottom bar e corretti i passaggi tab-to-tab per evitare flash o caricamenti percepiti dalla Home, mantenendo il supporto alla predictive back gesture.",
+        "releaseTag": "stable-classeviva-expressive-v6.1.1",
+        "apkAsset": "classeviva-expressive-6.1.1.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887170
+      },
+      {
+        "version": "6.1.0",
+        "releaseDate": "2026-06-04",
+        "changelog": "Navigazione resa piu fluida: bottom bar senza transizioni di pagina incoerenti, shared container attivati solo da card e liste, motion piu stabile con predictive back gesture mantenuta.",
+        "releaseTag": "stable-classeviva-expressive-v6.1.0",
+        "apkAsset": "classeviva-expressive-6.1.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887188
+      },
+      {
+        "version": "6.0.17",
+        "releaseDate": "2026-06-04",
+        "changelog": "Animazioni di navigazione piu fluide e coerenti, supporto migliorato alla predictive back gesture, correzioni di stabilita e notifiche.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.17",
+        "apkAsset": "classeviva-expressive-6.0.17.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887181
+      },
+      {
+        "version": "6.0.16",
+        "releaseDate": "2026-06-04",
+        "changelog": "Le notifiche dei voti vengono rimosse anche quando il voto viene aperto manualmente dall'app, segnandolo comunque come visto.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.16",
+        "apkAsset": "classeviva-expressive-6.0.16.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887170
+      },
+      {
+        "version": "6.0.15",
+        "releaseDate": "2026-06-03",
+        "changelog": "Stato sincronizzazione spostato in un pallino compatto negli header di Home, Voti, Agenda e Bacheca; rimosse le card di aggiornamento parziale dalle sezioni principali; escluse le assenze dalla sincronizzazione automatica per evitare falsi aggiornamenti incompleti.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.15",
+        "apkAsset": "classeviva-expressive-6.0.15.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887176
+      },
+      {
+        "version": "6.0.14",
+        "releaseDate": "2026-06-03",
+        "changelog": "Corretto lo stato di sincronizzazione parziale mostrato in Home quando falliscono sezioni accessorie. Ridotti i refresh globali e gli endpoint pesanti nel background sync, con polling notifiche piu stabile e meno rallentamenti da manutenzione o errori non critici. Card di sincronizzazione resa piu compatta e visibile solo quando serve.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.14",
+        "apkAsset": "classeviva-expressive-6.0.14.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887197
+      },
+      {
+        "version": "6.0.13",
+        "releaseDate": "2026-06-03",
+        "changelog": "Migliorata gestione notifiche e diagnostica; aggiunti stato ultimo aggiornamento, deep link notifiche stabili, schermata Colloqui reale, pattern messaggi uniforme e pulizia log.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.13",
+        "apkAsset": "classeviva-expressive-6.0.13.apk",
+        "exeAsset": "",
+        "sizeBytes": 20870794
+      },
+      {
+        "version": "6.0.12",
+        "releaseDate": "2026-06-03",
+        "changelog": "Ottimizzata la sincronizzazione in background con cadenza adattiva e polling leggero per le notifiche. Ridotte le chiamate rete e le scritture cache quando i dati non cambiano, mantenendo le notifiche rapide nelle fasce utili. Disattivato il logging HTTP in release e aggiornata la manutenzione giornaliera dei dati completi.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.12",
+        "apkAsset": "classeviva-expressive-6.0.12.apk",
+        "exeAsset": "",
+        "sizeBytes": 20854427
+      },
+      {
+        "version": "6.0.11",
+        "releaseDate": "2026-05-29",
+        "changelog": "Release 6.0.11",
+        "releaseTag": "stable-classeviva-expressive-v6.0.11",
+        "apkAsset": "classeviva-expressive-6.0.11.apk",
+        "exeAsset": "",
+        "sizeBytes": 20838049
+      },
+      {
+        "version": "6.0.10",
+        "releaseDate": "2026-05-29",
+        "changelog": "Nuovi grafici voti con andamento, medie per materia, distribuzione e schede riepilogo per una lettura piu chiara delle valutazioni.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.10",
+        "apkAsset": "classeviva-expressive-6.0.10.apk",
+        "exeAsset": "",
+        "sizeBytes": 20887200
+      },
+      {
+        "version": "6.0.9",
+        "releaseDate": "2026-05-25",
+        "changelog": "Corrette le notifiche dei voti: gestione affidabile dei voti duplicati senza ID remoto, notifiche anche per aggiornamenti significativi dei voti, test dei canali Android piu chiari e fix richiesta esonero batteria.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.9",
+        "apkAsset": "classeviva-expressive-6.0.9.apk",
+        "exeAsset": "",
+        "sizeBytes": 20838040
+      },
+      {
+        "version": "6.0.8",
+        "releaseDate": "2026-05-25",
+        "changelog": "Corrette le notifiche live Android 16 con richiesta di promozione ufficiale, timeline orario piu' ricca e tap sulle notifiche verso voto, comunicazione, nota, compito, agenda, assenza e orario.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.8",
+        "apkAsset": "classeviva-expressive-6.0.8.apk",
+        "exeAsset": "",
+        "sizeBytes": 20838010
+      },
+      {
+        "version": "6.0.7",
+        "releaseDate": "2026-05-22",
+        "changelog": "Ripristinata e corretta la visibilita del pulsante 'Conferma lettura' nella bacheca (visibile solo per circolari non ancora lette). Rimossa completamente ogni dicitura relativa alla firma/presa visione. Aggiunta la richiesta di accesso alle notifiche al primo avvio ed ottimizzate le notifiche live per Android 16.",
+        "releaseTag": "stable-classeviva-expressive-v6.0.7",
+        "apkAsset": "classeviva-expressive-6.0.7.apk",
+        "exeAsset": "",
+        "sizeBytes": 20821625
+      },
       {
         "version": "6.0.6",
         "releaseDate": "2026-05-22",
