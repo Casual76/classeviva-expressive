@@ -1,0 +1,5 @@
+<resources>
+  <string name="school_overview_widget_title">Classeviva Oggi</string>
+  <string name="school_overview_widget_description">Compiti, verifiche, comunicazioni e voti da controllare.</string>
+  <string name="school_overview_widget_loading">Aggiornamento...</string>
+</resources>

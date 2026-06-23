@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive
 
 import android.content.Context
+import android.os.SystemClock
 import app.cash.turbine.test
 import dev.antigravity.classevivaexpressive.core.data.sync.SyncWorkScheduler
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
@@ -10,11 +11,14 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
+import io.mockk.mockkStatic
 import io.mockk.unmockkObject
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -41,10 +45,13 @@ class MainViewModelTest {
     mockkObject(SyncWorkScheduler)
     every { SyncWorkScheduler.schedule(any()) } returns Unit
     every { SyncWorkScheduler.cancel(any()) } returns Unit
+    mockkStatic(SystemClock::class)
+    every { SystemClock.elapsedRealtime() } returns 1_000L
   }
 
   @After fun tearDown() {
     unmockkObject(SyncWorkScheduler)
+    unmockkStatic(SystemClock::class)
     Dispatchers.resetMain()
   }
 
@@ -75,6 +82,44 @@ class MainViewModelTest {
     }
   }
 
+  @Test
+  fun notificationPermissionResult_refreshesRuntimeStateAndLiveTimetableWhenGranted() = runTest {
+    val settingsRepository = FakeSettingsRepository(AppSettings())
+    val viewModel = MainViewModel(
+      authRepository = FakeAuthRepository(session()),
+      settingsRepository = settingsRepository,
+      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      context = mockk<Context>(relaxed = true),
+    )
+    testScheduler.advanceUntilIdle()
+    settingsRepository.resetCounters()
+
+    viewModel.onNotificationPermissionResult(granted = true)
+    testScheduler.advanceUntilIdle()
+
+    assertEquals(1, settingsRepository.notificationRuntimeRefreshCount)
+    assertEquals(1, settingsRepository.liveTimetableRefreshCount)
+  }
+
+  @Test
+  fun notificationPermissionResult_refreshesRuntimeStateOnlyWhenDenied() = runTest {
+    val settingsRepository = FakeSettingsRepository(AppSettings())
+    val viewModel = MainViewModel(
+      authRepository = FakeAuthRepository(),
+      settingsRepository = settingsRepository,
+      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      context = mockk<Context>(relaxed = true),
+    )
+    testScheduler.advanceUntilIdle()
+    settingsRepository.resetCounters()
+
+    viewModel.onNotificationPermissionResult(granted = false)
+    testScheduler.advanceUntilIdle()
+
+    assertEquals(1, settingsRepository.notificationRuntimeRefreshCount)
+    assertEquals(0, settingsRepository.liveTimetableRefreshCount)
+  }
+
   private fun update(version: String) = AvailableAppUpdate(
     version = version,
     changelog = "Bugfix updater.",
@@ -83,10 +128,19 @@ class MainViewModelTest {
     downloadUrl = "https://example.test/classeviva-expressive-$version.apk",
     sizeBytes = 42L,
   )
+
+  private fun session() = UserSession(
+    token = "token",
+    studentId = "student",
+    username = "studente",
+    profile = StudentProfile(name = "Studente"),
+  )
 }
 
-private class FakeAuthRepository : AuthRepository {
-  override val session = MutableStateFlow<UserSession?>(null)
+private class FakeAuthRepository(
+  initialSession: UserSession? = null,
+) : AuthRepository {
+  override val session = MutableStateFlow(initialSession)
   override suspend fun restore(): UserSession? = null
   override suspend fun login(username: String, password: String): Result<UserSession> {
     return Result.failure(UnsupportedOperationException())
@@ -98,6 +152,15 @@ private class FakeSettingsRepository(
   settings: AppSettings,
 ) : SettingsRepository {
   private val settings = MutableStateFlow(settings)
+  var notificationRuntimeRefreshCount = 0
+    private set
+  var liveTimetableRefreshCount = 0
+    private set
+
+  fun resetCounters() {
+    notificationRuntimeRefreshCount = 0
+    liveTimetableRefreshCount = 0
+  }
 
   override fun observeSettings(): Flow<AppSettings> = settings
   override fun observeNotificationRuntimeState(): Flow<NotificationRuntimeState> {
@@ -114,11 +177,15 @@ private class FakeSettingsRepository(
     preferences: dev.antigravity.classevivaexpressive.core.domain.model.NotificationPreferences,
   ) = Unit
   override suspend fun setNotificationCategoryEnabled(channelId: String, enabled: Boolean) = Unit
-  override suspend fun refreshNotificationRuntimeState() = Unit
+  override suspend fun refreshNotificationRuntimeState() {
+    notificationRuntimeRefreshCount += 1
+  }
   override suspend fun sendTestNotification(): Result<Unit> = Result.success(Unit)
   override suspend fun sendTestNotificationForChannel(channelId: String): Result<Unit> = Result.success(Unit)
   override suspend fun updateGatewayBaseUrl(url: String) = Unit
-  override suspend fun refreshLiveTimetable() = Unit
+  override suspend fun refreshLiveTimetable() {
+    liveTimetableRefreshCount += 1
+  }
   override suspend fun ignoreStableUpdateVersion(version: String) {
     settings.value = settings.value.copy(ignoredStableUpdateVersion = version)
   }

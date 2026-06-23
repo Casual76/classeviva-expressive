@@ -22,6 +22,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +40,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
@@ -141,6 +143,7 @@ class AbsencesViewModel @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AbsencesRoute(
+  initialAbsenceId: String? = null,
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
   viewModel: AbsencesViewModel = hiltViewModel(),
@@ -153,6 +156,14 @@ fun AbsencesRoute(
   val history = remember(state.absences) { state.absences.sortedByDescending { it.date } }
 
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+  LaunchedEffect(initialAbsenceId, state.absences) {
+    if (!initialAbsenceId.isNullOrBlank() && state.selectedAbsence?.id != initialAbsenceId) {
+      state.absences.firstOrNull { it.id == initialAbsenceId && !it.justified && it.canJustify }?.let {
+        viewModel.requestJustification(it)
+      }
+    }
+  }
 
   Scaffold(
     modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -261,12 +272,11 @@ fun AbsencesRoute(
         }
         if (!state.lastMessage.isNullOrBlank()) {
           item {
-            Text(text = state.lastMessage.orEmpty())
-          }
-          item {
-            TextButton(onClick = viewModel::clearMessage) {
-              Text("Nascondi messaggio")
-            }
+            InlineMessageCard(
+              message = state.lastMessage.orEmpty(),
+              title = "Assenze",
+              onDismiss = viewModel::clearMessage,
+            )
           }
         }
       }

@@ -10,13 +10,17 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -111,6 +115,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MotionTokens
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveSharedBounds
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
 import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
@@ -127,6 +132,8 @@ import dev.antigravity.classevivaexpressive.feature.grades.GradesRoute
 import dev.antigravity.classevivaexpressive.feature.lessons.LessonsRoute
 import dev.antigravity.classevivaexpressive.feature.lessons.ProfessorsRoute
 import dev.antigravity.classevivaexpressive.feature.settings.SettingsRoute
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 private const val BugReportRepositoryOwner = "Casual76"
 private const val BugReportRepositoryName = "classeviva-expressive"
@@ -147,11 +154,58 @@ private val topLevelDestinations = listOf(
   TopLevelDestination("more", "more", "Altro", { Icon(Icons.Rounded.Menu, contentDescription = null) }),
 )
 
-private val topLevelRoutes = topLevelDestinations.map { it.baseRoute }.toSet()
+internal val topLevelRoutes = topLevelDestinations.map { it.baseRoute }.toSet()
+
+private fun routeEnterTransition(
+  decision: RouteMotionDecision,
+  isPop: Boolean,
+): EnterTransition = when (decision.kind) {
+  RouteMotionKind.TopLevelSwitch -> {
+    fadeIn(animationSpec = MotionTokens.routeEffects()) +
+      scaleIn(initialScale = 0.997f, animationSpec = MotionTokens.routeSpatial())
+  }
+
+  RouteMotionKind.SharedContainer -> {
+    fadeIn(animationSpec = MotionTokens.routeEffects())
+  }
+
+  RouteMotionKind.FallbackScale -> {
+    fadeIn(animationSpec = MotionTokens.routeEffects()) +
+      scaleIn(initialScale = if (isPop) 1.006f else 0.992f, animationSpec = MotionTokens.routeSpatial()) +
+      slideInVertically(
+        initialOffsetY = { fullHeight -> if (isPop) -fullHeight / 42 else fullHeight / 42 },
+        animationSpec = MotionTokens.routeSpatial(),
+      )
+  }
+}
+
+private fun routeExitTransition(
+  decision: RouteMotionDecision,
+  isPop: Boolean,
+): ExitTransition = when (decision.kind) {
+  RouteMotionKind.TopLevelSwitch -> {
+    fadeOut(animationSpec = MotionTokens.routeEffects()) +
+      scaleOut(targetScale = 1.002f, animationSpec = MotionTokens.routeSpatial())
+  }
+
+  RouteMotionKind.SharedContainer -> {
+    fadeOut(animationSpec = MotionTokens.routeEffects())
+  }
+
+  RouteMotionKind.FallbackScale -> {
+    fadeOut(animationSpec = MotionTokens.routeEffects()) +
+      scaleOut(targetScale = if (isPop) 0.992f else 1.006f, animationSpec = MotionTokens.routeSpatial()) +
+      slideOutVertically(
+        targetOffsetY = { fullHeight -> if (isPop) fullHeight / 42 else -fullHeight / 42 },
+        animationSpec = MotionTokens.routeSpatial(),
+      )
+  }
+}
 
 @Composable
 fun MainApp(
   viewModel: MainViewModel = hiltViewModel(),
+  incomingIntents: Flow<Intent> = emptyFlow(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -159,16 +213,28 @@ fun MainApp(
   }
 
   val context = LocalContext.current
-  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-    val permissionLauncher = rememberLauncherForActivityResult(
-      contract = ActivityResultContracts.RequestPermission(),
-      onResult = { }
-    )
-    LaunchedEffect(Unit) {
-      val permission = android.Manifest.permission.POST_NOTIFICATIONS
-      if (context.checkSelfPermission(permission) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-        permissionLauncher.launch(permission)
-      }
+  var notificationPermissionRequested by rememberSaveable { mutableStateOf(false) }
+  val notificationPermissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission(),
+    onResult = viewModel::onNotificationPermissionResult,
+  )
+  LaunchedEffect(
+    uiState.isLoading,
+    uiState.session?.studentId,
+    uiState.settings.notificationPreferences.enabled,
+    notificationPermissionRequested,
+  ) {
+    val shouldRequestPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      !uiState.isLoading &&
+      uiState.session != null &&
+      uiState.settings.notificationPreferences.enabled &&
+      !notificationPermissionRequested &&
+      context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+      android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    if (shouldRequestPermission) {
+      notificationPermissionRequested = true
+      notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
     }
   }
 
@@ -188,6 +254,7 @@ fun MainApp(
             updateCheckMessage = uiState.updateCheckMessage,
             onCheckForUpdates = { viewModel.checkUpdate() },
             onClearUpdateCheckMessage = viewModel::clearUpdateCheckMessage,
+            incomingIntents = incomingIntents,
           )
         }
         val update = uiState.availableUpdate
@@ -631,14 +698,40 @@ internal fun TopLevelNavigationSuite(
     state = navigationSuiteState,
     navigationSuiteItems = {
       topLevelDestinations.forEach { destination ->
+        val selected = currentRoute == destination.baseRoute
         item(
-          selected = currentRoute == destination.baseRoute,
-          onClick = { onNavigateRoute(destination.navigateRoute) },
+          selected = selected,
+          onClick = {
+            if (!selected) {
+              onNavigateRoute(destination.navigateRoute)
+            }
+          },
           icon = destination.icon,
           label = { Text(destination.label) },
         )
       }
     },
+  ) {
+    content()
+  }
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun SharedRouteContainer(
+  sharedTransitionScope: SharedTransitionScope,
+  animatedVisibilityScope: AnimatedVisibilityScope,
+  sharedKey: String?,
+  content: @Composable () -> Unit,
+) {
+  Box(
+    modifier = Modifier
+      .fillMaxSize()
+      .expressiveSharedBounds(
+        sharedTransitionScope = sharedTransitionScope,
+        animatedVisibilityScope = animatedVisibilityScope,
+        sharedKey = sharedKey,
+      ),
   ) {
     content()
   }
@@ -683,6 +776,7 @@ private fun TopLevelNavigationSuitePreview() {
           onOpenHomework = {},
           onOpenDocuments = {},
           onOpenProfessors = {},
+          onOpenMeetings = {},
         )
       }
     }
@@ -696,12 +790,47 @@ private fun AuthenticatedApp(
   updateCheckMessage: String?,
   onCheckForUpdates: () -> Unit,
   onClearUpdateCheckMessage: () -> Unit,
+  incomingIntents: Flow<Intent>,
 ) {
   val navController = rememberNavController()
   val navBackStackEntry by navController.currentBackStackEntryAsState()
   val currentDestination = navBackStackEntry?.destination
   val currentRoute = currentDestination?.route?.substringBefore("?")
   val showNavigationSuite = currentRoute in topLevelRoutes
+  var activeSharedTransitionKey by rememberSaveable { mutableStateOf<String?>(null) }
+
+  fun navigateRoute(route: String, sharedKey: String? = null) {
+    activeSharedTransitionKey = sharedKey
+    navController.navigate(route)
+  }
+
+  fun navigateTopLevelRoute(targetRoute: String) {
+    val targetBaseRoute = normalizeRoute(targetRoute)
+    if (targetBaseRoute == currentRoute) return
+    activeSharedTransitionKey = null
+    navController.navigate(targetRoute) {
+      val currentDestinationId = currentDestination?.id
+      if (currentRoute != "home" && targetBaseRoute != "home" && currentDestinationId != null) {
+        popUpTo(currentDestinationId) {
+          inclusive = true
+          saveState = true
+        }
+      } else {
+        popUpTo(navController.graph.findStartDestination().id) {
+          saveState = true
+        }
+      }
+      launchSingleTop = true
+      restoreState = true
+    }
+  }
+
+  LaunchedEffect(navController, incomingIntents) {
+    incomingIntents.collect { intent ->
+      activeSharedTransitionKey = null
+      navController.handleDeepLink(intent)
+    }
+  }
 
   TopLevelNavigationSuite(
     currentRoute = currentDestination?.hierarchy
@@ -709,13 +838,7 @@ private fun AuthenticatedApp(
       ?.firstOrNull { it in topLevelRoutes },
     showNavigationSuite = showNavigationSuite,
     onNavigateRoute = { targetRoute ->
-      navController.navigate(targetRoute) {
-        popUpTo(navController.graph.findStartDestination().id) {
-          saveState = true
-        }
-        launchSingleTop = true
-        restoreState = true
-      }
+      navigateTopLevelRoute(targetRoute)
     },
   ) {
     SharedTransitionLayout {
@@ -724,47 +847,84 @@ private fun AuthenticatedApp(
         startDestination = "home",
         modifier = Modifier.fillMaxSize(),
         enterTransition = {
-          fadeIn(animationSpec = MotionTokens.fastEffects()) +
-            slideInHorizontally(
-              initialOffsetX = { it / 7 },
-              animationSpec = MotionTokens.expressive(),
-            )
+          routeEnterTransition(
+            decision = decideRouteMotion(
+              fromRoute = initialState.destination.route,
+              toRoute = targetState.destination.route,
+              requestedSharedKey = activeSharedTransitionKey,
+            ),
+            isPop = false,
+          )
         },
         exitTransition = {
-          fadeOut(animationSpec = MotionTokens.expressive()) +
-            slideOutHorizontally(
-              targetOffsetX = { -it / 9 },
-              animationSpec = MotionTokens.spatial(),
-            )
+          routeExitTransition(
+            decision = decideRouteMotion(
+              fromRoute = initialState.destination.route,
+              toRoute = targetState.destination.route,
+              requestedSharedKey = activeSharedTransitionKey,
+            ),
+            isPop = false,
+          )
         },
         popEnterTransition = {
-          fadeIn(animationSpec = MotionTokens.fastEffects()) +
-            slideInHorizontally(
-              initialOffsetX = { -it / 7 },
-              animationSpec = MotionTokens.expressive(),
-            )
+          routeEnterTransition(
+            decision = decideRouteMotion(
+              fromRoute = initialState.destination.route,
+              toRoute = targetState.destination.route,
+              requestedSharedKey = activeSharedTransitionKey,
+            ),
+            isPop = true,
+          )
         },
         popExitTransition = {
-          fadeOut(animationSpec = MotionTokens.expressive()) +
-            slideOutHorizontally(
-              targetOffsetX = { it / 9 },
-              animationSpec = MotionTokens.spatial(),
-            )
+          routeExitTransition(
+            decision = decideRouteMotion(
+              fromRoute = initialState.destination.route,
+              toRoute = targetState.destination.route,
+              requestedSharedKey = activeSharedTransitionKey,
+            ),
+            isPop = true,
+          )
         },
       ) {
         composable("home") {
           DashboardRoute(
-            onNavigateGrades = { navController.navigate("grades") },
-            onNavigateAgenda = { navController.navigate("agenda") },
-            onNavigateLessons = { navController.navigate("lessons") },
-            onNavigateCommunications = { navController.navigate("communications?tab=board") },
-            onOpenGrade = { gradeId -> navController.navigate("grades?gradeId=$gradeId") },
+            onNavigateGrades = { navigateRoute("grades", RouteSharedKeys.DashboardGrades) },
+            onNavigateAgenda = { navigateRoute("agenda") },
+            onNavigateLessons = { navigateRoute("lessons") },
+            onNavigateCommunications = {
+              navigateRoute("communications?tab=board", RouteSharedKeys.DashboardCommunications)
+            },
+            onOpenGrade = { gradeId -> navigateRoute("grades?gradeId=$gradeId", RouteSharedKeys.DashboardGrades) },
+            gradesSharedTransitionKey = RouteSharedKeys.DashboardGrades,
+            communicationsSharedTransitionKey = RouteSharedKeys.DashboardCommunications,
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
           )
         }
-        composable("agenda") {
+        composable(
+          route = "agenda?agendaId={agendaId}&date={date}",
+          arguments = listOf(
+            navArgument("agendaId") {
+              nullable = true
+              defaultValue = null
+              type = NavType.StringType
+            },
+            navArgument("date") {
+              nullable = true
+              defaultValue = null
+              type = NavType.StringType
+            },
+          ),
+          deepLinks = listOf(
+            navDeepLink { uriPattern = "classevivaexpressive://open/agenda?agendaId={agendaId}&date={date}" },
+            navDeepLink { uriPattern = "classevivaexpressive://open/agenda?date={date}" },
+            navDeepLink { uriPattern = "classevivaexpressive://open/agenda" },
+          ),
+        ) { entry ->
           AgendaRoute(
+            initialAgendaId = entry.arguments?.getString("agendaId"),
+            initialDate = entry.arguments?.getString("date"),
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
           )
@@ -778,56 +938,231 @@ private fun AuthenticatedApp(
               type = NavType.StringType
             },
           ),
+          deepLinks = listOf(
+            navDeepLink { uriPattern = "classevivaexpressive://open/grades?gradeId={gradeId}" },
+            navDeepLink { uriPattern = "classevivaexpressive://open/grades" },
+          ),
         ) { entry ->
-          GradesRoute(
-            initialGradeId = entry.arguments?.getString("gradeId"),
+          SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-          )
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.DashboardGrades },
+          ) {
+            GradesRoute(
+              initialGradeId = entry.arguments?.getString("gradeId"),
+              sharedTransitionScope = this@SharedTransitionLayout,
+              animatedVisibilityScope = this@composable,
+            )
+          }
         }
         composable(
-          route = "communications?tab={tab}",
+          route = "communications?tab={tab}&pubId={pubId}&evtCode={evtCode}&noteId={noteId}&categoryCode={categoryCode}",
           arguments = listOf(
             navArgument("tab") {
               defaultValue = "board"
               type = NavType.StringType
             },
+            navArgument("pubId") {
+              nullable = true
+              defaultValue = null
+              type = NavType.StringType
+            },
+            navArgument("evtCode") {
+              nullable = true
+              defaultValue = null
+              type = NavType.StringType
+            },
+            navArgument("noteId") {
+              nullable = true
+              defaultValue = null
+              type = NavType.StringType
+            },
+            navArgument("categoryCode") {
+              nullable = true
+              defaultValue = null
+              type = NavType.StringType
+            },
+          ),
+          deepLinks = listOf(
+            navDeepLink {
+              uriPattern = "classevivaexpressive://open/communications?tab={tab}&pubId={pubId}&evtCode={evtCode}"
+            },
+            navDeepLink { uriPattern = "classevivaexpressive://open/communications?tab={tab}" },
+            navDeepLink {
+              uriPattern = "classevivaexpressive://open/notes?noteId={noteId}&categoryCode={categoryCode}"
+            },
+            navDeepLink { uriPattern = "classevivaexpressive://open/notes" },
           ),
         ) { entry ->
-          CommunicationsRoute(
-            initialTab = entry.arguments?.getString("tab") ?: "board",
-            onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
-          )
+          SharedRouteContainer(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.DashboardCommunications },
+          ) {
+            CommunicationsRoute(
+              initialTab = entry.arguments?.getString("tab") ?: "board",
+              initialCommunicationPubId = entry.arguments?.getString("pubId"),
+              initialCommunicationEvtCode = entry.arguments?.getString("evtCode"),
+              initialNoteId = entry.arguments?.getString("noteId"),
+              initialNoteCategoryCode = entry.arguments?.getString("categoryCode"),
+              onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
+            )
+          }
+        }
+        composable("notes") {
+          SharedRouteContainer(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubNotes },
+          ) {
+            CommunicationsRoute(
+              initialTab = "notes",
+              onBack = navController::navigateUp,
+            )
+          }
         }
         composable("more") {
           MoreHubScreen(
             currentRoute = currentRoute ?: "more",
-            onOpenNotes = { navController.navigate("communications?tab=notes") },
-            onOpenLessons = { navController.navigate("lessons") },
-            onOpenAbsences = { navController.navigate("absences") },
-            onOpenMaterials = { navController.navigate("materials") },
-            onOpenSettings = { navController.navigate("settings") },
-            onOpenHomework = { navController.navigate("homework") },
-            onOpenDocuments = { navController.navigate("documents") },
-            onOpenProfessors = { navController.navigate("professors") },
-          )
-        }
-        composable("materials") { MaterialsRoute(onBack = navController::navigateUp) }
-        composable("homework") { HomeworkRoute(onBack = navController::navigateUp) }
-        composable("documents") { DocumentsRoute(onBack = navController::navigateUp) }
-        composable("lessons") { LessonsRoute(onBack = navController::navigateUp) }
-        composable("absences") { AbsencesRoute(onBack = navController::navigateUp) }
-        composable("professors") { ProfessorsRoute(onBack = navController::navigateUp) }
-        composable("settings") {
-          SettingsRoute(
-            onBack = navController::navigateUp,
-            isCheckingForUpdates = isCheckingForUpdates,
-            updateCheckMessage = updateCheckMessage,
-            onCheckForUpdates = onCheckForUpdates,
-            onClearUpdateCheckMessage = onClearUpdateCheckMessage,
+            onOpenNotes = { navigateRoute("notes", RouteSharedKeys.HubNotes) },
+            onOpenLessons = { navigateRoute("lessons", RouteSharedKeys.HubLessons) },
+            onOpenAbsences = { navigateRoute("absences", RouteSharedKeys.HubAbsences) },
+            onOpenMaterials = { navigateRoute("materials", RouteSharedKeys.HubMaterials) },
+            onOpenSettings = { navigateRoute("settings", RouteSharedKeys.HubSettings) },
+            onOpenHomework = { navigateRoute("homework", RouteSharedKeys.HubHomework) },
+            onOpenDocuments = { navigateRoute("documents", RouteSharedKeys.HubDocuments) },
+            onOpenProfessors = { navigateRoute("professors", RouteSharedKeys.HubProfessors) },
+            onOpenMeetings = { navigateRoute("meetings", RouteSharedKeys.HubMeetings) },
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
           )
+        }
+        composable("materials") {
+          SharedRouteContainer(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubMaterials },
+          ) {
+            MaterialsRoute(onBack = navController::navigateUp)
+          }
+        }
+        composable(
+          route = "homework?homeworkId={homeworkId}",
+          arguments = listOf(
+            navArgument("homeworkId") {
+              nullable = true
+              defaultValue = null
+              type = NavType.StringType
+            },
+          ),
+          deepLinks = listOf(
+            navDeepLink { uriPattern = "classevivaexpressive://open/homework?homeworkId={homeworkId}" },
+            navDeepLink { uriPattern = "classevivaexpressive://open/homework" },
+          ),
+        ) { entry ->
+          SharedRouteContainer(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubHomework },
+          ) {
+            HomeworkRoute(
+              initialHomeworkId = entry.arguments?.getString("homeworkId"),
+              onBack = navController::navigateUp,
+            )
+          }
+        }
+        composable("documents") {
+          SharedRouteContainer(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubDocuments },
+          ) {
+            DocumentsRoute(onBack = navController::navigateUp)
+          }
+        }
+        composable(
+          route = "lessons",
+          deepLinks = listOf(
+            navDeepLink { uriPattern = "classevivaexpressive://open/lessons" },
+          ),
+        ) {
+          SharedRouteContainer(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubLessons },
+          ) {
+            LessonsRoute(onBack = navController::navigateUp)
+          }
+        }
+        composable(
+          route = "absences?absenceId={absenceId}",
+          arguments = listOf(
+            navArgument("absenceId") {
+              nullable = true
+              defaultValue = null
+              type = NavType.StringType
+            },
+          ),
+          deepLinks = listOf(
+            navDeepLink { uriPattern = "classevivaexpressive://open/absences?absenceId={absenceId}" },
+            navDeepLink { uriPattern = "classevivaexpressive://open/absences" },
+          ),
+        ) { entry ->
+          SharedRouteContainer(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubAbsences },
+          ) {
+            AbsencesRoute(
+              initialAbsenceId = entry.arguments?.getString("absenceId"),
+              onBack = navController::navigateUp,
+            )
+          }
+        }
+        composable(
+          route = "meetings",
+          deepLinks = listOf(
+            navDeepLink { uriPattern = "classevivaexpressive://open/meetings" },
+          ),
+        ) {
+          SharedRouteContainer(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubMeetings },
+          ) {
+            MeetingsRoute(onBack = navController::navigateUp)
+          }
+        }
+        composable("professors") {
+          SharedRouteContainer(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubProfessors },
+          ) {
+            ProfessorsRoute(onBack = navController::navigateUp)
+          }
+        }
+        composable(
+          route = "settings",
+          deepLinks = listOf(
+            navDeepLink { uriPattern = "classevivaexpressive://open/settings" },
+          ),
+        ) {
+          SharedRouteContainer(
+            sharedTransitionScope = this@SharedTransitionLayout,
+            animatedVisibilityScope = this@composable,
+            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubSettings },
+          ) {
+            SettingsRoute(
+              onBack = navController::navigateUp,
+              isCheckingForUpdates = isCheckingForUpdates,
+              updateCheckMessage = updateCheckMessage,
+              onCheckForUpdates = onCheckForUpdates,
+              onClearUpdateCheckMessage = onClearUpdateCheckMessage,
+              sharedTransitionScope = this@SharedTransitionLayout,
+              animatedVisibilityScope = this@composable,
+            )
+          }
         }
         composable(
           route = "studentScore?payload={payload}",
@@ -861,6 +1196,9 @@ private fun MoreHubScreen(
   onOpenHomework: () -> Unit,
   onOpenDocuments: () -> Unit,
   onOpenProfessors: () -> Unit,
+  onOpenMeetings: () -> Unit,
+  sharedTransitionScope: SharedTransitionScope? = null,
+  animatedVisibilityScope: AnimatedVisibilityScope? = null,
 ) {
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
   var showBugReport by rememberSaveable { mutableStateOf(false) }
@@ -892,6 +1230,11 @@ private fun MoreHubScreen(
           subtitle = "Lezioni del giorno e settimana corrente, generato automaticamente.",
           eyebrow = "Lezioni",
           tone = ExpressiveTone.Info,
+          modifier = Modifier.expressiveSharedBounds(
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
+            sharedKey = RouteSharedKeys.HubLessons,
+          ),
           onClick = onOpenLessons,
           badge = { StatusBadge("ORARIO", tone = ExpressiveTone.Info) },
           leading = { Icon(Icons.Rounded.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -903,6 +1246,11 @@ private fun MoreHubScreen(
           subtitle = "Materiali condivisi, link e file dei docenti.",
           eyebrow = "Didattica",
           tone = ExpressiveTone.Info,
+          modifier = Modifier.expressiveSharedBounds(
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
+            sharedKey = RouteSharedKeys.HubMaterials,
+          ),
           onClick = onOpenMaterials,
           badge = { StatusBadge("DIDATTICA", tone = ExpressiveTone.Info) },
           leading = { Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -914,6 +1262,11 @@ private fun MoreHubScreen(
           subtitle = "Compiti assegnati dai docenti con data di consegna.",
           eyebrow = "Agenda",
           tone = ExpressiveTone.Warning,
+          modifier = Modifier.expressiveSharedBounds(
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
+            sharedKey = RouteSharedKeys.HubHomework,
+          ),
           onClick = onOpenHomework,
           badge = { StatusBadge("COMPITI", tone = ExpressiveTone.Warning) },
           leading = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -925,6 +1278,11 @@ private fun MoreHubScreen(
           subtitle = "Documenti della scuola, pagelle e libri scolastici adottati.",
           eyebrow = "Documenti",
           tone = ExpressiveTone.Info,
+          modifier = Modifier.expressiveSharedBounds(
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
+            sharedKey = RouteSharedKeys.HubDocuments,
+          ),
           onClick = onOpenDocuments,
           badge = { StatusBadge("DOCUMENTI", tone = ExpressiveTone.Info) },
           leading = { Icon(Icons.Rounded.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -936,6 +1294,11 @@ private fun MoreHubScreen(
           subtitle = "Storico delle note e sanzioni disciplinari.",
           eyebrow = "Comunicazioni",
           tone = ExpressiveTone.Danger,
+          modifier = Modifier.expressiveSharedBounds(
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
+            sharedKey = RouteSharedKeys.HubNotes,
+          ),
           onClick = onOpenNotes,
           badge = { StatusBadge("NOTE", tone = ExpressiveTone.Danger) },
           leading = { Icon(Icons.Rounded.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -947,9 +1310,30 @@ private fun MoreHubScreen(
           subtitle = "Storico di assenze, ritardi e uscite anticipate.",
           eyebrow = "Presenze",
           tone = ExpressiveTone.Warning,
+          modifier = Modifier.expressiveSharedBounds(
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
+            sharedKey = RouteSharedKeys.HubAbsences,
+          ),
           onClick = onOpenAbsences,
           badge = { StatusBadge("PRESENZE", tone = ExpressiveTone.Warning) },
           leading = { Icon(Icons.Rounded.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        )
+      }
+      item {
+        RegisterListRow(
+          title = "Colloqui",
+          subtitle = "Prenotazioni, disponibilita dei docenti e link per partecipare.",
+          eyebrow = "Docenti",
+          tone = ExpressiveTone.Info,
+          modifier = Modifier.expressiveSharedBounds(
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
+            sharedKey = RouteSharedKeys.HubMeetings,
+          ),
+          onClick = onOpenMeetings,
+          badge = { StatusBadge("COLLOQUI", tone = ExpressiveTone.Info) },
+          leading = { Icon(Icons.Rounded.PeopleAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         )
       }
       item {
@@ -958,6 +1342,11 @@ private fun MoreHubScreen(
           subtitle = "Statistiche di presenza, voti assegnati e rigore per ogni docente.",
           eyebrow = "Docenti",
           tone = ExpressiveTone.Neutral,
+          modifier = Modifier.expressiveSharedBounds(
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
+            sharedKey = RouteSharedKeys.HubProfessors,
+          ),
           onClick = onOpenProfessors,
           badge = { StatusBadge("PROF") },
           leading = { Icon(Icons.Rounded.PeopleAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -981,6 +1370,11 @@ private fun MoreHubScreen(
           subtitle = "Tema, notifiche, canali Android, sync periodica e account attivo.",
           eyebrow = "Profilo",
           tone = ExpressiveTone.Neutral,
+          modifier = Modifier.expressiveSharedBounds(
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
+            sharedKey = RouteSharedKeys.HubSettings,
+          ),
           onClick = onOpenSettings,
           badge = { StatusBadge("PROFILO") },
           leading = { Icon(Icons.Rounded.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },

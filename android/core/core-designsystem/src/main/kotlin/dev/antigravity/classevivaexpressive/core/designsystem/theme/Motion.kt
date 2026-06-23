@@ -4,6 +4,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.MotionScheme
 
 object MotionTokens {
@@ -28,6 +29,26 @@ object MotionTokens {
   fun <T> fastEffects(): FiniteAnimationSpec<T> = spring(
     dampingRatio = 0.82f,
     stiffness = 430f,
+  )
+
+  fun <T> routeSpatial(): FiniteAnimationSpec<T> = tween(
+    durationMillis = 220,
+    easing = EasingEmphasized,
+  )
+
+  fun <T> routeEffects(): FiniteAnimationSpec<T> = tween(
+    durationMillis = 120,
+    easing = EasingStandard,
+  )
+
+  fun <T> sharedSpatial(): FiniteAnimationSpec<T> = tween(
+    durationMillis = 320,
+    easing = EasingEmphasized,
+  )
+
+  fun <T> sharedEffects(): FiniteAnimationSpec<T> = tween(
+    durationMillis = 140,
+    easing = EasingStandard,
   )
 }
 

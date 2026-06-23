@@ -5,6 +5,8 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.CustomEvent
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -28,11 +30,15 @@ class AgendaViewModelTest {
 
   private val testDispatcher = UnconfinedTestDispatcher(TestCoroutineScheduler())
   private val agendaRepository = mockk<AgendaRepository>(relaxed = true)
+  private val dashboardRepository = mockk<DashboardRepository>(relaxed = true)
 
-  @Before fun setUp() { Dispatchers.setMain(testDispatcher) }
+  @Before fun setUp() {
+    Dispatchers.setMain(testDispatcher)
+    every { dashboardRepository.observeDashboard() } returns flowOf(DashboardSnapshot())
+  }
   @After fun tearDown() { Dispatchers.resetMain() }
 
-  private fun buildViewModel() = AgendaViewModel(agendaRepository)
+  private fun buildViewModel() = AgendaViewModel(agendaRepository, dashboardRepository)
 
   // ─── Caricamento voci agenda ──────────────────────────────────────────────
 

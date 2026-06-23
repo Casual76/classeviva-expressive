@@ -25,8 +25,8 @@ android {
     applicationId configuredApplicationId
     minSdk 26
     targetSdk 36
-    versionCode 2026052207
-    versionName "6.0.7"
+    versionCode 2026062301
+    versionName "6.1.4"
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
   }
@@ -99,6 +99,7 @@ dependencies {
   implementation project(":feature:feature-communications")
   implementation project(":feature:feature-absences")
   implementation project(":feature:feature-settings")
+  implementation project(":feature:feature-widgets")
 
   implementation platform(libs.compose.bom)
   implementation libs.androidx.appcompat

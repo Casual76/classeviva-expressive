@@ -64,7 +64,10 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
@@ -72,6 +75,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.Period
 import dev.antigravity.classevivaexpressive.core.domain.model.SimulatedGrade
 import dev.antigravity.classevivaexpressive.core.domain.model.SimulationRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SubjectGoal
+import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import dev.antigravity.classevivaexpressive.core.domain.util.parseDecimal
 import java.time.Instant
 import java.time.LocalDate
@@ -100,6 +104,7 @@ data class GradesUiState(
   val selectedPeriodCode: String? = null,
   val selectedGradeId: String? = null,
   val isRefreshing: Boolean = false,
+  val syncStatus: SyncStatus = SyncStatus(),
 )
 
 private data class GradesContentState(
@@ -114,6 +119,7 @@ private data class GradesContentState(
 class GradesViewModel @Inject constructor(
   private val gradesRepository: GradesRepository,
   private val simulationRepository: SimulationRepository,
+  private val dashboardRepository: DashboardRepository,
 ) : ViewModel() {
   private val selectedPeriodCode = MutableStateFlow<String?>(null)
   private val selectedGradeId = MutableStateFlow<String?>(null)
@@ -140,7 +146,8 @@ class GradesViewModel @Inject constructor(
     selectedPeriodCode,
     selectedGradeId,
     isRefreshing,
-  ) { content, periodCode, gradeId, refreshing ->
+    dashboardRepository.observeDashboard(),
+  ) { content, periodCode, gradeId, refreshing, dashboard ->
     GradesUiState(
       grades = content.grades,
       periods = content.periods,
@@ -150,6 +157,7 @@ class GradesViewModel @Inject constructor(
       selectedPeriodCode = periodCode,
       selectedGradeId = gradeId,
       isRefreshing = refreshing,
+      syncStatus = dashboard.syncStatus,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), GradesUiState())
 
@@ -294,8 +302,11 @@ fun GradesRoute(
     topBar = {
       ExpressiveTopHeader(
         title = "Voti",
-        subtitle = "Riepilogo medie, situazione per materia e ultimi voti registrati.",
+        subtitle = state.syncStatus.lastSyncLabel(),
         scrollBehavior = scrollBehavior,
+        titleTrailing = {
+          SyncStatusDot(status = state.syncStatus)
+        },
         actions = {
           IconButton(onClick = viewModel::refresh) {
             Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")

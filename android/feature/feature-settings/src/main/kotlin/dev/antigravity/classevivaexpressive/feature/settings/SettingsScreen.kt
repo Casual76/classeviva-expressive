@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.feature.settings
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -77,6 +78,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
@@ -358,7 +360,7 @@ fun SettingsRoute(
     uri?.let(viewModel::importBackup)
   }
 
-  val enabledLocalChannels = listOf(
+  val localChannelStates = listOf(
     state.settings.notificationPreferences.homework,
     state.settings.notificationPreferences.communications,
     state.settings.notificationPreferences.absences,
@@ -366,8 +368,16 @@ fun SettingsRoute(
     state.settings.notificationPreferences.agenda,
     state.settings.notificationPreferences.notes,
     state.settings.notificationPreferences.test,
-  ).count { it }
+    state.settings.notificationPreferences.liveTimetable,
+  )
+  val enabledLocalChannels = localChannelStates.count { it }
   val enabledSystemChannels = state.runtimeState.channels.count { it.enabled }
+  val openAppNotificationSettings = remember(context) {
+    { context.openAppNotificationSettings() }
+  }
+  val openChannelNotificationSettings = remember(context) {
+    { channelId: String -> context.openChannelNotificationSettings(channelId) }
+  }
 
   Scaffold(
     modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -449,7 +459,14 @@ fun SettingsRoute(
         item {
           RuntimeStateCard(
             runtimeState = state.runtimeState,
-            onRequestPermission = requestNotificationPermission
+            notificationsEnabled = state.settings.notificationsEnabled,
+            periodicSyncEnabled = state.settings.periodicSyncEnabled,
+            enabledLocalChannels = enabledLocalChannels,
+            totalLocalChannels = localChannelStates.size,
+            enabledSystemChannels = enabledSystemChannels,
+            totalSystemChannels = state.runtimeState.channels.size,
+            onRequestPermission = requestNotificationPermission,
+            onOpenNotificationSettings = openAppNotificationSettings,
           )
         }
         item {
@@ -469,7 +486,7 @@ fun SettingsRoute(
         item {
           SettingToggleRow(
             title = "Sincronizzazione periodica",
-            subtitle = "Mantiene aggiornati i dati in background ogni 2 minuti.",
+            subtitle = "Mantiene aggiornati i dati in background con frequenza adattiva.",
             checked = state.settings.periodicSyncEnabled,
             onCheckedChange = viewModel::setPeriodicSync,
             icon = { Icon(Icons.Rounded.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
@@ -492,7 +509,7 @@ fun SettingsRoute(
           }
         }
 
-        if (state.settings.notificationsEnabled && state.runtimeState.permissionGranted) {
+        if (state.settings.notificationsEnabled) {
           item {
             ExpressiveCard(highlighted = false) {
               Text(
@@ -508,22 +525,34 @@ fun SettingsRoute(
               
               Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 state.runtimeState.channels.forEach { channel ->
+                  val localChannelEnabled = channelEnabledInSettings(channel.id, state.settings)
+                  val canTestChannel = state.runtimeState.permissionGranted &&
+                    state.runtimeState.appNotificationsEnabled &&
+                    channel.enabled &&
+                    localChannelEnabled
                   SettingToggleRow(
                     title = channel.label.ifBlank { channel.id },
                     subtitle = channelSubtitle(channel, state.settings),
-                    checked = channelEnabledInSettings(channel.id, state.settings),
+                    checked = localChannelEnabled,
                     onCheckedChange = { enabled ->
                       viewModel.setNotificationCategoryEnabled(channel.id, enabled)
                     },
                     badge = {
                       Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (channelEnabledInSettings(channel.id, state.settings)) {
+                        if (localChannelEnabled) {
                           TextButton(
                             onClick = { viewModel.sendTestNotificationForChannel(channel.id) },
+                            enabled = canTestChannel,
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                           ) {
                             Text("Test", style = MaterialTheme.typography.labelSmall)
                           }
+                        }
+                        TextButton(
+                          onClick = { openChannelNotificationSettings(channel.id) },
+                          contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        ) {
+                          Text("OS", style = MaterialTheme.typography.labelSmall)
                         }
                         StatusBadge(
                           label = if (channel.enabled) "ON" else "OFF",
@@ -541,7 +570,14 @@ fun SettingsRoute(
               horizontalArrangement = Arrangement.spacedBy(10.dp),
               verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-              OutlinedButton(onClick = viewModel::sendTestNotification) {
+              val canSendTestNotification = state.runtimeState.permissionGranted &&
+                state.runtimeState.appNotificationsEnabled &&
+                state.runtimeState.channels.firstOrNull { it.id == TestChannelId }?.enabled != false &&
+                state.settings.notificationPreferences.test
+              OutlinedButton(
+                onClick = viewModel::sendTestNotification,
+                enabled = canSendTestNotification,
+              ) {
                 Text("Invia notifica di test")
               }
               TextButton(onClick = { viewModel.refresh() }) {
@@ -708,12 +744,11 @@ fun SettingsRoute(
         
         state.lastMessage?.let { message ->
           item {
-            ExpressiveCard(highlighted = true) {
-              Text(message)
-              TextButton(onClick = viewModel::clearMessage) {
-                Text("Nascondi messaggio")
-              }
-            }
+            InlineMessageCard(
+              message = message,
+              title = "Impostazioni",
+              onDismiss = viewModel::clearMessage,
+            )
           }
         }
       }
@@ -774,20 +809,49 @@ private fun AppUpdateSettingsCard(
   }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RuntimeStateCard(
   runtimeState: NotificationRuntimeState,
-  onRequestPermission: () -> Unit
+  notificationsEnabled: Boolean,
+  periodicSyncEnabled: Boolean,
+  enabledLocalChannels: Int,
+  totalLocalChannels: Int,
+  enabledSystemChannels: Int,
+  totalSystemChannels: Int,
+  onRequestPermission: () -> Unit,
+  onOpenNotificationSettings: () -> Unit,
 ) {
-  val isError = !runtimeState.permissionGranted || !runtimeState.appNotificationsEnabled
+  val isError = notificationsEnabled && (!runtimeState.permissionGranted || !runtimeState.appNotificationsEnabled)
   ExpressiveCard(
     highlighted = isError,
   ) {
     Text(
-      "Stato Permessi Android",
+      "Diagnostica notifiche",
       style = MaterialTheme.typography.titleMedium,
       color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     )
+    FlowRow(
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      StatusBadge(
+        label = if (notificationsEnabled) "APP ON" else "APP OFF",
+        tone = if (notificationsEnabled) ExpressiveTone.Success else ExpressiveTone.Warning,
+      )
+      StatusBadge(
+        label = if (runtimeState.permissionGranted) "PERMESSO OK" else "PERMESSO KO",
+        tone = if (runtimeState.permissionGranted) ExpressiveTone.Success else ExpressiveTone.Warning,
+      )
+      StatusBadge(
+        label = if (runtimeState.appNotificationsEnabled) "OS ON" else "OS OFF",
+        tone = if (runtimeState.appNotificationsEnabled) ExpressiveTone.Success else ExpressiveTone.Warning,
+      )
+      StatusBadge(
+        label = if (periodicSyncEnabled) "SYNC ON" else "SYNC OFF",
+        tone = if (periodicSyncEnabled) ExpressiveTone.Success else ExpressiveTone.Warning,
+      )
+    }
     Text(
       "Permesso di sistema: ${if (runtimeState.permissionGranted) "Concesso" else "Negato"}",
       style = MaterialTheme.typography.bodyMedium
@@ -796,15 +860,30 @@ private fun RuntimeStateCard(
       "Impostazioni App (OS): ${if (runtimeState.appNotificationsEnabled) "Abilitate" else "Disabilitate"}",
       style = MaterialTheme.typography.bodyMedium
     )
+    Text(
+      "Categorie app attive: $enabledLocalChannels/$totalLocalChannels",
+      style = MaterialTheme.typography.bodyMedium
+    )
+    Text(
+      "Canali Android attivi: $enabledSystemChannels/$totalSystemChannels",
+      style = MaterialTheme.typography.bodyMedium
+    )
     
-    if (!runtimeState.permissionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      OutlinedButton(
-        onClick = onRequestPermission,
-        modifier = Modifier.padding(top = 8.dp)
-      ) {
-        Text("Richiedi Permesso Notifiche")
+    FlowRow(
+      modifier = Modifier.padding(top = 4.dp),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      if (notificationsEnabled && !runtimeState.permissionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        OutlinedButton(onClick = onRequestPermission) {
+          Text("Richiedi permesso")
+        }
       }
-    } else if (!runtimeState.appNotificationsEnabled) {
+      OutlinedButton(onClick = onOpenNotificationSettings) {
+        Text("Impostazioni Android")
+      }
+    }
+    if (notificationsEnabled && !runtimeState.appNotificationsEnabled) {
       Text(
         "Vai nelle impostazioni di Android per riabilitare le notifiche dell'app.",
         style = MaterialTheme.typography.bodySmall,
@@ -878,7 +957,44 @@ private fun channelSubtitle(
   settings: AppSettings,
 ): String {
   val system = if (channel.enabled) "abilitato" else "disabilitato"
-  return "Canale Android $system."
+  val app = if (channelEnabledInSettings(channel.id, settings)) "categoria app attiva" else "categoria app disattivata"
+  return "Canale Android $system / $app."
+}
+
+private fun Context.openAppNotificationSettings() {
+  val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+      .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+  } else {
+    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+      .setData(Uri.parse("package:$packageName"))
+  }
+  startSettingsActivity(intent)
+}
+
+private fun Context.openChannelNotificationSettings(channelId: String) {
+  val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+      .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+      .putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
+  } else {
+    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+      .setData(Uri.parse("package:$packageName"))
+  }
+  startSettingsActivity(intent)
+}
+
+private fun Context.startSettingsActivity(intent: Intent) {
+  val safeIntent = intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+  try {
+    startActivity(safeIntent)
+  } catch (_: ActivityNotFoundException) {
+    startActivity(
+      Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+        .setData(Uri.parse("package:$packageName"))
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+    )
+  }
 }
 
 @Composable

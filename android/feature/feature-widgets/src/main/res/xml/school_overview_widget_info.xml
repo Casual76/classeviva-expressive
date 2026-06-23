@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+  android:configure="dev.antigravity.classevivaexpressive.feature.widgets.WidgetConfigurationActivity"
+  android:description="@string/school_overview_widget_description"
+  android:initialLayout="@layout/school_overview_widget_loading"
+  android:minHeight="110dp"
+  android:minResizeHeight="80dp"
+  android:minResizeWidth="160dp"
+  android:minWidth="180dp"
+  android:previewLayout="@layout/school_overview_widget_loading"
+  android:resizeMode="horizontal|vertical"
+  android:targetCellHeight="2"
+  android:targetCellWidth="4"
+  android:updatePeriodMillis="0"
+  android:widgetCategory="home_screen"
+  android:widgetFeatures="reconfigurable|configuration_optional" />

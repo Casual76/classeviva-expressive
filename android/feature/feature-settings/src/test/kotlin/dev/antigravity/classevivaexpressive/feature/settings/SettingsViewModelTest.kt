@@ -134,6 +134,22 @@ class SettingsViewModelTest {
     }
   }
 
+  @Test
+  fun sendTestNotificationForChannel_setsSuccessMessage() = runTest {
+    coEvery { settingsRepository.sendTestNotificationForChannel("voti") } returns Result.success(Unit)
+
+    val vm = buildViewModel()
+
+    vm.state.test {
+      awaitItem()
+      vm.sendTestNotificationForChannel("voti")
+      val updated = awaitItem()
+      assertEquals("Test notifica «voti» inviato.", updated.lastMessage)
+      cancelAndIgnoreRemainingEvents()
+    }
+    coVerify { settingsRepository.sendTestNotificationForChannel("voti") }
+  }
+
   // ─── Anno scolastico ──────────────────────────────────────────────────────
 
   @Test

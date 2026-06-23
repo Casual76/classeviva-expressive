@@ -1,12 +1,15 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.theme
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -15,11 +18,13 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CardDefaults
@@ -52,9 +57,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
+import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlin.math.max
 import kotlin.math.min
 
@@ -75,6 +87,7 @@ fun ExpressiveTopHeader(
   subtitle: String? = null,
   onBack: (() -> Unit)? = null,
   scrollBehavior: TopAppBarScrollBehavior? = null,
+  titleTrailing: (@Composable () -> Unit)? = null,
   actions: @Composable RowScope.() -> Unit = {},
 ) {
   LargeTopAppBar(
@@ -82,12 +95,19 @@ fun ExpressiveTopHeader(
     scrollBehavior = scrollBehavior,
     title = {
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-          text = title,
-          fontWeight = FontWeight.Bold,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
+        Row(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            text = title,
+            modifier = if (titleTrailing != null) Modifier.weight(1f, fill = false) else Modifier,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+          titleTrailing?.invoke()
+        }
         subtitle?.let {
           Text(
             text = it,
@@ -397,6 +417,94 @@ fun ExpressiveCard(
 }
 
 @Composable
+fun SyncStatusDot(
+  status: SyncStatus,
+  modifier: Modifier = Modifier,
+) {
+  val tone = when (status.state) {
+    SyncState.IDLE -> if (status.lastSuccessfulSyncEpochMillis == null) ExpressiveTone.Warning else ExpressiveTone.Success
+    SyncState.SYNCING -> ExpressiveTone.Info
+    SyncState.PARTIAL -> ExpressiveTone.Warning
+    SyncState.OFFLINE,
+    SyncState.ERROR -> ExpressiveTone.Danger
+  }
+  val label = when (status.state) {
+    SyncState.IDLE -> if (status.lastSuccessfulSyncEpochMillis == null) {
+      "Sincronizzazione mai completata"
+    } else {
+      "Sincronizzazione completata"
+    }
+    SyncState.SYNCING -> "Aggiornamento in corso"
+    SyncState.PARTIAL -> "Sincronizzazione parziale"
+    SyncState.OFFLINE,
+    SyncState.ERROR -> "Sincronizzazione non riuscita"
+  }
+  Box(
+    modifier = modifier
+      .size(10.dp)
+      .background(toneColors(tone).content, CircleShape)
+      .semantics { contentDescription = label },
+  )
+}
+
+@Composable
+fun InlineMessageCard(
+  message: String,
+  modifier: Modifier = Modifier,
+  title: String = "Messaggio",
+  tone: ExpressiveTone = ExpressiveTone.Info,
+  onDismiss: (() -> Unit)? = null,
+) {
+  ExpressiveCard(
+    modifier = modifier,
+    highlighted = tone != ExpressiveTone.Neutral,
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+      verticalAlignment = Alignment.Top,
+    ) {
+      Column(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+      ) {
+        Text(
+          text = title,
+          style = MaterialTheme.typography.titleMedium,
+          color = toneColors(tone).content,
+          fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+          text = message,
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+      onDismiss?.let {
+        IconButton(onClick = it) {
+          Icon(Icons.Rounded.Close, contentDescription = "Nascondi")
+        }
+      }
+    }
+  }
+}
+
+fun SyncStatus.lastSyncLabel(nowEpochMillis: Long = System.currentTimeMillis()): String {
+  if (state == SyncState.SYNCING) return "Aggiornamento in corso"
+  val last = lastSuccessfulSyncEpochMillis ?: return "Mai aggiornato"
+  val ageMillis = (nowEpochMillis - last).coerceAtLeast(0L)
+  val minute = 60_000L
+  val hour = 60 * minute
+  val day = 24 * hour
+  return when {
+    ageMillis < minute -> "Aggiornato adesso"
+    ageMillis < hour -> "Aggiornato ${ageMillis / minute} min fa"
+    ageMillis < day -> "Aggiornato ${ageMillis / hour} h fa"
+    else -> "Aggiornato il ${lastSyncDateFormatter.format(Instant.ofEpochMilli(last))}"
+  }
+}
+
+@Composable
 fun QuickAction(
   label: String,
   modifier: Modifier = Modifier,
@@ -414,6 +522,9 @@ fun QuickAction(
     ),
   )
 }
+
+private val lastSyncDateFormatter: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("dd/MM HH:mm").withZone(ZoneId.systemDefault())
 
 
 @OptIn(ExperimentalFoundationApi::class)
