@@ -50,6 +50,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,11 +77,15 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.CustomEvent
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -108,11 +113,13 @@ data class AgendaUiState(
   val items: List<AgendaItem> = emptyList(),
   val customEvents: List<CustomEvent> = emptyList(),
   val isRefreshing: Boolean = false,
+  val syncStatus: SyncStatus = SyncStatus(),
 )
 
 @HiltViewModel
 class AgendaViewModel @Inject constructor(
   private val agendaRepository: AgendaRepository,
+  private val dashboardRepository: DashboardRepository,
 ) : ViewModel() {
   private val isRefreshing = MutableStateFlow(false)
 
@@ -120,8 +127,14 @@ class AgendaViewModel @Inject constructor(
     agendaRepository.observeAgenda(),
     agendaRepository.observeCustomEvents(),
     isRefreshing,
-  ) { items, customEvents, refreshing ->
-    AgendaUiState(items = items, customEvents = customEvents, isRefreshing = refreshing)
+    dashboardRepository.observeDashboard(),
+  ) { items, customEvents, refreshing, dashboard ->
+    AgendaUiState(
+      items = items,
+      customEvents = customEvents,
+      isRefreshing = refreshing,
+      syncStatus = dashboard.syncStatus,
+    )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgendaUiState())
 
   init {
@@ -169,6 +182,8 @@ class AgendaViewModel @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun AgendaRoute(
+  initialAgendaId: String? = null,
+  initialDate: String? = null,
   modifier: Modifier = Modifier,
   viewModel: AgendaViewModel = hiltViewModel(),
   sharedTransitionScope: SharedTransitionScope? = null,
@@ -178,8 +193,11 @@ fun AgendaRoute(
   val context = LocalContext.current
   var showDialog by rememberSaveable { mutableStateOf(false) }
   var selectedEntry by remember { mutableStateOf<AgendaEntry?>(null) }
-  var selectedMonthText by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
-  var selectedDateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+  val initialDateValue = remember(initialDate) {
+    initialDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
+  }
+  var selectedMonthText by rememberSaveable(initialDateValue) { mutableStateOf(YearMonth.from(initialDateValue).toString()) }
+  var selectedDateText by rememberSaveable(initialDateValue) { mutableStateOf(initialDateValue.toString()) }
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
   val selectedMonth = remember(selectedMonthText) { YearMonth.parse(selectedMonthText) }
@@ -233,13 +251,34 @@ fun AgendaRoute(
       .filter { it.category != AgendaCategory.LESSON }
   }
 
+  LaunchedEffect(initialAgendaId, initialDate, entries) {
+    initialDate?.let { date ->
+      runCatching { LocalDate.parse(date) }.getOrNull()?.let {
+        selectedMonthText = YearMonth.from(it).toString()
+        selectedDateText = it.toString()
+      }
+    }
+    if (!initialAgendaId.isNullOrBlank()) {
+      entries.firstOrNull { it.id == initialAgendaId }?.let { entry ->
+        entry.date?.let {
+          selectedMonthText = YearMonth.from(it).toString()
+          selectedDateText = it.toString()
+        }
+        selectedEntry = entry
+      }
+    }
+  }
+
   Scaffold(
     modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
     topBar = {
       ExpressiveTopHeader(
         title = "Agenda",
-        subtitle = "Pianifica verifiche, eventi e compiti con una vista calendario leggibile.",
+        subtitle = state.syncStatus.lastSyncLabel(),
         scrollBehavior = scrollBehavior,
+        titleTrailing = {
+          SyncStatusDot(status = state.syncStatus)
+        },
         actions = {
           IconButton(onClick = viewModel::refresh) {
             Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")

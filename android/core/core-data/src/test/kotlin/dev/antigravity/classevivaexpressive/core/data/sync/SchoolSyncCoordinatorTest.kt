@@ -1,6 +1,11 @@
 package dev.antigravity.classevivaexpressive.core.data.sync
 
 import android.util.Log
+import dev.antigravity.classevivaexpressive.core.data.repository.AgendaSection
+import dev.antigravity.classevivaexpressive.core.data.repository.GradesSection
+import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkSection
+import dev.antigravity.classevivaexpressive.core.data.repository.NotesSection
+import dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaItemEntity
@@ -26,6 +31,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.GradeVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
+import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
 import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCase
@@ -37,6 +43,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import io.mockk.verify
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.decodeFromString
@@ -632,6 +639,213 @@ class SchoolSyncCoordinatorTest {
       )
     }
     coVerify(exactly = 0) { changeHistoryDao.upsertAll(any()) }
+  }
+
+  @Test
+  fun refreshAll_keepsDistinctLocalIdsForDuplicateGradesWithoutRemoteIds() = runTest {
+    stubLog()
+    coEvery { gradeDao.getByYearOnce(session.studentId, currentYear.id) } returns listOf(
+      gradeEntity(
+        id = "local-existing",
+        subject = "Matematica",
+        valueLabel = "7",
+        numericValue = 7.0,
+        date = "2026-03-20",
+        type = "Scritto",
+      ),
+    )
+    coEvery { agendaDao.getByYearOnce(session.studentId, currentYear.id) } returns emptyList()
+    stubFullRefresh(
+      grades = listOf(
+        Grade(
+          id = "",
+          subject = "Matematica",
+          valueLabel = "7",
+          numericValue = 7.0,
+          date = "2026-03-20",
+          type = "Scritto",
+        ),
+        Grade(
+          id = "",
+          subject = "Matematica",
+          valueLabel = "8",
+          numericValue = 8.0,
+          date = "2026-03-20",
+          type = "Scritto",
+        ),
+      ),
+    )
+    val coordinator = buildCoordinator()
+
+    coordinator.refreshAll(force = true)
+
+    coVerify {
+      gradeDao.upsertAll(
+        match { entities ->
+          entities.size == 2 &&
+            entities.map { it.id }.distinct().size == 2 &&
+            entities.any { it.id == "local-existing" && it.valueLabel == "7" } &&
+            entities.any { it.id != "local-existing" && it.valueLabel == "8" }
+        },
+      )
+    }
+  }
+
+  @Test
+  fun refreshCurrentSchoolYearForNotifications_fastSyncSkipsMaintenanceSectionsAndReusesAgendaFetch() = runTest {
+    stubLog()
+    coEvery { snapshotCacheDao.getByKey(any()) } returns null
+    coEvery { restClient.getHomeworks() } returns emptyList()
+    coEvery { restClient.getAgenda(any(), any()) } returns listOf(
+      AgendaItem(
+        id = "a1",
+        title = "Verifica",
+        subtitle = "Matematica",
+        date = "2026-06-05",
+        subject = "Matematica",
+        category = AgendaCategory.ASSESSMENT,
+      ),
+    )
+    coEvery { agendaDao.getByYearOnce(session.studentId, currentYear.id) } returns emptyList()
+    val coordinator = buildCoordinator()
+
+    coordinator.refreshCurrentSchoolYearForNotifications(
+      force = true,
+      sections = setOf(HomeworkSection, AgendaSection),
+      mode = BackgroundSyncMode.FAST,
+    )
+
+    coVerify(exactly = 1) { restClient.getAgenda(any(), any()) }
+    coVerify(exactly = 0) { restClient.getProfile() }
+    coVerify(exactly = 0) { restClient.getMaterials() }
+    coVerify(exactly = 0) { restClient.getDocuments() }
+    coVerify(exactly = 0) { restClient.getSchoolbooks() }
+    coVerify(exactly = 0) { portalClient.getMeetingsPageHtml() }
+    verify(exactly = 0) { predictiveTimetableUseCase.generateTimetableTemplate(any()) }
+  }
+
+  @Test
+  fun refreshCurrentSchoolYearForNotifications_partialFastSyncDoesNotPublishGlobalPartialWhenSomeSectionsSucceed() = runTest {
+    stubLog()
+    coEvery { snapshotCacheDao.getByKey(any()) } returns null
+    coEvery { gradeDao.getByYearOnce(session.studentId, currentYear.id) } returns emptyList()
+    coEvery { restClient.getGrades() } returns listOf(
+      Grade(
+        id = "g1",
+        subject = "Matematica",
+        valueLabel = "8",
+        numericValue = 8.0,
+        date = "2026-05-12",
+        type = "Scritto",
+      ),
+    )
+    coEvery { restClient.getNotes() } throws ClassevivaNetworkException("Endpoint note non disponibile")
+    val coordinator = buildCoordinator()
+
+    val status = coordinator.refreshCurrentSchoolYearForNotifications(
+      force = true,
+      sections = setOf(GradesSection, NotesSection),
+      mode = BackgroundSyncMode.FAST,
+    )
+
+    assertEquals(SyncState.PARTIAL, status.state)
+    assertEquals(listOf(NotesSection), status.failedSections)
+    assertEquals(SyncState.IDLE, coordinator.syncStatus.value.state)
+    assertEquals(null, coordinator.syncStatus.value.message)
+  }
+
+  @Test
+  fun refreshSections_automaticPartialDoesNotPublishGlobalPartialWhenSomeSectionsSucceed() = runTest {
+    stubLog()
+    coEvery { snapshotCacheDao.getByKey(any()) } returns null
+    coEvery { gradeDao.getByYearOnce(session.studentId, currentYear.id) } returns emptyList()
+    coEvery { restClient.getGrades() } returns listOf(
+      Grade(
+        id = "g1",
+        subject = "Matematica",
+        valueLabel = "8",
+        numericValue = 8.0,
+        date = "2026-05-12",
+        type = "Scritto",
+      ),
+    )
+    coEvery { restClient.getNotes() } throws ClassevivaNetworkException("Endpoint note non disponibile")
+    val coordinator = buildCoordinator()
+
+    val status = coordinator.refreshSections(
+      force = false,
+      sections = setOf(GradesSection, NotesSection),
+    )
+
+    assertEquals(SyncState.PARTIAL, status.state)
+    assertEquals(SyncState.IDLE, coordinator.syncStatus.value.state)
+    assertEquals(null, coordinator.syncStatus.value.message)
+  }
+
+  @Test
+  fun refreshSections_manualPartialPublishesGlobalPartial() = runTest {
+    stubLog()
+    coEvery { snapshotCacheDao.getByKey(any()) } returns null
+    coEvery { gradeDao.getByYearOnce(session.studentId, currentYear.id) } returns emptyList()
+    coEvery { restClient.getGrades() } returns listOf(
+      Grade(
+        id = "g1",
+        subject = "Matematica",
+        valueLabel = "8",
+        numericValue = 8.0,
+        date = "2026-05-12",
+        type = "Scritto",
+      ),
+    )
+    coEvery { restClient.getNotes() } throws ClassevivaNetworkException("Endpoint note non disponibile")
+    val coordinator = buildCoordinator()
+
+    val status = coordinator.refreshSections(
+      force = true,
+      sections = setOf(GradesSection, NotesSection),
+    )
+
+    assertEquals(SyncState.PARTIAL, status.state)
+    assertEquals(SyncState.PARTIAL, coordinator.syncStatus.value.state)
+    assertEquals(listOf(NotesSection), coordinator.syncStatus.value.failedSections)
+  }
+
+  @Test
+  fun refreshCurrentSchoolYearMaintenance_partialDoesNotPublishGlobalPartialWhenSomeSectionsSucceed() = runTest {
+    stubLog()
+    stubFullRefresh()
+    coEvery { restClient.getNotes() } throws ClassevivaNetworkException("Note non disponibili")
+    val coordinator = buildCoordinator()
+
+    val status = coordinator.refreshCurrentSchoolYearMaintenance(force = true)
+
+    assertEquals(SyncState.PARTIAL, status.state)
+    assertEquals(SyncState.IDLE, coordinator.syncStatus.value.state)
+    assertEquals(null, coordinator.syncStatus.value.message)
+  }
+
+  @Test
+  fun refreshCurrentSchoolYearForNotifications_doesNotRewriteUnchangedSnapshotPayload() = runTest {
+    stubLog()
+    val key = yearScopedCacheKey(NotesSection, currentYear)
+    coEvery { snapshotCacheDao.getByKey(key) } returns SnapshotCacheEntity(
+      cacheKey = key,
+      payload = "[]",
+      updatedAtEpochMillis = 123L,
+    )
+    coEvery { restClient.getNotes() } returns emptyList()
+    val coordinator = buildCoordinator()
+
+    coordinator.refreshCurrentSchoolYearForNotifications(
+      force = true,
+      sections = setOf(NotesSection),
+      mode = BackgroundSyncMode.FAST,
+    )
+
+    coVerify(exactly = 0) { snapshotCacheDao.upsert(match { it.cacheKey == key }) }
+    coVerify(exactly = 1) {
+      snapshotCacheDao.upsert(match { it.cacheKey == SyncStatusCacheKey && it.payload.toLongOrNull() != null })
+    }
   }
 
   @Test

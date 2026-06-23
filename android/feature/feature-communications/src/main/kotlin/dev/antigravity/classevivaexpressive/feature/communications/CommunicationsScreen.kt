@@ -59,13 +59,17 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardActionType
 import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
+import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -92,6 +96,7 @@ data class CommunicationsUiState(
   val isRefreshing: Boolean = false,
   val pendingOpenUri: Uri? = null,
   val attachmentDialog: AttachmentDownloadDialogState? = null,
+  val syncStatus: SyncStatus = SyncStatus(),
 )
 
 data class AttachmentDownloadDialogState(
@@ -106,11 +111,13 @@ private data class CommunicationsRuntimeState(
   val isRefreshing: Boolean,
   val pendingOpenUri: Uri?,
   val attachmentDialog: AttachmentDownloadDialogState?,
+  val syncStatus: SyncStatus,
 )
 
 @HiltViewModel
 class CommunicationsViewModel @Inject constructor(
   private val communicationsRepository: CommunicationsRepository,
+  private val dashboardRepository: DashboardRepository,
 ) : ViewModel() {
   private val selectedCommunication = MutableStateFlow<CommunicationDetail?>(null)
   private val selectedNote = MutableStateFlow<NoteDetail?>(null)
@@ -133,8 +140,13 @@ class CommunicationsViewModel @Inject constructor(
     selectedNote,
     lastMessage,
     isSubmittingAction,
-    combine(isRefreshing, pendingOpenUri, attachmentDialog) { refreshing, openUri, dialog ->
-      CommunicationsRuntimeState(refreshing, openUri, dialog)
+    combine(
+      isRefreshing,
+      pendingOpenUri,
+      attachmentDialog,
+      dashboardRepository.observeDashboard(),
+    ) { refreshing, openUri, dialog, dashboard ->
+      CommunicationsRuntimeState(refreshing, openUri, dialog, dashboard.syncStatus)
     },
   ) { content, note, message, submitting, runtime ->
     val (communications, notes, communication) = content
@@ -148,6 +160,7 @@ class CommunicationsViewModel @Inject constructor(
       isRefreshing = runtime.isRefreshing,
       pendingOpenUri = runtime.pendingOpenUri,
       attachmentDialog = runtime.attachmentDialog,
+      syncStatus = runtime.syncStatus,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CommunicationsUiState())
 
@@ -369,6 +382,10 @@ class CommunicationsViewModel @Inject constructor(
 @Composable
 fun CommunicationsRoute(
   initialTab: String = "board",
+  initialCommunicationPubId: String? = null,
+  initialCommunicationEvtCode: String? = null,
+  initialNoteId: String? = null,
+  initialNoteCategoryCode: String? = null,
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
   viewModel: CommunicationsViewModel = hiltViewModel(),
@@ -382,6 +399,20 @@ fun CommunicationsRoute(
 
   LaunchedEffect(initialTab) {
     selectedTab = tabFromRoute(initialTab)
+  }
+
+  LaunchedEffect(initialCommunicationPubId, initialCommunicationEvtCode) {
+    if (!initialCommunicationPubId.isNullOrBlank() && !initialCommunicationEvtCode.isNullOrBlank()) {
+      selectedTab = TAB_BOARD
+      viewModel.openCommunication(initialCommunicationPubId, initialCommunicationEvtCode)
+    }
+  }
+
+  LaunchedEffect(initialNoteId, initialNoteCategoryCode) {
+    if (!initialNoteId.isNullOrBlank() && !initialNoteCategoryCode.isNullOrBlank()) {
+      selectedTab = TAB_NOTES
+      viewModel.openNote(initialNoteId, initialNoteCategoryCode)
+    }
   }
 
   LaunchedEffect(state.lastMessage) {
@@ -436,9 +467,12 @@ fun CommunicationsRoute(
     topBar = {
       ExpressiveTopHeader(
         title = "Comunicazioni",
-        subtitle = "Comunicazioni e note scolastiche in una vista unica, con azioni ufficiali e allegati disponibili.",
+        subtitle = state.syncStatus.lastSyncLabel(),
         onBack = onBack,
         scrollBehavior = scrollBehavior,
+        titleTrailing = {
+          SyncStatusDot(status = state.syncStatus)
+        },
         actions = {
           IconButton(onClick = viewModel::refresh) {
             Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")

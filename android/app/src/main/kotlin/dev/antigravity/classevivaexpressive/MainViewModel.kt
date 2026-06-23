@@ -257,6 +257,23 @@ class MainViewModel @Inject constructor(
     authError.value = null
   }
 
+  fun onNotificationPermissionResult(granted: Boolean) {
+    viewModelScope.launch {
+      settingsRepository.refreshNotificationRuntimeState()
+      if (granted) {
+        refreshLiveTimetableIfNeeded(
+          config = LiveTimetableConfig(
+            hasSession = authRepository.session.value != null,
+            notificationsEnabled = uiState.value.settings.notificationPreferences.enabled,
+            liveTimetableEnabled = uiState.value.settings.notificationPreferences.liveTimetable,
+          ),
+          force = true,
+          allowDisabled = false,
+        )
+      }
+    }
+  }
+
   private fun refreshLiveTimetableIfNeeded(
     config: LiveTimetableConfig,
     force: Boolean,

@@ -6,6 +6,8 @@ import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityState
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardAction
@@ -36,11 +38,15 @@ class CommunicationsViewModelTest {
 
   private val testDispatcher = UnconfinedTestDispatcher(TestCoroutineScheduler())
   private val communicationsRepository = mockk<CommunicationsRepository>(relaxed = true)
+  private val dashboardRepository = mockk<DashboardRepository>(relaxed = true)
 
-  @Before fun setUp() { Dispatchers.setMain(testDispatcher) }
+  @Before fun setUp() {
+    Dispatchers.setMain(testDispatcher)
+    every { dashboardRepository.observeDashboard() } returns flowOf(DashboardSnapshot())
+  }
   @After fun tearDown() { Dispatchers.resetMain() }
 
-  private fun buildViewModel() = CommunicationsViewModel(communicationsRepository)
+  private fun buildViewModel() = CommunicationsViewModel(communicationsRepository, dashboardRepository)
 
   private fun stubBase() {
     every { communicationsRepository.observeCommunications() } returns flowOf(emptyList())

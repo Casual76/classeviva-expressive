@@ -214,14 +214,7 @@ class ClassevivaRestClient @Inject constructor(
    * l'endpoint di lettura, che su Classeviva registra la ricezione ed è pienamente supportato.
    */
   suspend fun confirmNoticeboard(communication: Communication): Unit = withContext(Dispatchers.IO) {
-    android.util.Log.i("RestClient", "CONFIRM NOTICEBOARD: starting for pubId=${communication.pubId}, evtCode=${communication.evtCode}")
-    try {
-      markNoticeboardRead(pubId = communication.pubId, evtCode = communication.evtCode)
-      android.util.Log.i("RestClient", "CONFIRM NOTICEBOARD - Read confirmation succeeded!")
-    } catch (e: Exception) {
-      android.util.Log.e("RestClient", "CONFIRM NOTICEBOARD - Read confirmation failed", e)
-      throw e
-    }
+    markNoticeboardRead(pubId = communication.pubId, evtCode = communication.evtCode)
   }
 
   suspend fun joinNoticeboard(pubId: String, evtCode: String): Unit = withContext(Dispatchers.IO) {

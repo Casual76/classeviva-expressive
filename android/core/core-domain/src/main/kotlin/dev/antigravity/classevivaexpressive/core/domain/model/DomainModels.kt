@@ -155,6 +155,7 @@ data class SyncStatus(
   val state: SyncState = SyncState.IDLE,
   val lastSuccessfulSyncEpochMillis: Long? = null,
   val message: String? = null,
+  val failedSections: List<String> = emptyList(),
 )
 
 @Serializable

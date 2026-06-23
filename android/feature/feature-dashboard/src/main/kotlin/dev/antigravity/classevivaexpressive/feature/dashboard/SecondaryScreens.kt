@@ -14,9 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Link
-import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
@@ -29,6 +29,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -55,6 +56,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
@@ -66,6 +68,10 @@ import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.MeetingBooking
+import dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot
+import dev.antigravity.classevivaexpressive.core.domain.model.MeetingTeacher
+import dev.antigravity.classevivaexpressive.core.domain.model.MeetingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolbookCourse
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreComparison
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreRepository
@@ -138,6 +144,314 @@ class MaterialsViewModel @Inject constructor(
         .onFailure { onError(it.message ?: "Errore") }
     }
   }
+}
+
+data class MeetingsUiState(
+  val teachers: List<MeetingTeacher> = emptyList(),
+  val slots: List<MeetingSlot> = emptyList(),
+  val bookings: List<MeetingBooking> = emptyList(),
+  val isRefreshing: Boolean = false,
+  val selectedBooking: MeetingBooking? = null,
+  val selectedSlot: MeetingSlot? = null,
+  val lastMessage: String? = null,
+)
+
+private data class MeetingsUiExtras(
+  val isRefreshing: Boolean = false,
+  val selectedBooking: MeetingBooking? = null,
+  val selectedSlot: MeetingSlot? = null,
+  val lastMessage: String? = null,
+)
+
+@HiltViewModel
+class MeetingsViewModel @Inject constructor(
+  private val meetingsRepository: MeetingsRepository,
+) : ViewModel() {
+  private val extras = MutableStateFlow(MeetingsUiExtras())
+
+  val state = combine(
+    meetingsRepository.observeMeetingTeachers(),
+    meetingsRepository.observeMeetingSlots(),
+    meetingsRepository.observeMeetingBookings(),
+    extras,
+  ) { teachers, slots, bookings, ex ->
+    MeetingsUiState(
+      teachers = teachers,
+      slots = slots,
+      bookings = bookings,
+      isRefreshing = ex.isRefreshing,
+      selectedBooking = ex.selectedBooking,
+      selectedSlot = ex.selectedSlot,
+      lastMessage = ex.lastMessage,
+    )
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MeetingsUiState())
+
+  init {
+    refresh(force = false, showIndicator = false)
+  }
+
+  fun refresh() = refresh(force = true, showIndicator = true)
+
+  fun selectBooking(booking: MeetingBooking) {
+    extras.update { it.copy(selectedBooking = booking, selectedSlot = null, lastMessage = null) }
+  }
+
+  fun selectSlot(slot: MeetingSlot) {
+    extras.update { it.copy(selectedSlot = slot, selectedBooking = null, lastMessage = null) }
+  }
+
+  fun dismissSelection() {
+    extras.update { it.copy(selectedBooking = null, selectedSlot = null) }
+  }
+
+  fun clearMessage() {
+    extras.update { it.copy(lastMessage = null) }
+  }
+
+  fun portalUrl(): String = meetingsRepository.getPortalMeetingsUrl()
+
+  fun bookSelectedSlot() {
+    val slot = state.value.selectedSlot ?: return
+    viewModelScope.launch {
+      meetingsRepository.bookMeeting(slot)
+        .onSuccess { booking ->
+          extras.update {
+            it.copy(
+              selectedSlot = null,
+              selectedBooking = booking,
+              lastMessage = "Colloquio prenotato.",
+            )
+          }
+        }
+        .onFailure { error ->
+          extras.update { it.copy(lastMessage = error.message ?: "Prenotazione colloquio non riuscita.") }
+        }
+    }
+  }
+
+  fun cancelSelectedBooking() {
+    val booking = state.value.selectedBooking ?: return
+    viewModelScope.launch {
+      meetingsRepository.cancelMeeting(booking)
+        .onSuccess {
+          extras.update {
+            it.copy(
+              selectedBooking = null,
+              lastMessage = "Prenotazione annullata.",
+            )
+          }
+        }
+        .onFailure { error ->
+          extras.update { it.copy(lastMessage = error.message ?: "Annullamento colloquio non riuscito.") }
+        }
+    }
+  }
+
+  fun joinSelectedBooking(onUrl: (String) -> Unit) {
+    val booking = state.value.selectedBooking ?: return
+    viewModelScope.launch {
+      meetingsRepository.joinMeeting(booking)
+        .onSuccess { link ->
+          onUrl(link.url)
+          extras.update { it.copy(lastMessage = "Link colloquio aperto.") }
+        }
+        .onFailure { error ->
+          val directUrl = booking.slot.joinUrl
+          if (!directUrl.isNullOrBlank()) {
+            onUrl(directUrl)
+          } else {
+            extras.update { it.copy(lastMessage = error.message ?: "Link colloquio non disponibile.") }
+          }
+        }
+    }
+  }
+
+  private fun refresh(force: Boolean, showIndicator: Boolean) = viewModelScope.launch {
+    if (showIndicator) extras.update { it.copy(isRefreshing = true) }
+    meetingsRepository.refreshMeetings(force)
+      .onFailure { error -> extras.update { it.copy(lastMessage = error.message ?: "Aggiornamento colloqui non riuscito.") } }
+    extras.update { it.copy(isRefreshing = false) }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MeetingsRoute(
+  onBack: (() -> Unit)? = null,
+  viewModel: MeetingsViewModel = hiltViewModel(),
+) {
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val context = LocalContext.current
+  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+  val teachersById = remember(state.teachers) { state.teachers.associateBy { it.id } }
+
+  Scaffold(
+    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+    topBar = {
+      ExpressiveTopHeader(
+        title = "Colloqui",
+        subtitle = "Prenotazioni e disponibilita dei docenti.",
+        onBack = onBack,
+        scrollBehavior = scrollBehavior,
+        actions = {
+          IconButton(onClick = viewModel::refresh) {
+            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
+          }
+        },
+      )
+    },
+  ) { paddingValues ->
+    PullToRefreshBox(
+      modifier = Modifier.fillMaxSize().padding(paddingValues),
+      isRefreshing = state.isRefreshing,
+      onRefresh = viewModel::refresh,
+    ) {
+      LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        state.lastMessage?.let { message ->
+          item {
+            InlineMessageCard(
+              message = message,
+              title = "Colloqui",
+              onDismiss = viewModel::clearMessage,
+            )
+          }
+        }
+
+        if (state.bookings.isNotEmpty()) {
+          item { ExpressiveAccentLabel("Prenotati") }
+          items(state.bookings, key = { it.id }) { booking ->
+            RegisterListRow(
+              title = booking.teacher.name,
+              subtitle = booking.slot.meetingSlotLabel(),
+              eyebrow = booking.teacher.subject ?: "Colloquio",
+              meta = booking.bookingPosition?.let { "Posizione: $it" } ?: booking.status,
+              tone = ExpressiveTone.Success,
+              onClick = { viewModel.selectBooking(booking) },
+              badge = { StatusBadge("PRENOTATO", tone = ExpressiveTone.Success) },
+              animatePress = true,
+            )
+          }
+        }
+
+        val availableSlots = state.slots.filter { it.available }
+        if (availableSlots.isNotEmpty()) {
+          item { ExpressiveAccentLabel("Disponibili") }
+          items(availableSlots, key = { it.id }) { slot ->
+            val teacher = teachersById[slot.teacherId]
+            RegisterListRow(
+              title = teacher?.name ?: "Docente",
+              subtitle = slot.meetingSlotLabel(),
+              eyebrow = teacher?.subject ?: "Disponibile",
+              meta = slot.location,
+              tone = ExpressiveTone.Info,
+              onClick = { viewModel.selectSlot(slot) },
+              badge = { StatusBadge("PRENOTA", tone = ExpressiveTone.Info) },
+              animatePress = true,
+            )
+          }
+        }
+
+        if (state.bookings.isEmpty() && availableSlots.isEmpty() && !state.isRefreshing) {
+          item {
+            EmptyState(
+              title = "Nessun colloquio disponibile",
+              detail = "Le prenotazioni e le disponibilita compariranno qui dopo la sincronizzazione o quando il portale le espone.",
+            )
+          }
+          item {
+            OutlinedButton(
+              onClick = { context.openUrl(viewModel.portalUrl()) },
+              modifier = Modifier.fillMaxWidth(),
+            ) {
+              Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+              Text("Apri portale colloqui")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  state.selectedBooking?.let { booking ->
+    ModalBottomSheet(onDismissRequest = viewModel::dismissSelection) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        Text(booking.teacher.name, style = MaterialTheme.typography.headlineSmall)
+        Text(booking.slot.meetingSlotLabel(), style = MaterialTheme.typography.bodyMedium)
+        booking.bookingPosition?.let {
+          Text("Posizione: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Button(
+          onClick = { viewModel.joinSelectedBooking(context::openUrl) },
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+          Text("Partecipa")
+        }
+        OutlinedButton(
+          onClick = viewModel::cancelSelectedBooking,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text("Annulla prenotazione")
+        }
+        TextButton(
+          onClick = { context.openUrl(viewModel.portalUrl()) },
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text("Apri portale")
+        }
+      }
+    }
+  }
+
+  state.selectedSlot?.let { slot ->
+    val teacher = teachersById[slot.teacherId]
+    ModalBottomSheet(onDismissRequest = viewModel::dismissSelection) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        Text(teacher?.name ?: "Docente", style = MaterialTheme.typography.headlineSmall)
+        Text(slot.meetingSlotLabel(), style = MaterialTheme.typography.bodyMedium)
+        slot.location?.takeIf(String::isNotBlank)?.let {
+          Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Button(
+          onClick = viewModel::bookSelectedSlot,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text("Prenota colloquio")
+        }
+        TextButton(
+          onClick = { context.openUrl(viewModel.portalUrl()) },
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text("Apri portale")
+        }
+      }
+    }
+  }
+}
+
+private fun MeetingSlot.meetingSlotLabel(): String {
+  return listOfNotNull(
+    date.takeIf(String::isNotBlank),
+    buildString {
+      append(startTime)
+      endTime?.takeIf(String::isNotBlank)?.let { append(" - $it") }
+    }.takeIf(String::isNotBlank),
+  ).joinToString(" / ")
+}
+
+private fun Context.openUrl(url: String) {
+  if (url.isBlank()) return
+  startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -304,11 +618,18 @@ class HomeworkViewModel @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeworkRoute(
+  initialHomeworkId: String? = null,
   onBack: (() -> Unit)? = null,
   viewModel: HomeworkViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+  LaunchedEffect(initialHomeworkId, state.homeworks) {
+    if (!initialHomeworkId.isNullOrBlank() && state.selectedHomework?.id != initialHomeworkId) {
+      state.homeworks.firstOrNull { it.id == initialHomeworkId }?.let(viewModel::selectHomework)
+    }
+  }
 
   Scaffold(
     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -426,7 +747,7 @@ fun HomeworkRoute(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MEETINGS (COLLOQUI) — placeholder mantenuto
+// MEETINGS (COLLOQUI)
 // ─────────────────────────────────────────────────────────────────────────────
 
 private val homeworkCreatedAtFormatter: DateTimeFormatter =
@@ -463,20 +784,6 @@ private fun String.homeworkCreatedAtLabel(): String {
   }.recoverCatching {
     LocalDateTime.parse(value).format(homeworkCreatedAtFormatter)
   }.getOrDefault(value)
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MeetingsRoute(onBack: (() -> Unit)? = null) {
-  Scaffold(
-    topBar = { ExpressiveTopHeader(title = "Colloqui", onBack = onBack) },
-  ) { padding ->
-    EmptyState(
-      title = "In arrivo",
-      detail = "Questa sezione sarà disponibile a breve.",
-      modifier = Modifier.padding(padding).padding(20.dp),
-    )
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -679,7 +986,7 @@ fun DocumentsRoute(
                 onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
                 modifier = Modifier.fillMaxWidth(),
               ) {
-                Icon(Icons.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                 Text("Apri documento")
               }
             }
@@ -905,10 +1212,11 @@ fun StudentScoreRoute(
 
         state.lastMessage?.let { msg ->
           item {
-            Text(
-              text = msg,
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.error,
+            InlineMessageCard(
+              message = msg,
+              title = "Media studente",
+              tone = ExpressiveTone.Warning,
+              onDismiss = viewModel::clearMessage,
             )
           }
         }

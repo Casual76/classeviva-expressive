@@ -53,6 +53,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAc
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
@@ -358,17 +359,12 @@ fun LessonsRoute(
       ) {
         if (!state.lastMessage.isNullOrBlank()) {
           item {
-            RegisterListRow(
+            InlineMessageCard(
+              message = state.lastMessage.orEmpty(),
               title = "Aggiornamento orario",
-              subtitle = state.lastMessage.orEmpty(),
               tone = ExpressiveTone.Warning,
-              badge = { StatusBadge("AVVISO", tone = ExpressiveTone.Warning) },
+              onDismiss = viewModel::clearMessage,
             )
-          }
-          item {
-            TextButton(onClick = viewModel::clearMessage) {
-              Text("Nascondi messaggio")
-            }
           }
         }
 

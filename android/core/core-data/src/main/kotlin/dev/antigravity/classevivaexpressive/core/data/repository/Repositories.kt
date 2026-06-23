@@ -11,7 +11,10 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.antigravity.classevivaexpressive.core.data.change.hasMeaningfulChangeComparedTo
+import dev.antigravity.classevivaexpressive.core.data.external.ExternalDashboardInvalidator
 import dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinator
+import dev.antigravity.classevivaexpressive.core.data.sync.observePersistedSyncStatus
+import dev.antigravity.classevivaexpressive.core.data.sync.withPersistedLastSuccess
 import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.AgendaChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.AppNotificationChannels
@@ -21,6 +24,7 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChan
 import dev.antigravity.classevivaexpressive.core.data.notifications.NotesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.LiveTimetableChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.dismissGradeNotifications
 import dev.antigravity.classevivaexpressive.core.data.notifications.refreshLiveTimetableNotification
 import dev.antigravity.classevivaexpressive.core.data.notifications.readNotificationRuntimeState
 import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNotification
@@ -268,6 +272,24 @@ class SchoolSettingsRepository @Inject constructor(
   }
 }
 
+private val DashboardRefreshSections = setOf(
+  GradesSection,
+  LessonsSection,
+  AgendaSection,
+  HomeworkSection,
+  CommunicationsSection,
+  NotesSection,
+)
+
+private val GradesRefreshSections = setOf(GradesSection, PeriodsSection, SubjectsSection)
+private val StatsRefreshSections = setOf(GradesSection, AgendaSection, HomeworkSection)
+private val AgendaRefreshSections = setOf(AgendaSection, HomeworkSection)
+private val LessonsRefreshSections = setOf(LessonsSection, AgendaSection)
+private val CommunicationsRefreshSections = setOf(CommunicationsSection, NotesSection)
+private val MaterialsRefreshSections = setOf(MaterialsSection)
+private val DocumentsRefreshSections = setOf(DocumentsSection, SchoolbooksSection)
+private val StudentScoreRefreshSections = StatsRefreshSections
+
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class SchoolDataRepository @Inject constructor(
@@ -294,6 +316,7 @@ class SchoolDataRepository @Inject constructor(
   private val timetableTemplateStore: TimetableTemplateStore,
   private val capabilityResolver: CapabilityResolver,
   private val predictiveTimetableUseCase: PredictiveTimetableUseCase,
+  private val externalDashboardInvalidators: Set<@JvmSuppressWildcards ExternalDashboardInvalidator>,
   @ApplicationContext private val context: Context,
 ) : DashboardRepository,
   GradesRepository,
@@ -310,7 +333,20 @@ class SchoolDataRepository @Inject constructor(
   StudentScoreRepository,
   SimulationRepository {
 
+  private suspend fun notifyExternalDashboardInvalidators() {
+    externalDashboardInvalidators.notifySafely()
+  }
+
   override fun observeDashboard(): Flow<DashboardSnapshot> {
+    val syncStatusFlow = schoolYearStore.observeSelectedSchoolYear()
+      .flatMapLatest { schoolYear ->
+        combine(
+          syncCoordinator.syncStatus,
+          observePersistedSyncStatus(snapshotCacheDao, schoolYear),
+        ) { runtime, persisted ->
+          runtime.withPersistedLastSuccess(persisted)
+        }
+      }
     val academicFlow = combine(
       observeGrades(),
       observeAgenda(),
@@ -341,7 +377,7 @@ class SchoolDataRepository @Inject constructor(
       observeGlobalValue(ProfileSection, StudentProfile()),
       academicFlow,
       schoolFlow,
-      syncCoordinator.syncStatus,
+      syncStatusFlow,
     ) { profile, academic, school, syncStatus ->
       val average = academic.grades.mapNotNull { it.numericValue }.takeIf { it.isNotEmpty() }?.average()
       val today = java.time.LocalDate.now()
@@ -392,7 +428,12 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun refreshDashboard(force: Boolean): Result<DashboardSnapshot> = runCatching {
-    syncCoordinator.refreshAll(force)
+    syncCoordinator.refreshSections(
+      force = force,
+      sections = DashboardRefreshSections,
+      refreshProfile = true,
+    )
+    notifyExternalDashboardInvalidators()
     observeDashboard().firstValue()
   }
 
@@ -470,7 +511,7 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun refreshGrades(force: Boolean): Result<List<Grade>> = runCatching {
-    syncCoordinator.refreshAll(force)
+    syncCoordinator.refreshSections(force = force, sections = GradesRefreshSections)
     observeGrades().firstValue()
   }
 
@@ -484,6 +525,8 @@ class SchoolDataRepository @Inject constructor(
         seenAtEpochMillis = System.currentTimeMillis(),
       ),
     )
+    dismissGradeNotifications(context)
+    notifyExternalDashboardInvalidators()
   }
 
   override suspend fun saveSubjectGoal(subject: String, periodCode: String?, targetAverage: Double) {
@@ -512,7 +555,7 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun refreshStats(force: Boolean): Result<StatsSnapshot> = runCatching {
-    syncCoordinator.refreshAll(force)
+    syncCoordinator.refreshSections(force = force, sections = StatsRefreshSections)
     observeStats().firstValue()
   }
 
@@ -632,7 +675,7 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun refreshAgenda(force: Boolean): Result<List<AgendaItem>> = runCatching {
-    syncCoordinator.refreshAll(force)
+    syncCoordinator.refreshSections(force = force, sections = AgendaRefreshSections)
     observeAgenda().firstValue()
   }
 
@@ -702,7 +745,7 @@ class SchoolDataRepository @Inject constructor(
 
   override suspend fun refreshLessons(force: Boolean): Result<List<Lesson>> = runCatching {
     // Pull-to-refresh: solo fetch dei dati, niente ricalcolo del template (è oneroso e va in background).
-    syncCoordinator.refreshAll(force)
+    syncCoordinator.refreshSections(force = force, sections = LessonsRefreshSections)
     observeLessons().firstValue()
   }
 
@@ -768,13 +811,14 @@ class SchoolDataRepository @Inject constructor(
 
   override fun observeNotes(): Flow<List<Note>> = observeYearScopedValue(NotesSection, emptyList())
   override suspend fun refreshCommunications(force: Boolean): Result<List<Communication>> = runCatching {
-    syncCoordinator.refreshAll(force)
+    syncCoordinator.refreshSections(force = force, sections = CommunicationsRefreshSections)
     observeCommunications().firstValue()
   }
 
   override suspend fun markAllAsRead(): Result<Unit> = runCatching {
     if (sessionStore.session.value == null) return@runCatching
     syncCoordinator.markAllCommunicationsReadRemotely().getOrThrow()
+    notifyExternalDashboardInvalidators()
   }
 
   override suspend fun markCommunicationRead(id: String): Result<Unit> = runCatching {
@@ -785,6 +829,7 @@ class SchoolDataRepository @Inject constructor(
     }
     // Always persist locally regardless of remote outcome.
     communicationDao.markRead(id)
+    notifyExternalDashboardInvalidators()
   }
 
   override suspend fun getCommunicationDetail(pubId: String, evtCode: String): Result<CommunicationDetail> {
@@ -924,7 +969,7 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun refreshMaterials(force: Boolean): Result<List<MaterialItem>> = runCatching {
-    syncCoordinator.refreshAll(force)
+    syncCoordinator.refreshSections(force = force, sections = MaterialsRefreshSections)
     observeMaterials().firstValue()
   }
 
@@ -955,7 +1000,7 @@ class SchoolDataRepository @Inject constructor(
 
   override fun observeSchoolbooks(): Flow<List<SchoolbookCourse>> = observeYearScopedValue(SchoolbooksSection, emptyList())
   override suspend fun refreshDocuments(force: Boolean): Result<List<DocumentItem>> = runCatching {
-    syncCoordinator.refreshAll(force)
+    syncCoordinator.refreshSections(force = force, sections = DocumentsRefreshSections)
     observeDocuments().firstValue()
   }
 
@@ -1052,7 +1097,7 @@ class SchoolDataRepository @Inject constructor(
   }.flowOn(Dispatchers.Default)
 
   override suspend fun refreshStudentScore(force: Boolean): Result<StudentScoreSnapshot> = runCatching {
-    syncCoordinator.refreshAll(force)
+    syncCoordinator.refreshSections(force = force, sections = StudentScoreRefreshSections)
     val snapshot = computeStudentScore(observeStats().firstValue(), observeAbsences().firstValue())
     val id = "score-${snapshot.computedAtEpochMillis}"
     studentScoreDao.upsert(StudentScoreSnapshotEntity(id, json.encodeToString(snapshot), snapshot.computedAtEpochMillis))
@@ -1382,6 +1427,12 @@ internal fun computeStudentScore(stats: StatsSnapshot, absences: List<AbsenceRec
 }
 
 private suspend fun <T> Flow<T>.firstValue(): T = first()
+
+private suspend fun Set<ExternalDashboardInvalidator>.notifySafely() {
+  forEach { invalidator ->
+    runCatching { invalidator.invalidateDashboard() }
+  }
+}
 
 private const val TimetableMaxAgeMillis: Long = 24L * 60L * 60L * 1000L
 

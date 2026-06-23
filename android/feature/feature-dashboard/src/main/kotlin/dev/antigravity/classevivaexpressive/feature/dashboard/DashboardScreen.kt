@@ -19,7 +19,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -41,6 +40,9 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveSharedBounds
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
@@ -128,6 +130,8 @@ fun DashboardRoute(
   onOpenGrade: (String) -> Unit,
   modifier: Modifier = Modifier,
   viewModel: DashboardViewModel = hiltViewModel(),
+  gradesSharedTransitionKey: String? = null,
+  communicationsSharedTransitionKey: String? = null,
   sharedTransitionScope: SharedTransitionScope? = null,
   animatedVisibilityScope: AnimatedVisibilityScope? = null,
 ) {
@@ -146,8 +150,11 @@ fun DashboardRoute(
     topBar = {
       ExpressiveTopHeader(
         title = titleText,
-        subtitle = snapshot.subheadline.ifBlank { "Lezioni, voti e bacheca restano in primo piano." },
+        subtitle = snapshot.syncStatus.lastSyncLabel(),
         scrollBehavior = scrollBehavior,
+        titleTrailing = {
+          SyncStatusDot(status = snapshot.syncStatus)
+        },
         actions = {
           IconButton(onClick = viewModel::refresh) {
             Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
@@ -199,7 +206,13 @@ fun DashboardRoute(
                   value = snapshot.unseenGrades.size.toString(),
                   detail = "Da aprire",
                   tone = if (snapshot.unseenGrades.isNotEmpty()) ExpressiveTone.Primary else ExpressiveTone.Neutral,
-                  modifier = Modifier.weight(1f),
+                  modifier = Modifier
+                    .weight(1f)
+                    .expressiveSharedBounds(
+                      sharedTransitionScope = sharedTransitionScope,
+                      animatedVisibilityScope = animatedVisibilityScope,
+                      sharedKey = gradesSharedTransitionKey,
+                    ),
                   onClick = onNavigateGrades,
                   animatePress = true,
                 )
@@ -208,7 +221,13 @@ fun DashboardRoute(
                   value = snapshot.unreadCommunications.size.toString(),
                   detail = "Non lette",
                   tone = if (snapshot.unreadCommunications.isNotEmpty()) ExpressiveTone.Warning else ExpressiveTone.Neutral,
-                  modifier = Modifier.weight(1f),
+                  modifier = Modifier
+                    .weight(1f)
+                    .expressiveSharedBounds(
+                      sharedTransitionScope = sharedTransitionScope,
+                      animatedVisibilityScope = animatedVisibilityScope,
+                      sharedKey = communicationsSharedTransitionKey,
+                    ),
                   onClick = onNavigateCommunications,
                   animatePress = true,
                 )
@@ -321,13 +340,6 @@ fun DashboardRoute(
               onClick = onNavigateCommunications,
               badge = { StatusBadge("NUOVA", tone = ExpressiveTone.Warning) },
               animatePress = true
-            )
-          }
-        }
-        if (!snapshot.syncStatus.message.isNullOrBlank()) {
-          item {
-            Text(
-              text = snapshot.syncStatus.message.orEmpty(),
             )
           }
         }

@@ -10,12 +10,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.graphics.drawable.Icon
+import android.net.Uri
 import android.os.Build
-import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.annotation.RequiresApi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.antigravity.classevivaexpressive.core.data.repository.LessonsSection
@@ -39,12 +39,16 @@ import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationChannelStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPreferences
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 
@@ -56,8 +60,8 @@ const val AgendaChannelId = "verifiche_agenda"
 const val NotesChannelId = "annotazioni"
 const val TestChannelId = "test"
 const val LiveTimetableChannelId = "orario_live_v2"
+internal const val GradesNotificationId = 4400
 private const val LegacyLiveTimetableChannelId = "orario_live"
-private const val RequestPromotedOngoingExtra = "android.requestPromotedOngoing"
 
 internal const val HomeworkCacheSection = HomeworkSection
 internal const val CommunicationsCacheSection = CommunicationsSection
@@ -66,6 +70,35 @@ internal const val GradesCacheSection = GradesSection
 internal const val AgendaCacheSection = AgendaSection
 internal const val NotesCacheSection = NotesSection
 internal const val LessonsCacheSection = LessonsSection
+
+internal object NotificationDeepLinks {
+  private const val Scheme = "classevivaexpressive"
+  private const val Authority = "open"
+
+  fun home(): String = open("home")
+  fun settings(): String = open("settings")
+  fun grades(gradeId: String? = null): String = open("grades", "gradeId" to gradeId)
+  fun agenda(agendaId: String? = null, date: String? = null): String = open("agenda", "agendaId" to agendaId, "date" to date)
+  fun homework(homeworkId: String? = null): String = open("homework", "homeworkId" to homeworkId)
+  fun communications(pubId: String? = null, evtCode: String? = null): String =
+    open("communications", "tab" to "board", "pubId" to pubId, "evtCode" to evtCode)
+  fun notes(noteId: String? = null, categoryCode: String? = null): String =
+    open("notes", "noteId" to noteId, "categoryCode" to categoryCode)
+  fun absences(absenceId: String? = null): String = open("absences", "absenceId" to absenceId)
+  fun lessons(): String = open("lessons")
+
+  private fun open(path: String, vararg params: Pair<String, String?>): String {
+    val query = params
+      .filter { (_, value) -> !value.isNullOrBlank() }
+      .joinToString("&") { (key, value) -> "${key.encodeUrlPart()}=${value.orEmpty().encodeUrlPart()}" }
+    val base = "$Scheme://$Authority/${path.encodeUrlPart()}"
+    return if (query.isBlank()) base else "$base?$query"
+  }
+
+  private fun String.encodeUrlPart(): String {
+    return URLEncoder.encode(this, StandardCharsets.UTF_8.toString()).replace("+", "%20")
+  }
+}
 
 data class SyncSnapshotPayloads(
   val homeworks: String? = null,
@@ -189,6 +222,10 @@ fun sendTestNotificationForChannel(
   require(runtime.appNotificationsEnabled) { "Le notifiche sono disattivate nelle impostazioni di sistema." }
   require(runtime.permissionGranted) { "Concedi il permesso notifiche per inviare il test." }
   AppNotificationChannels.create(context)
+  val channel = runtime.channels.firstOrNull { it.id == channelId }
+  require(channel?.enabled != false) {
+    "Il canale Android \"${channel?.label?.ifBlank { channelId } ?: channelId}\" e' disattivato nelle impostazioni di sistema."
+  }
 
   val notification = when (channelId) {
     GradesChannelId -> buildGradeTestNotification(context)
@@ -200,6 +237,10 @@ fun sendTestNotificationForChannel(
     else -> buildGenericTestNotification(context)
   }
   notifyCompat(context = context, notificationId = testNotificationId(channelId), notification = notification).getOrThrow()
+}
+
+internal fun dismissGradeNotifications(context: Context) {
+  NotificationManagerCompat.from(context).cancel(GradesNotificationId)
 }
 
 private fun testNotificationId(channelId: String) = when (channelId) {
@@ -225,6 +266,7 @@ private fun buildGradeTestNotification(context: Context): Notification {
     )
     .setPriority(NotificationCompat.PRIORITY_HIGH)
     .setAutoCancel(true)
+    .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grades))
     .build()
 }
 
@@ -241,6 +283,7 @@ private fun buildHomeworkTestNotification(context: Context): Notification {
     )
     .setPriority(NotificationCompat.PRIORITY_DEFAULT)
     .setAutoCancel(true)
+    .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Homework))
     .build()
 }
 
@@ -257,6 +300,7 @@ private fun buildAgendaTestNotification(context: Context): Notification {
     )
     .setPriority(NotificationCompat.PRIORITY_HIGH)
     .setAutoCancel(true)
+    .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Agenda))
     .build()
 }
 
@@ -272,6 +316,7 @@ private fun buildCommunicationTestNotification(context: Context): Notification {
     )
     .setPriority(NotificationCompat.PRIORITY_DEFAULT)
     .setAutoCancel(true)
+    .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Communications))
     .build()
 }
 
@@ -287,6 +332,7 @@ private fun buildAbsenceTestNotification(context: Context): Notification {
     )
     .setPriority(NotificationCompat.PRIORITY_HIGH)
     .setAutoCancel(true)
+    .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Absences))
     .build()
 }
 
@@ -302,6 +348,7 @@ private fun buildNoteTestNotification(context: Context): Notification {
     )
     .setPriority(NotificationCompat.PRIORITY_DEFAULT)
     .setAutoCancel(true)
+    .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Notes))
     .build()
 }
 
@@ -316,6 +363,7 @@ private fun buildGenericTestNotification(context: Context): Notification {
     )
     .setPriority(NotificationCompat.PRIORITY_DEFAULT)
     .setAutoCancel(true)
+    .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Settings))
     .build()
 }
 
@@ -333,28 +381,27 @@ class SyncNotificationDispatcher @Inject constructor(
     if (!runtime.permissionGranted || !runtime.appNotificationsEnabled) return
 
     AppNotificationChannels.create(context)
-    val launchIntent = launchPendingIntent(context)
 
     if (preferences.grades) {
-      dispatchGrades(previous, current, launchIntent)
+      dispatchGrades(previous, current)
     }
     if (preferences.agenda) {
-      dispatchAgendaEvents(previous, current, launchIntent)
+      dispatchAgendaEvents(previous, current)
     }
     if (preferences.homework) {
-      dispatchHomeworks(previous, current, launchIntent)
+      dispatchHomeworks(previous, current)
     }
     if (preferences.communications) {
-      dispatchCommunications(previous, current, launchIntent)
+      dispatchCommunications(previous, current)
     }
     if (preferences.absences) {
-      dispatchAbsences(previous, current, launchIntent)
+      dispatchAbsences(previous, current)
     }
     if (preferences.notes) {
-      dispatchNotes(previous, current, launchIntent)
+      dispatchNotes(previous, current)
     }
     if (preferences.liveTimetable) {
-      dispatchLiveTimetable(current, launchIntent)
+      dispatchLiveTimetable(current)
     } else {
       NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
     }
@@ -362,7 +409,6 @@ class SyncNotificationDispatcher @Inject constructor(
 
   private fun dispatchLiveTimetable(
     current: SyncSnapshotPayloads,
-    launchIntent: PendingIntent?,
   ) {
     if (Build.VERSION.SDK_INT < 36) return
 
@@ -390,21 +436,43 @@ class SyncNotificationDispatcher @Inject constructor(
     notifyCompat(
       context = context,
       notificationId = LiveTimetableNotificationId,
-      notification = buildLiveTimetableNotification(context, snapshot, launchIntent),
+      notification = buildLiveTimetableNotification(
+        context = context,
+        snapshot = snapshot,
+        launchIntent = launchPendingIntent(context, NotificationDestination.Lessons),
+      ),
     )
   }
 
   private fun dispatchGrades(
     previous: SyncSnapshotPayloads,
     current: SyncSnapshotPayloads,
-    launchIntent: PendingIntent?,
   ) {
     val before = decodeList<Grade>(previous.grades)
     val after = decodeList<Grade>(current.grades)
+    val beforeById = before.associateBy { it.id }
     val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id } }
-    if (newItems.isEmpty()) return
+    val updatedItems = if (newItems.isEmpty()) {
+      after.filter { candidate ->
+        beforeById[candidate.id]?.let { previousGrade ->
+          candidate.hasMeaningfulNotificationChangeComparedTo(previousGrade)
+        } == true
+      }
+    } else {
+      emptyList()
+    }
+    if (newItems.isEmpty() && updatedItems.isEmpty()) return
 
-    val notification = if (newItems.size == 1) {
+    val notification = if (newItems.isNotEmpty()) {
+      buildNewGradesNotification(newItems)
+    } else {
+      buildUpdatedGradesNotification(updatedItems)
+    }
+    notifyCompat(context, GradesNotificationId, notification)
+  }
+
+  private fun buildNewGradesNotification(newItems: List<Grade>): Notification {
+    return if (newItems.size == 1) {
       val grade = newItems.first()
       val emoji = gradeEmoji(grade.numericValue)
       val typeLabel = grade.type.ifBlank { null }
@@ -429,7 +497,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchIntent)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grade(grade.id)))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -445,16 +513,56 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchIntent)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grades))
         .build()
     }
-    notifyCompat(context, 4400, notification)
+  }
+
+  private fun buildUpdatedGradesNotification(updatedItems: List<Grade>): Notification {
+    return if (updatedItems.size == 1) {
+      val grade = updatedItems.first()
+      val emoji = gradeEmoji(grade.numericValue)
+      val bodyParts = buildList {
+        add(grade.subject)
+        add("$emoji ${grade.valueLabel}")
+        if (!grade.description.isNullOrBlank()) add(grade.description)
+        if (!grade.notes.isNullOrBlank()) add("Note: ${grade.notes}")
+        if (!grade.teacher.isNullOrBlank()) add(grade.teacher)
+      }
+      NotificationCompat.Builder(context, GradesChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle("Voto aggiornato - ${grade.subject}")
+        .setContentText("$emoji ${grade.valueLabel} - ${readableDate(grade.date)}")
+        .setStyle(
+          NotificationCompat.BigTextStyle()
+            .bigText(bodyParts.joinToString("\n"))
+            .setSummaryText("Registro Voti - aggiornamento"),
+        )
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grade(grade.id)))
+        .build()
+    } else {
+      val inboxStyle = NotificationCompat.InboxStyle()
+        .setSummaryText("Registro Voti - ${updatedItems.size} aggiornamenti")
+      updatedItems.sortedByDescending { it.date }.forEach { grade ->
+        inboxStyle.addLine("${gradeEmoji(grade.numericValue)} ${grade.valueLabel.padEnd(5)} ${grade.subject}")
+      }
+      NotificationCompat.Builder(context, GradesChannelId)
+        .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+        .setContentTitle("${updatedItems.size} voti aggiornati")
+        .setContentText(updatedItems.take(2).joinToString(" - ") { "${gradeEmoji(it.numericValue)} ${it.valueLabel} in ${it.subject}" })
+        .setStyle(inboxStyle)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grades))
+        .build()
+    }
   }
 
   private fun dispatchAgendaEvents(
     previous: SyncSnapshotPayloads,
     current: SyncSnapshotPayloads,
-    launchIntent: PendingIntent?,
   ) {
     val before = decodeList<AgendaItem>(previous.agenda)
     val after = decodeList<AgendaItem>(current.agenda)
@@ -482,7 +590,7 @@ class SyncNotificationDispatcher @Inject constructor(
           )
           .setPriority(NotificationCompat.PRIORITY_HIGH)
           .setAutoCancel(true)
-          .applyLaunchIntent(launchIntent)
+          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.AgendaItem(item.id, item.date)))
           .build()
       } else {
         val inboxStyle = NotificationCompat.InboxStyle()
@@ -497,7 +605,7 @@ class SyncNotificationDispatcher @Inject constructor(
           .setStyle(inboxStyle)
           .setPriority(NotificationCompat.PRIORITY_HIGH)
           .setAutoCancel(true)
-          .applyLaunchIntent(launchIntent)
+          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Agenda))
           .build()
       }
       notifyCompat(context, 4500, notification)
@@ -519,7 +627,7 @@ class SyncNotificationDispatcher @Inject constructor(
           )
           .setPriority(NotificationCompat.PRIORITY_DEFAULT)
           .setAutoCancel(true)
-          .applyLaunchIntent(launchIntent)
+          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.AgendaItem(item.id, item.date)))
           .build()
       } else {
         val inboxStyle = NotificationCompat.InboxStyle()
@@ -534,7 +642,7 @@ class SyncNotificationDispatcher @Inject constructor(
           .setStyle(inboxStyle)
           .setPriority(NotificationCompat.PRIORITY_DEFAULT)
           .setAutoCancel(true)
-          .applyLaunchIntent(launchIntent)
+          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Agenda))
           .build()
       }
       notifyCompat(context, 4501, notification)
@@ -544,7 +652,6 @@ class SyncNotificationDispatcher @Inject constructor(
   private fun dispatchHomeworks(
     previous: SyncSnapshotPayloads,
     current: SyncSnapshotPayloads,
-    launchIntent: PendingIntent?,
   ) {
     val before = decodeList<Homework>(previous.homeworks)
     val after = decodeList<Homework>(current.homeworks)
@@ -565,7 +672,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchIntent)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.HomeworkItem(hw.id)))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -580,7 +687,7 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchIntent)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Homework))
         .build()
     }
     notifyCompat(context, 4100, notification)
@@ -589,7 +696,6 @@ class SyncNotificationDispatcher @Inject constructor(
   private fun dispatchCommunications(
     previous: SyncSnapshotPayloads,
     current: SyncSnapshotPayloads,
-    launchIntent: PendingIntent?,
   ) {
     val before = decodeList<Communication>(previous.communications)
     val after = decodeList<Communication>(current.communications)
@@ -620,7 +726,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchIntent)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Communication(comm.pubId, comm.evtCode)))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -635,7 +741,7 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchIntent)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Communications))
         .build()
     }
     notifyCompat(context, 4200, notification)
@@ -644,7 +750,6 @@ class SyncNotificationDispatcher @Inject constructor(
   private fun dispatchAbsences(
     previous: SyncSnapshotPayloads,
     current: SyncSnapshotPayloads,
-    launchIntent: PendingIntent?,
   ) {
     val before = decodeList<AbsenceRecord>(previous.absences)
     val after = decodeList<AbsenceRecord>(current.absences)
@@ -672,7 +777,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchIntent)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Absence(record.id)))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -688,7 +793,7 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchIntent)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Absences))
         .build()
     }
     notifyCompat(context, 4300, notification)
@@ -697,7 +802,6 @@ class SyncNotificationDispatcher @Inject constructor(
   private fun dispatchNotes(
     previous: SyncSnapshotPayloads,
     current: SyncSnapshotPayloads,
-    launchIntent: PendingIntent?,
   ) {
     val before = decodeList<Note>(previous.notes)
     val after = decodeList<Note>(current.notes)
@@ -722,7 +826,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchIntent)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Note(note.id, note.categoryCode)))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -737,7 +841,7 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchIntent)
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Notes))
         .build()
     }
     notifyCompat(context, 4600, notification)
@@ -758,11 +862,16 @@ class SyncNotificationDispatcher @Inject constructor(
 private const val LiveTimetableNotificationId = 4700
 
 private data class LiveTimetableSnapshot(
-  val current: Lesson,
-  val next: Lesson?,
+  val current: ParsedLiveLesson,
+  val next: ParsedLiveLesson?,
   val progress: Int,
-  val progressMax: Int,
   val endAtEpochMillis: Long,
+  val isWaiting: Boolean,
+  val totalLessons: Int,
+  val currentPosition: Int,
+  val minutesRemaining: Int,
+  val progressSegments: List<LiveProgressSegment>,
+  val progressPoints: List<LiveProgressPoint>,
 ) {
   companion object {
     fun from(date: LocalDate, now: LocalTime, lessons: List<Lesson>): LiveTimetableSnapshot? {
@@ -783,19 +892,28 @@ private data class LiveTimetableSnapshot(
       val activeIndex = parsed.indexOfFirst { !now.isBefore(it.start) && now.isBefore(it.end) }
       val selectedIndex = if (activeIndex >= 0) activeIndex else parsed.indexOfFirst { now.isBefore(it.start) }
       val selected = parsed.getOrNull(selectedIndex) ?: return null
-      val elapsed = java.time.Duration.between(selected.start, now.coerceAtLeast(selected.start)).toMinutes().toInt()
-      val total = java.time.Duration.between(selected.start, selected.end).toMinutes().toInt().coerceAtLeast(1)
+      val timelineProgress = Duration.between(first.start, now.coerceIn(first.start, last.end)).toMinutes().toInt()
       val endMillis = LocalDateTime.of(date, selected.end)
         .atZone(ZoneId.systemDefault())
         .toInstant()
         .toEpochMilli()
+      val minutesRemaining = Duration.between(now, selected.end)
+        .toMinutes()
+        .toInt()
+        .coerceAtLeast(0)
+      val timeline = buildLiveProgressTimeline(first.start, parsed, selectedIndex)
 
       return LiveTimetableSnapshot(
-        current = selected.lesson,
-        next = parsed.getOrNull(selectedIndex + 1)?.lesson,
-        progress = elapsed.coerceIn(0, total),
-        progressMax = total,
+        current = selected,
+        next = parsed.getOrNull(selectedIndex + 1),
+        progress = timelineProgress.coerceIn(0, timeline.totalMinutes),
         endAtEpochMillis = endMillis,
+        isWaiting = activeIndex < 0,
+        totalLessons = parsed.size,
+        currentPosition = selectedIndex + 1,
+        minutesRemaining = minutesRemaining,
+        progressSegments = timeline.segments,
+        progressPoints = timeline.points,
       )
     }
   }
@@ -807,21 +925,91 @@ private data class ParsedLiveLesson(
   val end: LocalTime,
 )
 
+private data class LiveProgressSegment(
+  val length: Int,
+  val color: Int,
+  val id: Int,
+)
+
+private data class LiveProgressPoint(
+  val position: Int,
+  val color: Int,
+  val id: Int,
+)
+
+private data class LiveProgressTimeline(
+  val totalMinutes: Int,
+  val segments: List<LiveProgressSegment>,
+  val points: List<LiveProgressPoint>,
+)
+
+private fun buildLiveProgressTimeline(
+  dayStart: LocalTime,
+  lessons: List<ParsedLiveLesson>,
+  selectedIndex: Int,
+): LiveProgressTimeline {
+  val segments = mutableListOf<LiveProgressSegment>()
+  val points = mutableListOf<LiveProgressPoint>()
+  var cursor = dayStart
+
+  lessons.forEachIndexed { index, parsed ->
+    val gap = Duration.between(cursor, parsed.start).toMinutes().toInt()
+    if (gap > 0) {
+      segments += LiveProgressSegment(
+        length = gap,
+        color = Color.rgb(160, 168, 180),
+        id = 1_000 + index,
+      )
+    }
+
+    val offset = Duration.between(dayStart, parsed.start).toMinutes().toInt()
+    if (offset > 0) {
+      points += LiveProgressPoint(
+        position = offset,
+        color = if (index == selectedIndex) Color.rgb(26, 115, 232) else Color.rgb(94, 99, 104),
+        id = 2_000 + index,
+      )
+    }
+
+    val lessonLength = Duration.between(parsed.start, parsed.end).toMinutes().toInt().coerceAtLeast(1)
+    segments += LiveProgressSegment(
+      length = lessonLength,
+      color = when {
+        index < selectedIndex -> Color.rgb(52, 168, 83)
+        index == selectedIndex -> Color.rgb(66, 133, 244)
+        else -> Color.rgb(138, 180, 248)
+      },
+      id = 3_000 + index,
+    )
+    cursor = parsed.end
+  }
+
+  val total = segments.sumOf { it.length }.coerceAtLeast(1)
+  return LiveProgressTimeline(totalMinutes = total, segments = segments, points = points)
+}
+
+private fun LocalTime.coerceIn(start: LocalTime, end: LocalTime): LocalTime = when {
+  isBefore(start) -> start
+  isAfter(end) -> end
+  else -> this
+}
+
 @RequiresApi(36)
 private fun buildLiveTimetableNotification(
   context: Context,
   snapshot: LiveTimetableSnapshot,
   launchIntent: PendingIntent?,
 ): Notification {
-  val current = snapshot.current
-  val next = snapshot.next
+  val current = snapshot.current.lesson
+  val next = snapshot.next?.lesson
   val currentInterval = if (!current.endTime.isNullOrBlank()) {
     "${current.time} - ${current.endTime}"
   } else {
-    current.time
+    "${snapshot.current.start} - ${snapshot.current.end}"
   }
+  val stateLabel = if (snapshot.isWaiting) "Tra poco" else "In corso"
   val currentLine = listOfNotNull(
-    currentInterval,
+    "$stateLabel / $currentInterval",
     current.teacher?.takeIf(String::isNotBlank),
     current.room?.takeIf(String::isNotBlank)?.let { "Aula $it" },
   ).joinToString(" / ").ifBlank { "Docente in corso" }
@@ -838,25 +1026,52 @@ private fun buildLiveTimetableNotification(
       lesson.room?.takeIf(String::isNotBlank)?.let { append(" / Aula $it") }
     }
   } ?: "Ultima ora della mattinata"
+  val subText = "Ora ${snapshot.currentPosition}/${snapshot.totalLessons} / $nextLine"
+  val title = if (snapshot.isWaiting) {
+    "Tra ${snapshot.minutesRemaining} min: ${current.subject}"
+  } else {
+    current.subject
+  }
+  val shortCriticalText = if (snapshot.isWaiting) {
+    "T-${snapshot.minutesRemaining}m"
+  } else {
+    "${snapshot.minutesRemaining}m"
+  }
 
-  val style = Notification.ProgressStyle()
+  val style = NotificationCompat.ProgressStyle()
     .setStyledByProgress(true)
     .setProgress(snapshot.progress)
-    .addProgressSegment(
-      Notification.ProgressStyle.Segment(snapshot.progressMax).setColor(Color.rgb(66, 133, 244))
+    .setProgressSegments(
+      snapshot.progressSegments.map {
+        NotificationCompat.ProgressStyle.Segment(it.length)
+          .setColor(it.color)
+          .setId(it.id)
+      },
     )
-    .setProgressTrackerIcon(Icon.createWithResource(context, dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo))
+    .setProgressPoints(
+      snapshot.progressPoints.map {
+        NotificationCompat.ProgressStyle.Point(it.position)
+          .setColor(it.color)
+          .setId(it.id)
+      },
+    )
+    .setProgressStartIcon(
+      IconCompat.createWithResource(context, dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo),
+    )
+    .setProgressTrackerIcon(
+      IconCompat.createWithResource(context, dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo),
+    )
+    .setProgressEndIcon(
+      IconCompat.createWithResource(context, dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo),
+    )
 
-  // Costruzione notifica Live Update / Samsung Now Bar (Android 16+ — API 36).
-  // Usiamo SOLO le API ufficiali — niente extras hack — perché il flag legacy
-  // creava una seconda card duplicata nella shade su Samsung One UI 7.
-  val builder = Notification.Builder(context, LiveTimetableChannelId)
+  val builder = NotificationCompat.Builder(context, LiveTimetableChannelId)
     .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
-    .setContentTitle(current.subject)
+    .setContentTitle(title)
     .setContentText(currentLine)
     .setStyle(style)
-    .setSubText(nextLine)
-    .setShortCriticalText(current.subject.take(10))
+    .setSubText(subText)
+    .setShortCriticalText(shortCriticalText)
     .setWhen(snapshot.endAtEpochMillis)
     .setShowWhen(true)
     .setUsesChronometer(true)
@@ -865,25 +1080,16 @@ private fun buildLiveTimetableNotification(
     .setOnlyAlertOnce(true)
     .setColor(Color.rgb(66, 133, 244))
     .setCategory(Notification.CATEGORY_PROGRESS)
-    .setVisibility(Notification.VISIBILITY_PUBLIC)
+    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+    .setRequestPromotedOngoing(true)
     .setContentIntent(launchIntent)
 
-  // API 36+: richiediamo esplicitamente la promozione a Live Update / Now Bar.
-  // Niente più extras.putBoolean — il sistema deduplicava male e mostrava due card.
-  // Usiamo reflection perché la firma esatta varia tra build SDK e questo modulo
-  // non sempre vede l'API stable; il fallback è una notifica ongoing classica.
-  // Fallback compatibile: se il metodo non e' esposto dal runtime aggiungiamo l'extra.
-  if (Build.VERSION.SDK_INT >= 36) {
-    val promotionRequested = runCatching {
-      val method = builder.javaClass.methods.firstOrNull {
-        (it.name == "setRequestPromotedOngoing" || it.name == "requestPromotedOngoing") &&
-          it.parameterTypes.size == 1
-      }
-      method?.invoke(builder, true) != null
-    }.getOrDefault(false)
-    if (!promotionRequested) {
-      builder.addExtras(Bundle().apply { putBoolean(RequestPromotedOngoingExtra, true) })
-    }
+  launchIntent?.let {
+    builder.addAction(
+      dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo,
+      "Apri orario",
+      it,
+    )
   }
   return builder.build()
 }
@@ -943,13 +1149,7 @@ suspend fun refreshLiveTimetableNotification(
 }
 
 private fun launchPendingIntentInternal(context: Context): PendingIntent? {
-  val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
-  return PendingIntent.getActivity(
-    context,
-    0,
-    intent,
-    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-  )
+  return launchPendingIntent(context, NotificationDestination.Lessons)
 }
 
 internal fun gradeEmoji(numericValue: Double?): String = when {
@@ -965,14 +1165,86 @@ internal fun readableDate(value: String): String {
   return "%02d/%02d/%04d".format(parsed.dayOfMonth, parsed.monthValue, parsed.year)
 }
 
-private fun launchPendingIntent(context: Context): PendingIntent? {
+private fun launchPendingIntent(
+  context: Context,
+  destination: NotificationDestination = NotificationDestination.Home,
+): PendingIntent? {
   val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
+  intent.action = Intent.ACTION_VIEW
+  intent.data = destination.uri()
+  intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
   return PendingIntent.getActivity(
     context,
-    0,
+    destination.requestCode(),
     intent,
     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
   )
+}
+
+private sealed interface NotificationDestination {
+  fun uri(): Uri
+
+  fun requestCode(): Int = uri().toString().hashCode()
+
+  data object Home : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.home())
+  }
+
+  data object Settings : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.settings())
+  }
+
+  data object Grades : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.grades())
+  }
+
+  data class Grade(private val gradeId: String) : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.grades(gradeId))
+  }
+
+  data object Agenda : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.agenda(date = LocalDate.now().toString()))
+  }
+
+  data class AgendaItem(private val agendaId: String, private val date: String) : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.agenda(agendaId = agendaId, date = date))
+  }
+
+  data object Homework : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.homework())
+  }
+
+  data class HomeworkItem(private val homeworkId: String) : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.homework(homeworkId))
+  }
+
+  data object Communications : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.communications())
+  }
+
+  data class Communication(private val pubId: String, private val evtCode: String) : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.communications(pubId = pubId, evtCode = evtCode))
+  }
+
+  data object Notes : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.notes())
+  }
+
+  data class Note(private val noteId: String, private val categoryCode: String) : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.notes(noteId = noteId, categoryCode = categoryCode))
+  }
+
+  data object Absences : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.absences())
+  }
+
+  data class Absence(private val absenceId: String) : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.absences(absenceId))
+  }
+
+  data object Lessons : NotificationDestination {
+    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.lessons())
+  }
 }
 
 private fun NotificationCompat.Builder.applyLaunchIntent(intent: PendingIntent?): NotificationCompat.Builder {
@@ -986,6 +1258,72 @@ private fun hasNotificationPermission(context: Context): Boolean {
   } else {
     true
   }
+}
+
+private fun Grade.hasMeaningfulNotificationChangeComparedTo(previous: Grade): Boolean {
+  if (gradeValueChanged(previous.numericValue, previous.valueLabel, numericValue, valueLabel)) return true
+  if (requiredTextChanged(previous.date, date)) return true
+  if (comparableTextChanged(previous.subject, subject)) return true
+  if (comparableTextChanged(significantGradeType(previous.type), significantGradeType(type))) return true
+  if (comparableNumberChanged(previous.weight, weight)) return true
+  if (coreTextChanged(previous.description, description)) return true
+  if (coreTextChanged(previous.notes, notes)) return true
+  return false
+}
+
+private fun gradeValueChanged(
+  firstNumber: Double?,
+  firstLabel: String?,
+  secondNumber: Double?,
+  secondLabel: String?,
+): Boolean {
+  if (firstNumber != null && secondNumber != null) {
+    return abs(firstNumber - secondNumber) > 0.0001
+  }
+  val parsedFirst = firstNumber ?: parseGradeValue(firstLabel)
+  val parsedSecond = secondNumber ?: parseGradeValue(secondLabel)
+  if (parsedFirst != null && parsedSecond != null) {
+    return abs(parsedFirst - parsedSecond) > 0.0001
+  }
+  return comparableTextChanged(firstLabel, secondLabel)
+}
+
+private fun comparableNumberChanged(first: Double?, second: Double?): Boolean {
+  return first != null && second != null && abs(first - second) > 0.0001
+}
+
+private fun requiredTextChanged(first: String?, second: String?): Boolean {
+  val normalizedFirst = normalizedNotificationText(first)
+  val normalizedSecond = normalizedNotificationText(second)
+  return normalizedFirst.isNotBlank() && normalizedSecond.isNotBlank() && normalizedFirst != normalizedSecond
+}
+
+private fun comparableTextChanged(first: String?, second: String?): Boolean {
+  val normalizedFirst = normalizedNotificationText(first)
+  val normalizedSecond = normalizedNotificationText(second)
+  return normalizedFirst.isNotBlank() && normalizedSecond.isNotBlank() && normalizedFirst != normalizedSecond
+}
+
+private fun coreTextChanged(first: String?, second: String?): Boolean {
+  return normalizedNotificationText(first) != normalizedNotificationText(second)
+}
+
+private fun significantGradeType(type: String?): String? {
+  val normalized = normalizedNotificationText(type)
+  return normalized.takeUnless { it.isBlank() || it == "valutazione" || it == "voto" }
+}
+
+private fun normalizedNotificationText(value: String?): String {
+  return value.orEmpty()
+    .trim()
+    .lowercase()
+    .replace(Regex("\\s+"), " ")
+}
+
+private fun parseGradeValue(label: String?): Double? {
+  return normalizedNotificationText(label)
+    .replace(',', '.')
+    .toDoubleOrNull()
 }
 
 @SuppressLint("MissingPermission")

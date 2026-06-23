@@ -1,6 +1,8 @@
 package dev.antigravity.classevivaexpressive.feature.grades
 
 import app.cash.turbine.test
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SimulatedGrade
@@ -31,11 +33,15 @@ class GradesViewModelTest {
   private val testDispatcher = UnconfinedTestDispatcher(TestCoroutineScheduler())
   private val gradesRepository = mockk<GradesRepository>(relaxed = true)
   private val simulationRepository = mockk<SimulationRepository>(relaxed = true)
+  private val dashboardRepository = mockk<DashboardRepository>(relaxed = true)
 
-  @Before fun setUp() { Dispatchers.setMain(testDispatcher) }
+  @Before fun setUp() {
+    Dispatchers.setMain(testDispatcher)
+    every { dashboardRepository.observeDashboard() } returns flowOf(DashboardSnapshot())
+  }
   @After fun tearDown() { Dispatchers.resetMain() }
 
-  private fun buildViewModel() = GradesViewModel(gradesRepository, simulationRepository)
+  private fun buildViewModel() = GradesViewModel(gradesRepository, simulationRepository, dashboardRepository)
 
   @Test
   fun initialState_hasEmptyGradesList() = runTest {
