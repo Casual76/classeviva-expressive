@@ -62,7 +62,7 @@ class SchoolSyncWorker @AssistedInject constructor(
       return Result.success()
     }
 
-    val before = capturePayloads()
+    val before = capturePayloads(session.studentId)
     var consecutiveFailures = inputData.getInt(ConsecutiveFailuresKey, 0)
     runCatching {
       syncCoordinator.attachSession(session)
@@ -75,17 +75,17 @@ class SchoolSyncWorker @AssistedInject constructor(
         )
         consecutiveFailures = status.nextFastFailureCount(consecutiveFailures, fastSections)
         if (status.canDispatchNotifications()) {
-          notificationDispatcher.dispatch(previous = before, current = capturePayloads())
+          notificationDispatcher.dispatch(previous = before, current = capturePayloads(session.studentId))
         }
       } else {
         consecutiveFailures = 0
       }
 
-      if (maintenanceDue()) {
+      if (maintenanceDue(session.studentId)) {
         val maintenanceSections = BackgroundSyncPolicy.maintenanceSections()
         val status = syncCoordinator.refreshCurrentSchoolYearMaintenance(force = true)
         if (status.shouldAdvanceMaintenanceWindow(maintenanceSections)) {
-          markMaintenanceCompleted()
+          markMaintenanceCompleted(session.studentId)
         }
         if (status.state == SyncState.IDLE) {
           // Rigenera il template orario al massimo una volta ogni 24h, in background.
@@ -102,18 +102,18 @@ class SchoolSyncWorker @AssistedInject constructor(
     return Result.success()
   }
 
-  private suspend fun maintenanceDue(): Boolean {
+  private suspend fun maintenanceDue(studentId: String): Boolean {
     val currentYear = schoolYearStore.currentSchoolYearRef()
-    val lastCompletedAt = snapshotCacheDao.getByKey(maintenanceCacheKey(currentYear.id))?.updatedAtEpochMillis
+    val lastCompletedAt = snapshotCacheDao.getByKey(maintenanceCacheKey(studentId, currentYear.id))?.updatedAtEpochMillis
       ?: return true
     return System.currentTimeMillis() - lastCompletedAt > MaintenanceIntervalMillis
   }
 
-  private suspend fun markMaintenanceCompleted() {
+  private suspend fun markMaintenanceCompleted(studentId: String) {
     val currentYear = schoolYearStore.currentSchoolYearRef()
     snapshotCacheDao.upsert(
       SnapshotCacheEntity(
-        cacheKey = maintenanceCacheKey(currentYear.id),
+        cacheKey = maintenanceCacheKey(studentId, currentYear.id),
         payload = "{}",
         updatedAtEpochMillis = System.currentTimeMillis(),
       ),
@@ -130,16 +130,16 @@ class SchoolSyncWorker @AssistedInject constructor(
     }
   }
 
-  private suspend fun capturePayloads(): SyncSnapshotPayloads {
+  private suspend fun capturePayloads(studentId: String): SyncSnapshotPayloads {
     val currentYear = schoolYearStore.currentSchoolYearRef()
     return SyncSnapshotPayloads(
-      homeworks = snapshotCacheDao.getByKey(yearScopedCacheKey(HomeworkCacheSection, currentYear))?.payload,
-      communications = snapshotCacheDao.getByKey(yearScopedCacheKey(CommunicationsCacheSection, currentYear))?.payload,
-      absences = snapshotCacheDao.getByKey(yearScopedCacheKey(AbsencesCacheSection, currentYear))?.payload,
-      grades = snapshotCacheDao.getByKey(yearScopedCacheKey(GradesCacheSection, currentYear))?.payload,
-      agenda = snapshotCacheDao.getByKey(yearScopedCacheKey(AgendaCacheSection, currentYear))?.payload,
-      notes = snapshotCacheDao.getByKey(yearScopedCacheKey(NotesCacheSection, currentYear))?.payload,
-      lessons = snapshotCacheDao.getByKey(yearScopedCacheKey(LessonsCacheSection, currentYear))?.payload,
+      homeworks = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, HomeworkCacheSection, currentYear))?.payload,
+      communications = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, CommunicationsCacheSection, currentYear))?.payload,
+      absences = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, AbsencesCacheSection, currentYear))?.payload,
+      grades = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, GradesCacheSection, currentYear))?.payload,
+      agenda = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, AgendaCacheSection, currentYear))?.payload,
+      notes = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, NotesCacheSection, currentYear))?.payload,
+      lessons = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, LessonsCacheSection, currentYear))?.payload,
     )
   }
 
@@ -190,7 +190,8 @@ object SyncWorkScheduler {
   }
 }
 
-private fun maintenanceCacheKey(schoolYearId: String): String = "background_maintenance:$schoolYearId"
+private fun maintenanceCacheKey(studentId: String, schoolYearId: String): String =
+  "$studentId::$schoolYearId::background_maintenance"
 
 private fun SyncStatus.canDispatchNotifications(): Boolean {
   return state != SyncState.ERROR && state != SyncState.OFFLINE

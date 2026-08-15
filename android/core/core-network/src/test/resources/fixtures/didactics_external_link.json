@@ -1,0 +1,24 @@
+{
+  "didacticts": [
+    {
+      "teacherId": "teacher-link",
+      "teacherName": "Docente Demo",
+      "folders": [
+        {
+          "folderId": "folder-link",
+          "folderName": "Risorse web",
+          "contents": [
+            {
+              "contentId": "content-link",
+              "contentName": "Approfondimento esterno",
+              "objectId": "object-link",
+              "objectType": "LINK",
+              "shareDT": "2026-04-02",
+              "url": "https://example.edu/materiali/approfondimento"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

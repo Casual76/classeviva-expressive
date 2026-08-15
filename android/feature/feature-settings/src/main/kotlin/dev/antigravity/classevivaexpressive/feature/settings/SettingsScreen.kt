@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -52,6 +53,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,7 +61,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -75,6 +77,8 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelI
 import dev.antigravity.classevivaexpressive.core.data.notifications.LiveTimetableChannelId
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListDivider
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListGroup
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
@@ -110,6 +114,15 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private enum class SettingsSection(val title: String, val subtitle: String) {
+  Account("Account", "Profilo, anno scolastico e sessione"),
+  Appearance("Aspetto", "Tema, contrasto e colore accento"),
+  Notifications("Notifiche e sync", "Preferenze essenziali e stato"),
+  Data("Dati e backup", "Esporta o ripristina i dati locali"),
+  About("Informazioni e aggiornamenti", "Versione, update e funzionalità"),
+  Diagnostics("Diagnostica avanzata", "Canali Android, test e stato runtime"),
+}
+
 data class SettingsUiState(
   val settings: AppSettings = AppSettings(),
   val runtimeState: NotificationRuntimeState = NotificationRuntimeState(),
@@ -128,7 +141,7 @@ class SettingsViewModel @Inject constructor(
   private val schoolYearRepository: SchoolYearRepository,
   private val capabilityResolver: CapabilityResolver,
   private val appBackupRepository: AppBackupRepository,
-  @ApplicationContext private val applicationContext: Context,
+  @param:ApplicationContext private val applicationContext: Context,
 ) : ViewModel() {
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isRefreshing = MutableStateFlow(false)
@@ -316,6 +329,340 @@ class SettingsViewModel @Inject constructor(
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun SettingsRoute(
+  modifier: Modifier = Modifier,
+  onBack: (() -> Unit)? = null,
+  isCheckingForUpdates: Boolean = false,
+  updateCheckMessage: String? = null,
+  onCheckForUpdates: () -> Unit = {},
+  onClearUpdateCheckMessage: () -> Unit = {},
+  viewModel: SettingsViewModel = hiltViewModel(),
+  sharedTransitionScope: SharedTransitionScope? = null,
+  animatedVisibilityScope: AnimatedVisibilityScope? = null,
+) {
+  @Suppress("UNUSED_VARIABLE")
+  val motionScopes = sharedTransitionScope to animatedVisibilityScope
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  var sectionName by rememberSaveable { mutableStateOf<String?>(null) }
+  val section = sectionName?.let { name -> SettingsSection.entries.firstOrNull { it.name == name } }
+  val context = LocalContext.current
+  val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+    viewModel.refresh()
+  }
+  val exportBackupLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.CreateDocument("application/json"),
+  ) { uri -> uri?.let(viewModel::exportBackup) }
+  val importBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    uri?.let(viewModel::importBackup)
+  }
+  val navigateBack: () -> Unit = {
+    if (section != null) {
+      sectionName = null
+    } else {
+      onBack?.invoke()
+      Unit
+    }
+  }
+  BackHandler(enabled = section != null, onBack = navigateBack)
+  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+  Scaffold(
+    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+    topBar = {
+      ExpressiveTopHeader(
+        title = section?.title ?: "Impostazioni",
+        subtitle = section?.subtitle ?: "Tutto ciò che serve, senza il muro di opzioni.",
+        onBack = if (section != null || onBack != null) navigateBack else null,
+        scrollBehavior = scrollBehavior,
+        actions = {
+          if (section == SettingsSection.Diagnostics) {
+            IconButton(onClick = viewModel::refresh) {
+              Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna diagnostica")
+            }
+          }
+        },
+      )
+    },
+  ) { paddingValues ->
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(
+        start = 20.dp,
+        end = 20.dp,
+        top = paddingValues.calculateTopPadding() + 18.dp,
+        bottom = paddingValues.calculateBottomPadding() + 32.dp,
+      ),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      if (section == null) {
+        item {
+          ExpressiveHeroCard(
+            title = state.session?.profile?.name?.ifBlank { "Studente" } ?: "Profilo locale",
+            subtitle = listOfNotNull(
+              state.session?.profile?.schoolClass?.takeIf(String::isNotBlank),
+              state.selectedSchoolYear.label,
+            ).joinToString(" · "),
+          )
+        }
+        item {
+          ExpressiveListGroup {
+            val destinations = SettingsSection.entries.filterNot { it == SettingsSection.Diagnostics }
+            destinations.forEachIndexed { index, destination ->
+              RegisterListRow(
+                title = destination.title,
+                subtitle = destination.subtitle,
+                tone = if (destination == SettingsSection.Notifications &&
+                  state.settings.notificationsEnabled &&
+                  (!state.runtimeState.permissionGranted || !state.runtimeState.appNotificationsEnabled)
+                ) ExpressiveTone.Warning else ExpressiveTone.Neutral,
+                onClick = { sectionName = destination.name },
+                badge = {
+                  if (destination == SettingsSection.Notifications) {
+                    StatusBadge(
+                      if (state.settings.notificationsEnabled) "ON" else "OFF",
+                      tone = if (state.settings.notificationsEnabled) ExpressiveTone.Success else ExpressiveTone.Neutral,
+                    )
+                  }
+                },
+              )
+              if (index != destinations.lastIndex) ExpressiveListDivider()
+            }
+          }
+        }
+      }
+
+      if (section == SettingsSection.Account) {
+        item {
+          ExpressiveHeroCard(
+            title = state.session?.profile?.name?.ifBlank { "Studente" } ?: "Nessuna sessione",
+            subtitle = listOfNotNull(
+              state.session?.username,
+              state.session?.profile?.school,
+              state.session?.profile?.schoolClass,
+            ).filter(String::isNotBlank).joinToString(" · ").ifBlank { "Accedi per sincronizzare il registro" },
+          )
+        }
+        item {
+          SectionTitle(eyebrow = "Registro", title = "Anno scolastico")
+        }
+        item {
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            state.availableSchoolYears.forEach { year ->
+              FilterChip(
+                selected = state.selectedSchoolYear.id == year.id,
+                onClick = { viewModel.selectSchoolYear(year) },
+                label = { Text(year.label) },
+              )
+            }
+          }
+        }
+        item {
+          Button(onClick = viewModel::logout, modifier = Modifier.fillMaxWidth()) {
+            Text("Disconnetti questo dispositivo")
+          }
+        }
+      }
+
+      if (section == SettingsSection.Appearance) {
+        item { SectionTitle(eyebrow = "Tema", title = "Modalità colore") }
+        item {
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            ThemeMode.entries.forEach { mode ->
+              FilterChip(
+                selected = state.settings.themeMode == mode,
+                onClick = { viewModel.setThemeMode(mode) },
+                label = { Text(mode.label()) },
+              )
+            }
+          }
+        }
+        item { SectionTitle(eyebrow = "Personalità", title = "Colore accento") }
+        item {
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+              selected = state.settings.accentMode == AccentMode.BRAND,
+              onClick = { viewModel.setAccentMode(AccentMode.BRAND) },
+              label = { Text("Classeviva") },
+            )
+            FilterChip(
+              selected = state.settings.accentMode == AccentMode.DYNAMIC,
+              onClick = { viewModel.setAccentMode(AccentMode.DYNAMIC) },
+              label = { Text("Dynamic") },
+            )
+            expressiveAccentPresets.forEach { preset ->
+              FilterChip(
+                selected = state.settings.accentMode == AccentMode.CUSTOM_PRESET && state.settings.customAccentName == preset.name,
+                onClick = { viewModel.setAccentPreset(preset.name) },
+                label = { Text(preset.name.replaceFirstChar(Char::uppercase)) },
+              )
+            }
+          }
+        }
+        item {
+          SettingToggleRow(
+            title = "Dynamic Color nativo",
+            subtitle = "Usa i colori del sistema quando l'accento è Dynamic.",
+            checked = state.settings.dynamicColorEnabled,
+            onCheckedChange = viewModel::setDynamicColor,
+          )
+        }
+        item {
+          SettingToggleRow(
+            title = "Nero AMOLED",
+            subtitle = "Usa superfici nere nel tema scuro.",
+            checked = state.settings.amoledEnabled,
+            onCheckedChange = viewModel::setAmoled,
+          )
+        }
+      }
+
+      if (section == SettingsSection.Notifications) {
+        item {
+          SettingToggleRow(
+            title = "Notifiche",
+            subtitle = "Attiva gli aggiornamenti importanti del registro.",
+            checked = state.settings.notificationsEnabled,
+            onCheckedChange = { enabled ->
+              viewModel.setNotifications(enabled)
+              if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !state.runtimeState.permissionGranted) {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+              }
+            },
+            icon = { Icon(Icons.Rounded.NotificationsActive, contentDescription = null) },
+          )
+        }
+        item {
+          SettingToggleRow(
+            title = "Sincronizzazione periodica",
+            subtitle = "Aggiorna i dati in background con frequenza adattiva.",
+            checked = state.settings.periodicSyncEnabled,
+            onCheckedChange = viewModel::setPeriodicSync,
+            icon = { Icon(Icons.Rounded.Sync, contentDescription = null) },
+          )
+        }
+        if (state.settings.notificationsEnabled &&
+          (!state.runtimeState.permissionGranted || !state.runtimeState.appNotificationsEnabled)
+        ) {
+          item {
+            InlineMessageCard(
+              title = "Serve il tuo intervento",
+              message = "Android sta bloccando almeno una parte delle notifiche. Apri Diagnostica avanzata per correggere lo stato.",
+              tone = ExpressiveTone.Warning,
+            )
+          }
+        }
+        item {
+          RegisterListRow(
+            title = SettingsSection.Diagnostics.title,
+            subtitle = SettingsSection.Diagnostics.subtitle,
+            tone = ExpressiveTone.Info,
+            onClick = { sectionName = SettingsSection.Diagnostics.name },
+          )
+        }
+      }
+
+      if (section == SettingsSection.Data) {
+        item {
+          ExpressiveHeroCard(
+            title = "I tuoi dati restano sotto il tuo controllo",
+            subtitle = "Il backup viene creato solo quando scegli esplicitamente dove salvarlo.",
+          )
+        }
+        item {
+          OutlinedButton(
+            onClick = { exportBackupLauncher.launch(viewModel.backupFileName()) },
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Icon(Icons.Rounded.FileDownload, contentDescription = null)
+            Text("Esporta backup")
+          }
+        }
+        item {
+          Button(
+            onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*", "*/*")) },
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Icon(Icons.Rounded.FileUpload, contentDescription = null)
+            Text("Importa backup")
+          }
+        }
+      }
+
+      if (section == SettingsSection.About) {
+        item {
+          AppUpdateSettingsCard(
+            isChecking = isCheckingForUpdates,
+            message = updateCheckMessage,
+            onCheckForUpdates = onCheckForUpdates,
+            onClearMessage = onClearUpdateCheckMessage,
+          )
+        }
+        if (state.capabilities.isNotEmpty()) {
+          item { SectionTitle(eyebrow = "Registro", title = "Funzionalità disponibili") }
+          items(state.capabilities, key = { it.feature.name }) { capability -> CapabilityRow(capability) }
+        }
+      }
+
+      if (section == SettingsSection.Diagnostics) {
+        val localChannelStates = listOf(
+          state.settings.notificationPreferences.homework,
+          state.settings.notificationPreferences.communications,
+          state.settings.notificationPreferences.absences,
+          state.settings.notificationPreferences.grades,
+          state.settings.notificationPreferences.agenda,
+          state.settings.notificationPreferences.notes,
+          state.settings.notificationPreferences.test,
+          state.settings.notificationPreferences.liveTimetable,
+        )
+        item {
+          RuntimeStateCard(
+            runtimeState = state.runtimeState,
+            notificationsEnabled = state.settings.notificationsEnabled,
+            periodicSyncEnabled = state.settings.periodicSyncEnabled,
+            enabledLocalChannels = localChannelStates.count { it },
+            totalLocalChannels = localChannelStates.size,
+            enabledSystemChannels = state.runtimeState.channels.count { it.enabled },
+            totalSystemChannels = state.runtimeState.channels.size,
+            onRequestPermission = {
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+              }
+            },
+            onOpenNotificationSettings = { context.openAppNotificationSettings() },
+          )
+        }
+        items(state.runtimeState.channels, key = { it.id }) { channel ->
+          SettingToggleRow(
+            title = channel.label.ifBlank { channel.id },
+            subtitle = channelSubtitle(channel, state.settings),
+            checked = channelEnabledInSettings(channel.id, state.settings),
+            onCheckedChange = { viewModel.setNotificationCategoryEnabled(channel.id, it) },
+            badge = {
+              TextButton(onClick = { context.openChannelNotificationSettings(channel.id) }) {
+                Text("Android")
+              }
+            },
+          )
+        }
+        item {
+          OutlinedButton(onClick = viewModel::sendTestNotification, modifier = Modifier.fillMaxWidth()) {
+            Text("Invia notifica di test")
+          }
+        }
+      }
+
+      state.lastMessage?.let { message ->
+        item {
+          InlineMessageCard(message = message, title = "Impostazioni", onDismiss = viewModel::clearMessage)
+        }
+      }
+    }
+  }
+}
+
+@Deprecated("Kept temporarily as a reference while the sectioned settings UI stabilizes")
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
+@Composable
+private fun LegacySettingsRoute(
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
   isCheckingForUpdates: Boolean = false,

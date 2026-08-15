@@ -11,8 +11,14 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-internal fun yearScopedCacheKey(section: String, schoolYear: SchoolYearRef): String {
-  return "${schoolYear.id}::$section"
+internal fun yearScopedCacheKey(studentId: String, section: String, schoolYear: SchoolYearRef): String {
+  require(studentId.isNotBlank()) { "studentId is required for account-isolated cache keys" }
+  return "$studentId::${schoolYear.id}::$section"
+}
+
+internal fun studentScopedCacheKey(studentId: String, section: String): String {
+  require(studentId.isNotBlank()) { "studentId is required for account-isolated cache keys" }
+  return "$studentId::$section"
 }
 
 @Singleton

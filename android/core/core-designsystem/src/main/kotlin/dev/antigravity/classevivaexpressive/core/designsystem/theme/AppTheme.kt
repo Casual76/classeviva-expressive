@@ -4,6 +4,8 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -46,6 +48,15 @@ private fun presetFor(name: String): AccentPreset {
     ?: expressiveAccentPresets.first()
 }
 
+private val ClassevivaShapes = Shapes(
+  extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+  small = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+  medium = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+  large = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+  extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(32.dp),
+)
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ClassevivaExpressiveTheme(
   settings: AppSettings,
@@ -73,8 +84,8 @@ fun ClassevivaExpressiveTheme(
 
   MaterialTheme(
     colorScheme = colors,
-    motionScheme = ClassevivaMotionScheme,
-    shapes = Shapes(),
+    motionScheme = MotionScheme.expressive(),
+    shapes = ClassevivaShapes,
     typography = expressiveTypography(),
     content = content,
   )

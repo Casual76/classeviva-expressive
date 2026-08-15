@@ -1,5 +1,7 @@
 package dev.antigravity.classevivaexpressive
 
+import java.io.Serializable
+
 internal enum class RouteMotionKind {
   TopLevelSwitch,
   SharedContainer,
@@ -10,6 +12,36 @@ internal data class RouteMotionDecision(
   val kind: RouteMotionKind,
   val sharedKey: String? = null,
 )
+
+internal const val MotionOriginStateKey = "route_motion_origin"
+
+/**
+ * Entry-scoped origin for route motion. It is stored on each NavBackStackEntry instead of in
+ * composition-global state, so restored tabs and predictive back retain their own motion context.
+ */
+internal enum class MotionOrigin(
+  val wireName: String,
+  val sharedKey: String? = null,
+) : Serializable {
+  NavigationPill("navigation_pill"),
+  DeepLink("deep_link"),
+  DashboardGrades("dashboard_grades", RouteSharedKeys.DashboardGrades),
+  DashboardCommunications("dashboard_communications", RouteSharedKeys.DashboardCommunications),
+  HubLessons("hub_lessons", RouteSharedKeys.HubLessons),
+  HubAbsences("hub_absences", RouteSharedKeys.HubAbsences),
+  HubMaterials("hub_materials", RouteSharedKeys.HubMaterials),
+  HubHomework("hub_homework", RouteSharedKeys.HubHomework),
+  HubDocuments("hub_documents", RouteSharedKeys.HubDocuments),
+  HubProfessors("hub_professors", RouteSharedKeys.HubProfessors),
+  HubMeetings("hub_meetings", RouteSharedKeys.HubMeetings),
+  HubSettings("hub_settings", RouteSharedKeys.HubSettings),
+  HubNotes("hub_notes", RouteSharedKeys.HubNotes),
+  ;
+
+  companion object {
+    fun fromWireName(value: String?): MotionOrigin? = entries.firstOrNull { it.wireName == value }
+  }
+}
 
 internal object RouteSharedKeys {
   const val DashboardGrades = "dashboard:grades"
@@ -63,13 +95,13 @@ internal fun normalizeRoute(route: String?): String? {
 internal fun decideRouteMotion(
   fromRoute: String?,
   toRoute: String?,
-  requestedSharedKey: String? = null,
+  motionOrigin: MotionOrigin? = null,
 ): RouteMotionDecision {
   val from = normalizeRoute(fromRoute)
   val to = normalizeRoute(toRoute)
   val fromSharedKey = RouteSharedKeys.forDestinationBase(from)
   val toSharedKey = RouteSharedKeys.forDestinationBase(to)
-  val moreHubSharedKey = RouteSharedKeys.forMoreHubDestination(to.orEmpty())
+  val requestedSharedKey = motionOrigin?.sharedKey
 
   return when {
     requestedSharedKey != null && (requestedSharedKey == fromSharedKey || requestedSharedKey == toSharedKey) -> {
@@ -78,10 +110,6 @@ internal fun decideRouteMotion(
 
     from in topLevelRoutes && to in topLevelRoutes -> {
       RouteMotionDecision(RouteMotionKind.TopLevelSwitch)
-    }
-
-    from == "more" && moreHubSharedKey != null -> {
-      RouteMotionDecision(RouteMotionKind.SharedContainer, moreHubSharedKey)
     }
 
     else -> RouteMotionDecision(RouteMotionKind.FallbackScale)

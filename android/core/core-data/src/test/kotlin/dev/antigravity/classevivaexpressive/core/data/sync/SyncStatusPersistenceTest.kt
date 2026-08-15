@@ -15,26 +15,27 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SyncStatusPersistenceTest {
+  private val studentId = "55"
   private val schoolYear = SchoolYearRef(startYear = 2025, endYear = 2026)
 
   @Test
   fun observePersistedSyncStatus_readsExplicitSyncMarker() = runTest {
     val dao = snapshotCacheDaoWith(
-      SyncStatusCacheKey to SnapshotCacheEntity(
-        cacheKey = SyncStatusCacheKey,
+      syncStatusCacheKey(studentId) to SnapshotCacheEntity(
+        cacheKey = syncStatusCacheKey(studentId),
         payload = "456",
         updatedAtEpochMillis = 123L,
       ),
     )
 
-    val status = observePersistedSyncStatus(dao, schoolYear).first()
+    val status = observePersistedSyncStatus(dao, studentId, schoolYear).first()
 
     assertEquals(456L, status.lastSuccessfulSyncEpochMillis)
   }
 
   @Test
   fun observePersistedSyncStatus_fallsBackToSectionCacheTimestamp() = runTest {
-    val gradesKey = yearScopedCacheKey(GradesSection, schoolYear)
+    val gradesKey = yearScopedCacheKey(studentId, GradesSection, schoolYear)
     val dao = snapshotCacheDaoWith(
       gradesKey to SnapshotCacheEntity(
         cacheKey = gradesKey,
@@ -43,7 +44,7 @@ class SyncStatusPersistenceTest {
       ),
     )
 
-    val status = observePersistedSyncStatus(dao, schoolYear).first()
+    val status = observePersistedSyncStatus(dao, studentId, schoolYear).first()
 
     assertEquals(789L, status.lastSuccessfulSyncEpochMillis)
   }
@@ -56,6 +57,15 @@ class SyncStatusPersistenceTest {
     val status = runtime.withPersistedLastSuccess(persisted)
 
     assertEquals(200L, status.lastSuccessfulSyncEpochMillis)
+  }
+
+  @Test
+  fun yearScopedCacheKey_isDifferentForStudentsInSameSchoolYear() {
+    val first = yearScopedCacheKey("student-a", GradesSection, schoolYear)
+    val second = yearScopedCacheKey("student-b", GradesSection, schoolYear)
+
+    assertEquals("student-a::2025-2026::grades", first)
+    assertEquals("student-b::2025-2026::grades", second)
   }
 
   private fun snapshotCacheDaoWith(

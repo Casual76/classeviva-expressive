@@ -508,18 +508,56 @@ data class MaterialAsset(
   val objectType: String,
   val fileName: String? = null,
   val mimeType: String? = null,
-  val base64Content: String? = null,
+  /** Private FileProvider URI for an authenticated asset cached on-device. */
+  val contentUri: String? = null,
+  /** Public URL that can safely be handed to another application. */
+  val externalUrl: String? = null,
+  /** Inline representation used only when the asset is textual. */
   val textPreview: String? = null,
+  /** Transitional wire compatibility. Repositories must convert this to [contentUri]. */
+  @Deprecated("Convert authenticated content to a private contentUri in core-data")
+  val base64Content: String? = null,
+  /** Transitional wire compatibility. Prefer [externalUrl]. */
+  @Deprecated("Use externalUrl")
   val sourceUrl: String? = null,
   val capabilityState: CapabilityState = CapabilityState(),
-)
+) {
+  init {
+    require(listOf(contentUri, externalUrl, textPreview).count { !it.isNullOrBlank() } <= 1) {
+      "MaterialAsset can expose at most one canonical content location."
+    }
+  }
+}
+
+@Serializable
+enum class DocumentKind {
+  DOCUMENT,
+  SCHOOL_REPORT,
+}
+
+data class RepositoryRefreshMetadata(
+  val lastAttemptAtEpochMillis: Long? = null,
+  val lastSuccessAtEpochMillis: Long? = null,
+  val refreshError: String? = null,
+) {
+  val isStale: Boolean
+    get() = lastSuccessAtEpochMillis != null &&
+      (lastAttemptAtEpochMillis ?: Long.MIN_VALUE) > lastSuccessAtEpochMillis
+}
 
 @Serializable
 data class DocumentItem(
   val id: String,
   val title: String,
   val detail: String,
+  val kind: DocumentKind = DocumentKind.DOCUMENT,
+  val remoteHash: String? = null,
+  val restReadUrl: String? = null,
+  val portalViewUrl: String? = null,
+  val portalConfirmUrl: String? = null,
+  /** Transitional compatibility for older REST parsers. */
   val viewUrl: String? = null,
+  /** Transitional compatibility for older portal parsers. */
   val confirmUrl: String? = null,
   val capabilityState: CapabilityState = CapabilityState(),
 )
@@ -530,11 +568,26 @@ data class DocumentAsset(
   val title: String,
   val fileName: String? = null,
   val mimeType: String? = null,
-  val base64Content: String? = null,
+  /** Private FileProvider URI for an authenticated document cached on-device. */
+  val contentUri: String? = null,
+  /** Public URL that can safely be handed to another application. */
+  val externalUrl: String? = null,
+  /** Inline representation used only when the document is textual. */
   val textPreview: String? = null,
+  /** Transitional wire compatibility. Repositories must convert this to [contentUri]. */
+  @Deprecated("Convert authenticated content to a private contentUri in core-data")
+  val base64Content: String? = null,
+  /** Transitional wire compatibility. Prefer [externalUrl]. */
+  @Deprecated("Use externalUrl")
   val sourceUrl: String? = null,
   val capabilityState: CapabilityState = CapabilityState(),
-)
+) {
+  init {
+    require(listOf(contentUri, externalUrl, textPreview).count { !it.isNullOrBlank() } <= 1) {
+      "DocumentAsset can expose at most one canonical content location."
+    }
+  }
+}
 
 @Serializable
 data class Schoolbook(
@@ -845,17 +898,20 @@ interface CommunicationsRepository {
 
 interface MaterialsRepository {
   fun observeMaterials(): Flow<List<MaterialItem>>
+  fun observeMaterialsRefreshMetadata(): Flow<RepositoryRefreshMetadata>
   suspend fun refreshMaterials(force: Boolean = false): Result<List<MaterialItem>>
   suspend fun openAsset(item: MaterialItem): Result<MaterialAsset>
-  suspend fun queueDownload(attachment: RemoteAttachment): Result<Long>
+  suspend fun queueDownload(item: MaterialItem): Result<MaterialAsset>
 }
 
 interface DocumentsRepository {
   fun observeDocuments(): Flow<List<DocumentItem>>
   fun observeSchoolbooks(): Flow<List<SchoolbookCourse>>
+  fun observeDocumentsRefreshMetadata(): Flow<RepositoryRefreshMetadata>
+  fun observeSchoolbooksRefreshMetadata(): Flow<RepositoryRefreshMetadata>
   suspend fun refreshDocuments(force: Boolean = false): Result<List<DocumentItem>>
   suspend fun openDocument(document: DocumentItem): Result<DocumentAsset>
-  suspend fun queueDownload(document: DocumentItem): Result<Long>
+  suspend fun queueDownload(document: DocumentItem): Result<DocumentAsset>
 }
 
 interface AbsencesRepository {

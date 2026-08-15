@@ -33,12 +33,14 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -127,7 +129,7 @@ fun ExpressiveTopHeader(
       }
     },
     actions = actions,
-    colors = TopAppBarDefaults.largeTopAppBarColors(
+    colors = TopAppBarDefaults.topAppBarColors(
       containerColor = MaterialTheme.colorScheme.background,
       scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
       navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
@@ -387,24 +389,14 @@ fun ExpressiveCard(
     baseModifier
   }
 
-  OutlinedCard(
+  Surface(
     modifier = clickableModifier,
-    shape = RoundedCornerShape(24.dp),
-    colors = CardDefaults.outlinedCardColors(
-      containerColor = if (highlighted) {
+    shape = MaterialTheme.shapes.large,
+    color = if (highlighted) {
         MaterialTheme.colorScheme.surfaceContainerHigh
       } else {
-        MaterialTheme.colorScheme.surface
+        MaterialTheme.colorScheme.surfaceContainerLow
       },
-    ),
-    border = BorderStroke(
-      1.dp,
-      if (highlighted) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
-      } else {
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
-      },
-    ),
   ) {
     Column(
       modifier = Modifier
@@ -526,6 +518,28 @@ fun QuickAction(
 private val lastSyncDateFormatter: DateTimeFormatter =
   DateTimeFormatter.ofPattern("dd/MM HH:mm").withZone(ZoneId.systemDefault())
 
+@Composable
+fun ExpressiveListGroup(
+  modifier: Modifier = Modifier,
+  content: @Composable ColumnScope.() -> Unit,
+) {
+  Surface(
+    modifier = modifier.fillMaxWidth(),
+    shape = MaterialTheme.shapes.large,
+    color = MaterialTheme.colorScheme.surfaceContainerLow,
+  ) {
+    Column(modifier = Modifier.fillMaxWidth(), content = content)
+  }
+}
+
+@Composable
+fun ExpressiveListDivider(modifier: Modifier = Modifier) {
+  HorizontalDivider(
+    modifier = modifier.padding(horizontal = 16.dp),
+    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f),
+  )
+}
+
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -545,7 +559,7 @@ fun RegisterListRow(
 ) {
   val colors = toneColors(tone)
   val isTinted = tone != ExpressiveTone.Neutral
-  OutlinedCard(
+  Column(
     modifier = modifier
       .fillMaxWidth()
       .then(
@@ -568,12 +582,11 @@ fun RegisterListRow(
           Modifier
         },
       ),
-    shape = RoundedCornerShape(24.dp),
-    colors = CardDefaults.outlinedCardColors(containerColor = if (isTinted) colors.container.copy(alpha = 0.3f) else MaterialTheme.colorScheme.surface),
-    border = BorderStroke(1.dp, colors.container.copy(alpha = 0.65f)),
   ) {
     ListItem(
-      colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+      colors = ListItemDefaults.colors(
+        containerColor = if (isTinted) colors.container.copy(alpha = 0.16f) else Color.Transparent,
+      ),
       overlineContent = eyebrow?.let {
         {
           Text(
@@ -673,10 +686,10 @@ fun ExpressiveHeroCard(
   modifier: Modifier = Modifier,
   trailing: (@Composable () -> Unit)? = null,
 ) {
-  ElevatedCard(
+  Surface(
     modifier = modifier.fillMaxWidth(),
-    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+    shape = MaterialTheme.shapes.extraLarge,
+    color = MaterialTheme.colorScheme.primaryContainer,
   ) {
     Row(
       modifier = Modifier
@@ -770,7 +783,12 @@ fun EmptyState(
   detail: String,
   modifier: Modifier = Modifier,
 ) {
-  ExpressiveCard(modifier = modifier, highlighted = true, animateContent = true) {
+  Column(
+    modifier = modifier
+      .fillMaxWidth()
+      .padding(horizontal = 4.dp, vertical = 12.dp),
+    verticalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
     Text(
       text = title,
       style = MaterialTheme.typography.titleMedium,
@@ -806,7 +824,7 @@ fun AppListItem(
   onClick: (() -> Unit)? = null,
   trailing: (@Composable () -> Unit)? = null,
 ) {
-  OutlinedCard(
+  Column(
     modifier = modifier
       .fillMaxWidth()
       .then(
@@ -816,8 +834,6 @@ fun AppListItem(
           Modifier
         },
       ),
-    shape = RoundedCornerShape(24.dp),
-    colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surface),
   ) {
     ListItem(
       colors = ListItemDefaults.colors(containerColor = Color.Transparent),

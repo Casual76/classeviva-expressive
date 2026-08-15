@@ -6,6 +6,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardActionType
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
+import dev.antigravity.classevivaexpressive.core.domain.model.DocumentKind
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,6 +16,138 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class NetworkParsersTest {
+  @Test
+  fun normalizeMaterialsPayload_parsesLegacyWrapperWithDirectFolderAndContentArrays() {
+    val materials = normalizeMaterialsPayload(fixture("didactics_direct_arrays.json"))
+
+    assertEquals(1, materials.size)
+    assertEquals("content-01", materials.single().id)
+    assertEquals("Dispensa introduttiva", materials.single().title)
+    assertEquals("folder-01", materials.single().folderId)
+    assertEquals("Docente Demo", materials.single().teacherName)
+  }
+
+  @Test
+  fun normalizeMaterialsPayload_preservesValidatedExternalLinkWithoutTreatingItAsPortalAsset() {
+    val material = normalizeMaterialsPayload(fixture("didactics_external_link.json")).single()
+
+    assertEquals("link", material.objectType)
+    assertEquals(CapabilityStatus.EXTERNAL_ONLY, material.capabilityState.status)
+    assertEquals("https://example.edu/materiali/approfondimento", material.attachments.single().url)
+    assertFalse(material.attachments.single().portalOnly)
+  }
+
+  @Test
+  fun normalizeMaterialsPayload_acceptsDirectRootArray() {
+    val payload = Json.parseToJsonElement(
+      """
+      [
+        {
+          "teacherId": "teacher-02",
+          "teacherName": "Docente Direct",
+          "folders": [
+            {
+              "folderId": "folder-02",
+              "folderName": "Cartella diretta",
+              "contents": [
+                { "contentId": "content-02", "contentName": "Contenuto diretto" }
+              ]
+            }
+          ]
+        }
+      ]
+      """.trimIndent(),
+    )
+
+    val material = normalizeMaterialsPayload(payload).single()
+
+    assertEquals("content-02", material.id)
+    assertEquals("Contenuto diretto", material.title)
+  }
+
+  @Test
+  fun normalizeMaterialsPayload_generatesStableNonBlankIdWhenRemoteIdIsMissing() {
+    val payload = Json.parseToJsonElement(
+      """
+      {
+        "teacherId": "teacher-02",
+        "contents": [
+          {
+            "contentName": "Contenuto senza id",
+            "objectId": "object-02",
+            "shareDT": "2026-05-12"
+          }
+        ]
+      }
+      """.trimIndent(),
+    )
+
+    val first = normalizeMaterialsPayload(payload).single().id
+    val second = normalizeMaterialsPayload(payload).single().id
+
+    assertTrue(first.startsWith("material-"))
+    assertEquals(first, second)
+  }
+
+  @Test
+  fun normalizeSchoolbooksPayload_parsesDirectBooksWithMetadataAndFlags() {
+    val courses = normalizeSchoolbooksPayload(fixture("schoolbooks_direct_books.json"))
+    val book = courses.single().books.single()
+
+    assertEquals("course-01", courses.single().id)
+    assertEquals("9780000000001", book.isbn)
+    assertEquals(24.5, book.price)
+    assertEquals("https://cdn.example.test/covers/book-01.jpg", book.coverUrl)
+    assertTrue(book.toBuy)
+    assertFalse(book.alreadyOwned)
+    assertTrue(book.alreadyInUse)
+    assertTrue(book.recommended)
+    assertFalse(book.newAdoption)
+  }
+
+  @Test
+  fun normalizeSchoolbooksPayload_generatesStableNonBlankBookIdWhenRemoteIdAndIsbnAreMissing() {
+    val payload = Json.parseToJsonElement(
+      """
+      {
+        "books": [
+          {
+            "title": "Libro senza id",
+            "author": "Autore",
+            "publisher": "Editore",
+            "subject": "Storia"
+          }
+        ]
+      }
+      """.trimIndent(),
+    )
+
+    val first = normalizeSchoolbooksPayload(payload).single().books.single().id
+    val second = normalizeSchoolbooksPayload(payload).single().books.single().id
+
+    assertTrue(first.startsWith("book-"))
+    assertEquals(first, second)
+  }
+
+  @Test
+  fun normalizeDocumentsPayload_combinesDocumentsAndSchoolReports() {
+    val documents = normalizeDocumentsPayload(fixture("documents_combined.json"))
+
+    assertEquals(2, documents.size)
+    val document = documents.single { it.kind == DocumentKind.DOCUMENT }
+    val report = documents.single { it.kind == DocumentKind.SCHOOL_REPORT }
+    assertEquals("hash-document-01", document.remoteHash)
+    assertEquals("hash-report-01", report.remoteHash)
+    assertEquals(
+      "https://web.spaggiari.eu/sgv/app/default/report.php?id=demo",
+      report.portalViewUrl,
+    )
+    assertEquals(
+      "https://web.spaggiari.eu/sgv/app/default/report-confirm.php?id=demo",
+      report.portalConfirmUrl,
+    )
+  }
+
   @Test
   fun normalizeCommunicationDetail_preservesPortalUrlsForGateway() {
     val payload = Json.parseToJsonElement(
@@ -422,7 +555,7 @@ class NetworkParsersTest {
   }
 
   @Test
-  fun normalizeMaterialAsset_marksNonOfficialSourceAsUnavailable() {
+  fun normalizeMaterialAsset_exposesValidatedExternalSourceForLink() {
     val asset = normalizeMaterialAsset(
       item = dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem(
         id = "m1",
@@ -442,8 +575,8 @@ class NetworkParsersTest {
       sourceUrl = "https://example.com/materiale",
     )
 
-    assertEquals(CapabilityStatus.UNAVAILABLE, asset.capabilityState.status)
-    assertEquals("https://example.com/materiale", asset.sourceUrl)
+    assertEquals(CapabilityStatus.EXTERNAL_ONLY, asset.capabilityState.status)
+    assertEquals("https://example.com/materiale", asset.externalUrl)
   }
 
   @Test
@@ -468,7 +601,7 @@ class NetworkParsersTest {
     )
 
     assertEquals(CapabilityStatus.EXTERNAL_ONLY, asset.capabilityState.status)
-    assertEquals("https://web.spaggiari.eu/rest/v1/students/55/didactics/item/10", asset.sourceUrl)
+    assertEquals("https://web.spaggiari.eu/rest/v1/students/55/didactics/item/10", asset.externalUrl)
   }
 
   // ─── normalizeGrade ───────────────────────────────────────────────────────
@@ -952,6 +1085,38 @@ class NetworkParsersTest {
     assertNull(doc.viewUrl)
   }
 
+  @Test
+  fun restOriginPolicy_rejectsLookalikeHostsHttpAndUnexpectedPorts() {
+    val hostileDoc = normalizeDocument(
+      Json.parseToJsonElement(
+        """
+        {
+          "desc": "Documento ostile",
+          "viewLink": "https://evil.test/rest/v1/students/55/documents/read/123"
+        }
+        """.trimIndent(),
+      ),
+    )
+
+    assertNull(hostileDoc.restReadUrl)
+    assertEquals(CapabilityStatus.UNAVAILABLE, hostileDoc.capabilityState.status)
+    assertTrue(isOfficialRestUrl("https://web.spaggiari.eu/rest/v1/students/55/card"))
+    assertFalse(isOfficialRestUrl("https://web.spaggiari.eu.evil.test/rest/v1/students/55/card"))
+    assertFalse(isOfficialRestUrl("http://web.spaggiari.eu/rest/v1/students/55/card"))
+    assertFalse(isOfficialRestUrl("https://web.spaggiari.eu:444/rest/v1/students/55/card"))
+    assertFalse(isOfficialRestUrl("https://web.spaggiari.eu/sgv/rest/fake"))
+  }
+
+  @Test
+  fun externalMaterialUrlPolicy_acceptsOnlyCredentialFreeHttpsOutsideAuthenticatedRest() {
+    assertTrue(isSafeExternalMaterialUrl("https://example.edu/materiale"))
+    assertTrue(isSafeExternalMaterialUrl("https://web.spaggiari.eu/sgv/materiale-pubblico"))
+    assertFalse(isSafeExternalMaterialUrl("http://example.edu/materiale"))
+    assertFalse(isSafeExternalMaterialUrl("https://user:password@example.edu/materiale"))
+    assertFalse(isSafeExternalMaterialUrl("https://web.spaggiari.eu/rest/v1/students/55/didactics/item/10"))
+    assertFalse(isSafeExternalMaterialUrl("javascript:alert(1)"))
+  }
+
   // ─── normalizeSchoolbookCourse ────────────────────────────────────────────
 
   @Test
@@ -1032,4 +1197,10 @@ class NetworkParsersTest {
     assertEquals("Anteprima web", asset.capabilityState.label)
     assertEquals("pagella.html", asset.fileName)
   }
+
+  private fun fixture(name: String) = Json.parseToJsonElement(
+    checkNotNull(javaClass.classLoader?.getResource("fixtures/$name")) {
+      "Fixture not found: $name"
+    }.readText(),
+  )
 }

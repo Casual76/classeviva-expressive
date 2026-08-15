@@ -3,6 +3,11 @@ package dev.antigravity.classevivaexpressive.core.network.client
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStorage
 import dev.antigravity.classevivaexpressive.core.domain.model.AttachmentPayload
 import dev.antigravity.classevivaexpressive.core.domain.model.PortalCookieDto
+import java.io.Closeable
+import java.io.IOException
+import java.io.InputStream
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -13,11 +18,14 @@ import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.FormBody
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.ResponseBody
 import okhttp3.logging.HttpLoggingInterceptor
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -29,6 +37,16 @@ private const val PortalBaseUrl = "https://web.spaggiari.eu"
 private const val PortalNoticeboardUrl = "$PortalBaseUrl/sif/app/default/bacheca_personale.php"
 private const val PortalUserAgent = "CVVS/std/4.1.7 Android/10"
 const val PortalMeetingsUrl = "https://web.spaggiari.eu/fml/app/default/colloqui.php"
+
+class NetworkDocumentStream internal constructor(
+  private val body: ResponseBody,
+  val fileName: String?,
+  val mimeType: String?,
+) : Closeable {
+  fun byteStream(): InputStream = body.byteStream()
+
+  override fun close() = body.close()
+}
 
 data class PortalNoticeboardDetail(
   val content: String?,
@@ -100,10 +118,34 @@ internal fun findPortalNoticeboardSubmission(
 }
 
 @Singleton
-class PortalClient @Inject constructor(
+class PortalClient private constructor(
   private val sessionStorage: SessionStorage,
   private val loggingInterceptor: HttpLoggingInterceptor,
+  private val portalLoginUrl: String,
+  private val portalOrigin: HttpUrl,
 ) {
+  @Inject
+  constructor(
+    sessionStorage: SessionStorage,
+    loggingInterceptor: HttpLoggingInterceptor,
+  ) : this(
+    sessionStorage = sessionStorage,
+    loggingInterceptor = loggingInterceptor,
+    portalLoginUrl = PortalLoginUrl,
+    portalOrigin = PortalLoginUrl.toHttpUrl(),
+  )
+
+  internal constructor(
+    sessionStorage: SessionStorage,
+    loggingInterceptor: HttpLoggingInterceptor,
+    portalLoginUrl: String,
+  ) : this(
+    sessionStorage = sessionStorage,
+    loggingInterceptor = loggingInterceptor,
+    portalLoginUrl = portalLoginUrl,
+    portalOrigin = portalLoginUrl.toHttpUrl(),
+  )
+
   private val cookieStore = ConcurrentHashMap<String, MutableList<Cookie>>()
 
   private val cookieJar = object : CookieJar {
@@ -114,46 +156,83 @@ class PortalClient @Inject constructor(
       }
     }
 
-    override fun loadForRequest(url: HttpUrl): List<Cookie> =
-      cookieStore[url.host]?.toList() ?: emptyList()
+    override fun loadForRequest(url: HttpUrl): List<Cookie> {
+      val now = System.currentTimeMillis()
+      return cookieStore[url.host]
+        ?.filter { cookie -> cookie.expiresAt > now && cookie.matches(url) }
+        .orEmpty()
+    }
   }
 
   private val portalHttpClient = OkHttpClient.Builder()
     .cookieJar(cookieJar)
     .addInterceptor(loggingInterceptor)
+    .addNetworkInterceptor { chain ->
+      val requestUrl = chain.request().url
+      if (!isPortalOrigin(requestUrl)) {
+        throw IOException("Redirect del portale verso un'origine non consentita.")
+      }
+      chain.proceed(chain.request())
+    }
     .followRedirects(true)
     .connectTimeout(30, TimeUnit.SECONDS)
     .readTimeout(30, TimeUnit.SECONDS)
     .build()
 
-  private suspend fun ensurePortalSession() {
-    val hasSession = cookieStore["web.spaggiari.eu"]?.any {
-      it.name.contains("PHPSESSID", ignoreCase = true) ||
-        it.name.contains("cvv", ignoreCase = true) ||
-        it.name.contains("sess", ignoreCase = true)
-    } == true
+  private val portalAssetHttpClient = portalHttpClient.newBuilder()
+    .followRedirects(false)
+    .followSslRedirects(false)
+    .build()
 
-    if (hasSession) return
+  private fun isPortalOrigin(url: HttpUrl): Boolean =
+    url.scheme == portalOrigin.scheme &&
+      url.host == portalOrigin.host &&
+      url.port == portalOrigin.port
+
+  private fun hasUsablePortalSessionCookie(): Boolean {
+    val rootUrl = portalOrigin.newBuilder().encodedPath("/").query(null).build()
+    val now = System.currentTimeMillis()
+    return cookieStore[portalOrigin.host]?.any { cookie ->
+      cookie.expiresAt > now &&
+        cookie.matches(rootUrl) &&
+        (
+          cookie.name.contains("PHPSESSID", ignoreCase = true) ||
+            cookie.name.contains("cvv", ignoreCase = true) ||
+            cookie.name.contains("sess", ignoreCase = true)
+          )
+    } == true
+  }
+
+  private suspend fun ensurePortalSession(forceRefresh: Boolean = false) {
+    if (forceRefresh) cookieStore.clear()
+
+    if (hasUsablePortalSessionCookie()) return
 
     val credentials = sessionStorage.readStoredCredentials()
       ?: throw ClassevivaNetworkException("Credenziali non disponibili per il portale.")
 
     withContext(Dispatchers.IO) {
-      val loginPageResponse = portalHttpClient.newCall(
+      val loginHtml = portalHttpClient.newCall(
         Request.Builder()
-          .url(PortalLoginUrl)
+          .url(portalLoginUrl)
           .header("User-Agent", PortalUserAgent)
           .build()
-      ).execute()
+      ).execute().use { loginPageResponse ->
+        if (!loginPageResponse.isSuccessful || !isPortalOrigin(loginPageResponse.request.url)) {
+          throw ClassevivaNetworkException("Pagina di login portale non raggiungibile.")
+        }
+        loginPageResponse.body?.string()
+          ?: throw ClassevivaNetworkException("Pagina di login portale non raggiungibile.")
+      }
 
-      val loginHtml = loginPageResponse.body?.string()
-        ?: throw ClassevivaNetworkException("Pagina di login portale non raggiungibile.")
-
-      val doc = Jsoup.parse(loginHtml, PortalLoginUrl)
+      val doc = Jsoup.parse(loginHtml, portalLoginUrl)
       val form = doc.selectFirst("form")
         ?: throw ClassevivaNetworkException("Form di login portale non trovato.")
 
-      val formAction = form.absUrl("action").takeIf(String::isNotBlank) ?: PortalLoginUrl
+      val formAction = form.absUrl("action").takeIf(String::isNotBlank) ?: portalLoginUrl
+      val formActionUrl = formAction.toHttpUrlOrNull()
+        ?.takeIf(::isPortalOrigin)
+        ?: throw ClassevivaNetworkException("Form di login esterno al portale Classeviva.")
 
       val formBody = FormBody.Builder()
       form.select("input[type=hidden]").forEach { input ->
@@ -167,12 +246,156 @@ class PortalClient @Inject constructor(
 
       portalHttpClient.newCall(
         Request.Builder()
-          .url(formAction)
+          .url(formActionUrl)
           .header("User-Agent", PortalUserAgent)
           .post(formBody.build())
           .build()
-      ).execute().close()
+      ).execute().use { loginResponse ->
+        if (!loginResponse.isSuccessful || !isPortalOrigin(loginResponse.request.url)) {
+          throw ClassevivaNetworkException("Accesso al portale non riuscito (${loginResponse.code}).")
+        }
+      }
+      if (!hasUsablePortalSessionCookie()) {
+        throw ClassevivaNetworkException("Il portale non ha creato una sessione valida.")
+      }
     }
+  }
+
+  suspend fun openSchoolReport(
+    viewUrl: String?,
+    confirmUrl: String?,
+  ): NetworkDocumentStream = withContext(Dispatchers.IO) {
+    val suppliedCandidates = listOfNotNull(viewUrl, confirmUrl)
+      .mapNotNull { value -> value.trim().takeIf(String::isNotBlank) }
+      .distinct()
+    val candidates = suppliedCandidates.mapNotNull { value ->
+      value.toHttpUrlOrNull()
+        ?.takeIf(::isPortalOrigin)
+    }
+    if (candidates.isEmpty()) {
+      val message = if (suppliedCandidates.isEmpty()) {
+        "URL pagella non disponibile."
+      } else {
+        "URL pagella esterno o non valido."
+      }
+      throw ClassevivaNetworkException(message)
+    }
+    ensurePortalSession()
+
+    var lastFailure: ClassevivaNetworkException? = null
+    for (pass in 0..1) {
+      var sessionRejected = false
+      candidates.forEach { targetUrl ->
+        when (val result = tryOpenSchoolReport(targetUrl)) {
+          is SchoolReportAttempt.Success -> return@withContext result.stream
+          is SchoolReportAttempt.Failure -> {
+            lastFailure = result.error
+            sessionRejected = sessionRejected || result.sessionRejected
+          }
+        }
+      }
+      if (pass == 0 && sessionRejected) {
+        ensurePortalSession(forceRefresh = true)
+      } else {
+        break
+      }
+    }
+    throw lastFailure ?: ClassevivaNetworkException("Il portale non ha reso disponibile la pagella.")
+  }
+
+  private fun tryOpenSchoolReport(targetUrl: HttpUrl): SchoolReportAttempt {
+    val response = runCatching {
+      portalAssetHttpClient.newCall(
+        Request.Builder()
+          .url(targetUrl)
+          .header("User-Agent", PortalUserAgent)
+          .build(),
+      ).execute()
+    }.getOrElse { error ->
+      return SchoolReportAttempt.Failure(
+        ClassevivaNetworkException("Download pagella non riuscito.", error),
+      )
+    }
+
+    val redirectLocation = response.header("Location")?.let { location ->
+      targetUrl.resolve(location)
+    }
+    if (response.isRedirect) {
+      val sessionRejected = redirectLocation?.encodedPath?.contains("login", ignoreCase = true) == true
+      response.close()
+      return SchoolReportAttempt.Failure(
+        error = ClassevivaNetworkException("Il portale ha restituito un redirect invece della pagella."),
+        sessionRejected = sessionRejected,
+      )
+    }
+    if (!response.isSuccessful || !isPortalOrigin(response.request.url)) {
+      val code = response.code
+      val sessionRejected = code == 401 || code == 403
+      response.close()
+      return SchoolReportAttempt.Failure(
+        error = ClassevivaNetworkException("Il portale non ha reso disponibile la pagella ($code)."),
+        sessionRejected = sessionRejected,
+      )
+    }
+
+    val body = response.body
+    if (body == null || body.contentLength() == 0L) {
+      response.close()
+      return SchoolReportAttempt.Failure(
+        ClassevivaNetworkException("Il portale ha restituito una pagella vuota."),
+      )
+    }
+    val mimeType = body.contentType()?.toString()?.substringBefore(';')?.trim()?.lowercase()
+    val preview = runCatching { response.peekBody(8_192).string() }.getOrDefault("")
+    val htmlResponse = mimeType == "text/html" ||
+      mimeType == "application/xhtml+xml" ||
+      looksLikeHtml(preview)
+    if (htmlResponse) {
+      val sessionRejected = looksLikeLoginPage(preview) ||
+        response.request.url.encodedPath.contains("login", ignoreCase = true)
+      response.close()
+      return SchoolReportAttempt.Failure(
+        error = ClassevivaNetworkException("Il portale ha restituito una pagina HTML invece della pagella."),
+        sessionRejected = sessionRejected,
+      )
+    }
+
+    return SchoolReportAttempt.Success(
+      NetworkDocumentStream(
+        body = body,
+        fileName = contentDispositionFileName(response.header("Content-Disposition"))
+          ?: targetUrl.pathSegments.lastOrNull()?.takeIf(String::isNotBlank),
+        mimeType = mimeType,
+      ),
+    )
+  }
+
+  private fun looksLikeHtml(value: String): Boolean {
+    val normalized = value.trimStart().lowercase()
+    return normalized.startsWith("<!doctype html") ||
+      normalized.startsWith("<html") ||
+      normalized.startsWith("<head") ||
+      normalized.startsWith("<body") ||
+      normalized.startsWith("<form")
+  }
+
+  private fun looksLikeLoginPage(value: String): Boolean {
+    val normalized = value.lowercase()
+    return looksLikeHtml(value) &&
+      (normalized.contains("type=\"password\"") ||
+        normalized.contains("type='password'") ||
+        normalized.contains("name=\"password\"") ||
+        normalized.contains("name='password'") ||
+        normalized.contains("login"))
+  }
+
+  private sealed interface SchoolReportAttempt {
+    data class Success(val stream: NetworkDocumentStream) : SchoolReportAttempt
+
+    data class Failure(
+      val error: ClassevivaNetworkException,
+      val sessionRejected: Boolean = false,
+    ) : SchoolReportAttempt
   }
 
   suspend fun submitPortalAction(
@@ -487,11 +710,30 @@ class PortalClient @Inject constructor(
     return keywords.any { text.contains(it) }
   }
 
-  private fun findLoginField(form: Element, candidates: List<String>): String? {
+private fun findLoginField(form: Element, candidates: List<String>): String? {
     for (candidate in candidates) {
       val input = form.selectFirst("input[name*=$candidate], input[id*=$candidate]")
       if (input != null) return input.attr("name").takeIf(String::isNotBlank) ?: input.attr("id")
     }
     return null
   }
+}
+
+private fun contentDispositionFileName(value: String?): String? {
+  val header = value?.takeIf(String::isNotBlank) ?: return null
+  val encoded = Regex("""filename\*\s*=\s*UTF-8''([^;]+)""", RegexOption.IGNORE_CASE)
+    .find(header)
+    ?.groupValues
+    ?.getOrNull(1)
+  if (!encoded.isNullOrBlank()) {
+    return runCatching {
+      URLDecoder.decode(encoded.trim(), StandardCharsets.UTF_8.name())
+    }.getOrNull()?.takeIf(String::isNotBlank)
+  }
+  return Regex("""filename\s*=\s*"?([^";]+)"?""", RegexOption.IGNORE_CASE)
+    .find(header)
+    ?.groupValues
+    ?.getOrNull(1)
+    ?.trim()
+    ?.takeIf(String::isNotBlank)
 }

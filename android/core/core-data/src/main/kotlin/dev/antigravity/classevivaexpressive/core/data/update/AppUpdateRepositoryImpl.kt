@@ -121,7 +121,7 @@ interface AppUpdateInstaller {
 
 @Singleton
 class AndroidAppUpdateInstaller @Inject constructor(
-  @ApplicationContext private val context: Context,
+  @param:ApplicationContext private val context: Context,
 ) : AppUpdateInstaller {
   override fun install(update: AvailableAppUpdate): Flow<AppUpdateInstallState> = channelFlow {
     send(AppUpdateInstallState.Verifying("Preparazione aggiornamento..."))

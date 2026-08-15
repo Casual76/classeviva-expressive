@@ -9,4 +9,7 @@
   <files-path
     name="attachment_cache"
     path="attachment_cache/" />
+  <files-path
+    name="offline_assets"
+    path="offline_assets/" />
 </paths>

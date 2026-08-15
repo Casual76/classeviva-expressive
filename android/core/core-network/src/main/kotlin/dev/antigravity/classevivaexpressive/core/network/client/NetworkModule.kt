@@ -25,14 +25,26 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-private const val ApiBaseUrl = "https://web.spaggiari.eu/rest/"
 private const val GatewayFallbackBaseUrl = "http://127.0.0.1/"
 const val DevApiKey = "Tg1NWEwNGIgIC0K"
 const val UserAgent = "CVVS/std/4.1.7 Android/10"
 
-private class ClassevivaHeadersInterceptor : Interceptor {
+internal class ClassevivaHeadersInterceptor(
+  private val originPolicy: RestOriginPolicy = OfficialRestOriginPolicy,
+) : Interceptor {
   override fun intercept(chain: Interceptor.Chain): Response {
-    val request = chain.request().newBuilder()
+    val original = chain.request().newBuilder()
+      .removeHeader(SkipAuthHeader)
+      .build()
+    if (!originPolicy.allows(original.url)) {
+      return chain.proceed(
+        original.newBuilder()
+          .removeHeader("Z-Dev-ApiKey")
+          .removeHeader("Z-Auth-Token")
+          .build(),
+      )
+    }
+    val request = original.newBuilder()
       .header("User-Agent", UserAgent)
       .header("Z-Dev-ApiKey", DevApiKey)
       .header("Content-Type", "application/json")
@@ -41,12 +53,20 @@ private class ClassevivaHeadersInterceptor : Interceptor {
   }
 }
 
-private class AuthTokenInterceptor(
+internal class AuthTokenInterceptor(
   private val sessionStore: SessionStorage,
+  private val originPolicy: RestOriginPolicy = OfficialRestOriginPolicy,
 ) : Interceptor {
   override fun intercept(chain: Interceptor.Chain): Response {
-    val original = chain.request()
-    if (original.header(SkipAuthHeader) == "true") {
+    val incoming = chain.request()
+    val skipAuth = incoming.header(SkipAuthHeader) == "true"
+    val original = incoming.newBuilder()
+      .removeHeader(SkipAuthHeader)
+      .build()
+    if (!originPolicy.allows(original.url)) {
+      return chain.proceed(original.newBuilder().removeHeader("Z-Auth-Token").build())
+    }
+    if (skipAuth) {
       return chain.proceed(original)
     }
 
@@ -89,10 +109,12 @@ private class GatewayHeadersInterceptor : Interceptor {
   }
 }
 
-private class SessionAuthenticator(
+internal class SessionAuthenticator(
   private val apiSessionManager: ApiSessionManager,
+  private val originPolicy: RestOriginPolicy = OfficialRestOriginPolicy,
 ) : Authenticator {
   override fun authenticate(route: Route?, response: Response): Request? {
+    if (!originPolicy.allows(response.request.url)) return null
     if (response.request.header(SkipRefreshHeader) == "true") return null
     if (responseCount(response) >= 2) return null
 
@@ -173,7 +195,7 @@ object NetworkModule {
     headersInterceptor: Interceptor,
   ): OkHttpClient {
     return OkHttpClient.Builder()
-      .addInterceptor(headersInterceptor)
+      .addNetworkInterceptor(headersInterceptor)
       .addInterceptor(loggingInterceptor)
       .build()
   }
@@ -188,8 +210,10 @@ object NetworkModule {
     authenticator: Authenticator,
   ): OkHttpClient {
     return OkHttpClient.Builder()
-      .addInterceptor(authTokenInterceptor)
-      .addInterceptor(headersInterceptor)
+      // Network interceptors are re-applied to redirects, preventing custom credentials
+      // from following an official response to a different origin.
+      .addNetworkInterceptor(authTokenInterceptor)
+      .addNetworkInterceptor(headersInterceptor)
       .authenticator(authenticator)
       .addInterceptor(loggingInterceptor)
       .build()
@@ -218,7 +242,7 @@ object NetworkModule {
     @Named("authOkHttp") client: OkHttpClient,
   ): Retrofit {
     return Retrofit.Builder()
-      .baseUrl(ApiBaseUrl)
+      .baseUrl(ClassevivaRestBaseUrl)
       .client(client)
       .addConverterFactory(GsonConverterFactory.create(gson))
       .build()
@@ -232,7 +256,7 @@ object NetworkModule {
     @Named("apiOkHttp") client: OkHttpClient,
   ): Retrofit {
     return Retrofit.Builder()
-      .baseUrl(ApiBaseUrl)
+      .baseUrl(ClassevivaRestBaseUrl)
       .client(client)
       .addConverterFactory(GsonConverterFactory.create(gson))
       .build()

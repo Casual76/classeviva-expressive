@@ -8,7 +8,9 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -24,25 +26,39 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.automirrored.rounded.Assignment
+import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Backpack
 import androidx.compose.material.icons.rounded.BugReport
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material.icons.rounded.CoPresent
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.FolderCopy
 import androidx.compose.material.icons.rounded.Grade
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.EventBusy
+import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.Leaderboard
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Notifications
@@ -50,6 +66,7 @@ import androidx.compose.material.icons.rounded.PeopleAlt
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SportsScore
+import androidx.compose.material.icons.rounded.Report
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -66,10 +83,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.material3.adaptive.navigationsuite.ExperimentalMaterial3AdaptiveNavigationSuiteApi
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
-import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldValue
-import androidx.compose.material3.adaptive.navigationsuite.rememberNavigationSuiteScaffoldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -79,8 +92,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -91,12 +109,13 @@ import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.autofill.contentType
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -109,6 +128,8 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListDivider
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListGroup
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveScreenSurface
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
@@ -143,15 +164,15 @@ private data class TopLevelDestination(
   val baseRoute: String,
   val navigateRoute: String,
   val label: String,
-  val icon: @Composable () -> Unit,
+  val icon: ImageVector,
 )
 
 private val topLevelDestinations = listOf(
-  TopLevelDestination("home", "home", "Home", { Icon(Icons.Rounded.Home, contentDescription = null) }),
-  TopLevelDestination("grades", "grades", "Voti", { Icon(Icons.Rounded.Grade, contentDescription = null) }),
-  TopLevelDestination("agenda", "agenda", "Agenda", { Icon(Icons.Rounded.CalendarMonth, contentDescription = null) }),
-  TopLevelDestination("communications", "communications?tab=board", "Bacheca", { Icon(Icons.Rounded.Notifications, contentDescription = null) }),
-  TopLevelDestination("more", "more", "Altro", { Icon(Icons.Rounded.Menu, contentDescription = null) }),
+  TopLevelDestination("home", "home", "Home", Icons.Rounded.Home),
+  TopLevelDestination("grades", "grades", "Voti", Icons.Rounded.Leaderboard),
+  TopLevelDestination("agenda", "agenda", "Agenda", Icons.Rounded.CalendarMonth),
+  TopLevelDestination("communications", "communications?tab=board", "Bacheca", Icons.Rounded.Campaign),
+  TopLevelDestination("more", "more", "Altro", Icons.Rounded.Backpack),
 )
 
 internal val topLevelRoutes = topLevelDestinations.map { it.baseRoute }.toSet()
@@ -460,13 +481,10 @@ private fun buildBugReportBody(
     ## Comportamento ottenuto
     ${reportValue(actual)}
 
-    ## Diagnostica anonima
+    ## Diagnostica inclusa
     - App: ${context.appVersionLabel()}
-    - Package: ${context.packageName}
-    - Android: ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})
-    - Dispositivo: ${Build.MANUFACTURER} ${Build.MODEL}
-    - Schermata: $currentRoute
-    - Timestamp: ${java.time.OffsetDateTime.now()}
+    - SDK: ${Build.VERSION.SDK_INT}
+    - Schermata: ${normalizeRoute(currentRoute) ?: "sconosciuta"}
   """.trimIndent()
 }
 
@@ -676,7 +694,6 @@ internal fun LoginScreen(
   }
 }
 
-@OptIn(ExperimentalMaterial3AdaptiveNavigationSuiteApi::class)
 @Composable
 internal fun TopLevelNavigationSuite(
   currentRoute: String?,
@@ -684,35 +701,271 @@ internal fun TopLevelNavigationSuite(
   onNavigateRoute: (String) -> Unit,
   content: @Composable () -> Unit,
 ) {
-  val navigationSuiteState = rememberNavigationSuiteScaffoldState(NavigationSuiteScaffoldValue.Visible)
+  BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    val useRail = maxWidth >= 600.dp
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .padding(
+          start = if (showNavigationSuite && useRail) 104.dp else 0.dp,
+          bottom = if (showNavigationSuite && !useRail) 92.dp else 0.dp,
+        ),
+    ) {
+      content()
+    }
 
-  LaunchedEffect(showNavigationSuite) {
-    if (showNavigationSuite) {
-      navigationSuiteState.show()
-    } else {
-      navigationSuiteState.hide()
+    AnimatedVisibility(
+      visible = showNavigationSuite,
+      modifier = if (useRail) {
+        Modifier.align(Alignment.CenterStart).padding(start = 16.dp)
+      } else {
+        Modifier
+          .align(Alignment.BottomCenter)
+          .navigationBarsPadding()
+          .padding(horizontal = 16.dp, vertical = 8.dp)
+      },
+    ) {
+      Surface(
+        modifier = if (useRail) Modifier.width(72.dp) else Modifier.fillMaxWidth().height(68.dp),
+        shape = if (useRail) MaterialTheme.shapes.extraLarge else CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 8.dp,
+        shadowElevation = 6.dp,
+      ) {
+        if (useRail) {
+          Column(
+            modifier = Modifier.padding(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+          ) {
+            topLevelDestinations.forEach { destination ->
+              TopLevelNavigationItem(
+                destination = destination,
+                selected = currentRoute == destination.baseRoute,
+                vertical = true,
+                onNavigateRoute = onNavigateRoute,
+              )
+            }
+          }
+        } else {
+          Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            topLevelDestinations.forEach { destination ->
+              TopLevelNavigationItem(
+                destination = destination,
+                selected = currentRoute == destination.baseRoute,
+                vertical = false,
+                onNavigateRoute = onNavigateRoute,
+                modifier = Modifier.weight(1f),
+              )
+            }
+          }
+        }
+      }
     }
   }
+}
 
-  NavigationSuiteScaffold(
-    state = navigationSuiteState,
-    navigationSuiteItems = {
-      topLevelDestinations.forEach { destination ->
-        val selected = currentRoute == destination.baseRoute
-        item(
-          selected = selected,
-          onClick = {
-            if (!selected) {
-              onNavigateRoute(destination.navigateRoute)
-            }
-          },
-          icon = destination.icon,
-          label = { Text(destination.label) },
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BugReportScreen(
+  currentRoute: String,
+  onBack: () -> Unit,
+) {
+  BackHandler(onBack = onBack)
+  val context = LocalContext.current
+  var title by rememberSaveable { mutableStateOf("") }
+  var description by rememberSaveable { mutableStateOf("") }
+  var steps by rememberSaveable { mutableStateOf("") }
+  var expected by rememberSaveable { mutableStateOf("") }
+  var actual by rememberSaveable { mutableStateOf("") }
+  var showAdvanced by rememberSaveable { mutableStateOf(false) }
+  var copied by rememberSaveable { mutableStateOf(false) }
+  var diagnostics by rememberSaveable(currentRoute) {
+    mutableStateOf(
+      "App: ${context.appVersionLabel()}\nSDK: ${Build.VERSION.SDK_INT}\nSchermata: ${normalizeRoute(currentRoute) ?: "sconosciuta"}",
+    )
+  }
+  val reportBody = remember(description, steps, expected, actual, diagnostics) {
+    buildMinimalBugReportBody(description, steps, expected, actual, diagnostics)
+  }
+  val issueUri = remember(title, reportBody) { buildBugReportIssueUri(title, reportBody) }
+
+  Scaffold(
+    topBar = {
+      ExpressiveTopHeader(
+        title = "Segnala un problema",
+        subtitle = "Controlla cosa verrà condiviso prima di aprire GitHub.",
+        onBack = onBack,
+      )
+    },
+  ) { paddingValues ->
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(
+        start = 20.dp,
+        end = 20.dp,
+        top = paddingValues.calculateTopPadding() + 16.dp,
+        bottom = paddingValues.calculateBottomPadding() + 32.dp,
+      ),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      item {
+        Surface(
+          modifier = Modifier.fillMaxWidth(),
+          shape = MaterialTheme.shapes.large,
+          color = MaterialTheme.colorScheme.errorContainer,
+          contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ) {
+          Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
+          ) {
+            Icon(Icons.Rounded.WarningAmber, contentDescription = null)
+            Text(
+              "La segnalazione sarà una issue GitHub pubblica e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
+              style = MaterialTheme.typography.bodyMedium,
+            )
+          }
+        }
+      }
+      item {
+        OutlinedTextField(
+          value = title,
+          onValueChange = { title = it; copied = false },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Titolo") },
+          singleLine = true,
         )
       }
-    },
+      item {
+        OutlinedTextField(
+          value = description,
+          onValueChange = { description = it; copied = false },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Cosa non ha funzionato?") },
+          minLines = 4,
+        )
+      }
+      item {
+        TextButton(onClick = { showAdvanced = !showAdvanced }) {
+          Text(if (showAdvanced) "Nascondi dettagli" else "Aggiungi passaggi e diagnostica")
+        }
+      }
+      if (showAdvanced) {
+        item { BugReportField("Passaggi per riprodurre", steps) { steps = it; copied = false } }
+        item { BugReportField("Comportamento atteso", expected) { expected = it; copied = false } }
+        item { BugReportField("Comportamento ottenuto", actual) { actual = it; copied = false } }
+        item { BugReportField("Diagnostica inclusa (modificabile)", diagnostics) { diagnostics = it; copied = false } }
+      }
+      if (copied) {
+        item { Text("Report copiato negli appunti.", color = MaterialTheme.colorScheme.primary) }
+      }
+      item {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          OutlinedButton(
+            onClick = { context.copyBugReport(reportBody); copied = true },
+            modifier = Modifier.weight(1f),
+          ) {
+            Icon(Icons.Rounded.ContentCopy, contentDescription = null)
+            Text("Copia")
+          }
+          Button(
+            onClick = {
+              context.startActivity(Intent(Intent.ACTION_VIEW, issueUri))
+              onBack()
+            },
+            enabled = title.isNotBlank() && description.isNotBlank(),
+            modifier = Modifier.weight(1f),
+          ) {
+            Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
+            Text("Apri GitHub")
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun BugReportField(
+  label: String,
+  value: String,
+  onValueChange: (String) -> Unit,
+) {
+  OutlinedTextField(
+    value = value,
+    onValueChange = onValueChange,
+    modifier = Modifier.fillMaxWidth(),
+    label = { Text(label) },
+    minLines = 3,
+  )
+}
+
+private fun buildMinimalBugReportBody(
+  description: String,
+  steps: String,
+  expected: String,
+  actual: String,
+  diagnostics: String,
+): String = """
+  ## Descrizione
+  ${reportValue(description)}
+
+  ## Passaggi per riprodurre
+  ${reportValue(steps)}
+
+  ## Comportamento atteso
+  ${reportValue(expected)}
+
+  ## Comportamento ottenuto
+  ${reportValue(actual)}
+
+  ## Diagnostica inclusa
+  ${reportValue(diagnostics)}
+""".trimIndent()
+
+@Composable
+private fun TopLevelNavigationItem(
+  destination: TopLevelDestination,
+  selected: Boolean,
+  vertical: Boolean,
+  onNavigateRoute: (String) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    modifier = modifier
+      .padding(horizontal = if (vertical) 8.dp else 4.dp, vertical = 4.dp)
+      .testTag("top_level_${destination.baseRoute}")
+      .semantics {
+        role = Role.Tab
+        this.selected = selected
+      },
+    onClick = { onNavigateRoute(destination.navigateRoute) },
+    shape = CircleShape,
+    color = if (selected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
+    contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
   ) {
-    content()
+    if (vertical) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+      ) {
+        Icon(destination.icon, contentDescription = destination.label)
+        if (selected) Text(destination.label, style = MaterialTheme.typography.labelSmall)
+      }
+    } else {
+      Row(
+        modifier = Modifier.padding(horizontal = if (selected) 10.dp else 6.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Icon(destination.icon, contentDescription = destination.label)
+        if (selected) {
+          Text(destination.label, modifier = Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelLarge)
+        }
+      }
+    }
   }
 }
 
@@ -757,6 +1010,7 @@ private fun LoginScreenPreview() {
   }
 }
 
+@Preview(name = "Compact 360, font 2x", widthDp = 360, heightDp = 800, fontScale = 2f, showBackground = true)
 @Preview(name = "Adaptive Shell", widthDp = 900, heightDp = 700, showBackground = true)
 @Composable
 private fun TopLevelNavigationSuitePreview() {
@@ -783,7 +1037,37 @@ private fun TopLevelNavigationSuitePreview() {
   }
 }
 
-@OptIn(ExperimentalMaterial3AdaptiveNavigationSuiteApi::class, ExperimentalSharedTransitionApi::class)
+internal fun NavHostController.recordMotionOrigin(origin: MotionOrigin) {
+  currentBackStackEntry?.savedStateHandle?.set(MotionOriginStateKey, origin.wireName)
+}
+
+internal fun NavHostController.navigateTopLevel(
+  targetRoute: String,
+  origin: MotionOrigin = MotionOrigin.NavigationPill,
+) {
+  val startDestination = graph.findStartDestination()
+  val targetBaseRoute = targetRoute.substringBefore('?')
+  val targetsStartDestination = targetBaseRoute == startDestination.route?.substringBefore('?')
+  recordMotionOrigin(origin)
+  navigate(targetRoute) {
+    popUpTo(startDestination.id) {
+      saveState = true
+    }
+    launchSingleTop = true
+    // Restoring the start route here also restores the tab that was just popped beneath it,
+    // so Back from Home would reopen that tab. Its state remains saved for later tab selection.
+    restoreState = !targetsStartDestination
+  }
+  recordMotionOrigin(origin)
+}
+
+internal fun NavHostController.handleIncomingIntent(intent: Intent): Boolean {
+  val handled = handleDeepLink(intent)
+  if (handled) recordMotionOrigin(MotionOrigin.DeepLink)
+  return handled
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun AuthenticatedApp(
   isCheckingForUpdates: Boolean,
@@ -797,38 +1081,30 @@ private fun AuthenticatedApp(
   val currentDestination = navBackStackEntry?.destination
   val currentRoute = currentDestination?.route?.substringBefore("?")
   val showNavigationSuite = currentRoute in topLevelRoutes
-  var activeSharedTransitionKey by rememberSaveable { mutableStateOf<String?>(null) }
 
-  fun navigateRoute(route: String, sharedKey: String? = null) {
-    activeSharedTransitionKey = sharedKey
+  fun navigateRoute(route: String, origin: MotionOrigin = MotionOrigin.NavigationPill) {
+    navController.recordMotionOrigin(origin)
     navController.navigate(route)
+    navController.recordMotionOrigin(origin)
   }
 
-  fun navigateTopLevelRoute(targetRoute: String) {
-    val targetBaseRoute = normalizeRoute(targetRoute)
-    if (targetBaseRoute == currentRoute) return
-    activeSharedTransitionKey = null
-    navController.navigate(targetRoute) {
-      val currentDestinationId = currentDestination?.id
-      if (currentRoute != "home" && targetBaseRoute != "home" && currentDestinationId != null) {
-        popUpTo(currentDestinationId) {
-          inclusive = true
-          saveState = true
-        }
-      } else {
-        popUpTo(navController.graph.findStartDestination().id) {
-          saveState = true
-        }
-      }
-      launchSingleTop = true
-      restoreState = true
-    }
+  fun navigateTopLevelRoute(
+    targetRoute: String,
+    origin: MotionOrigin = MotionOrigin.NavigationPill,
+  ) {
+    navController.navigateTopLevel(targetRoute, origin)
+  }
+
+  fun currentSharedKey(expected: String): String? {
+    val origin = MotionOrigin.fromWireName(
+      navController.currentBackStackEntry?.savedStateHandle?.get<String>(MotionOriginStateKey),
+    )
+    return origin?.sharedKey?.takeIf { it == expected }
   }
 
   LaunchedEffect(navController, incomingIntents) {
     incomingIntents.collect { intent ->
-      activeSharedTransitionKey = null
-      navController.handleDeepLink(intent)
+      navController.handleIncomingIntent(intent)
     }
   }
 
@@ -851,7 +1127,7 @@ private fun AuthenticatedApp(
             decision = decideRouteMotion(
               fromRoute = initialState.destination.route,
               toRoute = targetState.destination.route,
-              requestedSharedKey = activeSharedTransitionKey,
+              motionOrigin = MotionOrigin.fromWireName(targetState.savedStateHandle[MotionOriginStateKey]),
             ),
             isPop = false,
           )
@@ -861,7 +1137,7 @@ private fun AuthenticatedApp(
             decision = decideRouteMotion(
               fromRoute = initialState.destination.route,
               toRoute = targetState.destination.route,
-              requestedSharedKey = activeSharedTransitionKey,
+              motionOrigin = MotionOrigin.fromWireName(targetState.savedStateHandle[MotionOriginStateKey]),
             ),
             isPop = false,
           )
@@ -871,7 +1147,7 @@ private fun AuthenticatedApp(
             decision = decideRouteMotion(
               fromRoute = initialState.destination.route,
               toRoute = targetState.destination.route,
-              requestedSharedKey = activeSharedTransitionKey,
+              motionOrigin = MotionOrigin.fromWireName(initialState.savedStateHandle[MotionOriginStateKey]),
             ),
             isPop = true,
           )
@@ -881,7 +1157,7 @@ private fun AuthenticatedApp(
             decision = decideRouteMotion(
               fromRoute = initialState.destination.route,
               toRoute = targetState.destination.route,
-              requestedSharedKey = activeSharedTransitionKey,
+              motionOrigin = MotionOrigin.fromWireName(initialState.savedStateHandle[MotionOriginStateKey]),
             ),
             isPop = true,
           )
@@ -889,13 +1165,13 @@ private fun AuthenticatedApp(
       ) {
         composable("home") {
           DashboardRoute(
-            onNavigateGrades = { navigateRoute("grades", RouteSharedKeys.DashboardGrades) },
-            onNavigateAgenda = { navigateRoute("agenda") },
+            onNavigateGrades = { navigateTopLevelRoute("grades", MotionOrigin.DashboardGrades) },
+            onNavigateAgenda = { navigateTopLevelRoute("agenda") },
             onNavigateLessons = { navigateRoute("lessons") },
             onNavigateCommunications = {
-              navigateRoute("communications?tab=board", RouteSharedKeys.DashboardCommunications)
+              navigateTopLevelRoute("communications?tab=board", MotionOrigin.DashboardCommunications)
             },
-            onOpenGrade = { gradeId -> navigateRoute("grades?gradeId=$gradeId", RouteSharedKeys.DashboardGrades) },
+            onOpenGrade = { gradeId -> navigateTopLevelRoute("grades?gradeId=$gradeId", MotionOrigin.DashboardGrades) },
             gradesSharedTransitionKey = RouteSharedKeys.DashboardGrades,
             communicationsSharedTransitionKey = RouteSharedKeys.DashboardCommunications,
             sharedTransitionScope = this@SharedTransitionLayout,
@@ -946,7 +1222,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.DashboardGrades },
+            sharedKey = currentSharedKey(RouteSharedKeys.DashboardGrades),
           ) {
             GradesRoute(
               initialGradeId = entry.arguments?.getString("gradeId"),
@@ -997,7 +1273,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.DashboardCommunications },
+            sharedKey = currentSharedKey(RouteSharedKeys.DashboardCommunications),
           ) {
             CommunicationsRoute(
               initialTab = entry.arguments?.getString("tab") ?: "board",
@@ -1013,7 +1289,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubNotes },
+            sharedKey = currentSharedKey(RouteSharedKeys.HubNotes),
           ) {
             CommunicationsRoute(
               initialTab = "notes",
@@ -1024,15 +1300,15 @@ private fun AuthenticatedApp(
         composable("more") {
           MoreHubScreen(
             currentRoute = currentRoute ?: "more",
-            onOpenNotes = { navigateRoute("notes", RouteSharedKeys.HubNotes) },
-            onOpenLessons = { navigateRoute("lessons", RouteSharedKeys.HubLessons) },
-            onOpenAbsences = { navigateRoute("absences", RouteSharedKeys.HubAbsences) },
-            onOpenMaterials = { navigateRoute("materials", RouteSharedKeys.HubMaterials) },
-            onOpenSettings = { navigateRoute("settings", RouteSharedKeys.HubSettings) },
-            onOpenHomework = { navigateRoute("homework", RouteSharedKeys.HubHomework) },
-            onOpenDocuments = { navigateRoute("documents", RouteSharedKeys.HubDocuments) },
-            onOpenProfessors = { navigateRoute("professors", RouteSharedKeys.HubProfessors) },
-            onOpenMeetings = { navigateRoute("meetings", RouteSharedKeys.HubMeetings) },
+            onOpenNotes = { navigateRoute("notes", MotionOrigin.HubNotes) },
+            onOpenLessons = { navigateRoute("lessons", MotionOrigin.HubLessons) },
+            onOpenAbsences = { navigateRoute("absences", MotionOrigin.HubAbsences) },
+            onOpenMaterials = { navigateRoute("materials", MotionOrigin.HubMaterials) },
+            onOpenSettings = { navigateRoute("settings", MotionOrigin.HubSettings) },
+            onOpenHomework = { navigateRoute("homework", MotionOrigin.HubHomework) },
+            onOpenDocuments = { navigateRoute("documents", MotionOrigin.HubDocuments) },
+            onOpenProfessors = { navigateRoute("professors", MotionOrigin.HubProfessors) },
+            onOpenMeetings = { navigateRoute("meetings", MotionOrigin.HubMeetings) },
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
           )
@@ -1041,7 +1317,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubMaterials },
+            sharedKey = currentSharedKey(RouteSharedKeys.HubMaterials),
           ) {
             MaterialsRoute(onBack = navController::navigateUp)
           }
@@ -1063,7 +1339,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubHomework },
+            sharedKey = currentSharedKey(RouteSharedKeys.HubHomework),
           ) {
             HomeworkRoute(
               initialHomeworkId = entry.arguments?.getString("homeworkId"),
@@ -1075,7 +1351,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubDocuments },
+            sharedKey = currentSharedKey(RouteSharedKeys.HubDocuments),
           ) {
             DocumentsRoute(onBack = navController::navigateUp)
           }
@@ -1089,7 +1365,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubLessons },
+            sharedKey = currentSharedKey(RouteSharedKeys.HubLessons),
           ) {
             LessonsRoute(onBack = navController::navigateUp)
           }
@@ -1111,7 +1387,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubAbsences },
+            sharedKey = currentSharedKey(RouteSharedKeys.HubAbsences),
           ) {
             AbsencesRoute(
               initialAbsenceId = entry.arguments?.getString("absenceId"),
@@ -1128,7 +1404,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubMeetings },
+            sharedKey = currentSharedKey(RouteSharedKeys.HubMeetings),
           ) {
             MeetingsRoute(onBack = navController::navigateUp)
           }
@@ -1137,7 +1413,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubProfessors },
+            sharedKey = currentSharedKey(RouteSharedKeys.HubProfessors),
           ) {
             ProfessorsRoute(onBack = navController::navigateUp)
           }
@@ -1151,7 +1427,7 @@ private fun AuthenticatedApp(
           SharedRouteContainer(
             sharedTransitionScope = this@SharedTransitionLayout,
             animatedVisibilityScope = this@composable,
-            sharedKey = activeSharedTransitionKey.takeIf { it == RouteSharedKeys.HubSettings },
+            sharedKey = currentSharedKey(RouteSharedKeys.HubSettings),
           ) {
             SettingsRoute(
               onBack = navController::navigateUp,
@@ -1184,7 +1460,17 @@ private fun AuthenticatedApp(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+private data class MoreHubAction(
+  val title: String,
+  val subtitle: String,
+  val eyebrow: String,
+  val tone: ExpressiveTone,
+  val icon: ImageVector,
+  val sharedKey: String? = null,
+  val onClick: () -> Unit,
+)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 private fun MoreHubScreen(
   currentRoute: String = "more",
@@ -1202,6 +1488,136 @@ private fun MoreHubScreen(
 ) {
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
   var showBugReport by rememberSaveable { mutableStateOf(false) }
+  if (showBugReport) {
+    BugReportScreen(currentRoute = currentRoute, onBack = { showBugReport = false })
+    return
+  }
+
+  val registerActions = listOf(
+    MoreHubAction("Orario", "Lezioni di oggi e della settimana.", "Lezioni", ExpressiveTone.Info, Icons.Rounded.Schedule, RouteSharedKeys.HubLessons, onOpenLessons),
+    MoreHubAction("Compiti", "Attività assegnate e scadenze.", "Agenda", ExpressiveTone.Warning, Icons.AutoMirrored.Rounded.Assignment, RouteSharedKeys.HubHomework, onOpenHomework),
+    MoreHubAction("Didattica", "File, link e cartelle dei docenti.", "Materiali", ExpressiveTone.Info, Icons.Rounded.FolderCopy, RouteSharedKeys.HubMaterials, onOpenMaterials),
+    MoreHubAction("Documenti e libri", "Pagelle, documenti e testi adottati.", "Archivio", ExpressiveTone.Info, Icons.AutoMirrored.Rounded.LibraryBooks, RouteSharedKeys.HubDocuments, onOpenDocuments),
+  )
+  val peopleActions = listOf(
+    MoreHubAction("Note disciplinari", "Note e sanzioni del registro.", "Comunicazioni", ExpressiveTone.Danger, Icons.Rounded.Report, RouteSharedKeys.HubNotes, onOpenNotes),
+    MoreHubAction("Assenze", "Assenze, ritardi e uscite.", "Presenze", ExpressiveTone.Warning, Icons.Rounded.EventBusy, RouteSharedKeys.HubAbsences, onOpenAbsences),
+    MoreHubAction("Colloqui", "Disponibilità e prenotazioni.", "Docenti", ExpressiveTone.Info, Icons.Rounded.Forum, RouteSharedKeys.HubMeetings, onOpenMeetings),
+    MoreHubAction("Professori", "Contatti e andamento per docente.", "Docenti", ExpressiveTone.Neutral, Icons.Rounded.CoPresent, RouteSharedKeys.HubProfessors, onOpenProfessors),
+  )
+
+  Scaffold(
+    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
+    topBar = {
+      ExpressiveTopHeader(
+        title = "Altro",
+        subtitle = "Strumenti del registro, raccolti per ciò che devi fare.",
+        scrollBehavior = scrollBehavior,
+      )
+    },
+  ) { paddingValues ->
+    LazyColumn(
+      modifier = Modifier.fillMaxSize(),
+      contentPadding = PaddingValues(
+        start = 20.dp,
+        end = 20.dp,
+        top = paddingValues.calculateTopPadding() + 18.dp,
+        bottom = paddingValues.calculateBottomPadding() + 24.dp,
+      ),
+      verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+      item { ExpressiveAccentLabel("Registro") }
+      item {
+        MoreHubActionGroup(registerActions, sharedTransitionScope, animatedVisibilityScope)
+      }
+      item { ExpressiveAccentLabel("Persone e presenza") }
+      item {
+        MoreHubActionGroup(peopleActions, sharedTransitionScope, animatedVisibilityScope)
+      }
+      item { ExpressiveAccentLabel("App") }
+      item {
+        ExpressiveListGroup {
+          RegisterListRow(
+            title = "Segnala un problema",
+            subtitle = "Issue GitHub pubblica con diagnostica minima modificabile.",
+            eyebrow = "Feedback",
+            tone = ExpressiveTone.Info,
+            leading = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
+            onClick = { showBugReport = true },
+          )
+          ExpressiveListDivider()
+          RegisterListRow(
+            title = "Impostazioni",
+            subtitle = "Account, aspetto, notifiche, dati e aggiornamenti.",
+            eyebrow = "Profilo",
+            modifier = Modifier.expressiveSharedBounds(
+              sharedTransitionScope = sharedTransitionScope,
+              animatedVisibilityScope = animatedVisibilityScope,
+              sharedKey = RouteSharedKeys.HubSettings,
+            ),
+            leading = { Icon(Icons.Rounded.Settings, contentDescription = null) },
+            onClick = onOpenSettings,
+          )
+        }
+      }
+    }
+  }
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun MoreHubActionGroup(
+  actions: List<MoreHubAction>,
+  sharedTransitionScope: SharedTransitionScope?,
+  animatedVisibilityScope: AnimatedVisibilityScope?,
+) {
+  ExpressiveListGroup {
+    actions.forEachIndexed { index, action ->
+      RegisterListRow(
+        title = action.title,
+        subtitle = action.subtitle,
+        eyebrow = action.eyebrow,
+        tone = action.tone,
+        modifier = Modifier.expressiveSharedBounds(
+          sharedTransitionScope = sharedTransitionScope,
+          animatedVisibilityScope = animatedVisibilityScope,
+          sharedKey = action.sharedKey,
+        ),
+        leading = { Icon(action.icon, contentDescription = null) },
+        onClick = action.onClick,
+      )
+      if (index != actions.lastIndex) ExpressiveListDivider()
+    }
+  }
+}
+
+@Deprecated("Kept temporarily as a visual reference while the grouped hub stabilizes")
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LegacyMoreHubScreen(
+  currentRoute: String = "more",
+  onOpenLessons: () -> Unit,
+  onOpenAbsences: () -> Unit,
+  onOpenMaterials: () -> Unit,
+  onOpenSettings: () -> Unit,
+  onOpenNotes: () -> Unit,
+  onOpenHomework: () -> Unit,
+  onOpenDocuments: () -> Unit,
+  onOpenProfessors: () -> Unit,
+  onOpenMeetings: () -> Unit,
+  sharedTransitionScope: SharedTransitionScope? = null,
+  animatedVisibilityScope: AnimatedVisibilityScope? = null,
+) {
+  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+  var showBugReport by rememberSaveable { mutableStateOf(false) }
+
+  if (showBugReport) {
+    BugReportScreen(
+      currentRoute = currentRoute,
+      onBack = { showBugReport = false },
+    )
+    return
+  }
 
   Scaffold(
     modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -1253,7 +1669,7 @@ private fun MoreHubScreen(
           ),
           onClick = onOpenMaterials,
           badge = { StatusBadge("DIDATTICA", tone = ExpressiveTone.Info) },
-          leading = { Icon(Icons.Rounded.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+          leading = { Icon(Icons.Rounded.FolderCopy, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         )
       }
       item {
@@ -1269,7 +1685,7 @@ private fun MoreHubScreen(
           ),
           onClick = onOpenHomework,
           badge = { StatusBadge("COMPITI", tone = ExpressiveTone.Warning) },
-          leading = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+          leading = { Icon(Icons.AutoMirrored.Rounded.Assignment, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         )
       }
       item {
@@ -1285,7 +1701,7 @@ private fun MoreHubScreen(
           ),
           onClick = onOpenDocuments,
           badge = { StatusBadge("DOCUMENTI", tone = ExpressiveTone.Info) },
-          leading = { Icon(Icons.Rounded.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+          leading = { Icon(Icons.AutoMirrored.Rounded.LibraryBooks, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         )
       }
       item {
@@ -1301,7 +1717,7 @@ private fun MoreHubScreen(
           ),
           onClick = onOpenNotes,
           badge = { StatusBadge("NOTE", tone = ExpressiveTone.Danger) },
-          leading = { Icon(Icons.Rounded.Description, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+          leading = { Icon(Icons.Rounded.Report, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         )
       }
       item {
@@ -1317,7 +1733,7 @@ private fun MoreHubScreen(
           ),
           onClick = onOpenAbsences,
           badge = { StatusBadge("PRESENZE", tone = ExpressiveTone.Warning) },
-          leading = { Icon(Icons.Rounded.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+          leading = { Icon(Icons.Rounded.EventBusy, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         )
       }
       item {
@@ -1333,7 +1749,7 @@ private fun MoreHubScreen(
           ),
           onClick = onOpenMeetings,
           badge = { StatusBadge("COLLOQUI", tone = ExpressiveTone.Info) },
-          leading = { Icon(Icons.Rounded.PeopleAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+          leading = { Icon(Icons.Rounded.Forum, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         )
       }
       item {
@@ -1349,14 +1765,14 @@ private fun MoreHubScreen(
           ),
           onClick = onOpenProfessors,
           badge = { StatusBadge("PROF") },
-          leading = { Icon(Icons.Rounded.PeopleAlt, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+          leading = { Icon(Icons.Rounded.CoPresent, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         )
       }
       item { ExpressiveAccentLabel("Profilo") }
       item {
         RegisterListRow(
           title = "Segnala bug",
-          subtitle = "Prepara una issue GitHub con descrizione e diagnostica anonima.",
+          subtitle = "Apri una issue GitHub pubblica con una diagnostica minima modificabile.",
           eyebrow = "Feedback",
           tone = ExpressiveTone.Info,
           onClick = { showBugReport = true },
@@ -1383,10 +1799,4 @@ private fun MoreHubScreen(
     }
   }
 
-  if (showBugReport) {
-    BugReportDialog(
-      currentRoute = currentRoute,
-      onDismiss = { showBugReport = false },
-    )
-  }
 }

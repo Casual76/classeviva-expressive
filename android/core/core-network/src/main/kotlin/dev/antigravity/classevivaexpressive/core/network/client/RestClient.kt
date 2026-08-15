@@ -1,6 +1,6 @@
 package dev.antigravity.classevivaexpressive.core.network.client
 
-import android.util.Base64
+import com.google.gson.JsonElement as GsonJsonElement
 import com.google.gson.JsonObject as GsonJsonObject
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
@@ -10,7 +10,6 @@ import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
-import dev.antigravity.classevivaexpressive.core.domain.model.MaterialAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import dev.antigravity.classevivaexpressive.core.domain.model.NoteDetail
@@ -30,7 +29,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import retrofit2.HttpException
 
-private const val RestBaseUrl = "https://web.spaggiari.eu/rest/"
 private val NoticeboardAttachmentIndexedUrl = Regex("""(.*/noticeboard/attach/[^/]+/[^/?#]+)/(\d+)([?#].*)?$""")
 
 class ClassevivaNetworkException(message: String, cause: Throwable? = null) : IOException(message, cause)
@@ -45,7 +43,7 @@ data class LoginResult(
 class ClassevivaRestClient @Inject constructor(
   private val json: Json,
   private val apiService: ClassevivaApiService,
-  @Named("authService") private val authService: ClassevivaAuthService,
+  @param:Named("authService") private val authService: ClassevivaAuthService,
   private val apiSessionManager: ApiSessionManager,
 ) {
   private var activeSession: UserSession? = null
@@ -233,7 +231,7 @@ class ClassevivaRestClient @Inject constructor(
   }
 
   suspend fun downloadAttachmentBytes(url: String): ByteArray = withContext(Dispatchers.IO) {
-    apiCall { apiService.downloadByUrl(url) }.use { it.bytes() }
+    apiCall { apiService.downloadByUrl(requireOfficialDownloadUrl(url)) }.use { it.bytes() }
   }
 
   suspend fun getAgenda(startDate: String, endDate: String): List<dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem> = withContext(Dispatchers.IO) {
@@ -283,80 +281,91 @@ class ClassevivaRestClient @Inject constructor(
   suspend fun getMaterials(): List<MaterialItem> = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {
-      val teachers = extractArray(apiService.getDidactics(session.studentId).toPayload(), "didacticts")
-      teachers.flatMap { teacherElement ->
-        val teacher = teacherElement.obj()
-        val teacherId = teacher.string("teacherId").orEmpty()
-        val teacherName = teacher.string("teacherName", "teacherLastName") ?: "Docente"
-        extractArray(teacher["folders"].obj(), "folders").flatMap { folderElement ->
-          normalizeMaterialFolder(folderElement.obj(), teacherId, teacherName)
-        }
-      }.sortedByDescending { it.sharedAt }
+      normalizeMaterialsPayload(apiService.getDidactics(session.studentId).toPayloadElement())
     }
   }
 
-  suspend fun getMaterialAsset(item: MaterialItem): MaterialAsset = withContext(Dispatchers.IO) {
+  suspend fun openMaterialStream(item: MaterialItem): NetworkDocumentStream = withContext(Dispatchers.IO) {
+    if (item.objectType.equals("link", ignoreCase = true)) {
+      throw ClassevivaNetworkException("Il link didattico deve essere aperto come URL esterno.")
+    }
     val session = requireSession()
-    runCatching {
+    val responseBody = runCatching {
       apiCall { apiService.getDidacticsItem(session.studentId, item.id) }
     }.getOrElse {
       val fallbackUrl = item.attachments.firstNotNullOfOrNull { attachment -> attachment.url }
       if (fallbackUrl.isNullOrBlank()) {
         throw it
       }
-      apiCall { apiService.downloadByUrl(fallbackUrl) }
-    }.use { responseBody ->
-      val bytes = responseBody.bytes()
-      val mimeType = responseBody.contentType()?.toString()?.substringBefore(";")
-      val base64Content = if (bytes.isNotEmpty()) Base64.encodeToString(bytes, Base64.NO_WRAP) else null
-      val textPreview = mimeType?.takeIf { it.startsWith("text/") }?.let {
-        bytes.decodeToString().trim().takeIf(String::isNotBlank)?.take(512)
-      }
-      normalizeMaterialAsset(
-        item = item,
-        mimeType = mimeType,
-        base64Content = base64Content,
-        textPreview = textPreview,
-        sourceUrl = item.attachments.firstNotNullOfOrNull { attachment -> attachment.url },
-      )
+      apiCall { apiService.downloadByUrl(requireOfficialDownloadUrl(fallbackUrl)) }
+    }
+    NetworkDocumentStream(
+      body = responseBody,
+      fileName = item.attachments.firstOrNull()?.name ?: item.title,
+      mimeType = responseBody.contentType()?.toString()?.substringBefore(";"),
+    )
+  }
+
+  fun resolveMaterialExternalUrl(item: MaterialItem): String? {
+    if (!item.objectType.equals("link", ignoreCase = true)) return null
+    return item.attachments.firstNotNullOfOrNull { attachment ->
+      attachment.url?.takeIf(::isSafeExternalMaterialUrl)
     }
   }
 
   suspend fun getDocuments(): List<DocumentItem> = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {
-      extractArray(
-        apiService.getDocuments(session.studentId).toPayload(),
-        "schoolReports",
-        "documents",
-      ).map(::normalizeDocument)
+      normalizeDocumentsPayload(fetchDocumentsPayload(session.studentId).toPayloadElement())
         .map { document ->
+          val remoteHash = document.remoteHash?.takeIf(String::isNotBlank)
           document.copy(
-            viewUrl = document.viewUrl ?: buildDocumentReadUrl(session.studentId, document.id),
-            confirmUrl = document.confirmUrl ?: buildDocumentCheckUrl(session.studentId, document.id),
+            restReadUrl = document.restReadUrl
+              ?: remoteHash?.let { buildDocumentReadUrl(session.studentId, it) },
+            viewUrl = document.viewUrl
+              ?: remoteHash?.let { buildDocumentReadUrl(session.studentId, it) },
+            confirmUrl = remoteHash?.let { buildDocumentCheckUrl(session.studentId, it) }
+              ?: document.confirmUrl,
           )
         }
     }
   }
 
-  suspend fun readDocument(document: DocumentItem): Pair<ByteArray, String?> = withContext(Dispatchers.IO) {
+  suspend fun openDocumentStream(document: DocumentItem): NetworkDocumentStream = withContext(Dispatchers.IO) {
     val session = requireSession()
     val responseBody = when {
-      document.id.isNotBlank() -> apiCall { apiService.readDocument(session.studentId, document.id) }
-      !document.viewUrl.isNullOrBlank() -> apiCall { apiService.downloadByUrl(document.viewUrl!!) }
+      !document.remoteHash.isNullOrBlank() -> apiCall {
+        apiService.readDocument(session.studentId, document.remoteHash!!)
+      }
+      !document.restReadUrl.isNullOrBlank() -> apiCall {
+        apiService.downloadByUrl(requireOfficialDownloadUrl(document.restReadUrl!!))
+      }
+      !document.viewUrl.isNullOrBlank() -> apiCall {
+        apiService.downloadByUrl(requireOfficialDownloadUrl(document.viewUrl!!))
+      }
       else -> throw ClassevivaNetworkException("Documento non leggibile tramite API ufficiali.")
     }
+    NetworkDocumentStream(
+      body = responseBody,
+      fileName = document.title.takeIf(String::isNotBlank),
+      mimeType = responseBody.contentType()?.toString()?.substringBefore(";"),
+    )
+  }
 
-    responseBody.use { body ->
-      body.bytes() to body.contentType()?.toString()?.substringBefore(";")
+  suspend fun checkDocument(document: DocumentItem): Unit = withContext(Dispatchers.IO) {
+    val session = requireSession()
+    val remoteHash = document.remoteHash?.takeIf(String::isNotBlank)
+      ?: throw ClassevivaNetworkException("Documento non verificabile senza hash remoto.")
+    apiCall {
+      apiService.checkDocument(session.studentId, remoteHash)
+      Unit
     }
   }
 
   suspend fun getSchoolbooks(): List<SchoolbookCourse> = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {
-      extractArray(apiService.getSchoolbooks(session.studentId).toPayload(), "schoolbooks")
-        .map(::normalizeSchoolbookCourse)
+      normalizeSchoolbooksPayload(apiService.getSchoolbooks(session.studentId).toPayloadElement())
     }
   }
 
@@ -414,15 +423,34 @@ class ClassevivaRestClient @Inject constructor(
     return json.parseToJsonElement(toString()).obj()
   }
 
+  private fun GsonJsonElement.toPayloadElement(): kotlinx.serialization.json.JsonElement {
+    return json.parseToJsonElement(toString())
+  }
+
+  private suspend fun fetchDocumentsPayload(studentId: String): GsonJsonElement {
+    return try {
+      apiService.getDocumentsPost(studentId)
+    } catch (exception: HttpException) {
+      val errorPayload = runCatching {
+        exception.response()?.errorBody()?.string().orEmpty()
+      }.getOrDefault("")
+      if (exception.code() == 400 && errorPayload.isInvalidPayloadError()) {
+        apiService.getDocumentsGet(studentId)
+      } else {
+        throw exception
+      }
+    }
+  }
+
   private fun buildDocumentReadUrl(studentId: String, documentId: String): String? {
     return documentId.takeIf(String::isNotBlank)?.let {
-      "${RestBaseUrl}v1/students/$studentId/documents/read/$it"
+      "${ClassevivaRestBaseUrl}v1/students/$studentId/documents/read/$it"
     }
   }
 
   private fun buildDocumentCheckUrl(studentId: String, documentId: String): String? {
     return documentId.takeIf(String::isNotBlank)?.let {
-      "${RestBaseUrl}v1/students/$studentId/documents/check/$it"
+      "${ClassevivaRestBaseUrl}v1/students/$studentId/documents/check/$it"
     }
   }
 
@@ -554,7 +582,14 @@ fun buildNoticeboardAttachmentUrl(
   oneBasedAttachmentIndex: Int,
 ): String {
   val safeIndex = oneBasedAttachmentIndex.coerceAtLeast(1)
-  return "${RestBaseUrl}v1/students/$studentId/noticeboard/attach/$evtCode/$pubId/$safeIndex"
+  return "${ClassevivaRestBaseUrl}v1/students/$studentId/noticeboard/attach/$evtCode/$pubId/$safeIndex"
+}
+
+private fun requireOfficialDownloadUrl(url: String): String {
+  if (!isOfficialRestUrl(url)) {
+    throw ClassevivaNetworkException("URL di download esterno all'API REST ufficiale.")
+  }
+  return url
 }
 
 fun normalizeNoticeboardAttachmentUrl(url: String): String {
@@ -578,4 +613,9 @@ private fun String?.isLegacyNoticeboardAttachmentUrl(): Boolean {
   if (this.isNullOrBlank()) return false
   val match = NoticeboardAttachmentIndexedUrl.matchEntire(this) ?: return false
   return match.groupValues[2] == "101"
+}
+
+private fun String.isInvalidPayloadError(): Boolean {
+  val normalized = lowercase().replace('_', ' ').replace('-', ' ')
+  return normalized.contains("invalid") && normalized.contains("payload")
 }

@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,7 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -173,72 +174,51 @@ fun DashboardRoute(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
       ) {
-        if (snapshot.averageNumeric != null) {
-          item {
-            RegisterListRow(
-              title = "Media Generale",
-              subtitle = "La tua media calcolata su tutte le materie.",
-              eyebrow = "Andamento",
-              tone = dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone(snapshot.averageNumeric),
-              onClick = onNavigateGrades,
-              badge = {
-                StatusBadge(
-                  label = snapshot.averageLabel,
-                  tone = dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone(snapshot.averageNumeric),
-                )
-              },
-              animatePress = true
-            )
-          }
-        }
-        item { ExpressiveAccentLabel("Ultime novità") }
         item {
-          dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard(
+          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (snapshot.averageNumeric != null) {
+              MetricTile(
+                label = "Media generale",
+                value = snapshot.averageLabel,
+                detail = "Tocca per vedere l'andamento",
+                tone = dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone(snapshot.averageNumeric),
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .expressiveSharedBounds(
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    sharedKey = gradesSharedTransitionKey,
+                  ),
+                onClick = onNavigateGrades,
+              )
+            }
+            Row(
               modifier = Modifier.fillMaxWidth(),
-              animateContent = false,
-          ) {
-              Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-              ) {
-                MetricTile(
-                  label = "Voti nuovi",
-                  value = snapshot.unseenGrades.size.toString(),
-                  detail = "Da aprire",
-                  tone = if (snapshot.unseenGrades.isNotEmpty()) ExpressiveTone.Primary else ExpressiveTone.Neutral,
-                  modifier = Modifier
-                    .weight(1f)
-                    .expressiveSharedBounds(
-                      sharedTransitionScope = sharedTransitionScope,
-                      animatedVisibilityScope = animatedVisibilityScope,
-                      sharedKey = gradesSharedTransitionKey,
-                    ),
-                  onClick = onNavigateGrades,
-                  animatePress = true,
-                )
-                MetricTile(
-                  label = "Bacheca",
-                  value = snapshot.unreadCommunications.size.toString(),
-                  detail = "Non lette",
-                  tone = if (snapshot.unreadCommunications.isNotEmpty()) ExpressiveTone.Warning else ExpressiveTone.Neutral,
-                  modifier = Modifier
-                    .weight(1f)
-                    .expressiveSharedBounds(
-                      sharedTransitionScope = sharedTransitionScope,
-                      animatedVisibilityScope = animatedVisibilityScope,
-                      sharedKey = communicationsSharedTransitionKey,
-                    ),
-                  onClick = onNavigateCommunications,
-                  animatePress = true,
-                )
-                MetricTile(
-                  label = "Note non lette",
-                  value = snapshot.highlightedNotes.size.toString(),
-                  detail = "Avvisi",
-                  tone = if (snapshot.highlightedNotes.isNotEmpty()) ExpressiveTone.Danger else ExpressiveTone.Neutral,
-                  modifier = Modifier.weight(1f),
-                )
-              }
+              horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+              MetricTile(
+                label = "Voti nuovi",
+                value = snapshot.unseenGrades.size.toString(),
+                detail = "Da aprire",
+                tone = if (snapshot.unseenGrades.isNotEmpty()) ExpressiveTone.Primary else ExpressiveTone.Neutral,
+                modifier = Modifier.weight(1f),
+                onClick = onNavigateGrades,
+              )
+              MetricTile(
+                label = "Bacheca",
+                value = snapshot.unreadCommunications.size.toString(),
+                detail = "Non lette",
+                tone = if (snapshot.unreadCommunications.isNotEmpty()) ExpressiveTone.Warning else ExpressiveTone.Neutral,
+                modifier = Modifier
+                  .weight(1f)
+                  .expressiveSharedBounds(
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
+                    sharedKey = communicationsSharedTransitionKey,
+                  ),
+                onClick = onNavigateCommunications,
+              )
+            }
           }
         }
         

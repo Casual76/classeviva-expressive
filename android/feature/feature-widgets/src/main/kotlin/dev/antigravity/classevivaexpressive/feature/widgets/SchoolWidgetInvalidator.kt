@@ -14,7 +14,7 @@ import javax.inject.Singleton
 
 @Singleton
 class SchoolWidgetInvalidator @Inject constructor(
-  @ApplicationContext private val context: Context,
+  @param:ApplicationContext private val context: Context,
 ) : ExternalDashboardInvalidator {
   override suspend fun invalidateDashboard() {
     SchoolOverviewWidget().updateAll(context)

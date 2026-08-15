@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -44,7 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -67,6 +68,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
+import dev.antigravity.classevivaexpressive.core.domain.model.MaterialAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.MeetingBooking
 import dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot
@@ -95,16 +97,41 @@ import kotlinx.coroutines.launch
 // MATERIALS
 // ─────────────────────────────────────────────────────────────────────────────
 
+data class MaterialsUiState(
+  val items: List<MaterialItem> = emptyList(),
+  val initialLoading: Boolean = true,
+  val refreshing: Boolean = false,
+  val refreshError: String? = null,
+  val isStale: Boolean = false,
+)
+
+internal fun MaterialItem.isLinkMaterial(): Boolean = objectType.equals("link", ignoreCase = true)
+
+private data class MaterialsUiExtras(
+  val initialLoading: Boolean = true,
+  val refreshing: Boolean = false,
+  val refreshError: String? = null,
+)
+
 @HiltViewModel
 class MaterialsViewModel @Inject constructor(
   private val materialsRepository: MaterialsRepository,
 ) : ViewModel() {
-  private val isRefreshing = MutableStateFlow(false)
+  private val extras = MutableStateFlow(MaterialsUiExtras())
 
-  val state = materialsRepository.observeMaterials()
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-  val refreshing = isRefreshing.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+  val state = combine(
+    materialsRepository.observeMaterials(),
+    materialsRepository.observeMaterialsRefreshMetadata(),
+    extras,
+  ) { items, metadata, local ->
+    MaterialsUiState(
+      items = items,
+      initialLoading = local.initialLoading,
+      refreshing = local.refreshing,
+      refreshError = local.refreshError ?: metadata.refreshError,
+      isStale = metadata.isStale || ((local.refreshError ?: metadata.refreshError) != null && items.isNotEmpty()),
+    )
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MaterialsUiState())
 
   init {
     refresh(force = false, showIndicator = false)
@@ -117,31 +144,35 @@ class MaterialsViewModel @Inject constructor(
   private fun refresh(force: Boolean, showIndicator: Boolean) {
     viewModelScope.launch {
       if (showIndicator) {
-        isRefreshing.value = true
+        extras.update { it.copy(refreshing = true, refreshError = null) }
       }
       materialsRepository.refreshMaterials(force = force)
-      isRefreshing.value = false
+        .onFailure { error -> extras.update { it.copy(refreshError = error.message ?: "Aggiornamento didattica non riuscito") } }
+      extras.update { it.copy(initialLoading = false, refreshing = false) }
     }
   }
 
   fun openAsset(
     item: MaterialItem,
-    onUrl: (String) -> Unit,
-    onTextPreview: (String) -> Unit,
+    onAsset: (MaterialAsset) -> Unit,
     onError: (String) -> Unit,
   ) {
     viewModelScope.launch {
       materialsRepository.openAsset(item)
-        .onSuccess { asset ->
-          val url = asset.sourceUrl
-          val preview = asset.textPreview
-          when {
-            url != null -> onUrl(url)
-            preview != null -> onTextPreview(preview)
-            else -> onError("Nessun contenuto disponibile")
-          }
-        }
+        .onSuccess(onAsset)
         .onFailure { onError(it.message ?: "Errore") }
+    }
+  }
+
+  fun queueDownload(
+    item: MaterialItem,
+    onSuccess: (MaterialAsset) -> Unit,
+    onError: (String) -> Unit,
+  ) {
+    viewModelScope.launch {
+      materialsRepository.queueDownload(item)
+        .onSuccess(onSuccess)
+        .onFailure { onError(it.message ?: "Download non riuscito") }
     }
   }
 }
@@ -437,6 +468,7 @@ fun MeetingsRoute(
       }
     }
   }
+
 }
 
 private fun MeetingSlot.meetingSlotLabel(): String {
@@ -454,16 +486,38 @@ private fun Context.openUrl(url: String) {
   startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 }
 
+private fun Context.openResource(
+  contentUri: String?,
+  externalUrl: String?,
+  mimeType: String?,
+): Boolean {
+  val intent = when {
+    !contentUri.isNullOrBlank() -> Intent(Intent.ACTION_VIEW).apply {
+      setDataAndType(Uri.parse(contentUri), mimeType ?: "application/octet-stream")
+      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    !externalUrl.isNullOrBlank() -> Intent(Intent.ACTION_VIEW, Uri.parse(externalUrl))
+    else -> return false
+  }
+  return runCatching {
+    startActivity(intent)
+    true
+  }.getOrDefault(false)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MaterialsRoute(
   onBack: (() -> Unit)? = null,
   viewModel: MaterialsViewModel = hiltViewModel(),
 ) {
-  val items by viewModel.state.collectAsStateWithLifecycle()
-  val isRefreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val items = state.items
   var selectedItem by remember { mutableStateOf<MaterialItem?>(null) }
   var assetPreviewText by remember { mutableStateOf<String?>(null) }
+  var assetErrorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+  var isDownloading by rememberSaveable { mutableStateOf(false) }
+  var downloadMessage by rememberSaveable { mutableStateOf<String?>(null) }
   val context = LocalContext.current
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -485,10 +539,21 @@ fun MaterialsRoute(
   ) { paddingValues ->
     PullToRefreshBox(
       modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = isRefreshing,
+      isRefreshing = state.refreshing,
       onRefresh = viewModel::refresh,
     ) {
-      if (items.isEmpty() && !isRefreshing) {
+      if (state.initialLoading && items.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+          ExpressiveLoading()
+        }
+      } else if (items.isEmpty() && state.refreshError != null) {
+        InlineMessageCard(
+          title = "Didattica non disponibile",
+          message = state.refreshError.orEmpty(),
+          tone = ExpressiveTone.Warning,
+          modifier = Modifier.padding(20.dp),
+        )
+      } else if (items.isEmpty()) {
         EmptyState(
           title = "Nessun materiale",
           detail = "Non ci sono ancora file o link condivisi dai tuoi professori.",
@@ -500,6 +565,15 @@ fun MaterialsRoute(
           contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
           verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+          if (state.isStale && state.refreshError != null) {
+            item {
+              InlineMessageCard(
+                title = "Contenuti non aggiornati",
+                message = "Mostro l'ultima copia disponibile. ${state.refreshError}",
+                tone = ExpressiveTone.Warning,
+              )
+            }
+          }
           items(items, key = { it.id }) { item ->
             RegisterListRow(
               title = item.title,
@@ -509,7 +583,7 @@ fun MaterialsRoute(
               tone = ExpressiveTone.Info,
               onClick = { selectedItem = item },
               badge = {
-                StatusBadge(if (item.objectType == "link") "LINK" else "FILE", tone = ExpressiveTone.Info)
+                StatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = ExpressiveTone.Info)
               },
               animatePress = true,
             )
@@ -520,7 +594,13 @@ fun MaterialsRoute(
   }
 
   selectedItem?.let { item ->
-    ModalBottomSheet(onDismissRequest = { selectedItem = null; assetPreviewText = null }) {
+    ModalBottomSheet(onDismissRequest = {
+      selectedItem = null
+      assetPreviewText = null
+      assetErrorMessage = null
+      isDownloading = false
+      downloadMessage = null
+    }) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -533,23 +613,73 @@ fun MaterialsRoute(
         assetPreviewText?.let {
           Text(text = it, style = MaterialTheme.typography.bodySmall)
         }
+        downloadMessage?.let {
+          Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
+        assetErrorMessage?.let {
+          Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+        }
         Button(
           onClick = {
+            assetErrorMessage = null
             viewModel.openAsset(
               item = item,
-              onUrl = { url -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
-              onTextPreview = { text -> assetPreviewText = text },
-              onError = {},
+              onAsset = { asset ->
+                assetPreviewText = asset.textPreview
+                if (
+                  asset.textPreview == null &&
+                  !context.openResource(
+                    contentUri = asset.contentUri,
+                    externalUrl = asset.externalUrl,
+                    mimeType = asset.mimeType,
+                  )
+                ) {
+                  assetErrorMessage = "Nessun contenuto o link disponibile per questo materiale."
+                }
+              },
+              onError = { error -> assetErrorMessage = error },
             )
           },
           modifier = Modifier.fillMaxWidth(),
         ) {
           Icon(
-            if (item.objectType == "link") Icons.Rounded.Link else Icons.Rounded.Download,
+            if (item.isLinkMaterial()) Icons.Rounded.Link else Icons.Rounded.Download,
             contentDescription = null,
             modifier = Modifier.padding(end = 8.dp),
           )
-          Text(if (item.objectType == "link") "Vai al link" else "Scarica file")
+          Text(if (item.isLinkMaterial()) "Vai al link" else "Apri file")
+        }
+        if (!item.isLinkMaterial()) {
+          OutlinedButton(
+            onClick = {
+              isDownloading = true
+              downloadMessage = null
+              viewModel.queueDownload(
+                item = item,
+                onSuccess = { asset ->
+                  isDownloading = false
+                  downloadMessage = "File disponibile offline."
+                  context.openResource(asset.contentUri, asset.externalUrl, asset.mimeType)
+                },
+                onError = { error ->
+                  isDownloading = false
+                  downloadMessage = error
+                },
+              )
+            },
+            enabled = !isDownloading,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            if (isDownloading) {
+              ExpressiveLoading(modifier = Modifier.size(20.dp))
+            } else {
+              Icon(Icons.Rounded.Download, contentDescription = null)
+            }
+            Text(
+              text = if (isDownloading) "Download in corso" else "Salva per uso offline",
+              modifier = Modifier.padding(start = 8.dp),
+            )
+          }
         }
       }
     }
@@ -793,18 +923,31 @@ private fun String.homeworkCreatedAtLabel(): String {
 data class DocumentsUiState(
   val documents: List<DocumentItem> = emptyList(),
   val schoolbookCourses: List<SchoolbookCourse> = emptyList(),
-  val isRefreshing: Boolean = false,
+  val initialLoading: Boolean = true,
+  val refreshing: Boolean = false,
+  val documentsRefreshError: String? = null,
+  val schoolbooksRefreshError: String? = null,
+  val documentsAreStale: Boolean = false,
+  val schoolbooksAreStale: Boolean = false,
+  val refreshError: String? = null,
+  val isStale: Boolean = false,
   val selectedDocument: DocumentItem? = null,
   val selectedAsset: DocumentAsset? = null,
   val isOpeningDocument: Boolean = false,
+  val isDownloadingDocument: Boolean = false,
+  val downloadMessage: String? = null,
   val lastError: String? = null,
 )
 
 private data class DocumentsUiExtras(
-  val isRefreshing: Boolean = false,
+  val initialLoading: Boolean = true,
+  val refreshing: Boolean = false,
+  val refreshError: String? = null,
   val selectedDocument: DocumentItem? = null,
   val selectedAsset: DocumentAsset? = null,
   val isOpeningDocument: Boolean = false,
+  val isDownloadingDocument: Boolean = false,
+  val downloadMessage: String? = null,
   val lastError: String? = null,
 )
 
@@ -817,9 +960,32 @@ class DocumentsViewModel @Inject constructor(
   val state = combine(
     documentsRepository.observeDocuments(),
     documentsRepository.observeSchoolbooks(),
+    documentsRepository.observeDocumentsRefreshMetadata(),
+    documentsRepository.observeSchoolbooksRefreshMetadata(),
     extras,
-  ) { docs, books, ex ->
-    DocumentsUiState(docs, books, ex.isRefreshing, ex.selectedDocument, ex.selectedAsset, ex.isOpeningDocument, ex.lastError)
+  ) { docs, books, documentsMetadata, schoolbooksMetadata, ex ->
+    val documentsError = ex.refreshError ?: documentsMetadata.refreshError
+    val schoolbooksError = ex.refreshError ?: schoolbooksMetadata.refreshError
+    val documentsStale = documentsMetadata.isStale || (documentsError != null && docs.isNotEmpty())
+    val schoolbooksStale = schoolbooksMetadata.isStale || (schoolbooksError != null && books.isNotEmpty())
+    DocumentsUiState(
+      documents = docs,
+      schoolbookCourses = books,
+      initialLoading = ex.initialLoading,
+      refreshing = ex.refreshing,
+      documentsRefreshError = documentsError,
+      schoolbooksRefreshError = schoolbooksError,
+      documentsAreStale = documentsStale,
+      schoolbooksAreStale = schoolbooksStale,
+      refreshError = documentsError ?: schoolbooksError,
+      isStale = documentsStale || schoolbooksStale,
+      selectedDocument = ex.selectedDocument,
+      selectedAsset = ex.selectedAsset,
+      isOpeningDocument = ex.isOpeningDocument,
+      isDownloadingDocument = ex.isDownloadingDocument,
+      downloadMessage = ex.downloadMessage,
+      lastError = ex.lastError,
+    )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DocumentsUiState())
 
   init {
@@ -829,7 +995,7 @@ class DocumentsViewModel @Inject constructor(
   fun refresh() = refresh(force = true, showIndicator = true)
 
   fun openDocument(doc: DocumentItem) {
-    extras.update { it.copy(selectedDocument = doc, selectedAsset = null, lastError = null) }
+    extras.update { it.copy(selectedDocument = doc, selectedAsset = null, lastError = null, downloadMessage = null) }
     viewModelScope.launch {
       extras.update { it.copy(isOpeningDocument = true) }
       documentsRepository.openDocument(doc)
@@ -840,17 +1006,34 @@ class DocumentsViewModel @Inject constructor(
   }
 
   fun dismissDocument() {
-    extras.update { it.copy(selectedDocument = null, selectedAsset = null, lastError = null) }
+    extras.update {
+      it.copy(
+        selectedDocument = null,
+        selectedAsset = null,
+        lastError = null,
+        isDownloadingDocument = false,
+        downloadMessage = null,
+      )
+    }
   }
 
   fun queueDownload(doc: DocumentItem) = viewModelScope.launch {
+    extras.update { it.copy(isDownloadingDocument = true, downloadMessage = null, lastError = null) }
     documentsRepository.queueDownload(doc)
+      .onSuccess { asset ->
+        extras.update { it.copy(selectedAsset = asset, downloadMessage = "Documento disponibile offline.") }
+      }
+      .onFailure { error ->
+        extras.update { it.copy(lastError = error.message ?: "Download documento non riuscito") }
+      }
+    extras.update { it.copy(isDownloadingDocument = false) }
   }
 
   private fun refresh(force: Boolean, showIndicator: Boolean) = viewModelScope.launch {
-    if (showIndicator) extras.update { it.copy(isRefreshing = true) }
+    if (showIndicator) extras.update { it.copy(refreshing = true, refreshError = null) }
     documentsRepository.refreshDocuments(force)
-    extras.update { it.copy(isRefreshing = false) }
+      .onFailure { error -> extras.update { it.copy(refreshError = error.message ?: "Aggiornamento documenti non riuscito") } }
+    extras.update { it.copy(initialLoading = false, refreshing = false) }
   }
 }
 
@@ -862,6 +1045,16 @@ fun DocumentsRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   var selectedTab by rememberSaveable { mutableStateOf("Documenti") }
+  val selectedRefreshError = if (selectedTab == "Documenti") {
+    state.documentsRefreshError
+  } else {
+    state.schoolbooksRefreshError
+  }
+  val selectedContentIsStale = if (selectedTab == "Documenti") {
+    state.documentsAreStale
+  } else {
+    state.schoolbooksAreStale
+  }
   val context = LocalContext.current
   val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -883,7 +1076,7 @@ fun DocumentsRoute(
   ) { paddingValues ->
     PullToRefreshBox(
       modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = state.isRefreshing,
+      isRefreshing = state.refreshing,
       onRefresh = viewModel::refresh,
     ) {
       LazyColumn(
@@ -891,6 +1084,13 @@ fun DocumentsRoute(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
+        if (state.initialLoading && state.documents.isEmpty() && state.schoolbookCourses.isEmpty()) {
+          item {
+            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+              ExpressiveLoading()
+            }
+          }
+        }
         item {
           ExpressivePillTabs(
             options = listOf("Documenti", "Libri"),
@@ -899,8 +1099,26 @@ fun DocumentsRoute(
           )
         }
 
+        if (selectedContentIsStale && selectedRefreshError != null) {
+          item {
+            InlineMessageCard(
+              title = if (selectedTab == "Documenti") "Documenti non aggiornati" else "Libri non aggiornati",
+              message = "Mostro l'ultima copia disponibile. $selectedRefreshError",
+              tone = ExpressiveTone.Warning,
+            )
+          }
+        } else if (selectedRefreshError != null) {
+          item {
+            InlineMessageCard(
+              title = if (selectedTab == "Documenti") "Documenti non disponibili" else "Libri non disponibili",
+              message = selectedRefreshError,
+              tone = ExpressiveTone.Warning,
+            )
+          }
+        }
+
         if (selectedTab == "Documenti") {
-          if (state.documents.isEmpty() && !state.isRefreshing) {
+          if (state.documents.isEmpty() && !state.initialLoading && state.documentsRefreshError == null) {
             item {
               EmptyState(
                 title = "Nessun documento",
@@ -920,7 +1138,7 @@ fun DocumentsRoute(
             }
           }
         } else {
-          if (state.schoolbookCourses.isEmpty() && !state.isRefreshing) {
+          if (state.schoolbookCourses.isEmpty() && !state.initialLoading && state.schoolbooksRefreshError == null) {
             item {
               EmptyState(
                 title = "Nessun libro",
@@ -981,9 +1199,9 @@ fun DocumentsRoute(
             asset.textPreview?.let {
               Text(text = it, style = MaterialTheme.typography.bodySmall)
             }
-            asset.sourceUrl?.let { url ->
+            if (!asset.contentUri.isNullOrBlank() || !asset.externalUrl.isNullOrBlank()) {
               Button(
-                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                onClick = { context.openResource(asset.contentUri, asset.externalUrl, asset.mimeType) },
                 modifier = Modifier.fillMaxWidth(),
               ) {
                 Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
@@ -993,11 +1211,25 @@ fun DocumentsRoute(
             if (asset.fileName != null) {
               OutlinedButton(
                 onClick = { viewModel.queueDownload(doc) },
+                enabled = !state.isDownloadingDocument,
                 modifier = Modifier.fillMaxWidth(),
               ) {
-                Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                Text("Scarica")
+                if (state.isDownloadingDocument) {
+                  ExpressiveLoading(modifier = Modifier.size(20.dp))
+                } else {
+                  Icon(Icons.Rounded.Download, contentDescription = null)
+                }
+                Text(
+                  text = if (state.isDownloadingDocument) "Download in corso" else "Salva per uso offline",
+                  modifier = Modifier.padding(start = 8.dp),
+                )
               }
+            }
+            state.downloadMessage?.let { message ->
+              Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            state.lastError?.let { error ->
+              Text(error, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             }
           }
           state.lastError != null -> {

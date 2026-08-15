@@ -19,11 +19,13 @@ import dev.antigravity.classevivaexpressive.core.data.repository.PeriodsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.ProfileSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SchoolbooksSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SubjectsSection
+import dev.antigravity.classevivaexpressive.core.data.repository.studentScopedCacheKey
 import dev.antigravity.classevivaexpressive.core.data.repository.toAgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.data.repository.buildLessonsWithFallback
 import dev.antigravity.classevivaexpressive.core.data.repository.toCommunication
 import dev.antigravity.classevivaexpressive.core.data.repository.toGradeVersion
 import dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey
+import dev.antigravity.classevivaexpressive.core.data.preview.PrivateAssetStore
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceEntity
 import dev.antigravity.classevivaexpressive.core.database.database.ChangeHistoryDao
@@ -40,6 +42,8 @@ import dev.antigravity.classevivaexpressive.core.database.database.GradeDao
 import dev.antigravity.classevivaexpressive.core.database.database.GradeEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheEntity
+import dev.antigravity.classevivaexpressive.core.database.database.SyncMetadataDao
+import dev.antigravity.classevivaexpressive.core.database.database.SyncMetadataEntity
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
 import dev.antigravity.classevivaexpressive.core.datastore.TimetableTemplateStore
@@ -53,6 +57,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
+import dev.antigravity.classevivaexpressive.core.domain.model.DocumentKind
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSubmission
@@ -80,7 +85,6 @@ import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaNetwor
 import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaRestClient
 import dev.antigravity.classevivaexpressive.core.network.client.LoginResult
 import dev.antigravity.classevivaexpressive.core.network.client.PortalClient
-import dev.antigravity.classevivaexpressive.core.network.client.normalizeDocumentAsset
 import dev.antigravity.classevivaexpressive.core.network.client.parseMeetingsSnapshot
 import java.time.LocalDate
 import java.time.ZoneId
@@ -108,6 +112,7 @@ class SchoolSyncCoordinator @Inject constructor(
   private val schoolYearStore: SchoolYearStore,
   private val timetableTemplateStore: TimetableTemplateStore,
   private val snapshotCacheDao: SnapshotCacheDao,
+  private val syncMetadataDao: SyncMetadataDao,
   private val gradeDao: GradeDao,
   private val agendaDao: AgendaDao,
   private val changeHistoryDao: ChangeHistoryDao,
@@ -115,16 +120,41 @@ class SchoolSyncCoordinator @Inject constructor(
   private val communicationDao: CommunicationDao,
   private val materialDao: MaterialDao,
   private val documentDao: DocumentDao,
+  private val privateAssetStore: PrivateAssetStore,
   private val predictiveTimetableUseCase: PredictiveTimetableUseCase,
 ) {
-  private var activeSession: UserSession? = null
+  @Volatile private var activeSession: UserSession? = null
+  @Volatile private var sessionGeneration: Long = 0L
   val syncStatus = MutableStateFlow(SyncStatus())
   private val syncMutex = Mutex()
   private val lastInteractiveRefreshAttempts = mutableMapOf<String, Long>()
 
+  @Synchronized
   fun attachSession(session: UserSession?) {
+    if (activeSession != session) sessionGeneration += 1L
     activeSession = session
     restClient.setSession(session)
+  }
+
+  private data class SessionOperation(
+    val session: UserSession,
+    val generation: Long,
+  )
+
+  private fun captureSessionOperation(): SessionOperation {
+    val session = activeSession ?: error("Sessione assente.")
+    return SessionOperation(session, sessionGeneration)
+  }
+
+  private fun ensureSessionUnchanged(operation: SessionOperation) {
+    val current = activeSession
+    if (
+      sessionGeneration != operation.generation ||
+      current?.studentId != operation.session.studentId ||
+      current?.token != operation.session.token
+    ) {
+      throw ClassevivaNetworkException("La sessione e cambiata; il risultato precedente e stato scartato.")
+    }
   }
 
   suspend fun login(username: String, password: String): UserSession {
@@ -202,6 +232,7 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   suspend fun refreshAbsences(force: Boolean = false): Result<List<AbsenceRecord>> = runCatching {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val status = refreshSelectedSections(
       selectedYear = selectedYear,
@@ -212,10 +243,11 @@ class SchoolSyncCoordinator @Inject constructor(
     if (status.state == SyncState.PARTIAL) {
       throw ClassevivaNetworkException("Impossibile aggiornare le assenze. Verificare la connessione.")
     }
-    readYearScopedValue(AbsencesSection, selectedYear, emptyList<AbsenceRecord>())
+    readYearScopedValue(operation, AbsencesSection, selectedYear, emptyList<AbsenceRecord>())
   }
 
   suspend fun refreshHomeworks(force: Boolean = false): List<Homework> {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     refreshSelectedSections(
       selectedYear = selectedYear,
@@ -223,10 +255,11 @@ class SchoolSyncCoordinator @Inject constructor(
       refreshProfile = false,
       sections = setOf(HomeworkSection),
     )
-    return readYearScopedValue(HomeworkSection, selectedYear, emptyList())
+    return readYearScopedValue(operation, HomeworkSection, selectedYear, emptyList())
   }
 
   suspend fun refreshMeetings(force: Boolean = false): List<MeetingBooking> {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     refreshSelectedSections(
       selectedYear = selectedYear,
@@ -234,7 +267,7 @@ class SchoolSyncCoordinator @Inject constructor(
       refreshProfile = false,
       sections = setOf(MeetingTeachersSection, MeetingSlotsSection, MeetingBookingsSection),
     )
-    return readYearScopedValue(MeetingBookingsSection, selectedYear, emptyList())
+    return readYearScopedValue(operation, MeetingBookingsSection, selectedYear, emptyList())
   }
 
   suspend fun submitHomework(submission: HomeworkSubmission): Result<HomeworkSubmissionReceipt> = runCatching {
@@ -319,6 +352,7 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   suspend fun acknowledgeCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = runCatching {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
 
     val restResult = runCatching {
@@ -349,7 +383,7 @@ class SchoolSyncCoordinator @Inject constructor(
     }
 
     runCatching { communicationDao.markRead(detail.communication.id) }
-    runCatching { refreshCommunicationsSnapshot(selectedYear) }
+    runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
     val updated = runCatching {
       restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
@@ -357,6 +391,7 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   suspend fun replyToCommunication(detail: CommunicationDetail, text: String): Result<CommunicationDetail> = runCatching {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val replyUrl = detail.replyUrl ?: detail.portalDetailUrl
     if (replyUrl.isNullOrBlank()) {
@@ -367,7 +402,7 @@ class SchoolSyncCoordinator @Inject constructor(
     portalClient.replyNoticeboard(replyUrl = replyUrl, text = text)
     runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
     runCatching { communicationDao.markRead(detail.communication.id) }
-    runCatching { refreshCommunicationsSnapshot(selectedYear) }
+    runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
     val updated = runCatching {
       restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
@@ -375,6 +410,7 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   suspend fun joinCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = runCatching {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val joinUrl = detail.joinUrl
     if (joinUrl.isNullOrBlank()) {
@@ -387,7 +423,7 @@ class SchoolSyncCoordinator @Inject constructor(
     }
     runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
     runCatching { communicationDao.markRead(detail.communication.id) }
-    runCatching { refreshCommunicationsSnapshot(selectedYear) }
+    runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
     runCatching {
       restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
@@ -399,6 +435,7 @@ class SchoolSyncCoordinator @Inject constructor(
     mimeType: String?,
     bytes: ByteArray,
   ): Result<CommunicationDetail> = runCatching {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val uploadUrl = detail.fileUploadUrl ?: detail.portalDetailUrl
     if (uploadUrl.isNullOrBlank()) {
@@ -416,18 +453,19 @@ class SchoolSyncCoordinator @Inject constructor(
     )
     runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
     runCatching { communicationDao.markRead(detail.communication.id) }
-    runCatching { refreshCommunicationsSnapshot(selectedYear) }
+    runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
     runCatching {
       restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
   }
 
   suspend fun getNoteDetail(id: String, categoryCode: String): Result<NoteDetail> = runCatching {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     runCatching {
       restClient.getNoteDetail(id, categoryCode)
     }.getOrElse { error ->
-      val cached = readYearScopedValue(NotesSection, selectedYear, emptyList<Note>())
+      val cached = readYearScopedValue(operation, NotesSection, selectedYear, emptyList<Note>())
         .firstOrNull { note -> note.id == id && note.categoryCode == categoryCode }
         ?: throw error
       NoteDetail(
@@ -437,43 +475,122 @@ class SchoolSyncCoordinator @Inject constructor(
           ?: cached.title.ifBlank { cached.categoryLabel },
       )
     }.also {
-      runCatching { refreshNotesSnapshot(selectedYear) }
+      runCatching { refreshNotesSnapshot(selectedYear, operation) }
     }
   }
 
   suspend fun openMaterial(item: MaterialItem): Result<MaterialAsset> = runCatching {
-    restClient.getMaterialAsset(item)
+    val operation = captureSessionOperation()
+    val session = operation.session
+    restClient.resolveMaterialExternalUrl(item)?.takeIf(String::isNotBlank)?.let { externalUrl ->
+      ensureSessionUnchanged(operation)
+      val attachment = item.attachments.firstOrNull { it.url == externalUrl }
+      return@runCatching MaterialAsset(
+        id = item.id,
+        title = item.title,
+        objectType = item.objectType,
+        fileName = attachment?.name,
+        mimeType = attachment?.mimeType,
+        externalUrl = externalUrl,
+        capabilityState = item.capabilityState,
+      )
+    }
+    val schoolYear = schoolYearStore.observeSelectedSchoolYear().first()
+    ensureSessionUnchanged(operation)
+    val cacheId = "${item.id}:${item.objectId}:${item.sharedAt}"
+    privateAssetStore.find(session.studentId, schoolYear.id, cacheId)?.let { cached ->
+      ensureSessionUnchanged(operation)
+      return@runCatching MaterialAsset(
+        id = item.id,
+        title = item.title,
+        objectType = item.objectType,
+        fileName = cached.fileName,
+        mimeType = guessMimeType(item.title, cached.fileName, null),
+        contentUri = cached.contentUri,
+        capabilityState = item.capabilityState,
+      )
+    }
+    restClient.openMaterialStream(item).use { stream ->
+      val fileName = stream.fileName ?: item.title
+      val mimeType = guessMimeType(item.title, fileName, stream.mimeType)
+      try {
+        val contentUri = privateAssetStore.store(
+          studentId = session.studentId,
+          schoolYearId = schoolYear.id,
+          assetId = cacheId,
+          displayName = fileName,
+          mimeType = mimeType,
+          input = stream.byteStream(),
+          validateBeforeCommit = { ensureSessionUnchanged(operation) },
+        )
+        ensureSessionUnchanged(operation)
+        MaterialAsset(
+          id = item.id,
+          title = item.title,
+          objectType = item.objectType,
+          fileName = fileName,
+          mimeType = mimeType,
+          contentUri = contentUri,
+          capabilityState = item.capabilityState,
+        )
+      } catch (error: Throwable) {
+        privateAssetStore.delete(session.studentId, schoolYear.id, cacheId)
+        throw error
+      }
+    }
   }
 
   suspend fun openDocument(item: DocumentItem): Result<DocumentAsset> = runCatching {
-    val (bytes, declaredMimeType) = restClient.readDocument(item)
-    val mimeType = guessMimeType(item.title, item.title, declaredMimeType, bytes)
-    val textPreview = if (mimeType?.startsWith("text/") == true || mimeType == "application/json") {
-      bytes.decodeToString().trim().takeIf(String::isNotBlank)?.take(12_000)
-    } else {
-      null
+    val operation = captureSessionOperation()
+    val session = operation.session
+    val schoolYear = schoolYearStore.observeSelectedSchoolYear().first()
+    ensureSessionUnchanged(operation)
+    val cacheId = documentCacheId(item)
+    privateAssetStore.find(session.studentId, schoolYear.id, cacheId)?.let { cached ->
+      ensureSessionUnchanged(operation)
+      return@runCatching DocumentAsset(
+        id = item.id,
+        title = item.title,
+        fileName = cached.fileName,
+        mimeType = guessMimeType(item.title, cached.fileName, null),
+        contentUri = cached.contentUri,
+        capabilityState = item.capabilityState,
+      )
     }
-    val base64Content = if (
-      bytes.isNotEmpty() &&
-      (
-        mimeType == "application/pdf" ||
-          mimeType == "text/html" ||
-          mimeType?.startsWith("text/") == true ||
-          mimeType?.startsWith("image/") == true
+    val remote = when (item.kind) {
+      DocumentKind.DOCUMENT -> restClient.openDocumentStream(item)
+      DocumentKind.SCHOOL_REPORT -> portalClient.openSchoolReport(
+        viewUrl = item.portalViewUrl ?: item.viewUrl,
+        confirmUrl = item.portalConfirmUrl ?: item.confirmUrl,
+      )
+    }
+    remote.use { stream ->
+      val fileName = stream.fileName ?: item.title
+      val mimeType = guessMimeType(item.title, fileName, stream.mimeType)
+      try {
+        val contentUri = privateAssetStore.store(
+          studentId = session.studentId,
+          schoolYearId = schoolYear.id,
+          assetId = cacheId,
+          displayName = fileName,
+          mimeType = mimeType,
+          input = stream.byteStream(),
+          validateBeforeCommit = { ensureSessionUnchanged(operation) },
         )
-    ) {
-      Base64.getEncoder().encodeToString(bytes)
-    } else {
-      null
+        ensureSessionUnchanged(operation)
+        DocumentAsset(
+          id = item.id,
+          title = item.title,
+          fileName = fileName,
+          mimeType = mimeType,
+          contentUri = contentUri,
+          capabilityState = item.capabilityState,
+        )
+      } catch (error: Throwable) {
+        privateAssetStore.delete(session.studentId, schoolYear.id, cacheId)
+        throw error
+      }
     }
-    normalizeDocumentAsset(
-      item = item,
-      fileName = item.title,
-      mimeType = mimeType,
-      base64Content = base64Content,
-      textPreview = textPreview,
-      sourceUrl = item.viewUrl,
-    )
   }
 
   suspend fun justifyAbsence(
@@ -486,6 +603,7 @@ class SchoolSyncCoordinator @Inject constructor(
       detailUrl = record.detailUrl,
     ),
   ): Result<List<AbsenceRecord>> = runCatching {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val effectiveRequest = request.copy(
       absenceId = record.id,
@@ -493,7 +611,7 @@ class SchoolSyncCoordinator @Inject constructor(
       justifyUrl = request.justifyUrl ?: record.justifyUrl,
       detailUrl = request.detailUrl ?: record.detailUrl,
     )
-    val session = activeSession ?: return Result.failure(ClassevivaNetworkException("Sessione assente."))
+    val session = operation.session
     portalClient.justifyAbsence(
       justifyUrl = effectiveRequest.justifyUrl,
       detailUrl = effectiveRequest.detailUrl,
@@ -504,18 +622,20 @@ class SchoolSyncCoordinator @Inject constructor(
       schoolYearStart(selectedYear).toString(),
       schoolYearEnd(selectedYear).toString(),
     )
-    syncAbsences(selectedYear, mutableListOf(), session) { updated }
+    syncAbsences(selectedYear, mutableListOf(), operation) { updated }
+    ensureSessionUnchanged(operation)
     updated
   }
 
   suspend fun bookMeeting(slot: MeetingSlot): Result<MeetingBooking> = runCatching {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     portalClient.submitPortalAction(
       pageUrl = slot.id,
       formKeywords = listOf("prenota", "book", "conferma"),
     )
-    refreshMeetingsSnapshot(selectedYear)
-    readYearScopedValue(MeetingBookingsSection, selectedYear, emptyList<MeetingBooking>())
+    refreshMeetingsSnapshot(selectedYear, operation)
+    readYearScopedValue(operation, MeetingBookingsSection, selectedYear, emptyList<MeetingBooking>())
       .firstOrNull()
       ?: MeetingBooking(
         id = slot.id,
@@ -526,13 +646,14 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   suspend fun cancelMeeting(booking: MeetingBooking): Result<List<MeetingBooking>> = runCatching {
+    val operation = captureSessionOperation()
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     portalClient.submitPortalAction(
       pageUrl = booking.id,
       formKeywords = listOf("annulla", "cancel", "rimuovi", "disdici"),
     )
-    refreshMeetingsSnapshot(selectedYear)
-    readYearScopedValue(MeetingBookingsSection, selectedYear, emptyList())
+    refreshMeetingsSnapshot(selectedYear, operation)
+    readYearScopedValue(operation, MeetingBookingsSection, selectedYear, emptyList())
   }
 
   suspend fun joinMeeting(booking: MeetingBooking): Result<MeetingJoinLink> = runCatching {
@@ -575,12 +696,13 @@ class SchoolSyncCoordinator @Inject constructor(
     sections: Set<String>? = null,
     mode: BackgroundSyncMode = BackgroundSyncMode.FULL,
   ): SyncStatus {
-    val session = activeSession ?: run {
+    val operation = runCatching { captureSessionOperation() }.getOrElse {
         return SyncStatus(
             state = SyncState.ERROR,
             message = "Sessione assente (Coordinator).",
         )
     }
+    val session = operation.session
     val currentYear = schoolYearStore.currentSchoolYearRef()
     val yearStart = schoolYearStart(selectedYear)
     val yearEnd = schoolYearEnd(selectedYear)
@@ -596,14 +718,14 @@ class SchoolSyncCoordinator @Inject constructor(
         .also { agendaForWindow = it }
     }
 
-    if (!force && shouldSkipInteractiveRefresh(selectedYear, selectedSections, now)) {
+    if (!force && shouldSkipInteractiveRefresh(operation, selectedYear, selectedSections, now)) {
       return syncStatus.value
     }
-    recordInteractiveRefreshAttempt(selectedYear, selectedSections, now)
+    recordInteractiveRefreshAttempt(operation, selectedYear, selectedSections, now)
+    recordSyncAttempts(operation, selectedYear, selectedSections, now)
 
     val previousStatus = syncStatus.value
     val publishForegroundStatus = mode == BackgroundSyncMode.FULL && force
-    attachSession(session)
     if (publishForegroundStatus) {
       syncStatus.value = SyncStatusFactory.syncing(previousStatus)
     }
@@ -611,26 +733,26 @@ class SchoolSyncCoordinator @Inject constructor(
     val errors = mutableListOf<String>()
 
     if (refreshProfile && selectedSections.contains(ProfileSection)) {
-      syncGlobal(ProfileSection, errors) { restClient.getProfile() }
+      syncGlobal(operation, ProfileSection, errors) { restClient.getProfile() }
     }
 
     if (selectedSections.contains(GradesSection)) {
-      syncGrades(selectedYear, errors, session) {
+      syncGrades(selectedYear, errors, operation) {
         filterGradesForYear(restClient.getGrades(), selectedYear)
       }
     }
     if (selectedSections.contains(PeriodsSection)) {
-      syncYearScoped(PeriodsSection, selectedYear, errors) { restClient.getPeriods() }
+      syncYearScoped(operation, PeriodsSection, selectedYear, errors) { restClient.getPeriods() }
     }
     if (selectedSections.contains(SubjectsSection)) {
-      syncYearScoped(SubjectsSection, selectedYear, errors) { restClient.getSubjects() }
+      syncYearScoped(operation, SubjectsSection, selectedYear, errors) { restClient.getSubjects() }
     }
     if (selectedSections.contains(LessonsSection)) {
-      syncYearScoped(LessonsSection, selectedYear, errors) {
+      syncYearScoped(operation, LessonsSection, selectedYear, errors) {
         val lessons = restClient.getLessons(dateWindow.start.toString(), dateWindow.end.toString())
         if (mode == BackgroundSyncMode.FAST) {
           mergeDatedWindow(
-            existing = readYearScopedValue(LessonsSection, selectedYear, emptyList<Lesson>()),
+            existing = readYearScopedValue(operation, LessonsSection, selectedYear, emptyList<Lesson>()),
             incoming = lessons,
             start = dateWindow.start,
             end = dateWindow.end,
@@ -643,7 +765,7 @@ class SchoolSyncCoordinator @Inject constructor(
       }
     }
     if (selectedSections.contains(HomeworkSection)) {
-      syncYearScoped(HomeworkSection, selectedYear, errors) {
+      syncYearScoped(operation, HomeworkSection, selectedYear, errors) {
         val homeworks = filterHomeworksForYear(restClient.getHomeworks(), selectedYear)
         val agendaHomeworks = loadAgendaForWindow()
           .filter { it.category == AgendaCategory.HOMEWORK }
@@ -651,7 +773,7 @@ class SchoolSyncCoordinator @Inject constructor(
         val merged = mergeHomeworks(homeworks + agendaHomeworks)
         if (mode == BackgroundSyncMode.FAST) {
           mergeDatedWindow(
-            existing = readYearScopedValue(HomeworkSection, selectedYear, emptyList<Homework>()),
+            existing = readYearScopedValue(operation, HomeworkSection, selectedYear, emptyList<Homework>()),
             incoming = merged,
             start = dateWindow.start,
             end = dateWindow.end,
@@ -664,11 +786,11 @@ class SchoolSyncCoordinator @Inject constructor(
       }
     }
     if (selectedSections.contains(AgendaSection)) {
-      syncAgenda(selectedYear, errors, session) {
+      syncAgenda(selectedYear, errors, operation) {
         val agenda = loadAgendaForWindow()
         if (mode == BackgroundSyncMode.FAST) {
           mergeDatedWindow(
-            existing = readYearScopedValue(AgendaSection, selectedYear, emptyList<AgendaItem>()),
+            existing = readYearScopedValue(operation, AgendaSection, selectedYear, emptyList<AgendaItem>()),
             incoming = agenda,
             start = dateWindow.start,
             end = dateWindow.end,
@@ -681,11 +803,11 @@ class SchoolSyncCoordinator @Inject constructor(
       }
     }
     if (selectedSections.contains(AbsencesSection)) {
-      syncAbsences(selectedYear, errors, session) {
+      syncAbsences(selectedYear, errors, operation) {
         val absences = restClient.getAbsences(dateWindow.start.toString(), dateWindow.end.toString())
         if (mode == BackgroundSyncMode.FAST) {
           mergeDatedWindow(
-            existing = readYearScopedValue(AbsencesSection, selectedYear, emptyList<AbsenceRecord>()),
+            existing = readYearScopedValue(operation, AbsencesSection, selectedYear, emptyList<AbsenceRecord>()),
             incoming = absences,
             start = dateWindow.start,
             end = dateWindow.end,
@@ -698,28 +820,31 @@ class SchoolSyncCoordinator @Inject constructor(
       }
     }
     if (selectedSections.contains(CommunicationsSection)) {
-      syncCommunications(selectedYear, errors, session) {
+      syncCommunications(selectedYear, errors, operation) {
         restClient.getCommunications().filter { comm ->
           filterByDate(comm.date, yearStart, yearEnd)
         }
       }
     }
     if (selectedSections.contains(NotesSection)) {
-      syncYearScoped(NotesSection, selectedYear, errors) {
+      syncYearScoped(operation, NotesSection, selectedYear, errors) {
         restClient.getNotes().filter { note -> filterByDate(note.date, yearStart, yearEnd) }
       }
     }
     if (selectedSections.contains(MaterialsSection)) {
-      syncMaterials(selectedYear, errors, session) {
+      syncMaterials(selectedYear, errors, operation) {
         restClient.getMaterials().filter { mat -> filterByDate(mat.sharedAt, yearStart, yearEnd) }
       }
     }
     if (selectedSections.contains(DocumentsSection)) {
-      syncDocuments(selectedYear, errors, session) { restClient.getDocuments() }
+      syncDocuments(selectedYear, errors, operation) { restClient.getDocuments() }
     }
     if (selectedSections.contains(SchoolbooksSection)) {
-      if (isCurrentYear) syncYearScoped(SchoolbooksSection, selectedYear, errors) { restClient.getSchoolbooks() }
-      else clearYearScoped(SchoolbooksSection, selectedYear, emptyList<SchoolbookCourse>())
+      if (isCurrentYear) {
+        syncYearScoped(operation, SchoolbooksSection, selectedYear, errors) { restClient.getSchoolbooks() }
+      } else {
+        clearYearScoped(operation, SchoolbooksSection, selectedYear, emptyList<SchoolbookCourse>())
+      }
     }
 
     if (
@@ -727,21 +852,29 @@ class SchoolSyncCoordinator @Inject constructor(
       selectedSections.contains(MeetingSlotsSection) ||
       selectedSections.contains(MeetingBookingsSection)
     ) {
-      runCatching { refreshMeetingsSnapshot(selectedYear) }.onFailure {
+      runCatching { refreshMeetingsSnapshot(selectedYear, operation) }.onFailure {
         errors += MeetingBookingsSection
-        clearMeetings(selectedYear)
+        clearMeetings(selectedYear, operation)
       }
     }
 
     if (mode != BackgroundSyncMode.FAST &&
       (selectedSections.contains(LessonsSection) || selectedSections.contains(AgendaSection))
     ) {
-      runCatching { persistTimetableTemplate(selectedYear, session) }.onFailure {
+      runCatching { persistTimetableTemplate(selectedYear, operation) }.onFailure {
         errors += LessonsSection
       }
     }
 
     val completedAt = System.currentTimeMillis()
+    if (runCatching { ensureSessionUnchanged(operation) }.isFailure) {
+      return SyncStatus(
+        state = SyncState.ERROR,
+        message = "Sessione cambiata durante l'aggiornamento; risultati scartati.",
+        failedSections = selectedSections.toList(),
+      )
+    }
+    recordSyncResults(operation, selectedYear, selectedSections, errors, completedAt)
     val hasSuccessfulSection = selectedSections.any { section -> section !in errors }
     val next = SyncStatusFactory.completed(
       errors = errors,
@@ -756,50 +889,60 @@ class SchoolSyncCoordinator @Inject constructor(
     )
     syncStatus.value = visibleStatus
     if (hasSuccessfulSection) {
-      runCatching { snapshotCacheDao.recordSuccessfulSync(completedAt) }
+      ensureSessionUnchanged(operation)
+      runCatching { snapshotCacheDao.recordSuccessfulSync(session.studentId, completedAt) }
     }
     return next
   }
 
   private suspend fun shouldSkipInteractiveRefresh(
+    operation: SessionOperation,
     schoolYear: SchoolYearRef,
     sections: Set<String>,
     now: Long,
   ): Boolean {
-    val key = interactiveRefreshKey(schoolYear, sections)
+    ensureSessionUnchanged(operation)
+    val key = interactiveRefreshKey(operation, schoolYear, sections)
     val lastAttempt = lastInteractiveRefreshAttempts[key]
     if (lastAttempt != null && now - lastAttempt in 0 until InteractiveRefreshCooldownMillis) {
       return true
     }
-    return sections.all { section -> isSectionCacheFresh(section, schoolYear, now) }
+    return sections.all { section -> isSectionCacheFresh(operation, section, schoolYear, now) }
   }
 
   private fun recordInteractiveRefreshAttempt(
+    operation: SessionOperation,
     schoolYear: SchoolYearRef,
     sections: Set<String>,
     now: Long,
   ) {
-    lastInteractiveRefreshAttempts[interactiveRefreshKey(schoolYear, sections)] = now
+    ensureSessionUnchanged(operation)
+    lastInteractiveRefreshAttempts[interactiveRefreshKey(operation, schoolYear, sections)] = now
   }
 
   private suspend fun isSectionCacheFresh(
+    operation: SessionOperation,
     section: String,
     schoolYear: SchoolYearRef,
     now: Long,
   ): Boolean {
+    ensureSessionUnchanged(operation)
     val cacheKey = if (section == ProfileSection) {
-      ProfileSection
+      studentScopedCacheKey(operation.session.studentId, ProfileSection)
     } else {
-      yearScopedCacheKey(section, schoolYear)
+      yearScopedCacheKey(operation.session.studentId, section, schoolYear)
     }
-    val updatedAt = snapshotCacheDao.getByKey(cacheKey)?.updatedAtEpochMillis ?: return false
+    val updatedAt = snapshotCacheDao.getByKey(cacheKey)?.updatedAtEpochMillis
+    ensureSessionUnchanged(operation)
+    if (updatedAt == null) return false
     return now - updatedAt in 0..InteractiveRefreshCacheMaxAgeMillis
   }
 
   private fun interactiveRefreshKey(
+    operation: SessionOperation,
     schoolYear: SchoolYearRef,
     sections: Set<String>,
-  ): String = "${schoolYear.id}:${sections.sorted().joinToString("|")}"
+  ): String = "${operation.session.studentId}:${schoolYear.id}:${sections.sorted().joinToString("|")}"
 
   private fun SyncStatus.visibleStatusFor(
     publishForegroundStatus: Boolean,
@@ -876,10 +1019,11 @@ class SchoolSyncCoordinator @Inject constructor(
   private suspend fun syncGrades(
     schoolYear: SchoolYearRef,
     errors: MutableList<String>,
-    session: UserSession,
+    operation: SessionOperation,
     fetch: suspend () -> List<Grade>,
   ) {
     runCatching {
+      val session = operation.session
       val grades = fetch()
       val existingGrades = gradeDao.getByYearOnce(session.studentId, schoolYear.id)
       val existingById = existingGrades.associateBy { it.id }
@@ -947,11 +1091,14 @@ class SchoolSyncCoordinator @Inject constructor(
         )
       }
       if (historyEntries.isNotEmpty()) {
+        ensureSessionUnchanged(operation)
         changeHistoryDao.upsertAll(historyEntries)
       }
+      ensureSessionUnchanged(operation)
       gradeDao.deleteByYear(session.studentId, schoolYear.id)
       gradeDao.upsertAll(entities)
       storeYearScopedValue(
+        operation,
         GradesSection,
         schoolYear,
         resolvedGrades.map { it.grade.copy(id = it.localId) },
@@ -964,10 +1111,11 @@ class SchoolSyncCoordinator @Inject constructor(
   private suspend fun syncAgenda(
     schoolYear: SchoolYearRef,
     errors: MutableList<String>,
-    session: UserSession,
+    operation: SessionOperation,
     fetch: suspend () -> List<AgendaItem>,
   ) {
     runCatching {
+      val session = operation.session
       val agenda = fetch()
       val existingAgenda = agendaDao.getByYearOnce(session.studentId, schoolYear.id)
       val existingById = existingAgenda.associateBy { it.id }
@@ -1027,11 +1175,14 @@ class SchoolSyncCoordinator @Inject constructor(
         )
       }
       if (historyEntries.isNotEmpty()) {
+        ensureSessionUnchanged(operation)
         changeHistoryDao.upsertAll(historyEntries)
       }
+      ensureSessionUnchanged(operation)
       agendaDao.deleteByYear(session.studentId, schoolYear.id)
       agendaDao.upsertAll(entities)
       storeYearScopedValue(
+        operation,
         AgendaSection,
         schoolYear,
         resolvedAgenda.map { resolved ->
@@ -1052,10 +1203,11 @@ class SchoolSyncCoordinator @Inject constructor(
   private suspend fun syncAbsences(
     schoolYear: SchoolYearRef,
     errors: MutableList<String>,
-    session: UserSession,
+    operation: SessionOperation,
     fetch: suspend () -> List<AbsenceRecord>,
   ) {
     runCatching {
+      val session = operation.session
       val absences = fetch()
       val entities = absences.map { record ->
         AbsenceEntity(
@@ -1073,9 +1225,10 @@ class SchoolSyncCoordinator @Inject constructor(
           detailUrl = record.detailUrl,
         )
       }
+      ensureSessionUnchanged(operation)
       absenceDao.deleteByYear(session.studentId, schoolYear.id)
       absenceDao.upsertAll(entities)
-      storeYearScopedValue(AbsencesSection, schoolYear, absences)
+      storeYearScopedValue(operation, AbsencesSection, schoolYear, absences)
     }.onFailure {
       errors += AbsencesSection
     }
@@ -1084,10 +1237,11 @@ class SchoolSyncCoordinator @Inject constructor(
   private suspend fun syncCommunications(
     schoolYear: SchoolYearRef,
     errors: MutableList<String>,
-    session: UserSession,
+    operation: SessionOperation,
     fetch: suspend () -> List<Communication>,
   ) {
     runCatching {
+      val session = operation.session
       val localReadIds = communicationDao.getReadIds(session.studentId, schoolYear.id).toSet()
       val communications = preserveLocallyReadCommunications(fetch(), localReadIds)
       val entities = communications.map { comm ->
@@ -1113,9 +1267,10 @@ class SchoolSyncCoordinator @Inject constructor(
           capabilityState = json.encodeToString(comm.capabilityState),
         )
       }
+      ensureSessionUnchanged(operation)
       communicationDao.deleteByYear(session.studentId, schoolYear.id)
       communicationDao.upsertAll(entities)
-      storeYearScopedValue(CommunicationsSection, schoolYear, communications)
+      storeYearScopedValue(operation, CommunicationsSection, schoolYear, communications)
     }.onFailure {
       errors += CommunicationsSection
     }
@@ -1124,10 +1279,11 @@ class SchoolSyncCoordinator @Inject constructor(
   private suspend fun syncMaterials(
     schoolYear: SchoolYearRef,
     errors: MutableList<String>,
-    session: UserSession,
+    operation: SessionOperation,
     fetch: suspend () -> List<MaterialItem>,
   ) {
     runCatching {
+      val session = operation.session
       val materials = fetch()
       val entities = materials.map { mat ->
         MaterialEntity(
@@ -1146,9 +1302,9 @@ class SchoolSyncCoordinator @Inject constructor(
           attachments = json.encodeToString(mat.attachments),
         )
       }
-      materialDao.deleteByYear(session.studentId, schoolYear.id)
-      materialDao.upsertAll(entities)
-      storeYearScopedValue(MaterialsSection, schoolYear, materials)
+      ensureSessionUnchanged(operation)
+      materialDao.replaceByYear(session.studentId, schoolYear.id, entities)
+      storeYearScopedValue(operation, MaterialsSection, schoolYear, materials)
     }.onFailure {
       errors += MaterialsSection
     }
@@ -1157,71 +1313,91 @@ class SchoolSyncCoordinator @Inject constructor(
   private suspend fun syncDocuments(
     schoolYear: SchoolYearRef,
     errors: MutableList<String>,
-    session: UserSession,
+    operation: SessionOperation,
     fetch: suspend () -> List<DocumentItem>,
   ) {
     runCatching {
+      val session = operation.session
       val documents = fetch()
       val entities = documents.map { doc ->
         DocumentEntity(
-          id = doc.id,
+          id = persistedDocumentId(doc),
           studentId = session.studentId,
           schoolYearId = schoolYear.id,
           title = doc.title,
           detail = doc.detail,
+          kind = doc.kind.name,
+          remoteHash = doc.remoteHash,
+          restReadUrl = doc.restReadUrl,
+          portalViewUrl = doc.portalViewUrl,
+          portalConfirmUrl = doc.portalConfirmUrl,
           viewUrl = doc.viewUrl,
           confirmUrl = doc.confirmUrl,
           capabilityState = json.encodeToString(doc.capabilityState),
         )
       }
-      documentDao.deleteByYear(session.studentId, schoolYear.id)
-      documentDao.upsertAll(entities)
-      storeYearScopedValue(DocumentsSection, schoolYear, documents)
+      ensureSessionUnchanged(operation)
+      documentDao.replaceByYear(session.studentId, schoolYear.id, entities)
+      storeYearScopedValue(operation, DocumentsSection, schoolYear, documents)
     }.onFailure {
       errors += DocumentsSection
     }
   }
 
   private suspend inline fun <reified T> syncGlobal(
+    operation: SessionOperation,
     key: String,
     errors: MutableList<String>,
     crossinline fetch: suspend () -> T,
   ) {
     runCatching {
       val value = fetch()
-      upsertSnapshotIfChanged(key, json.encodeToString(value))
+      upsertSnapshotIfChanged(
+        operation,
+        studentScopedCacheKey(operation.session.studentId, key),
+        json.encodeToString(value),
+      )
     }.onFailure {
       errors += key
     }
   }
 
   private suspend inline fun <reified T> syncYearScoped(
+    operation: SessionOperation,
     section: String,
     schoolYear: SchoolYearRef,
     errors: MutableList<String>,
     crossinline fetch: suspend () -> T,
   ) {
     runCatching {
-      storeYearScopedValue(section, schoolYear, fetch())
+      storeYearScopedValue(operation, section, schoolYear, fetch())
     }.onFailure {
       errors += section
     }
   }
 
   private suspend inline fun <reified T> storeYearScopedValue(
+    operation: SessionOperation,
     section: String,
     schoolYear: SchoolYearRef,
     value: T,
   ) {
     upsertSnapshotIfChanged(
-      cacheKey = yearScopedCacheKey(section, schoolYear),
+      operation = operation,
+      cacheKey = yearScopedCacheKey(operation.session.studentId, section, schoolYear),
       payload = json.encodeToString(value),
     )
   }
 
-  private suspend fun upsertSnapshotIfChanged(cacheKey: String, payload: String) {
+  private suspend fun upsertSnapshotIfChanged(
+    operation: SessionOperation,
+    cacheKey: String,
+    payload: String,
+  ) {
+    ensureSessionUnchanged(operation)
     val existing = snapshotCacheDao.getByKey(cacheKey)
     if (existing?.payload == payload) return
+    ensureSessionUnchanged(operation)
     snapshotCacheDao.upsert(
       SnapshotCacheEntity(
         cacheKey = cacheKey,
@@ -1232,26 +1408,86 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   private suspend inline fun <reified T> clearYearScoped(
+    operation: SessionOperation,
     section: String,
     schoolYear: SchoolYearRef,
     emptyValue: T,
   ) {
-    storeYearScopedValue(section, schoolYear, emptyValue)
+    storeYearScopedValue(operation, section, schoolYear, emptyValue)
   }
 
   private suspend inline fun <reified T> readYearScopedValue(
+    operation: SessionOperation,
     section: String,
     schoolYear: SchoolYearRef,
     default: T,
   ): T {
-    val entity = snapshotCacheDao.getByKey(yearScopedCacheKey(section, schoolYear)) ?: return default
+    ensureSessionUnchanged(operation)
+    val entity = snapshotCacheDao.getByKey(
+      yearScopedCacheKey(operation.session.studentId, section, schoolYear),
+    )
+    ensureSessionUnchanged(operation)
+    if (entity == null) return default
     return runCatching { json.decodeFromString<T>(entity.payload) }.getOrDefault(default)
   }
 
-  private suspend fun refreshCommunicationsSnapshot(schoolYear: SchoolYearRef) {
+  private suspend fun recordSyncAttempts(
+    operation: SessionOperation,
+    schoolYear: SchoolYearRef,
+    sections: Set<String>,
+    attemptedAt: Long,
+  ) {
+    val studentId = operation.session.studentId
+    sections.forEach { section ->
+      ensureSessionUnchanged(operation)
+      val previous = syncMetadataDao.get(studentId, schoolYear.id, section)
+      ensureSessionUnchanged(operation)
+      syncMetadataDao.upsert(
+        SyncMetadataEntity(
+          studentId = studentId,
+          schoolYearId = schoolYear.id,
+          section = section,
+          lastAttemptAtEpochMillis = attemptedAt,
+          lastSuccessAtEpochMillis = previous?.lastSuccessAtEpochMillis,
+          lastError = null,
+        ),
+      )
+    }
+  }
+
+  private suspend fun recordSyncResults(
+    operation: SessionOperation,
+    schoolYear: SchoolYearRef,
+    sections: Set<String>,
+    errors: List<String>,
+    completedAt: Long,
+  ) {
+    val studentId = operation.session.studentId
+    sections.forEach { section ->
+      ensureSessionUnchanged(operation)
+      val previous = syncMetadataDao.get(studentId, schoolYear.id, section)
+      ensureSessionUnchanged(operation)
+      val failed = section in errors
+      syncMetadataDao.upsert(
+        SyncMetadataEntity(
+          studentId = studentId,
+          schoolYearId = schoolYear.id,
+          section = section,
+          lastAttemptAtEpochMillis = previous?.lastAttemptAtEpochMillis ?: completedAt,
+          lastSuccessAtEpochMillis = if (failed) previous?.lastSuccessAtEpochMillis else completedAt,
+          lastError = if (failed) "Aggiornamento non riuscito" else null,
+        ),
+      )
+    }
+  }
+
+  private suspend fun refreshCommunicationsSnapshot(
+    schoolYear: SchoolYearRef,
+    operation: SessionOperation,
+  ) {
     if (schoolYear.id != schoolYearStore.currentSchoolYearRef().id) return
-    val session = activeSession ?: return
-    syncCommunications(schoolYear, mutableListOf(), session) {
+    ensureSessionUnchanged(operation)
+    syncCommunications(schoolYear, mutableListOf(), operation) {
       restClient.getCommunications()
     }
   }
@@ -1306,38 +1542,48 @@ class SchoolSyncCoordinator @Inject constructor(
     )
   }
 
-  private suspend fun refreshNotesSnapshot(schoolYear: SchoolYearRef) {
+  private suspend fun refreshNotesSnapshot(
+    schoolYear: SchoolYearRef,
+    operation: SessionOperation,
+  ) {
     if (schoolYear.id != schoolYearStore.currentSchoolYearRef().id) return
     storeYearScopedValue(
+      operation,
       NotesSection,
       schoolYear,
       restClient.getNotes(),
     )
   }
 
-  private suspend fun refreshMeetingsSnapshot(schoolYear: SchoolYearRef) {
+  private suspend fun refreshMeetingsSnapshot(
+    schoolYear: SchoolYearRef,
+    operation: SessionOperation,
+  ) {
     val page = portalClient.getMeetingsPageHtml()
+    ensureSessionUnchanged(operation)
     if (page == null) {
-      clearMeetings(schoolYear)
+      clearMeetings(schoolYear, operation)
       return
     }
     val snapshot = parseMeetingsSnapshot(page.first, page.second)
-    storeYearScopedValue(MeetingTeachersSection, schoolYear, snapshot.teachers)
-    storeYearScopedValue(MeetingSlotsSection, schoolYear, snapshot.slots)
-    storeYearScopedValue(MeetingBookingsSection, schoolYear, snapshot.bookings)
+    storeYearScopedValue(operation, MeetingTeachersSection, schoolYear, snapshot.teachers)
+    storeYearScopedValue(operation, MeetingSlotsSection, schoolYear, snapshot.slots)
+    storeYearScopedValue(operation, MeetingBookingsSection, schoolYear, snapshot.bookings)
   }
 
   private suspend fun persistTimetableTemplate(
     schoolYear: SchoolYearRef,
-    session: UserSession,
+    operation: SessionOperation,
   ) {
+    val session = operation.session
+    ensureSessionUnchanged(operation)
     val currentTemplate = timetableTemplateStore.observeTemplate(schoolYear.id).first()
     if (currentTemplate.isOfficial == true) {
       // Do not overwrite official imported template
       return
     }
     
-    val lessons = readYearScopedValue(LessonsSection, schoolYear, emptyList<Lesson>())
+    val lessons = readYearScopedValue(operation, LessonsSection, schoolYear, emptyList<Lesson>())
     val agenda = agendaDao.getByYearOnce(session.studentId, schoolYear.id).map { entity ->
       AgendaItem(
         id = entity.id,
@@ -1357,17 +1603,21 @@ class SchoolSyncCoordinator @Inject constructor(
     
     val newTemplate = predictiveTimetableUseCase.generateTimetableTemplate(preparedLessons)
     val merged = newTemplate.copy(manualOverrides = currentTemplate?.manualOverrides ?: emptyMap())
-    
+
+    ensureSessionUnchanged(operation)
     timetableTemplateStore.writeTemplate(
       schoolYear.id,
       merged,
     )
   }
 
-  private suspend fun clearMeetings(schoolYear: SchoolYearRef) {
-    storeYearScopedValue(MeetingTeachersSection, schoolYear, emptyList<MeetingTeacher>())
-    storeYearScopedValue(MeetingSlotsSection, schoolYear, emptyList<MeetingSlot>())
-    storeYearScopedValue(MeetingBookingsSection, schoolYear, emptyList<MeetingBooking>())
+  private suspend fun clearMeetings(
+    schoolYear: SchoolYearRef,
+    operation: SessionOperation,
+  ) {
+    storeYearScopedValue(operation, MeetingTeachersSection, schoolYear, emptyList<MeetingTeacher>())
+    storeYearScopedValue(operation, MeetingSlotsSection, schoolYear, emptyList<MeetingSlot>())
+    storeYearScopedValue(operation, MeetingBookingsSection, schoolYear, emptyList<MeetingBooking>())
   }
 
   private fun schoolYearStart(schoolYear: SchoolYearRef): LocalDate {
@@ -1734,11 +1984,25 @@ class SchoolSyncCoordinator @Inject constructor(
     title: String,
     fileName: String?,
     declaredMimeType: String?,
-    bytes: ByteArray,
   ): String? {
     return declaredMimeType
       ?: java.net.URLConnection.guessContentTypeFromName(fileName ?: title)
-      ?: java.net.URLConnection.guessContentTypeFromStream(bytes.inputStream())
+  }
+
+  private fun documentCacheId(item: DocumentItem): String {
+    val revision = item.remoteHash
+      ?: item.restReadUrl
+      ?: item.portalViewUrl
+      ?: item.portalConfirmUrl
+      ?: item.viewUrl
+      ?: item.confirmUrl
+      ?: "unversioned"
+    return "${item.kind}:${item.id}:$revision"
+  }
+
+  private fun persistedDocumentId(item: DocumentItem): String {
+    val prefix = "${item.kind.name}::"
+    return if (item.id.startsWith(prefix)) item.id else "$prefix${item.id}"
   }
 
   private fun epochMillisToCreatedAt(value: Long): String {

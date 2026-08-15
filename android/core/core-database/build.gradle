@@ -15,6 +15,10 @@ android {
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
   }
 
+  sourceSets {
+    androidTest.assets.srcDirs += files("$projectDir/schemas")
+  }
+
   compileOptions {
     sourceCompatibility JavaVersion.VERSION_17
     targetCompatibility JavaVersion.VERSION_17
@@ -23,6 +27,10 @@ android {
   kotlinOptions {
     jvmTarget = "17"
   }
+}
+
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -35,9 +43,11 @@ dependencies {
 
   ksp libs.room.compiler
   ksp libs.hilt.compiler
+  kspAndroidTest libs.room.compiler
 
   testImplementation libs.junit4
   androidTestImplementation libs.androidx.test.ext.junit
+  androidTestImplementation libs.androidx.test.runner
   androidTestImplementation libs.room.testing
   androidTestImplementation libs.kotlinx.coroutines.test
   androidTestImplementation libs.turbine

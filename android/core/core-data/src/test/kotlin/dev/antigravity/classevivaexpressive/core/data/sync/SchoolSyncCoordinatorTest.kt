@@ -4,8 +4,13 @@ import android.util.Log
 import dev.antigravity.classevivaexpressive.core.data.repository.AgendaSection
 import dev.antigravity.classevivaexpressive.core.data.repository.GradesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkSection
+import dev.antigravity.classevivaexpressive.core.data.repository.MaterialsSection
+import dev.antigravity.classevivaexpressive.core.data.repository.DocumentsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.NotesSection
+import dev.antigravity.classevivaexpressive.core.data.repository.SchoolbooksSection
 import dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey
+import dev.antigravity.classevivaexpressive.core.data.preview.PrivateAssetStore
+import dev.antigravity.classevivaexpressive.core.data.preview.CachedPrivateAsset
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaItemEntity
@@ -18,17 +23,23 @@ import dev.antigravity.classevivaexpressive.core.database.database.GradeEntity
 import dev.antigravity.classevivaexpressive.core.database.database.MaterialDao
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao
+import dev.antigravity.classevivaexpressive.core.database.database.SyncMetadataDao
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
+import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityState
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
 import dev.antigravity.classevivaexpressive.core.datastore.TimetableTemplateStore
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
+import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
+import dev.antigravity.classevivaexpressive.core.domain.model.DocumentKind
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
+import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
+import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
@@ -37,13 +48,18 @@ import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCase
 import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaNetworkException
 import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaRestClient
+import dev.antigravity.classevivaexpressive.core.network.client.NetworkDocumentStream
 import dev.antigravity.classevivaexpressive.core.network.client.PortalClient
+import java.io.ByteArrayInputStream
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.verify
+import io.mockk.verifyOrder
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.decodeFromString
@@ -61,6 +77,7 @@ class SchoolSyncCoordinatorTest {
   private val schoolYearStore = mockk<SchoolYearStore>(relaxed = true)
   private val timetableTemplateStore = mockk<TimetableTemplateStore>(relaxed = true)
   private val snapshotCacheDao = mockk<SnapshotCacheDao>(relaxed = true)
+  private val syncMetadataDao = mockk<SyncMetadataDao>(relaxed = true)
   private val gradeDao = mockk<GradeDao>(relaxed = true)
   private val agendaDao = mockk<AgendaDao>(relaxed = true)
   private val changeHistoryDao = mockk<ChangeHistoryDao>(relaxed = true)
@@ -68,6 +85,7 @@ class SchoolSyncCoordinatorTest {
   private val communicationDao = mockk<CommunicationDao>(relaxed = true)
   private val materialDao = mockk<MaterialDao>(relaxed = true)
   private val documentDao = mockk<DocumentDao>(relaxed = true)
+  private val privateAssetStore = mockk<PrivateAssetStore>(relaxed = true)
   private val predictiveTimetableUseCase = mockk<PredictiveTimetableUseCase>(relaxed = true)
 
   private val currentYear = SchoolYearRef(startYear = 2025, endYear = 2026)
@@ -92,6 +110,7 @@ class SchoolSyncCoordinatorTest {
       schoolYearStore = schoolYearStore,
       timetableTemplateStore = timetableTemplateStore,
       snapshotCacheDao = snapshotCacheDao,
+      syncMetadataDao = syncMetadataDao,
       gradeDao = gradeDao,
       agendaDao = agendaDao,
       changeHistoryDao = changeHistoryDao,
@@ -99,6 +118,7 @@ class SchoolSyncCoordinatorTest {
       communicationDao = communicationDao,
       materialDao = materialDao,
       documentDao = documentDao,
+      privateAssetStore = privateAssetStore,
       predictiveTimetableUseCase = predictiveTimetableUseCase,
     ).also {
       it.attachSession(session)
@@ -827,7 +847,7 @@ class SchoolSyncCoordinatorTest {
   @Test
   fun refreshCurrentSchoolYearForNotifications_doesNotRewriteUnchangedSnapshotPayload() = runTest {
     stubLog()
-    val key = yearScopedCacheKey(NotesSection, currentYear)
+    val key = yearScopedCacheKey(session.studentId, NotesSection, currentYear)
     coEvery { snapshotCacheDao.getByKey(key) } returns SnapshotCacheEntity(
       cacheKey = key,
       payload = "[]",
@@ -844,8 +864,298 @@ class SchoolSyncCoordinatorTest {
 
     coVerify(exactly = 0) { snapshotCacheDao.upsert(match { it.cacheKey == key }) }
     coVerify(exactly = 1) {
-      snapshotCacheDao.upsert(match { it.cacheKey == SyncStatusCacheKey && it.payload.toLongOrNull() != null })
+      snapshotCacheDao.upsert(match {
+        it.cacheKey == syncStatusCacheKey(session.studentId) && it.payload.toLongOrNull() != null
+      })
     }
+  }
+
+  @Test
+  fun refreshMaterials_replacesTheRoomYearAtomically() = runTest {
+    stubLog()
+    val material = MaterialItem(
+      id = "same-remote-id",
+      teacherId = "teacher",
+      teacherName = "Docente",
+      folderId = "folder",
+      folderName = "Cartella",
+      title = "Dispensa",
+      objectId = "object",
+      objectType = "FILE",
+      sharedAt = "2026-04-01",
+      capabilityState = CapabilityState(),
+    )
+    coEvery { restClient.getMaterials() } returns listOf(material)
+    val coordinator = buildCoordinator()
+
+    coordinator.refreshSections(force = true, sections = setOf(MaterialsSection))
+
+    coVerify(exactly = 1) {
+      materialDao.replaceByYear(
+        session.studentId,
+        currentYear.id,
+        match { entities -> entities.single().id == material.id },
+      )
+    }
+  }
+
+  @Test
+  fun refreshDocuments_namespacesSameRemoteIdByDocumentKind() = runTest {
+    stubLog()
+    coEvery { restClient.getDocuments() } returns listOf(
+      DocumentItem(id = "same-id", title = "Documento", detail = "Documento"),
+      DocumentItem(
+        id = "same-id",
+        title = "Pagella",
+        detail = "Pagella",
+        kind = DocumentKind.SCHOOL_REPORT,
+        portalViewUrl = "https://web.spaggiari.eu/report/view",
+      ),
+    )
+    val coordinator = buildCoordinator()
+
+    coordinator.refreshSections(force = true, sections = setOf(DocumentsSection))
+
+    coVerify(exactly = 1) {
+      documentDao.replaceByYear(
+        session.studentId,
+        currentYear.id,
+        match { entities ->
+          entities.map { it.id }.toSet() == setOf("DOCUMENT::same-id", "SCHOOL_REPORT::same-id")
+        },
+      )
+    }
+  }
+
+  @Test
+  fun refreshSchoolbooks_persistsSectionFailureInsteadOfAnAuthenticEmptyState() = runTest {
+    stubLog()
+    coEvery { syncMetadataDao.get(session.studentId, currentYear.id, SchoolbooksSection) } returns null
+    coEvery { restClient.getSchoolbooks() } throws ClassevivaNetworkException("Libri non disponibili")
+    val coordinator = buildCoordinator()
+
+    val status = coordinator.refreshSections(force = true, sections = setOf(SchoolbooksSection))
+
+    assertTrue(SchoolbooksSection in status.failedSections)
+    coVerify {
+      syncMetadataDao.upsert(match { metadata ->
+        metadata.studentId == session.studentId &&
+          metadata.schoolYearId == currentYear.id &&
+          metadata.section == SchoolbooksSection &&
+          metadata.lastError != null
+      })
+    }
+  }
+
+  @Test
+  fun refreshMaterials_discardsAccountAResponseAfterSessionChangesToAccountB() = runTest {
+    stubLog()
+    val fetchStarted = CompletableDeferred<Unit>()
+    val releaseFetch = CompletableDeferred<Unit>()
+    val material = MaterialItem(
+      id = "material-a",
+      teacherId = "teacher",
+      teacherName = "Docente",
+      folderId = "folder",
+      folderName = "Cartella",
+      title = "Dispensa A",
+      objectId = "object-a",
+      objectType = "FILE",
+      sharedAt = "2026-04-01",
+      capabilityState = CapabilityState(),
+    )
+    coEvery { restClient.getMaterials() } coAnswers {
+      fetchStarted.complete(Unit)
+      releaseFetch.await()
+      listOf(material)
+    }
+    val coordinator = buildCoordinator()
+
+    val refresh = async {
+      coordinator.refreshSections(force = true, sections = setOf(MaterialsSection))
+    }
+    fetchStarted.await()
+    val accountB = session.copy(
+      token = "token-b",
+      studentId = "99",
+      username = "student-b",
+      profile = session.profile.copy(id = "99"),
+    )
+    coordinator.attachSession(null)
+    coordinator.attachSession(accountB)
+    releaseFetch.complete(Unit)
+
+    val status = refresh.await()
+
+    assertEquals(SyncState.ERROR, status.state)
+    coVerify(exactly = 0) { materialDao.replaceByYear(any(), any(), any()) }
+    coVerify(exactly = 0) {
+      snapshotCacheDao.upsert(match { it.cacheKey == yearScopedCacheKey("99", MaterialsSection, currentYear) })
+    }
+    verifyOrder {
+      restClient.setSession(session)
+      restClient.setSession(null)
+      restClient.setSession(accountB)
+    }
+  }
+
+  @Test
+  fun openMaterial_discardsTemporaryAssetWhenLogoutAndAccountSwitchWinTheRace() = runTest {
+    val streamStarted = CompletableDeferred<Unit>()
+    val releaseStream = CompletableDeferred<Unit>()
+    val material = MaterialItem(
+      id = "material-a",
+      teacherId = "teacher",
+      teacherName = "Docente",
+      folderId = "folder",
+      folderName = "Cartella",
+      title = "Dispensa A",
+      objectId = "object-a",
+      objectType = "FILE",
+      sharedAt = "2026-04-01",
+      capabilityState = CapabilityState(),
+    )
+    val cacheId = "${material.id}:${material.objectId}:${material.sharedAt}"
+    val stream = mockk<NetworkDocumentStream>(relaxed = true)
+    every { stream.fileName } returns "dispensa-a.pdf"
+    every { stream.mimeType } returns "application/pdf"
+    every { stream.byteStream() } returns ByteArrayInputStream("account-a".encodeToByteArray())
+    every { privateAssetStore.find(session.studentId, currentYear.id, cacheId) } returns null
+    every {
+      privateAssetStore.store(
+        studentId = session.studentId,
+        schoolYearId = currentYear.id,
+        assetId = cacheId,
+        displayName = "dispensa-a.pdf",
+        mimeType = "application/pdf",
+        input = any(),
+        validateBeforeCommit = any(),
+      )
+    } answers {
+      @Suppress("UNCHECKED_CAST")
+      (invocation.args[6] as () -> Unit).invoke()
+      "content://private/account-a.pdf"
+    }
+    coEvery { restClient.openMaterialStream(material) } coAnswers {
+      streamStarted.complete(Unit)
+      releaseStream.await()
+      stream
+    }
+    val coordinator = buildCoordinator()
+
+    val open = async { coordinator.openMaterial(material) }
+    streamStarted.await()
+    coordinator.attachSession(null)
+    coordinator.attachSession(
+      session.copy(token = "token-b", studentId = "99", username = "student-b"),
+    )
+    releaseStream.complete(Unit)
+
+    assertTrue(open.await().isFailure)
+    verify(exactly = 1) { privateAssetStore.delete(session.studentId, currentYear.id, cacheId) }
+  }
+
+  @Test
+  fun openMaterial_streamsAuthenticatedBodyDirectlyIntoPrivateAccountCache() = runTest {
+    val material = MaterialItem(
+      id = "material-1",
+      teacherId = "teacher",
+      teacherName = "Docente",
+      folderId = "folder",
+      folderName = "Cartella",
+      title = "Dispensa",
+      objectId = "object-1",
+      objectType = "FILE",
+      sharedAt = "2026-04-01",
+      capabilityState = CapabilityState(),
+    )
+    val stream = mockk<NetworkDocumentStream>(relaxed = true)
+    every { stream.fileName } returns "dispensa.pdf"
+    every { stream.mimeType } returns "application/pdf"
+    every { stream.byteStream() } returns ByteArrayInputStream("pdf-body".encodeToByteArray())
+    every { privateAssetStore.find(session.studentId, currentYear.id, any()) } returns null
+    every {
+      privateAssetStore.store(
+        studentId = session.studentId,
+        schoolYearId = currentYear.id,
+        assetId = any(),
+        displayName = "dispensa.pdf",
+        mimeType = "application/pdf",
+        input = any(),
+        validateBeforeCommit = any(),
+      )
+    } answers {
+      @Suppress("UNCHECKED_CAST")
+      (invocation.args[6] as () -> Unit).invoke()
+      "content://private/dispensa.pdf"
+    }
+    coEvery { restClient.openMaterialStream(material) } returns stream
+    val coordinator = buildCoordinator()
+
+    val asset = coordinator.openMaterial(material).getOrThrow()
+
+    assertEquals("content://private/dispensa.pdf", asset.contentUri)
+    coVerify(exactly = 1) { restClient.openMaterialStream(material) }
+    verify(exactly = 1) { stream.byteStream() }
+    verify(exactly = 1) { stream.close() }
+  }
+
+  @Test
+  fun openMaterial_returnsSafeExternalUrlForUppercaseLinkWithoutStartingAStream() = runTest {
+    val externalUrl = "https://example.test/resource"
+    val material = MaterialItem(
+      id = "link-1",
+      teacherId = "teacher",
+      teacherName = "Docente",
+      folderId = "folder",
+      folderName = "Cartella",
+      title = "Risorsa esterna",
+      objectId = "object-link",
+      objectType = "LINK",
+      sharedAt = "2026-04-01",
+      capabilityState = CapabilityState(),
+      attachments = listOf(
+        RemoteAttachment(
+          id = "attachment-1",
+          name = "Apri risorsa",
+          url = externalUrl,
+          mimeType = "text/html",
+        ),
+      ),
+    )
+    every { restClient.resolveMaterialExternalUrl(material) } returns externalUrl
+    val coordinator = buildCoordinator()
+
+    val asset = coordinator.openMaterial(material).getOrThrow()
+
+    assertEquals(externalUrl, asset.externalUrl)
+    assertEquals(null, asset.contentUri)
+    coVerify(exactly = 0) { restClient.openMaterialStream(any()) }
+    verify(exactly = 0) { privateAssetStore.store(any(), any(), any(), any(), any(), any(), any()) }
+  }
+
+  @Test
+  fun openDocument_returnsAccountScopedCachedAssetWithoutNetwork() = runTest {
+    val document = DocumentItem(
+      id = "doc-1",
+      title = "Pagella.pdf",
+      detail = "Documento",
+      remoteHash = "revision-1",
+    )
+    every {
+      privateAssetStore.find(
+        studentId = session.studentId,
+        schoolYearId = currentYear.id,
+        assetId = any(),
+      )
+    } returns CachedPrivateAsset("content://cached/doc-1", "Pagella.pdf")
+    val coordinator = buildCoordinator()
+
+    val asset = coordinator.openDocument(document).getOrThrow()
+
+    assertEquals("content://cached/doc-1", asset.contentUri)
+    coVerify(exactly = 0) { restClient.openDocumentStream(any()) }
+    coVerify(exactly = 0) { portalClient.openSchoolReport(any(), any()) }
   }
 
   @Test

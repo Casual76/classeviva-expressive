@@ -15,6 +15,8 @@ import dev.antigravity.classevivaexpressive.core.data.external.ExternalDashboard
 import dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinator
 import dev.antigravity.classevivaexpressive.core.data.sync.observePersistedSyncStatus
 import dev.antigravity.classevivaexpressive.core.data.sync.withPersistedLastSuccess
+import dev.antigravity.classevivaexpressive.core.data.preview.PrivateSessionDataCleaner
+import dev.antigravity.classevivaexpressive.core.data.preview.privateAccountPathPart
 import dev.antigravity.classevivaexpressive.core.data.notifications.AbsencesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.AgendaChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.AppNotificationChannels
@@ -51,6 +53,7 @@ import dev.antigravity.classevivaexpressive.core.database.database.SeenGradeEnti
 import dev.antigravity.classevivaexpressive.core.database.database.SimulationDao
 import dev.antigravity.classevivaexpressive.core.database.database.SimulatedGradeEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao
+import dev.antigravity.classevivaexpressive.core.database.database.SyncMetadataDao
 import dev.antigravity.classevivaexpressive.core.database.database.SubjectGoalDao
 import dev.antigravity.classevivaexpressive.core.database.database.SubjectGoalEntity
 import dev.antigravity.classevivaexpressive.core.database.database.StudentScoreDao
@@ -79,6 +82,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepositor
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardStat
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentAsset
+import dev.antigravity.classevivaexpressive.core.domain.model.DocumentKind
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
@@ -107,6 +111,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPrefer
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
 import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
+import dev.antigravity.classevivaexpressive.core.domain.model.RepositoryRefreshMetadata
 import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolbookCourse
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
@@ -134,8 +139,6 @@ import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCase
 import dev.antigravity.classevivaexpressive.core.network.client.ApiSessionManager
 
-import dev.antigravity.classevivaexpressive.core.network.client.DevApiKey
-import dev.antigravity.classevivaexpressive.core.network.client.UserAgent
 import dev.antigravity.classevivaexpressive.core.network.client.normalizeNoticeboardAttachmentUrl
 import dev.antigravity.classevivaexpressive.core.network.client.noticeboardAttachmentDownloadCandidates
 import javax.inject.Inject
@@ -166,6 +169,7 @@ class SchoolAuthRepository @Inject constructor(
   private val sessionStore: SessionStore,
   private val syncCoordinator: SchoolSyncCoordinator,
   private val apiSessionManager: ApiSessionManager,
+  private val privateSessionDataCleaner: PrivateSessionDataCleaner,
 ) : AuthRepository {
   override val session: StateFlow<UserSession?> = sessionStore.session
 
@@ -178,13 +182,15 @@ class SchoolAuthRepository @Inject constructor(
   override suspend fun login(username: String, password: String): Result<UserSession> = runCatching {
     syncCoordinator.login(username, password)
   }.onFailure {
-    sessionStore.clear()
     syncCoordinator.attachSession(null)
+    sessionStore.clear()
   }
 
   override suspend fun logout() {
-    sessionStore.clear()
+    val studentId = session.value?.studentId
     syncCoordinator.attachSession(null)
+    sessionStore.clear()
+    privateSessionDataCleaner.clear(studentId)
     syncCoordinator.clearPortalSession()
   }
 }
@@ -192,7 +198,8 @@ class SchoolAuthRepository @Inject constructor(
 @Singleton
 class SchoolSettingsRepository @Inject constructor(
   private val settingsStore: SettingsStore,
-  @ApplicationContext private val context: Context,
+  private val sessionStore: SessionStore,
+  @param:ApplicationContext private val context: Context,
   private val snapshotCacheDao: SnapshotCacheDao,
   private val schoolYearStore: SchoolYearStore,
   private val json: Json,
@@ -262,6 +269,7 @@ class SchoolSettingsRepository @Inject constructor(
       context = context,
       settingsStore = settingsStore,
       snapshotCacheDao = snapshotCacheDao,
+      sessionStore = sessionStore,
       schoolYearStore = schoolYearStore,
       json = json,
     )
@@ -295,6 +303,7 @@ private val StudentScoreRefreshSections = StatsRefreshSections
 class SchoolDataRepository @Inject constructor(
   private val json: Json,
   private val snapshotCacheDao: SnapshotCacheDao,
+  private val syncMetadataDao: SyncMetadataDao,
   private val customEventDao: CustomEventDao,
   private val simulationDao: SimulationDao,
   private val studentScoreDao: StudentScoreDao,
@@ -317,7 +326,7 @@ class SchoolDataRepository @Inject constructor(
   private val capabilityResolver: CapabilityResolver,
   private val predictiveTimetableUseCase: PredictiveTimetableUseCase,
   private val externalDashboardInvalidators: Set<@JvmSuppressWildcards ExternalDashboardInvalidator>,
-  @ApplicationContext private val context: Context,
+  @param:ApplicationContext private val context: Context,
 ) : DashboardRepository,
   GradesRepository,
   AgendaRepository,
@@ -338,11 +347,17 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override fun observeDashboard(): Flow<DashboardSnapshot> {
-    val syncStatusFlow = schoolYearStore.observeSelectedSchoolYear()
-      .flatMapLatest { schoolYear ->
+    val syncStatusFlow = combine(
+      sessionStore.session,
+      schoolYearStore.observeSelectedSchoolYear(),
+    ) { session, schoolYear -> session to schoolYear }
+      .flatMapLatest { (session, schoolYear) ->
+        val persistedStatus = session?.studentId?.let { studentId ->
+          observePersistedSyncStatus(snapshotCacheDao, studentId, schoolYear)
+        } ?: flowOf(SyncStatus())
         combine(
           syncCoordinator.syncStatus,
-          observePersistedSyncStatus(snapshotCacheDao, schoolYear),
+          persistedStatus,
         ) { runtime, persisted ->
           runtime.withPersistedLastSuccess(persisted)
         }
@@ -847,12 +862,14 @@ class SchoolDataRepository @Inject constructor(
 
   override suspend fun resolveAttachmentLocalPath(attachment: RemoteAttachment): Result<String> = runCatching {
     require(!attachment.url.isNullOrBlank()) { "Nessun URL disponibile per l'allegato." }
+    val studentId = sessionStore.session.value?.studentId ?: error("Sessione assente.")
     val originalUrl = attachment.url!!
     val url = normalizeNoticeboardAttachmentUrl(originalUrl)
-    val urlKey = url.trim().take(250)
+    val urlKey = "$studentId::${url.trim()}".take(250)
     val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000
 
-    val cacheDir = java.io.File(context.filesDir, "attachment_cache")
+    val accountDirectory = privateAccountPathPart(studentId)
+    val cacheDir = java.io.File(context.filesDir, "attachment_cache/$accountDirectory")
 
     // Return cached file if still valid.
     val cached = attachmentCacheDao.getByUrlKey(urlKey)
@@ -973,7 +990,16 @@ class SchoolDataRepository @Inject constructor(
     observeMaterials().firstValue()
   }
 
-  override suspend fun openAsset(item: MaterialItem): Result<MaterialAsset> = syncCoordinator.openMaterial(item)
+  override fun observeMaterialsRefreshMetadata(): Flow<RepositoryRefreshMetadata> =
+    observeRefreshMetadata(MaterialsSection)
+
+  override suspend fun openAsset(item: MaterialItem): Result<MaterialAsset> = runCatching {
+    syncCoordinator.openMaterial(item).getOrThrow().also { asset ->
+      require(!asset.contentUri.isNullOrBlank()) { "Il materiale non e stato salvato nella cache privata." }
+    }
+  }
+
+  override suspend fun queueDownload(item: MaterialItem): Result<MaterialAsset> = openAsset(item)
 
   override fun observeDocuments(): Flow<List<DocumentItem>> {
     return combine(
@@ -989,6 +1015,11 @@ class SchoolDataRepository @Inject constructor(
             id = entity.id,
             title = entity.title,
             detail = entity.detail,
+            kind = runCatching { DocumentKind.valueOf(entity.kind) }.getOrDefault(DocumentKind.DOCUMENT),
+            remoteHash = entity.remoteHash,
+            restReadUrl = entity.restReadUrl,
+            portalViewUrl = entity.portalViewUrl,
+            portalConfirmUrl = entity.portalConfirmUrl,
             viewUrl = entity.viewUrl,
             confirmUrl = entity.confirmUrl,
             capabilityState = json.decodeFromString(entity.capabilityState),
@@ -999,6 +1030,11 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override fun observeSchoolbooks(): Flow<List<SchoolbookCourse>> = observeYearScopedValue(SchoolbooksSection, emptyList())
+  override fun observeDocumentsRefreshMetadata(): Flow<RepositoryRefreshMetadata> =
+    observeRefreshMetadata(DocumentsSection)
+  override fun observeSchoolbooksRefreshMetadata(): Flow<RepositoryRefreshMetadata> =
+    observeRefreshMetadata(SchoolbooksSection)
+
   override suspend fun refreshDocuments(force: Boolean): Result<List<DocumentItem>> = runCatching {
     syncCoordinator.refreshSections(force = force, sections = DocumentsRefreshSections)
     observeDocuments().firstValue()
@@ -1006,10 +1042,7 @@ class SchoolDataRepository @Inject constructor(
 
   override suspend fun openDocument(document: DocumentItem): Result<DocumentAsset> = syncCoordinator.openDocument(document)
 
-  override suspend fun queueDownload(document: DocumentItem): Result<Long> = runCatching {
-    val url = document.viewUrl ?: document.confirmUrl ?: error("Il documento non ha un URL apribile.")
-    queueDownloadInternal(url, document.title, null)
-  }
+  override suspend fun queueDownload(document: DocumentItem): Result<DocumentAsset> = openDocument(document)
 
   override fun observeAbsences(): Flow<List<AbsenceRecord>> {
     return combine(
@@ -1146,20 +1179,21 @@ class SchoolDataRepository @Inject constructor(
   }
 
   private suspend fun queueDownloadInternal(url: String, title: String, mimeType: String?): Long {
+    val studentId = sessionStore.session.value?.studentId ?: error("Sessione assente.")
+    val accountDirectory = privateAccountPathPart(studentId)
     val request = DownloadManager.Request(url.toUri())
       .setTitle(title)
       .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
       .setMimeType(mimeType)
-      .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, sanitizeFileName(title))
-      .addRequestHeader("User-Agent", dev.antigravity.classevivaexpressive.core.network.client.UserAgent)
-      .addRequestHeader("Z-Dev-ApiKey", dev.antigravity.classevivaexpressive.core.network.client.DevApiKey)
-    syncCoordinator.authToken()?.let { token ->
-      request.addRequestHeader("Z-Auth-Token", token)
-    }
+      .setDestinationInExternalFilesDir(
+        context,
+        Environment.DIRECTORY_DOWNLOADS,
+        "$accountDirectory/${sanitizeFileName(title)}",
+      )
     val downloadId = downloadManager.enqueue(request)
     downloadRecordDao.upsert(
       DownloadRecordEntity(
-        id = downloadId.toString(),
+        id = "$studentId::$downloadId",
         sourceUrl = url,
         displayName = title,
         mimeType = mimeType,
@@ -1171,15 +1205,37 @@ class SchoolDataRepository @Inject constructor(
   }
 
   private inline fun <reified T> observeGlobalValue(key: String, default: T): Flow<T> {
-    return snapshotCacheDao.observeByKey(key).map { entity ->
-      entity?.payload?.let { runCatching { json.decodeFromString<T>(it) }.getOrDefault(default) } ?: default
+    return sessionStore.session.flatMapLatest { session ->
+      val studentId = session?.studentId ?: return@flatMapLatest flowOf(default)
+      snapshotCacheDao.observeByKey(studentScopedCacheKey(studentId, key)).map { entity ->
+        entity?.payload?.let { runCatching { json.decodeFromString<T>(it) }.getOrDefault(default) } ?: default
+      }
     }.flowOn(Dispatchers.Default)
   }
 
   private inline fun <reified T> observeYearScopedValue(section: String, default: T): Flow<T> {
-    return schoolYearStore.observeSelectedSchoolYear().flatMapLatest { schoolYear ->
-      snapshotCacheDao.observeByKey(yearScopedCacheKey(section, schoolYear)).map { entity ->
+    return combine(sessionStore.session, schoolYearStore.observeSelectedSchoolYear()) { session, schoolYear ->
+      session to schoolYear
+    }.flatMapLatest { (session, schoolYear) ->
+      val studentId = session?.studentId ?: return@flatMapLatest flowOf(default)
+      snapshotCacheDao.observeByKey(yearScopedCacheKey(studentId, section, schoolYear)).map { entity ->
         entity?.payload?.let { runCatching { json.decodeFromString<T>(it) }.getOrDefault(default) } ?: default
+      }
+    }.flowOn(Dispatchers.Default)
+  }
+
+  private fun observeRefreshMetadata(section: String): Flow<RepositoryRefreshMetadata> {
+    return combine(sessionStore.session, schoolYearStore.observeSelectedSchoolYear()) { session, schoolYear ->
+      session to schoolYear
+    }.flatMapLatest { (session, schoolYear) ->
+      val studentId = session?.studentId
+        ?: return@flatMapLatest flowOf(RepositoryRefreshMetadata())
+      syncMetadataDao.observe(studentId, schoolYear.id, section).map { entity ->
+        RepositoryRefreshMetadata(
+          lastAttemptAtEpochMillis = entity?.lastAttemptAtEpochMillis,
+          lastSuccessAtEpochMillis = entity?.lastSuccessAtEpochMillis,
+          refreshError = entity?.lastError,
+        )
       }
     }.flowOn(Dispatchers.Default)
   }

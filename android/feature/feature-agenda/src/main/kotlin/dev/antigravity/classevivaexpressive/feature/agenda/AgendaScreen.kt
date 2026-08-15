@@ -64,8 +64,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat.startActivity
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -1024,7 +1023,7 @@ private fun shareEntry(context: android.content.Context, entry: AgendaEntry) {
     val intent = Intent(Intent.ACTION_SEND)
       .setType("text/plain")
       .putExtra(Intent.EXTRA_TEXT, payload)
-    startActivity(context, Intent.createChooser(intent, "Condividi evento"), null)
+    context.startActivity(Intent.createChooser(intent, "Condividi evento"))
   }
 }
 

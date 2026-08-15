@@ -24,12 +24,15 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
-internal const val SyncStatusCacheKey = "sync_status:last_successful"
+internal const val SyncStatusSection = "sync_status:last_successful"
 
-internal suspend fun SnapshotCacheDao.recordSuccessfulSync(completedAtEpochMillis: Long) {
+internal fun syncStatusCacheKey(studentId: String): String = "$studentId::$SyncStatusSection"
+
+internal suspend fun SnapshotCacheDao.recordSuccessfulSync(studentId: String, completedAtEpochMillis: Long) {
+  val key = syncStatusCacheKey(studentId)
   upsert(
     SnapshotCacheEntity(
-      cacheKey = SyncStatusCacheKey,
+      cacheKey = key,
       payload = completedAtEpochMillis.toString(),
       updatedAtEpochMillis = completedAtEpochMillis,
     ),
@@ -38,15 +41,17 @@ internal suspend fun SnapshotCacheDao.recordSuccessfulSync(completedAtEpochMilli
 
 internal fun observePersistedSyncStatus(
   snapshotCacheDao: SnapshotCacheDao,
+  studentId: String,
   schoolYear: SchoolYearRef,
 ): Flow<SyncStatus> {
-  val flows = syncStatusCacheKeys(schoolYear).map(snapshotCacheDao::observeByKey)
+  val syncKey = syncStatusCacheKey(studentId)
+  val flows = syncStatusCacheKeys(studentId, schoolYear).map(snapshotCacheDao::observeByKey)
   return combine(flows) { entries ->
     SyncStatus(
       lastSuccessfulSyncEpochMillis = entries
         .filterNotNull()
         .map { entry ->
-          if (entry.cacheKey == SyncStatusCacheKey) {
+          if (entry.cacheKey == syncKey) {
             entry.payload.toLongOrNull() ?: entry.updatedAtEpochMillis
           } else {
             entry.updatedAtEpochMillis
@@ -67,9 +72,9 @@ internal fun SyncStatus.withPersistedLastSuccess(persisted: SyncStatus): SyncSta
   }
 }
 
-private fun syncStatusCacheKeys(schoolYear: SchoolYearRef): List<String> {
-  return listOf(SyncStatusCacheKey, ProfileSection) +
-    syncStatusYearScopedSections.map { section -> yearScopedCacheKey(section, schoolYear) }
+private fun syncStatusCacheKeys(studentId: String, schoolYear: SchoolYearRef): List<String> {
+  return listOf(syncStatusCacheKey(studentId), "$studentId::$ProfileSection") +
+    syncStatusYearScopedSections.map { section -> yearScopedCacheKey(studentId, section, schoolYear) }
 }
 
 private val syncStatusYearScopedSections = listOf(

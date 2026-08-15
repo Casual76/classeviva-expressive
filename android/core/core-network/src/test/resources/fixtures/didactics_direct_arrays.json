@@ -1,0 +1,23 @@
+{
+  "didacticts": [
+    {
+      "teacherId": "teacher-01",
+      "teacherName": "Docente Demo",
+      "folders": [
+        {
+          "folderId": "folder-01",
+          "folderName": "Materiali del corso",
+          "contents": [
+            {
+              "contentId": "content-01",
+              "contentName": "Dispensa introduttiva",
+              "objectId": "object-01",
+              "objectType": "file",
+              "shareDT": "2026-03-20"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

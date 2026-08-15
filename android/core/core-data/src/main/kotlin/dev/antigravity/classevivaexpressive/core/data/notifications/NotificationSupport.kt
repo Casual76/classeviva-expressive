@@ -369,7 +369,7 @@ private fun buildGenericTestNotification(context: Context): Notification {
 
 @Singleton
 class SyncNotificationDispatcher @Inject constructor(
-  @ApplicationContext private val context: Context,
+  @param:ApplicationContext private val context: Context,
   private val json: Json,
   private val settingsStore: SettingsStore,
 ) {
@@ -1102,6 +1102,7 @@ suspend fun refreshLiveTimetableNotification(
   context: Context,
   settingsStore: SettingsStore,
   snapshotCacheDao: dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao,
+  sessionStore: dev.antigravity.classevivaexpressive.core.datastore.SessionStore,
   schoolYearStore: dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore,
   json: Json,
 ) {
@@ -1115,12 +1116,13 @@ suspend fun refreshLiveTimetableNotification(
   if (!runtime.permissionGranted || !runtime.appNotificationsEnabled) return
   AppNotificationChannels.create(context)
 
+  val studentId = sessionStore.session.value?.studentId ?: return
   val currentYear = schoolYearStore.currentSchoolYearRef()
   val lessonsPayload = snapshotCacheDao
-    .getByKey(dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey(LessonsCacheSection, currentYear))
+    .getByKey(dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey(studentId, LessonsCacheSection, currentYear))
     ?.payload
   val agendaPayload = snapshotCacheDao
-    .getByKey(dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey(AgendaCacheSection, currentYear))
+    .getByKey(dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey(studentId, AgendaCacheSection, currentYear))
     ?.payload
   val lessons = dev.antigravity.classevivaexpressive.core.data.repository.buildLessonsWithFallback(
     lessons = runCatching { json.decodeFromString<List<Lesson>>(lessonsPayload ?: "") }.getOrDefault(emptyList()),

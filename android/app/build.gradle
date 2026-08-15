@@ -105,7 +105,6 @@ dependencies {
   implementation libs.androidx.appcompat
   implementation libs.google.material
   implementation libs.bundles.compose
-  implementation libs.compose.material3.adaptive.navigation.suite
   implementation libs.androidx.navigation.runtime.ktx
   implementation libs.hilt.android
   implementation libs.androidx.hilt.navigation.compose

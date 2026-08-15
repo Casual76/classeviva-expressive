@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.network.client
 
 import com.google.gson.JsonObject
+import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 import okhttp3.ResponseBody
 import retrofit2.Call
@@ -140,7 +141,7 @@ interface ClassevivaApiService {
   ): JsonObject
 
   @GET("v1/students/{id}/didactics")
-  suspend fun getDidactics(@Path("id") studentId: String): JsonObject
+  suspend fun getDidactics(@Path("id") studentId: String): JsonElement
 
   @Streaming
   @GET("v1/students/{id}/didactics/item/{itemId}")
@@ -159,15 +160,15 @@ interface ClassevivaApiService {
   suspend fun getHomeworks(@Path("id") studentId: String): JsonObject
 
   @POST("v1/students/{id}/documents")
-  suspend fun getDocuments(
-    @Path("id") studentId: String,
-    @Body body: JsonObject = JsonObject(),
-  ): JsonObject
+  suspend fun getDocumentsPost(@Path("id") studentId: String): JsonElement
+
+  @GET("v1/students/{id}/documents")
+  suspend fun getDocumentsGet(@Path("id") studentId: String): JsonElement
 
   @POST("v1/students/{id}/documents/check/{documentId}")
   suspend fun checkDocument(
     @Path("id") studentId: String,
-    @Path("documentId") documentId: String,
+    @Path("documentId") documentHash: String,
     @Body body: JsonObject = JsonObject(),
   ): JsonObject
 
@@ -175,11 +176,11 @@ interface ClassevivaApiService {
   @GET("v1/students/{id}/documents/read/{documentId}")
   suspend fun readDocument(
     @Path("id") studentId: String,
-    @Path("documentId") documentId: String,
+    @Path("documentId") documentHash: String,
   ): ResponseBody
 
   @GET("v1/students/{id}/schoolbooks")
-  suspend fun getSchoolbooks(@Path("id") studentId: String): JsonObject
+  suspend fun getSchoolbooks(@Path("id") studentId: String): JsonElement
 
   @Streaming
   @GET

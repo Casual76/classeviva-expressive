@@ -12,6 +12,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
+import dev.antigravity.classevivaexpressive.core.domain.model.DocumentKind
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
@@ -31,6 +32,7 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.security.MessageDigest
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -49,13 +51,127 @@ internal fun extractArray(payload: JsonObject, vararg keys: String): List<JsonEl
     when (val candidate = payload[key]) {
       is JsonArray -> return candidate
       is JsonObject -> {
-        val nested = extractArray(candidate, key, "items", "events", "data")
+        val nestedKeys = (keys.toList() + listOf("items", "events", "data")).distinct().toTypedArray()
+        val nested = extractArray(candidate, *nestedKeys)
         if (nested.isNotEmpty()) return nested
       }
       else -> Unit
     }
   }
   return emptyList()
+}
+
+internal fun extractArray(payload: JsonElement, vararg keys: String): List<JsonElement> {
+  return when (payload) {
+    is JsonArray -> payload
+    is JsonObject -> extractArray(payload, *keys)
+    else -> emptyList()
+  }
+}
+
+/**
+ * Normalizes the different didactics payloads returned by Classeviva.
+ * Older responses wrap teachers in the misspelled `didacticts` field, while
+ * newer payloads may expose `didactics` or even a direct array. Folders and
+ * contents are arrays in the official response and must not be coerced to
+ * objects before parsing.
+ */
+internal fun normalizeMaterialsPayload(payload: JsonElement): List<MaterialItem> {
+  val root = payload.obj()
+  val teachers = when {
+    payload is JsonArray -> payload.toList()
+    root["folders"] is JsonArray || root["contents"] is JsonArray -> listOf(root)
+    else -> extractArray(payload, "didacticts", "didactics", "teachers", "items", "data")
+  }
+
+  return teachers.flatMap { teacherElement ->
+    val teacher = teacherElement.obj()
+    val teacherId = teacher.string("teacherId", "idDocente", "teacherCode").orEmpty()
+    val teacherName = sanitizeRegisterText(
+      teacher.string("teacherName", "teacherFullName", "teacherLastName", "docente"),
+    ) ?: "Docente"
+    val folders = when {
+      teacher["folders"] is JsonArray -> extractArray(teacher, "folders")
+      teacher["contents"] is JsonArray -> listOf(teacher)
+      else -> emptyList()
+    }
+    folders.flatMap { folderElement ->
+      normalizeMaterialFolder(folderElement.obj(), teacherId, teacherName)
+    }
+  }.distinctBy { material ->
+    listOf(material.teacherId, material.folderId, material.id).joinToString(":")
+  }.sortedByDescending { it.sharedAt }
+}
+
+/** Combines regular documents and report cards instead of taking the first non-empty list. */
+internal fun normalizeDocumentsPayload(payload: JsonElement): List<DocumentItem> {
+  if (payload is JsonArray) return payload.map(::normalizeDocument)
+  val root = payload.obj()
+  val documents = extractArray(root, "documents").map { normalizeDocument(it, DocumentKind.DOCUMENT) }
+  val reports = extractArray(root, "schoolReports").map { normalizeDocument(it, DocumentKind.SCHOOL_REPORT) }
+  val combined = documents + reports
+  if (combined.isNotEmpty()) {
+    return combined.distinctBy { document -> "${document.kind}:${document.id}:${document.title}" }
+  }
+
+  val nested = root["data"] ?: root["items"] ?: root["result"]
+  return nested?.let(::normalizeDocumentsPayload).orEmpty()
+}
+
+/** Accepts both course wrappers and the newer top-level `books` array. */
+internal fun normalizeSchoolbooksPayload(payload: JsonElement): List<SchoolbookCourse> {
+  if (payload is JsonArray) return normalizeSchoolbookEntries(payload, JsonObject(emptyMap()))
+  val root = payload.obj()
+
+  val courseContainer = root["schoolbooks"] ?: root["courses"]
+  if (courseContainer != null) {
+    if (courseContainer is JsonObject && courseContainer["books"] != null) {
+      return normalizeSchoolbooksPayload(courseContainer)
+    }
+    val entries = extractArray(courseContainer, "schoolbooks", "courses", "items", "data")
+    if (entries.isNotEmpty()) return normalizeSchoolbookEntries(entries, root)
+  }
+
+  val books = extractArray(root, "books")
+  if (books.isNotEmpty()) return normalizeDirectSchoolbooks(books, root)
+
+  val nested = root["data"] ?: root["items"] ?: root["result"]
+  return nested?.let(::normalizeSchoolbooksPayload).orEmpty()
+}
+
+private fun normalizeSchoolbookEntries(
+  entries: List<JsonElement>,
+  parent: JsonObject,
+): List<SchoolbookCourse> {
+  return if (entries.any { entry -> entry.obj()["books"] != null }) {
+    entries.map(::normalizeSchoolbookCourse)
+  } else {
+    normalizeDirectSchoolbooks(entries, parent)
+  }
+}
+
+private fun normalizeDirectSchoolbooks(
+  entries: List<JsonElement>,
+  parent: JsonObject,
+): List<SchoolbookCourse> {
+  return entries.groupBy { entry ->
+    val book = entry.obj()
+    book.string("courseId", "courseCode", "subjectCode")
+      ?: book.string("courseDesc", "subjectDesc", "subject")
+      ?: parent.string("courseId", "courseDesc")
+      ?: "books"
+  }.map { (groupKey, groupEntries) ->
+    val first = groupEntries.first().obj()
+    val title = sanitizeRegisterText(
+      first.string("courseDesc", "subjectDesc", "subject")
+        ?: parent.string("courseDesc", "description", "subjectDesc"),
+    ) ?: "Libri di testo"
+    SchoolbookCourse(
+      id = first.string("courseId", "courseCode", "subjectCode") ?: groupKey,
+      title = title,
+      books = groupEntries.map(::normalizeSchoolbook),
+    )
+  }
 }
 
 internal fun normalizeProfile(root: JsonObject, fallbackId: String): StudentProfile {
@@ -444,27 +560,53 @@ internal fun normalizeNote(data: JsonObject, categoryCode: String): Note {
 
 internal fun normalizeMaterialFolder(folder: JsonObject, teacherId: String, teacherName: String): List<MaterialItem> {
   val folderId = folder.string("folderId", "id").orEmpty()
-  val folderName = sanitizeRegisterText(folder.string("folderName", "title")) ?: "Materiali"
-  return extractArray(folder["contents"].obj(), "contents").map { contentElement ->
+  val folderName = sanitizeRegisterText(folder.string("folderName", "title", "name")) ?: "Materiali"
+  return extractArray(folder, "contents", "items").map { contentElement ->
     val content = contentElement.obj()
-    val objectType = content.string("objectType", "type").orEmpty()
+    val objectType = content.string("objectType", "type").orEmpty().trim().lowercase()
     val sourceUrl = normalizeUrlCandidate(content.string("url", "link", "href", "path"))
+    val isExternalLink = objectType == "link" && isSafeExternalMaterialUrl(sourceUrl)
+    val title = sanitizeRegisterText(content.string("contentName", "title", "name")) ?: "Materiale"
+    val objectId = content.string("objectId", "oid").orEmpty()
+    val sharedAt = normalizeDate(content.string("shareDT", "sharedAt", "lastShareDT"))
+    val materialId = content.string("id", "contentId", "itemId")
+      ?.takeIf(String::isNotBlank)
+      ?: stableFallbackId(
+        "material",
+        teacherId,
+        folderId,
+        objectId,
+        title,
+        sharedAt,
+        sourceUrl.orEmpty(),
+      )
     val attachments = buildList {
-      addAll(normalizeAttachments(content["attachments"] ?: content["allegati"]))
+      addAll(
+        normalizeAttachments(
+          content["attachments"] ?: content["allegati"],
+          allowExternalWebUrls = objectType == "link",
+        ),
+      )
       if (!sourceUrl.isNullOrBlank()) {
         add(
           RemoteAttachment(
-            id = content.string("id", "contentId", "itemId") ?: sourceUrl,
-            name = sanitizeRegisterText(content.string("title", "name")) ?: "Link",
-            url = sourceUrl.takeIf(::isOfficialApiUrl),
+            id = materialId,
+            name = title,
+            url = sourceUrl.takeIf { isOfficialRestUrl(it) || isExternalLink },
             mimeType = content.string("mimeType", "contentType"),
-            portalOnly = !isOfficialApiUrl(sourceUrl),
+            portalOnly = !isOfficialRestUrl(sourceUrl) && !isExternalLink,
           ),
         )
       }
     }.distinctBy { "${it.id}:${it.url.orEmpty()}" }
     val capability = when {
-      !sourceUrl.isNullOrBlank() && !isOfficialApiUrl(sourceUrl) ->
+      isExternalLink || attachments.any { attachment -> isSafeExternalMaterialUrl(attachment.url) } ->
+        CapabilityState(
+          status = CapabilityStatus.EXTERNAL_ONLY,
+          label = "Apri link",
+          detail = "Il materiale e disponibile come link web esterno sicuro.",
+        )
+      !sourceUrl.isNullOrBlank() && !isOfficialRestUrl(sourceUrl) ->
         CapabilityState(
           status = CapabilityStatus.UNAVAILABLE,
           label = "Endpoint non ufficiale",
@@ -484,15 +626,15 @@ internal fun normalizeMaterialFolder(folder: JsonObject, teacherId: String, teac
         )
     }
     MaterialItem(
-      id = content.string("id", "contentId", "itemId").orEmpty(),
+      id = materialId,
       teacherId = teacherId,
       teacherName = teacherName,
       folderId = folderId,
       folderName = folderName,
-      title = sanitizeRegisterText(content.string("title", "name")).orEmpty(),
-      objectId = content.string("objectId", "oid").orEmpty(),
+      title = title,
+      objectId = objectId,
       objectType = objectType,
-      sharedAt = normalizeDate(content.string("shareDT", "sharedAt", "lastShareDT")),
+      sharedAt = sharedAt,
       capabilityState = capability,
       attachments = attachments,
     )
@@ -507,6 +649,9 @@ internal fun normalizeMaterialAsset(
   sourceUrl: String?,
 ): MaterialAsset {
   val effectiveSourceUrl = sourceUrl ?: item.attachments.firstOrNull { !it.url.isNullOrBlank() }?.url
+  val externalLinkUrl = effectiveSourceUrl?.takeIf {
+    item.objectType.equals("link", ignoreCase = true) && isSafeExternalMaterialUrl(it)
+  }
   val capability = when {
     !base64Content.isNullOrBlank() || !textPreview.isNullOrBlank() -> CapabilityState(
       status = CapabilityStatus.AVAILABLE,
@@ -518,7 +663,12 @@ internal fun normalizeMaterialAsset(
       },
       detail = "Il contenuto e disponibile per anteprima o apertura locale.",
     )
-    !effectiveSourceUrl.isNullOrBlank() && isOfficialApiUrl(effectiveSourceUrl) -> CapabilityState(
+    !externalLinkUrl.isNullOrBlank() -> CapabilityState(
+      status = CapabilityStatus.EXTERNAL_ONLY,
+      label = "Apri link",
+      detail = "Il materiale e disponibile come link web esterno sicuro.",
+    )
+    !effectiveSourceUrl.isNullOrBlank() && isOfficialRestUrl(effectiveSourceUrl) -> CapabilityState(
       status = CapabilityStatus.EXTERNAL_ONLY,
       label = "Download disponibile",
       detail = "Il materiale e disponibile tramite endpoint REST ufficiale.",
@@ -542,6 +692,12 @@ internal fun normalizeMaterialAsset(
     mimeType = mimeType,
     base64Content = base64Content,
     textPreview = textPreview,
+    externalUrl = effectiveSourceUrl
+      ?.takeIf { candidate ->
+        isOfficialRestUrl(candidate) ||
+          (item.objectType.equals("link", ignoreCase = true) && isSafeExternalMaterialUrl(candidate))
+      }
+      ?.takeIf { base64Content.isNullOrBlank() && textPreview.isNullOrBlank() },
     sourceUrl = effectiveSourceUrl,
     capabilityState = capability,
   )
@@ -578,27 +734,46 @@ fun normalizeDocumentAsset(
   )
 }
 
-internal fun normalizeDocument(data: JsonElement): DocumentItem {
+internal fun normalizeDocument(data: JsonElement): DocumentItem =
+  normalizeDocument(data, DocumentKind.DOCUMENT)
+
+private fun normalizeDocument(data: JsonElement, kind: DocumentKind): DocumentItem {
   val obj = data.obj()
-  val viewUrl = normalizeUrlCandidate(obj.string("viewLink", "viewUrl", "url")).takeIf(::isOfficialApiUrl)
-  val confirmUrl = normalizeUrlCandidate(obj.string("confirmLink", "confirmUrl", "confirmHref")).takeIf(::isOfficialApiUrl)
+  val remoteHash = obj.string("hash", "documentHash", "docHash", "fileHash")
+  val rawViewUrl = normalizeUrlCandidate(obj.string("viewLink", "viewUrl", "readUrl", "url"))
+  val rawConfirmUrl = normalizeUrlCandidate(
+    obj.string("confirmLink", "confirmUrl", "confirmHref", "checkUrl"),
+  )
+  val restReadUrl = rawViewUrl.takeIf(::isOfficialRestUrl)
+  val portalViewUrl = rawViewUrl.takeIf(::isClassevivaPortalUrl)
+  val portalConfirmUrl = rawConfirmUrl.takeIf(::isClassevivaPortalUrl)
   return DocumentItem(
-    id = obj.string("id", "viewLink", "confirmLink", "desc").orEmpty().ifBlank {
-      obj.string("desc", "title").orEmpty()
+    id = obj.string("id", "documentId", "docId", "reportId").orEmpty().ifBlank {
+      remoteHash ?: obj.string("desc", "description", "title").orEmpty()
     },
-    title = sanitizeRegisterText(obj.string("desc", "title")) ?: "Documento",
+    title = sanitizeRegisterText(obj.string("desc", "description", "title", "name")) ?: "Documento",
+    kind = kind,
+    remoteHash = remoteHash,
+    restReadUrl = restReadUrl,
+    portalViewUrl = portalViewUrl,
+    portalConfirmUrl = portalConfirmUrl,
     detail = when {
-      viewUrl != null -> "Documento disponibile tramite endpoint REST ufficiale."
-      confirmUrl != null -> "Documento verificabile tramite endpoint REST ufficiale."
+      restReadUrl != null || remoteHash != null -> "Documento disponibile tramite endpoint REST ufficiale."
+      portalViewUrl != null -> "Documento disponibile tramite sessione portale autenticata."
+      portalConfirmUrl != null -> "Documento verificabile tramite sessione portale autenticata."
       else -> "Nessun link REST diretto esposto nella lista documenti."
     },
-    viewUrl = viewUrl,
-    confirmUrl = confirmUrl,
+    viewUrl = restReadUrl,
+    confirmUrl = rawConfirmUrl,
     capabilityState = when {
-      viewUrl != null || confirmUrl != null -> CapabilityState(
+      restReadUrl != null || remoteHash != null || portalViewUrl != null || rawConfirmUrl != null -> CapabilityState(
         CapabilityStatus.AVAILABLE,
         "Apri documento",
-        "Apertura e download gestiti dal client nativo.",
+        if (portalViewUrl != null || portalConfirmUrl != null) {
+          "Apertura gestita tramite sessione portale autenticata."
+        } else {
+          "Apertura e download gestiti dal client nativo."
+        },
       )
       else -> CapabilityState(
         CapabilityStatus.UNAVAILABLE,
@@ -611,31 +786,42 @@ internal fun normalizeDocument(data: JsonElement): DocumentItem {
 
 internal fun normalizeSchoolbookCourse(data: JsonElement): SchoolbookCourse {
   val obj = data.obj()
-  val books = extractArray(obj["books"].obj(), "books").map { bookElement ->
-    val book = bookElement.obj()
-    Schoolbook(
-      id = book.string("bookId", "id").orEmpty(),
-      isbn = book.string("isbnCode", "isbn").orEmpty(),
-      title = sanitizeRegisterText(book.string("title")) ?: "Libro",
-      subtitle = sanitizeRegisterText(book.string("subheading")),
-      volume = sanitizeRegisterText(book.string("volume")),
-      author = sanitizeRegisterText(book.string("author")),
-      publisher = sanitizeRegisterText(book.string("publisher")),
-      subject = sanitizeRegisterText(book.string("subjectDesc", "subject")) ?: "Materia",
-      price = book.double("price"),
-      coverUrl = normalizeUrlCandidate(book.string("coverUrl")),
-      toBuy = book.bool("toBuy") ?: false,
-      alreadyOwned = book.bool("alreadyOwned") ?: false,
-      alreadyInUse = book.bool("alreadyInUse") ?: false,
-      recommended = book.bool("recommended") ?: false,
-      recommendedFor = sanitizeRegisterText(book.string("recommendedFor")),
-      newAdoption = book.bool("newAdoption") ?: false,
-    )
-  }
+  val books = extractArray(obj, "books", "items").map(::normalizeSchoolbook)
+  val title = sanitizeRegisterText(obj.string("courseDesc", "description")) ?: "Corso"
   return SchoolbookCourse(
-    id = obj.string("courseId", "id").orEmpty(),
-    title = sanitizeRegisterText(obj.string("courseDesc", "description")) ?: "Corso",
+    id = obj.string("courseId", "id")?.takeIf(String::isNotBlank)
+      ?: stableFallbackId("course", title, books.joinToString("|") { it.id }),
+    title = title,
     books = books,
+  )
+}
+
+private fun normalizeSchoolbook(data: JsonElement): Schoolbook {
+  val book = data.obj()
+  val isbn = book.string("isbnCode", "isbn", "isbn13").orEmpty()
+  val title = sanitizeRegisterText(book.string("title", "bookTitle")) ?: "Libro"
+  val author = sanitizeRegisterText(book.string("author", "authors"))
+  val publisher = sanitizeRegisterText(book.string("publisher", "publisherName"))
+  val subject = sanitizeRegisterText(book.string("subjectDesc", "subject", "courseDesc")) ?: "Materia"
+  return Schoolbook(
+    id = book.string("bookId", "id")?.takeIf(String::isNotBlank)
+      ?: isbn.takeIf(String::isNotBlank)
+      ?: stableFallbackId("book", title, author.orEmpty(), publisher.orEmpty(), subject),
+    isbn = isbn,
+    title = title,
+    subtitle = sanitizeRegisterText(book.string("subheading", "subtitle")),
+    volume = sanitizeRegisterText(book.string("volume", "volumeDesc")),
+    author = author,
+    publisher = publisher,
+    subject = subject,
+    price = book.double("price", "coverPrice"),
+    coverUrl = normalizeUrlCandidate(book.string("coverUrl", "cover", "coverImageUrl", "imageUrl")),
+    toBuy = book.bool("toBuy", "buy", "purchaseRequired") ?: false,
+    alreadyOwned = book.bool("alreadyOwned", "owned") ?: false,
+    alreadyInUse = book.bool("alreadyInUse", "inUse") ?: false,
+    recommended = book.bool("recommended", "isRecommended") ?: false,
+    recommendedFor = sanitizeRegisterText(book.string("recommendedFor", "recommendation")),
+    newAdoption = book.bool("newAdoption", "isNewAdoption") ?: false,
   )
 }
 
@@ -665,7 +851,10 @@ internal fun normalizeSubject(data: JsonElement): Subject {
   )
 }
 
-internal fun normalizeAttachments(data: JsonElement?): List<RemoteAttachment> {
+internal fun normalizeAttachments(
+  data: JsonElement?,
+  allowExternalWebUrls: Boolean = false,
+): List<RemoteAttachment> {
   val items = when (data) {
     is JsonArray -> data
     is JsonObject -> extractArray(data, "attachments", "allegati", "files", "items")
@@ -684,9 +873,13 @@ internal fun normalizeAttachments(data: JsonElement?): List<RemoteAttachment> {
         RemoteAttachment(
           id = item.string("id", "attachId", "uuid") ?: name,
           name = name,
-          url = url?.takeIf(::isOfficialApiUrl),
+          url = url?.takeIf { candidate ->
+            isOfficialRestUrl(candidate) ||
+              (allowExternalWebUrls && isSafeExternalMaterialUrl(candidate))
+          },
           mimeType = item.string("mimeType", "contentType"),
-          portalOnly = item.bool("portalOnly") ?: !isOfficialApiUrl(url),
+          portalOnly = item.bool("portalOnly")
+            ?: (!isOfficialRestUrl(url) && !(allowExternalWebUrls && isSafeExternalMaterialUrl(url))),
         )
       }
       else -> null
@@ -763,7 +956,7 @@ private fun normalizeNoticeboardAttachments(data: JsonElement?): List<Noticeboar
           ?: return@mapNotNull null
         val url = normalizeUrlCandidate(element.string("url", "link", "href", "path"))
           ?: findActionUrl(element, "download", "attach", "alleg", "file")
-        val action = url?.takeIf(::isOfficialApiUrl)?.let {
+        val action = url?.takeIf(::isOfficialRestUrl)?.let {
           NoticeboardAction(
             type = NoticeboardActionType.DOWNLOAD,
             label = "Scarica allegato",
@@ -773,9 +966,9 @@ private fun normalizeNoticeboardAttachments(data: JsonElement?): List<Noticeboar
         NoticeboardAttachment(
           id = element.string("id", "attachId", "uuid") ?: name,
           name = name,
-          url = url?.takeIf(::isOfficialApiUrl),
+          url = url?.takeIf(::isOfficialRestUrl),
           mimeType = element.string("mimeType", "contentType"),
-          portalOnly = element.bool("portalOnly") ?: !isOfficialApiUrl(url),
+          portalOnly = element.bool("portalOnly") ?: !isOfficialRestUrl(url),
           action = action,
         )
       }
@@ -861,7 +1054,7 @@ private fun communicationCapability(
 }
 
 private fun requiresGatewayUrl(value: String?): Boolean {
-  return !value.isNullOrBlank() && !isOfficialApiUrl(value)
+  return !value.isNullOrBlank() && !isOfficialRestUrl(value)
 }
 
 data class MeetingsSnapshot(
@@ -1000,8 +1193,9 @@ private fun normalizeUrlCandidate(value: String?): String? {
   }
 }
 
-private fun isOfficialApiUrl(value: String?): Boolean {
-  return value?.contains("/rest/", ignoreCase = true) == true
+private fun isClassevivaPortalUrl(value: String?): Boolean {
+  return value?.startsWith("https://web.spaggiari.eu/", ignoreCase = true) == true &&
+    !isOfficialRestUrl(value)
 }
 
 internal fun normalizeStudentId(value: String?): String? {
@@ -1118,6 +1312,13 @@ private fun resolveSubject(obj: JsonObject): String? {
 private fun isGenericSubjectLabel(value: String?): Boolean {
   val normalized = value?.trim()?.lowercase() ?: return true
   return normalized in genericSubjectLabels
+}
+
+private fun stableFallbackId(prefix: String, vararg parts: String): String {
+  val source = parts.joinToString(separator = "\u001f") { it.trim() }
+  val digest = MessageDigest.getInstance("SHA-256").digest(source.encodeToByteArray())
+  val suffix = digest.take(12).joinToString(separator = "") { byte -> "%02x".format(byte) }
+  return "$prefix-$suffix"
 }
 
 private fun trimZero(value: Double): String = if (value % 1.0 == 0.0) value.toInt().toString() else value.toString()

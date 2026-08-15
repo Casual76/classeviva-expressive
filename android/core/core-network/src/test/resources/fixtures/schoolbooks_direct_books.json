@@ -1,0 +1,19 @@
+{
+  "books": [
+    {
+      "bookId": "book-01",
+      "courseId": "course-01",
+      "courseDesc": "Matematica",
+      "isbn": "9780000000001",
+      "title": "Manuale dimostrativo",
+      "publisher": "Editore Demo",
+      "price": "24,50",
+      "cover": "https://cdn.example.test/covers/book-01.jpg",
+      "toBuy": true,
+      "alreadyOwned": false,
+      "alreadyInUse": true,
+      "recommended": true,
+      "newAdoption": false
+    }
+  ]
+}

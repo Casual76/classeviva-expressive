@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 @Singleton
 class ApiSessionManager @Inject constructor(
   private val sessionStore: SessionStorage,
-  @Named("authService") private val authService: ClassevivaAuthService,
+  @param:Named("authService") private val authService: ClassevivaAuthService,
 ) {
   private val refreshLock = Any()
 

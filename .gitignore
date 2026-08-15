@@ -34,6 +34,8 @@ logs/
 *logcat*.txt
 *logcat*.xml
 qa-*-logcat.*
+/qa-*
+/apk_extract/
 
 # Misc cache
 .cache/

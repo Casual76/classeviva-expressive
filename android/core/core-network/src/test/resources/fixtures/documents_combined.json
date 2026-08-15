@@ -1,0 +1,18 @@
+{
+  "documents": [
+    {
+      "id": "document-01",
+      "desc": "Documento dimostrativo",
+      "hash": "hash-document-01"
+    }
+  ],
+  "schoolReports": [
+    {
+      "reportId": "report-01",
+      "desc": "Pagella dimostrativa",
+      "documentHash": "hash-report-01",
+      "viewLink": "/sgv/app/default/report.php?id=demo",
+      "confirmLink": "/sgv/app/default/report-confirm.php?id=demo"
+    }
+  ]
+}

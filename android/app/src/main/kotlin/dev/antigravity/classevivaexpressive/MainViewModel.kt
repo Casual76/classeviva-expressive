@@ -65,7 +65,7 @@ class MainViewModel @Inject constructor(
   private val authRepository: AuthRepository,
   private val settingsRepository: SettingsRepository,
   private val appUpdateRepository: AppUpdateRepository,
-  @ApplicationContext private val context: Context,
+  @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
   private val isRestoring = MutableStateFlow(true)
   private val isAuthenticating = MutableStateFlow(false)

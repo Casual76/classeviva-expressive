@@ -14,7 +14,10 @@ import sys
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-FORBIDDEN_ARTIFACT = re.compile(r"logcat", re.IGNORECASE)
+FORBIDDEN_ARTIFACTS = (
+    (re.compile(r"logcat", re.IGNORECASE), "raw logcat artifact"),
+    (re.compile(r"^qa-", re.IGNORECASE), "raw QA artifact"),
+)
 SENSITIVE_PATTERNS = (
     re.compile(r"(?im)\bZ-Auth-Token\b\s*:\s*[A-Za-z0-9._~+/=-]{12,}"),
     re.compile(r"(?im)\bZ-Dev-ApiKey\b\s*:\s*[A-Za-z0-9._~+/=-]{12,}"),
@@ -37,8 +40,12 @@ def main() -> int:
     failures: list[tuple[pathlib.Path, int, str]] = []
     for path in tracked_files():
         relative = path.relative_to(ROOT)
-        if FORBIDDEN_ARTIFACT.search(relative.name):
-            failures.append((relative, 0, "raw logcat artifact"))
+        artifact_reason = next(
+            (reason for pattern, reason in FORBIDDEN_ARTIFACTS if pattern.search(relative.name)),
+            None,
+        )
+        if artifact_reason:
+            failures.append((relative, 0, artifact_reason))
             continue
         try:
             data = path.read_bytes()

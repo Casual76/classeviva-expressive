@@ -10,6 +10,7 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.Transaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import dagger.Module
@@ -27,6 +28,17 @@ data class SnapshotCacheEntity(
   @PrimaryKey val cacheKey: String,
   val payload: String,
   val updatedAtEpochMillis: Long,
+)
+
+@Serializable
+@Entity(tableName = "sync_metadata", primaryKeys = ["studentId", "schoolYearId", "section"])
+data class SyncMetadataEntity(
+  val studentId: String,
+  val schoolYearId: String,
+  val section: String,
+  val lastAttemptAtEpochMillis: Long,
+  val lastSuccessAtEpochMillis: Long?,
+  val lastError: String?,
 )
 
 @Serializable
@@ -194,9 +206,9 @@ data class AttachmentCacheEntity(
 )
 
 @Serializable
-@Entity(tableName = "materials")
+@Entity(tableName = "materials", primaryKeys = ["studentId", "schoolYearId", "id"])
 data class MaterialEntity(
-  @PrimaryKey val id: String,
+  val id: String,
   val studentId: String,
   val schoolYearId: String,
   val teacherId: String,
@@ -212,13 +224,18 @@ data class MaterialEntity(
 )
 
 @Serializable
-@Entity(tableName = "documents")
+@Entity(tableName = "documents", primaryKeys = ["studentId", "schoolYearId", "id"])
 data class DocumentEntity(
-  @PrimaryKey val id: String,
+  val id: String,
   val studentId: String,
   val schoolYearId: String,
   val title: String,
   val detail: String,
+  val kind: String,
+  val remoteHash: String?,
+  val restReadUrl: String?,
+  val portalViewUrl: String?,
+  val portalConfirmUrl: String?,
   val viewUrl: String?,
   val confirmUrl: String?,
   val capabilityState: String, // JSON
@@ -242,6 +259,24 @@ interface SnapshotCacheDao {
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsert(entity: SnapshotCacheEntity)
+
+  @Query("DELETE FROM snapshot_cache WHERE cacheKey LIKE :prefix || '%'")
+  suspend fun deleteByPrefix(prefix: String)
+}
+
+@Dao
+interface SyncMetadataDao {
+  @Query("SELECT * FROM sync_metadata WHERE studentId = :studentId AND schoolYearId = :schoolYearId AND section = :section LIMIT 1")
+  fun observe(studentId: String, schoolYearId: String, section: String): Flow<SyncMetadataEntity?>
+
+  @Query("SELECT * FROM sync_metadata WHERE studentId = :studentId AND schoolYearId = :schoolYearId AND section = :section LIMIT 1")
+  suspend fun get(studentId: String, schoolYearId: String, section: String): SyncMetadataEntity?
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsert(entity: SyncMetadataEntity)
+
+  @Query("DELETE FROM sync_metadata WHERE studentId = :studentId")
+  suspend fun deleteByStudent(studentId: String)
 }
 
 @Dao
@@ -308,6 +343,15 @@ interface DownloadRecordDao {
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsert(entity: DownloadRecordEntity)
+
+  @Query("SELECT * FROM download_records WHERE id LIKE :prefix || '%'")
+  suspend fun getByPrefix(prefix: String): List<DownloadRecordEntity>
+
+  @Query("DELETE FROM download_records")
+  suspend fun clearAll()
+
+  @Query("DELETE FROM download_records WHERE id LIKE :prefix || '%'")
+  suspend fun deleteByPrefix(prefix: String)
 }
 
 @Dao
@@ -434,6 +478,12 @@ interface MaterialDao {
 
   @Query("DELETE FROM materials WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
   suspend fun deleteByYear(studentId: String, schoolYearId: String)
+
+  @Transaction
+  suspend fun replaceByYear(studentId: String, schoolYearId: String, entities: List<MaterialEntity>) {
+    deleteByYear(studentId, schoolYearId)
+    if (entities.isNotEmpty()) upsertAll(entities)
+  }
 }
 
 @Dao
@@ -446,6 +496,12 @@ interface DocumentDao {
 
   @Query("DELETE FROM documents WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
   suspend fun deleteByYear(studentId: String, schoolYearId: String)
+
+  @Transaction
+  suspend fun replaceByYear(studentId: String, schoolYearId: String, entities: List<DocumentEntity>) {
+    deleteByYear(studentId, schoolYearId)
+    if (entities.isNotEmpty()) upsertAll(entities)
+  }
 }
 
 @Dao
@@ -470,11 +526,18 @@ interface AttachmentCacheDao {
 
   @Query("DELETE FROM attachment_cache WHERE urlKey = :urlKey")
   suspend fun deleteByUrlKey(urlKey: String)
+
+  @Query("DELETE FROM attachment_cache")
+  suspend fun clearAll()
+
+  @Query("DELETE FROM attachment_cache WHERE urlKey LIKE :prefix || '%'")
+  suspend fun deleteByPrefix(prefix: String)
 }
 
 @Database(
   entities = [
     SnapshotCacheEntity::class,
+    SyncMetadataEntity::class,
     CustomEventEntity::class,
     SimulatedGradeEntity::class,
     StudentScoreSnapshotEntity::class,
@@ -491,11 +554,12 @@ interface AttachmentCacheDao {
     ReadNoteEntity::class,
     AttachmentCacheEntity::class,
   ],
-  version = 9,
-  exportSchema = false,
+  version = 10,
+  exportSchema = true,
 )
 abstract class SchoolDatabase : RoomDatabase() {
   abstract fun snapshotCacheDao(): SnapshotCacheDao
+  abstract fun syncMetadataDao(): SyncMetadataDao
   abstract fun customEventDao(): CustomEventDao
   abstract fun simulationDao(): SimulationDao
   abstract fun studentScoreDao(): StudentScoreDao
@@ -557,6 +621,94 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
   }
 }
 
+val MIGRATION_9_10 = object : Migration(9, 10) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL(
+      """
+      CREATE TABLE IF NOT EXISTS `sync_metadata` (
+        `studentId` TEXT NOT NULL,
+        `schoolYearId` TEXT NOT NULL,
+        `section` TEXT NOT NULL,
+        `lastAttemptAtEpochMillis` INTEGER NOT NULL,
+        `lastSuccessAtEpochMillis` INTEGER,
+        `lastError` TEXT,
+        PRIMARY KEY(`studentId`, `schoolYearId`, `section`)
+      )
+      """.trimIndent(),
+    )
+    db.execSQL(
+      """
+      CREATE TABLE `materials_v10` (
+        `id` TEXT NOT NULL,
+        `studentId` TEXT NOT NULL,
+        `schoolYearId` TEXT NOT NULL,
+        `teacherId` TEXT NOT NULL,
+        `teacherName` TEXT NOT NULL,
+        `folderId` TEXT NOT NULL,
+        `folderName` TEXT NOT NULL,
+        `title` TEXT NOT NULL,
+        `objectId` TEXT NOT NULL,
+        `objectType` TEXT NOT NULL,
+        `sharedAt` TEXT NOT NULL,
+        `capabilityState` TEXT NOT NULL,
+        `attachments` TEXT NOT NULL,
+        PRIMARY KEY(`studentId`, `schoolYearId`, `id`)
+      )
+      """.trimIndent(),
+    )
+    db.execSQL(
+      """
+      INSERT INTO `materials_v10` (
+        `id`, `studentId`, `schoolYearId`, `teacherId`, `teacherName`, `folderId`,
+        `folderName`, `title`, `objectId`, `objectType`, `sharedAt`, `capabilityState`, `attachments`
+      )
+      SELECT `id`, `studentId`, `schoolYearId`, `teacherId`, `teacherName`, `folderId`,
+        `folderName`, `title`, `objectId`, `objectType`, `sharedAt`, `capabilityState`, `attachments`
+      FROM `materials`
+      """.trimIndent(),
+    )
+    db.execSQL("DROP TABLE `materials`")
+    db.execSQL("ALTER TABLE `materials_v10` RENAME TO `materials`")
+
+    db.execSQL(
+      """
+      CREATE TABLE `documents_v10` (
+        `id` TEXT NOT NULL,
+        `studentId` TEXT NOT NULL,
+        `schoolYearId` TEXT NOT NULL,
+        `title` TEXT NOT NULL,
+        `detail` TEXT NOT NULL,
+        `kind` TEXT NOT NULL,
+        `remoteHash` TEXT,
+        `restReadUrl` TEXT,
+        `portalViewUrl` TEXT,
+        `portalConfirmUrl` TEXT,
+        `viewUrl` TEXT,
+        `confirmUrl` TEXT,
+        `capabilityState` TEXT NOT NULL,
+        PRIMARY KEY(`studentId`, `schoolYearId`, `id`)
+      )
+      """.trimIndent(),
+    )
+    db.execSQL(
+      """
+      INSERT INTO `documents_v10` (
+        `id`, `studentId`, `schoolYearId`, `title`, `detail`, `kind`, `remoteHash`,
+        `restReadUrl`, `portalViewUrl`, `portalConfirmUrl`, `viewUrl`, `confirmUrl`, `capabilityState`
+      )
+      SELECT 'DOCUMENT::' || `id`, `studentId`, `schoolYearId`, `title`, `detail`, 'DOCUMENT', NULL,
+        NULL, NULL, NULL, `viewUrl`, `confirmUrl`, `capabilityState`
+      FROM `documents`
+      """.trimIndent(),
+    )
+    db.execSQL("DROP TABLE `documents`")
+    db.execSQL("ALTER TABLE `documents_v10` RENAME TO `documents`")
+
+    // Legacy snapshots cannot be attributed to a student and must never cross accounts.
+    db.execSQL("DELETE FROM `snapshot_cache`")
+  }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -565,12 +717,15 @@ object DatabaseModule {
   fun provideDatabase(@ApplicationContext context: Context): SchoolDatabase {
     return Room
       .databaseBuilder(context, SchoolDatabase::class.java, "classeviva_expressive_native.db")
-      .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+      .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
       .build()
   }
 
   @Provides
   fun provideSnapshotCacheDao(database: SchoolDatabase): SnapshotCacheDao = database.snapshotCacheDao()
+
+  @Provides
+  fun provideSyncMetadataDao(database: SchoolDatabase): SyncMetadataDao = database.syncMetadataDao()
 
   @Provides
   fun provideCustomEventDao(database: SchoolDatabase): CustomEventDao = database.customEventDao()

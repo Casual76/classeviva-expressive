@@ -19,7 +19,7 @@ class NavigationMotionTest {
     val decision = decideRouteMotion(
       fromRoute = "home",
       toRoute = "grades",
-      requestedSharedKey = RouteSharedKeys.DashboardGrades,
+      motionOrigin = MotionOrigin.DashboardGrades,
     )
 
     assertEquals(RouteMotionKind.SharedContainer, decision.kind)
@@ -31,7 +31,7 @@ class NavigationMotionTest {
     val decision = decideRouteMotion(
       fromRoute = "grades",
       toRoute = "home",
-      requestedSharedKey = RouteSharedKeys.DashboardGrades,
+      motionOrigin = MotionOrigin.DashboardGrades,
     )
 
     assertEquals(RouteMotionKind.SharedContainer, decision.kind)
@@ -43,7 +43,7 @@ class NavigationMotionTest {
     val decision = decideRouteMotion(
       fromRoute = "more",
       toRoute = "settings",
-      requestedSharedKey = RouteSharedKeys.HubSettings,
+      motionOrigin = MotionOrigin.HubSettings,
     )
 
     assertEquals(RouteMotionKind.SharedContainer, decision.kind)
@@ -69,5 +69,11 @@ class NavigationMotionTest {
   fun routeNormalization_stripsArgumentsAndPath() {
     assertEquals("grades", normalizeRoute("grades?gradeId={gradeId}"))
     assertEquals("student-score", normalizeRoute("student-score/import"))
+  }
+
+  @Test
+  fun motionOrigin_roundTripsThroughStableWireName() {
+    assertEquals(MotionOrigin.HubDocuments, MotionOrigin.fromWireName("hub_documents"))
+    assertNull(MotionOrigin.fromWireName("unknown"))
   }
 }
