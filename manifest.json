@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "7.1.0",
+      "version": "7.1.1",
       "releaseDate": "2026-08-23",
-      "changelog": "Un solo vocabolario di movimento: le transizioni non sfumano piu la pagina in arrivo, i cambi di tab scorrono nella direzione della barra e toccare una card apre la sezione dal punto toccato. Il titolo in alto e agganciato allo scroll e non si sovrappone piu al resto della pagina. Un aggiornamento non riuscito dice ora il motivo, e un anno scolastico non ancora aperto dalla scuola viene spiegato invece di comparire come errore. Meno frame persi durante i cambi di pagina.",
-      "releaseTag": "stable-classeviva-expressive-v7.1.0",
-      "apkAsset": "classeviva-expressive-7.1.0.apk",
+      "changelog": "Corretto un difetto che poteva impedire di aggiornare: con un changelog lungo i pulsanti dell'avviso di aggiornamento finivano fuori dallo schermo. Ora il testo scorre e i pulsanti restano sempre raggiungibili.",
+      "releaseTag": "stable-classeviva-expressive-v7.1.1",
+      "apkAsset": "classeviva-expressive-7.1.1.apk",
       "exeAsset": "",
-      "sizeBytes": 23755196
+      "sizeBytes": 23755210
     },
     "beta": {
-      "version": "7.1.0",
+      "version": "7.1.1",
       "releaseDate": "2026-08-23",
-      "changelog": "Un solo vocabolario di movimento: le transizioni non sfumano piu la pagina in arrivo, i cambi di tab scorrono nella direzione della barra e toccare una card apre la sezione dal punto toccato. Il titolo in alto e agganciato allo scroll e non si sovrappone piu al resto della pagina. Un aggiornamento non riuscito dice ora il motivo, e un anno scolastico non ancora aperto dalla scuola viene spiegato invece di comparire come errore. Meno frame persi durante i cambi di pagina.",
-      "releaseTag": "stable-classeviva-expressive-v7.1.0",
-      "apkAsset": "classeviva-expressive-7.1.0.apk",
+      "changelog": "Corretto un difetto che poteva impedire di aggiornare: con un changelog lungo i pulsanti dell'avviso di aggiornamento finivano fuori dallo schermo. Ora il testo scorre e i pulsanti restano sempre raggiungibili.",
+      "releaseTag": "stable-classeviva-expressive-v7.1.1",
+      "apkAsset": "classeviva-expressive-7.1.1.apk",
       "exeAsset": "",
-      "sizeBytes": 23755196
+      "sizeBytes": 23755210
     },
     "history": [
+      {
+        "version": "7.1.0",
+        "releaseDate": "2026-08-23",
+        "changelog": "Un solo vocabolario di movimento: le transizioni non sfumano piu la pagina in arrivo, i cambi di tab scorrono nella direzione della barra e toccare una card apre la sezione dal punto toccato. Il titolo in alto e agganciato allo scroll e non si sovrappone piu al resto della pagina. Un aggiornamento non riuscito dice ora il motivo, e un anno scolastico non ancora aperto dalla scuola viene spiegato invece di comparire come errore. Meno frame persi durante i cambi di pagina.",
+        "releaseTag": "stable-classeviva-expressive-v7.1.0",
+        "apkAsset": "classeviva-expressive-7.1.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 23755196
+      },
       {
         "version": "7.0.0",
         "releaseDate": "2026-08-22",
