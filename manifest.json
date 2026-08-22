@@ -2,7 +2,7 @@
   "app": {
     "id": "classeviva-expressive",
     "name": "Classeviva Expressive",
-    "description": "Client Android nativo per Classeviva con UI Material 3 Expressive, dashboard scolastica e widget home-screen.",
+    "description": "Client Android nativo per Classeviva con interfaccia disegnata su misura, dashboard scolastica e widget home-screen.",
     "packageName": "dev.antigravity.classevivaexpressive",
     "iconUrl": "",
     "category": "Education",
@@ -24,13 +24,13 @@
       "sizeBytes": 22294908
     },
     "beta": {
-      "version": "6.1.4",
-      "releaseDate": "2026-06-23",
-      "changelog": "Aggiunto il widget home-screen Classeviva Oggi con riepilogo compiti, verifiche, comunicazioni non lette e voti non visti. Aggiunta configurazione del widget, refresh manuale e aggiornamenti automatici dopo la sincronizzazione. Migliorata la sincronizzazione comunicazioni preservando le letture locali.",
-      "releaseTag": "stable-classeviva-expressive-v6.1.4",
-      "apkAsset": "classeviva-expressive-6.1.4.apk",
+      "version": "6.2.0",
+      "releaseDate": "2026-08-22",
+      "changelog": "Redesign profondo dell'interfaccia: l'app abbandona l'aspetto Material 3 per un linguaggio visivo costruito su misura. Nuovo carattere Inter tarato sulla scala di San Francisco, palette a grigi neutri con un solo colore d'accento, angoli continui e un intero livello di controlli ridisegnati (switch, segmented control, bottoni, sheet, avvisi, campi di testo, indicatori). La barra in alto ha un blur progressivo senza bordo netto e la barra delle schede un blur uniforme piu marcato. Le schermate ora si aprono espandendosi dall'elemento toccato e si richiudono al suo interno, con animazioni a molla. Corretto il passaggio all'anno scolastico: avviene a settembre e non piu ad agosto, con ripiego automatico sull'anno precedente, cosi l'app non resta vuota per un mese.",
+      "releaseTag": "beta-classeviva-expressive-v6.2.0",
+      "apkAsset": "classeviva-expressive-6.2.0.apk",
       "exeAsset": "",
-      "sizeBytes": 22294908
+      "sizeBytes": 23558537
     },
     "history": [
       {
