@@ -18,8 +18,10 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -48,11 +50,13 @@ class SettingsViewModelTest {
   @Before fun setUp() { Dispatchers.setMain(testDispatcher) }
   @After fun tearDown() { Dispatchers.resetMain() }
 
-  private fun buildViewModel(): SettingsViewModel {
+  private fun buildViewModel(
+    selectedSchoolYears: Flow<SchoolYearRef> = flowOf(SchoolYearRef(2025, 2026)),
+  ): SettingsViewModel {
     every { settingsRepository.observeSettings() } returns flowOf(AppSettings())
     every { settingsRepository.observeNotificationRuntimeState() } returns flowOf(dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState())
     every { authRepository.session } returns MutableStateFlow(null)
-    every { schoolYearRepository.observeSelectedSchoolYear() } returns flowOf(SchoolYearRef(2025, 2026))
+    every { schoolYearRepository.observeSelectedSchoolYear() } returns selectedSchoolYears
     every { schoolYearRepository.observeAvailableSchoolYears() } returns flowOf(listOf(SchoolYearRef(2025, 2026)))
     every { capabilityResolver.observeCapabilityMatrix() } returns flowOf(emptyList())
     return SettingsViewModel(settingsRepository, authRepository, schoolYearRepository, capabilityResolver, appBackupRepository, context)
@@ -101,6 +105,26 @@ class SettingsViewModelTest {
     val vm = buildViewModel()
     vm.setDynamicColor(false)
     coVerify { settingsRepository.setDynamicColorEnabled(false) }
+  }
+
+  @Test
+  fun setDynamicColor_enablingRequestsTheAtomicRepositoryTransition() = runTest {
+    val vm = buildViewModel()
+
+    vm.setDynamicColor(true)
+
+    coVerify(exactly = 1) { settingsRepository.setDynamicColorEnabled(true) }
+    coVerify(exactly = 0) { settingsRepository.updateAccentMode(any()) }
+  }
+
+  @Test
+  fun setAccentPreset_requestsOneAtomicRepositoryMutation() = runTest {
+    val vm = buildViewModel()
+
+    vm.setAccentPreset("ember")
+
+    coVerify(exactly = 1) { settingsRepository.updateCustomAccent("ember") }
+    coVerify(exactly = 0) { settingsRepository.updateAccentMode(AccentMode.CUSTOM_PRESET) }
   }
 
   // ─── Notifiche ────────────────────────────────────────────────────────────
@@ -153,23 +177,77 @@ class SettingsViewModelTest {
   // ─── Anno scolastico ──────────────────────────────────────────────────────
 
   @Test
-  fun selectSchoolYear_callsRepositoryAndSetsMessage() = runTest {
-    val year = SchoolYearRef(2024, 2025)
-    coEvery { schoolYearRepository.selectSchoolYear(year) } returns Unit
+  fun selectSchoolYear_usesEffectiveYearInMessageAfterFallback() = runTest {
+    val requested = SchoolYearRef(2026, 2027)
+    val effective = SchoolYearRef(2025, 2026)
+    val selectedSchoolYears = MutableStateFlow(effective)
+    coEvery { schoolYearRepository.selectSchoolYear(requested) } answers {
+      selectedSchoolYears.value = effective
+    }
 
+    val vm = buildViewModel(selectedSchoolYears)
+
+    vm.state.test {
+      awaitItem()
+      vm.selectSchoolYear(requested)
+      testDispatcher.scheduler.advanceUntilIdle()
+
+      assertEquals("Anno scolastico impostato su ${effective.label}.", vm.state.value.lastMessage)
+      assertFalse(vm.state.value.isChangingSchoolYear)
+      cancelAndIgnoreRemainingEvents()
+    }
+    coVerify(exactly = 1) { schoolYearRepository.selectSchoolYear(requested) }
+  }
+
+  @Test
+  fun selectSchoolYear_disablesFurtherChangesUntilAuthoritativeRefreshCompletes() = runTest {
+    val requested = SchoolYearRef(2026, 2027)
+    val ignoredDuplicate = SchoolYearRef(2025, 2026)
+    val selectionCompleted = CompletableDeferred<Unit>()
+    coEvery { schoolYearRepository.selectSchoolYear(requested) } coAnswers {
+      selectionCompleted.await()
+    }
     val vm = buildViewModel()
 
     vm.state.test {
       awaitItem()
-      vm.selectSchoolYear(year)
-      val updated = awaitItem()
-      assertTrue(updated.lastMessage?.contains(year.label) == true)
+      vm.selectSchoolYear(requested)
+      assertTrue(awaitItem().isChangingSchoolYear)
+
+      vm.selectSchoolYear(ignoredDuplicate)
+      coVerify(exactly = 1) { schoolYearRepository.selectSchoolYear(requested) }
+      coVerify(exactly = 0) { schoolYearRepository.selectSchoolYear(ignoredDuplicate) }
+
+      selectionCompleted.complete(Unit)
+      testDispatcher.scheduler.advanceUntilIdle()
+      assertFalse(vm.state.value.isChangingSchoolYear)
       cancelAndIgnoreRemainingEvents()
     }
-    coVerify { schoolYearRepository.selectSchoolYear(year) }
   }
 
   // ─── Logout ───────────────────────────────────────────────────────────────
+
+  @Test
+  fun selectSchoolYear_repositoryRefreshFailureRestoresControlsAndShowsFeedback() = runTest {
+    val requested = SchoolYearRef(2026, 2027)
+    coEvery { schoolYearRepository.selectSchoolYear(requested) } throws
+      IllegalStateException("aggiornamento del registro non disponibile")
+    val vm = buildViewModel()
+
+    vm.state.test {
+      awaitItem()
+      vm.selectSchoolYear(requested)
+      testDispatcher.scheduler.advanceUntilIdle()
+
+      assertFalse(vm.state.value.isChangingSchoolYear)
+      assertEquals(
+        "Non è stato possibile cambiare anno scolastico: aggiornamento del registro non disponibile",
+        vm.state.value.lastMessage,
+      )
+      cancelAndIgnoreRemainingEvents()
+    }
+    coVerify(exactly = 1) { schoolYearRepository.selectSchoolYear(requested) }
+  }
 
   @Test
   fun logout_callsAuthRepository() = runTest {

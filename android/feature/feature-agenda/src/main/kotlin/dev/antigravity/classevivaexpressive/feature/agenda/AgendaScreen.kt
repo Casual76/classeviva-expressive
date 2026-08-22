@@ -19,9 +19,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Assignment
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.EditCalendar
+import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.Quiz
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.School
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -65,6 +72,9 @@ import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextFie
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
@@ -274,6 +284,25 @@ fun AgendaRoute(
     onRefresh = viewModel::refresh,
     itemSpacing = 12.dp,
   ) {
+    item {
+      val monthEntryCount = monthEntriesByDate.values.sumOf(List<AgendaEntry>::size)
+      FeatureHero(
+        identity = FeatureIdentity.Agenda,
+        eyebrow = selectedMonth.format(calendarHeaderFormatter).replaceFirstChar { it.uppercase() },
+        value = selectedDayEntries.size.toString(),
+        title = if (selectedDayEntries.size == 1) "impegno nel giorno scelto" else "impegni nel giorno scelto",
+        description = if (selectedDayEntries.isEmpty()) {
+          "La data selezionata è libera da compiti, verifiche ed eventi."
+        } else {
+          "Tutto ciò che richiede attenzione nella data selezionata, in ordine cronologico."
+        },
+        icon = Icons.Rounded.CalendarMonth,
+        metrics = listOf(
+          FeatureHeroMetric("Nel mese", monthEntryCount.toString()),
+          FeatureHeroMetric("Giorni impegnati", monthEntriesByDate.size.toString()),
+        ),
+      )
+    }
     item {
       MonthHeader(
         month = selectedMonth,
@@ -515,6 +544,7 @@ private fun AgendaEntryRow(
       entry.teacher?.takeIf(String::isNotBlank)?.let(::add)
     }.joinToString(" / ").ifBlank { null },
     tone = categoryTone(entry.category),
+    leading = { Icon(categoryIcon(entry.category), contentDescription = null) },
     badge = {
       if (entry.history.isNotEmpty()) {
         StatusBadge(
@@ -918,6 +948,16 @@ private fun categoryLabel(category: AgendaCategory): String {
     AgendaCategory.ASSESSMENT -> "Verifica"
     AgendaCategory.EVENT -> "Evento"
     AgendaCategory.CUSTOM -> "Personalizzato"
+  }
+}
+
+private fun categoryIcon(category: AgendaCategory): ImageVector {
+  return when (category) {
+    AgendaCategory.LESSON -> Icons.Rounded.School
+    AgendaCategory.HOMEWORK -> Icons.AutoMirrored.Rounded.Assignment
+    AgendaCategory.ASSESSMENT -> Icons.Rounded.Quiz
+    AgendaCategory.EVENT -> Icons.Rounded.Event
+    AgendaCategory.CUSTOM -> Icons.Rounded.EditCalendar
   }
 }
 

@@ -40,6 +40,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.GradeVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearFallbackEvent
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
@@ -48,6 +49,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCase
 import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaNetworkException
 import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaRestClient
+import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaSchoolYearNotStartedException
 import dev.antigravity.classevivaexpressive.core.network.client.NetworkDocumentStream
 import dev.antigravity.classevivaexpressive.core.network.client.PortalClient
 import java.io.ByteArrayInputStream
@@ -60,6 +62,8 @@ import io.mockk.verify
 import io.mockk.verifyOrder
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.decodeFromString
@@ -96,9 +100,12 @@ class SchoolSyncCoordinatorTest {
     profile = StudentProfile(id = "55", name = "Nome", surname = "Cognome"),
   )
 
-  private fun buildCoordinator(): SchoolSyncCoordinator {
-    every { schoolYearStore.observeSelectedSchoolYear() } returns flowOf(currentYear)
-    every { schoolYearStore.currentSchoolYearRef() } returns currentYear
+  private fun buildCoordinator(
+    selectedYears: Flow<SchoolYearRef> = flowOf(currentYear),
+    calendarCurrentYear: SchoolYearRef = currentYear,
+  ): SchoolSyncCoordinator {
+    every { schoolYearStore.observeSelectedSchoolYear() } returns selectedYears
+    every { schoolYearStore.currentSchoolYearRef() } returns calendarCurrentYear
     every { timetableTemplateStore.observeTemplate(currentYear.id) } returns flowOf(TimetableTemplate())
     every { predictiveTimetableUseCase.generateTimetableTemplate(any()) } returns TimetableTemplate()
 
@@ -709,6 +716,74 @@ class SchoolSyncCoordinatorTest {
         },
       )
     }
+  }
+
+  @Test
+  fun refreshSections_schoolYearNotStartedFallsBackOnceAndNeverWalksTheArchive() = runTest {
+    stubLog()
+    val requested = SchoolYearRef(2026, 2027)
+    val fallback = currentYear
+    val selectedYears = MutableStateFlow(requested)
+    val event = SchoolYearFallbackEvent(
+      id = "fallback-1",
+      requested = requested,
+      selected = fallback,
+    )
+    coEvery { schoolYearStore.selectAutomaticFallback(requested) } coAnswers {
+      selectedYears.value = fallback
+      event
+    }
+    coEvery { schoolYearStore.selectAutomaticFallback(fallback) } returns null
+    var gradeFetches = 0
+    coEvery { restClient.getGrades() } answers {
+      when (gradeFetches++) {
+        0, 2 -> throw ClassevivaSchoolYearNotStartedException("Anno non aperto")
+        else -> emptyList()
+      }
+    }
+    val coordinator = buildCoordinator(selectedYears = selectedYears)
+
+    coordinator.refreshSections(force = true, sections = setOf(GradesSection))
+    assertEquals(fallback, selectedYears.value)
+
+    coordinator.refreshSections(force = true, sections = setOf(GradesSection))
+
+    assertEquals(fallback, selectedYears.value)
+    assertEquals(3, gradeFetches)
+    coVerify(exactly = 1) { schoolYearStore.selectAutomaticFallback(requested) }
+    coVerify(exactly = 1) { schoolYearStore.selectAutomaticFallback(fallback) }
+    coVerify(exactly = 0) { schoolYearStore.selectSchoolYear(any()) }
+  }
+
+  @Test
+  fun refreshCurrentSchoolYearForNotifications_neverMutatesSelectionOnTyped422() = runTest {
+    stubLog()
+    coEvery { restClient.getGrades() } throws
+      ClassevivaSchoolYearNotStartedException("Anno non aperto")
+    val coordinator = buildCoordinator()
+
+    coordinator.refreshCurrentSchoolYearForNotifications(
+      force = true,
+      sections = setOf(GradesSection),
+      mode = BackgroundSyncMode.FAST,
+    )
+
+    coVerify(exactly = 0) { schoolYearStore.selectAutomaticFallback(any()) }
+    coVerify(exactly = 0) { schoolYearStore.selectSchoolYear(any()) }
+  }
+
+  @Test
+  fun refreshCurrentSchoolYearMaintenance_neverMutatesSelectionOnTyped422() = runTest {
+    stubLog()
+    stubFullRefresh()
+    coEvery { restClient.getGrades() } throws
+      ClassevivaSchoolYearNotStartedException("Anno non aperto")
+    val coordinator = buildCoordinator()
+
+    coordinator.refreshCurrentSchoolYearMaintenance(force = true)
+
+    coVerify(exactly = 0) { schoolYearStore.selectAutomaticFallback(any()) }
+    coVerify(exactly = 0) { schoolYearStore.selectSchoolYear(any()) }
   }
 
   @Test

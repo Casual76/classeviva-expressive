@@ -30,4 +30,8 @@ dependencies {
   implementation project(":core:core-domain")
   implementation platform(libs.compose.bom)
   implementation libs.bundles.compose
+  implementation libs.kotlinx.coroutines.core
+
+  testImplementation libs.junit4
+  testImplementation libs.kotlinx.coroutines.test
 }

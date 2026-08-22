@@ -7,8 +7,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +30,9 @@ import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSection
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
@@ -424,29 +430,21 @@ fun ProfessorsRoute(
       }
     } else {
       item {
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          val avgPresence = state.professors
-            .map { it.presenceRate }
-            .takeIf { it.isNotEmpty() }
-            ?.average()
-          MetricTile(
-            label = "Docenti",
-            value = state.professors.size.toString(),
-            detail = "Docenti ufficiali rilevati.",
-            modifier = Modifier.weight(1f),
-            tone = ExpressiveTone.Info,
-          )
-          MetricTile(
-            label = "Presenza media",
-            value = avgPresence?.let { "${(it * 100).toInt()}%" } ?: "N/D",
-            detail = "Media classe.",
-            modifier = Modifier.weight(1f),
-            tone = if ((avgPresence ?: 0.0) >= 0.85) ExpressiveTone.Success else ExpressiveTone.Warning,
-          )
-        }
+        val avgPresence = state.professors.map { it.presenceRate }.average()
+        val distinctSubjects = state.professors.flatMap { it.subjects }.distinct().size
+        FeatureHero(
+          identity = FeatureIdentity.People,
+          eyebrow = "La classe docente",
+          value = state.professors.size.toString(),
+          title = if (state.professors.size == 1) "docente rilevato" else "docenti rilevati",
+          description = "Presenza, materie e valutazioni diventano un profilo leggibile per ogni docente ufficiale.",
+          icon = Icons.Rounded.Groups,
+          metrics = listOf(
+            FeatureHeroMetric("Presenza media", "${(avgPresence * 100).toInt()}%"),
+            FeatureHeroMetric("Materie", distinctSubjects.toString()),
+            FeatureHeroMetric("Voti assegnati", state.professors.sumOf { it.gradeCount }.toString()),
+          ),
+        )
       }
       item { FluidSectionHeader("Docenti") }
       items(state.professors, key = { it.teacherName }) { prof ->
@@ -471,6 +469,7 @@ fun ProfessorsRoute(
             if (prof.gradeCount == 0) append("Nessun voto assegnato")
           },
           tone = presenceTone,
+          leading = { Icon(Icons.Rounded.Person, contentDescription = null) },
           onClick = { viewModel.selectProfessor(prof) },
           badge = { StatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
           animatePress = true,

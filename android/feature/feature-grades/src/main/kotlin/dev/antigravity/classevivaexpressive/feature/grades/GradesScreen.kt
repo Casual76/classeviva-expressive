@@ -16,8 +16,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteSweep
+import androidx.compose.material.icons.rounded.Grade
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +55,9 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveEd
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveMiniChart
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradePill
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction
@@ -231,6 +237,7 @@ class GradesViewModel @Inject constructor(
 @Composable
 fun GradesRoute(
   initialGradeId: String? = null,
+  onInitialGradeConsumed: (String) -> Unit = {},
   modifier: Modifier = Modifier,
   viewModel: GradesViewModel = hiltViewModel(),
 ) {
@@ -281,10 +288,15 @@ fun GradesRoute(
     filteredGrades.filterNot { state.seenGradeIds.contains(it.id) }
   }
 
-  LaunchedEffect(initialGradeId, state.grades.size) {
-    if (!initialGradeId.isNullOrBlank() && state.grades.any { it.id == initialGradeId } && state.selectedGradeId != initialGradeId) {
-      viewModel.openGrade(initialGradeId)
-    }
+  LaunchedEffect(initialGradeId, state.grades) {
+    val gradeId = initialGradeRequestToOpen(
+      requestedGradeId = initialGradeId,
+      availableGrades = state.grades,
+    ) ?: return@LaunchedEffect
+    // Route arguments are commands, not persistent selection state. Consume before opening so a
+    // saved top-level back-stack entry cannot replay the detail when the user returns to Voti.
+    onInitialGradeConsumed(gradeId)
+    viewModel.openGrade(gradeId)
   }
 
   FluidScreen(
@@ -318,32 +330,23 @@ fun GradesRoute(
     itemSpacing = 18.dp,
   ) {
     item {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        MetricTile(
-          label = "Annuale",
-          value = overallAverage?.format2() ?: "--",
-          detail = "Media globale anno",
-          tone = gradeTone(overallAverage),
-          modifier = Modifier.weight(1f),
-        )
-        MetricTile(
-          label = "Periodo",
-          value = periodAverage?.format2() ?: "--",
-          detail = effectivePeriodLabel(state.periods, effectivePeriodCode),
-          tone = gradeTone(periodAverage),
-          modifier = Modifier.weight(1f),
-        )
-        MetricTile(
-          label = "A rischio",
-          value = riskSubjectsCount.toString(),
-          detail = "Materie sotto il 6.0",
-          tone = if (riskSubjectsCount > 0) ExpressiveTone.Danger else ExpressiveTone.Success,
-          modifier = Modifier.weight(1f),
-        )
-      }
+      FeatureHero(
+        identity = FeatureIdentity.Grades,
+        eyebrow = effectivePeriodLabel(state.periods, effectivePeriodCode),
+        value = periodAverage?.format2() ?: "--",
+        title = "media del periodo",
+        description = when {
+          filteredGrades.isEmpty() -> "Non ci sono ancora valutazioni numeriche nel periodo selezionato."
+          riskSubjectsCount > 0 -> "$riskSubjectsCount ${if (riskSubjectsCount == 1) "materia richiede" else "materie richiedono"} attenzione."
+          else -> "Le medie del periodo risultano tutte sopra la soglia del sei."
+        },
+        icon = Icons.Rounded.Insights,
+        metrics = listOf(
+          FeatureHeroMetric("Media annuale", overallAverage?.format2() ?: "--"),
+          FeatureHeroMetric("Valutazioni", filteredGrades.size.toString()),
+          FeatureHeroMetric("Materie a rischio", riskSubjectsCount.toString()),
+        ),
+      )
     }
     
     if (chartPoints.isNotEmpty()) {
@@ -437,6 +440,7 @@ fun GradesRoute(
               eyebrow = readableDate,
               meta = meta,
               tone = gradeTone(grade.numericValue),
+              leading = { Icon(Icons.Rounded.Grade, contentDescription = null) },
               badge = {
                 if (unseen) {
                   StatusBadge(label = "NUOVO", tone = ExpressiveTone.Primary)
@@ -470,6 +474,7 @@ fun GradesRoute(
               eyebrow = if (row.average != null && row.average < 6.0) "Materia a rischio" else "Per materia",
               meta = row.meta,
               tone = gradeTone(row.average),
+              leading = { Icon(Icons.AutoMirrored.Rounded.ShowChart, contentDescription = null) },
               badge = {
                 row.target?.let {
                   StatusBadge(
@@ -824,6 +829,13 @@ private data class SubjectRow(
   val meta: String,
   val target: Double?,
 )
+
+internal fun initialGradeRequestToOpen(
+  requestedGradeId: String?,
+  availableGrades: List<Grade>,
+): String? = requestedGradeId
+  ?.takeIf(String::isNotBlank)
+  ?.takeIf { requested -> availableGrades.any { grade -> grade.id == requested } }
 
 internal fun selectCurrentPeriodCode(
   periods: List<Period>,

@@ -10,6 +10,9 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateRepositor
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearFallbackEvent
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
@@ -22,6 +25,7 @@ import io.mockk.unmockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -65,6 +69,7 @@ class MainViewModelTest {
         AppSettings(ignoredStableUpdateVersion = update.version),
       ),
       appUpdateRepository = appUpdateRepository,
+      schoolYearRepository = FakeSchoolYearRepository(),
       context = mockk<Context>(relaxed = true),
     )
     testScheduler.advanceUntilIdle()
@@ -89,6 +94,7 @@ class MainViewModelTest {
       authRepository = FakeAuthRepository(session()),
       settingsRepository = settingsRepository,
       appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      schoolYearRepository = FakeSchoolYearRepository(),
       context = mockk<Context>(relaxed = true),
     )
     testScheduler.advanceUntilIdle()
@@ -108,6 +114,7 @@ class MainViewModelTest {
       authRepository = FakeAuthRepository(),
       settingsRepository = settingsRepository,
       appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      schoolYearRepository = FakeSchoolYearRepository(),
       context = mockk<Context>(relaxed = true),
     )
     testScheduler.advanceUntilIdle()
@@ -118,6 +125,37 @@ class MainViewModelTest {
 
     assertEquals(1, settingsRepository.notificationRuntimeRefreshCount)
     assertEquals(0, settingsRepository.liveTimetableRefreshCount)
+  }
+
+  @Test
+  fun schoolYearFallback_becomesGlobalNoticeAndCanBeAcknowledged() = runTest {
+    val schoolYears = FakeSchoolYearRepository()
+    val viewModel = MainViewModel(
+      authRepository = FakeAuthRepository(),
+      settingsRepository = FakeSettingsRepository(AppSettings()),
+      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      schoolYearRepository = schoolYears,
+      context = mockk<Context>(relaxed = true),
+    )
+    val event = SchoolYearFallbackEvent(
+      id = "school-year:2026-2027:2025-2026",
+      requested = SchoolYearRef(2026, 2027),
+      selected = SchoolYearRef(2025, 2026),
+    )
+
+    viewModel.inAppNotifications.test {
+      schoolYears.emitFallback(event)
+      val notice = awaitItem()
+
+      assertEquals(event.id, notice.id)
+      assertEquals(true, notice.message.contains(event.requested.label))
+      assertEquals(true, notice.message.contains(event.selected.label))
+
+      viewModel.acknowledgeInAppNotification(notice.id)
+      testScheduler.advanceUntilIdle()
+      assertEquals(listOf(event.id), schoolYears.acknowledgedIds)
+      cancelAndIgnoreRemainingEvents()
+    }
   }
 
   private fun update(version: String) = AvailableAppUpdate(
@@ -188,6 +226,31 @@ private class FakeSettingsRepository(
   }
   override suspend fun ignoreStableUpdateVersion(version: String) {
     settings.value = settings.value.copy(ignoredStableUpdateVersion = version)
+  }
+}
+
+private class FakeSchoolYearRepository : SchoolYearRepository {
+  private val fallbacks = MutableSharedFlow<SchoolYearFallbackEvent>(extraBufferCapacity = 1)
+  val acknowledgedIds = mutableListOf<String>()
+
+  suspend fun emitFallback(event: SchoolYearFallbackEvent) {
+    fallbacks.emit(event)
+  }
+
+  override fun observeSelectedSchoolYear(): Flow<SchoolYearRef> =
+    flowOf(SchoolYearRef(2025, 2026))
+
+  override fun observeAvailableSchoolYears(): Flow<List<SchoolYearRef>> =
+    flowOf(listOf(SchoolYearRef(2025, 2026)))
+
+  override fun observeFallbackEvents(): Flow<SchoolYearFallbackEvent> = fallbacks
+
+  override suspend fun selectSchoolYear(year: SchoolYearRef) = Unit
+
+  override suspend fun selectAutomaticFallback(requested: SchoolYearRef): SchoolYearFallbackEvent? = null
+
+  override suspend fun acknowledgeFallbackEvent(id: String) {
+    acknowledgedIds += id
   }
 }
 

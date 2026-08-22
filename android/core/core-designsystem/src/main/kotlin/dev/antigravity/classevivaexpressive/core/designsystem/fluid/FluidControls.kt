@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +46,9 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -114,19 +118,17 @@ fun FluidButton(
   leading: (@Composable () -> Unit)? = null,
 ) {
   val scheme = MaterialTheme.colorScheme
-  val accent = when (style) {
-    FluidButtonStyle.Destructive -> scheme.error
-    else -> scheme.primary
-  }
   val container = when (style) {
-    FluidButtonStyle.Filled -> accent
-    FluidButtonStyle.Tinted -> accent.copy(alpha = 0.14f)
-    FluidButtonStyle.Destructive -> accent.copy(alpha = 0.14f)
+    FluidButtonStyle.Filled -> scheme.primary
+    FluidButtonStyle.Tinted -> scheme.primaryContainer
+    FluidButtonStyle.Destructive -> scheme.errorContainer
     FluidButtonStyle.Plain -> Color.Transparent
   }
   val content = when (style) {
-    FluidButtonStyle.Filled -> if (accent.luminanceIsLight()) Color(0xFF121214) else Color.White
-    else -> accent
+    FluidButtonStyle.Filled -> scheme.onPrimary
+    FluidButtonStyle.Tinted -> scheme.onPrimaryContainer
+    FluidButtonStyle.Destructive -> scheme.onErrorContainer
+    FluidButtonStyle.Plain -> scheme.primary
   }
   val shape = FluidButtonDefaults.shape(size)
 
@@ -194,11 +196,20 @@ fun FluidSwitch(
   val interactionSource = remember { MutableInteractionSource() }
   val pressed by interactionSource.collectIsPressedAsState()
 
-  val trackOff = scheme.onSurface.copy(alpha = 0.16f)
+  val trackOff = scheme.onSurface.copy(alpha = FluidSwitchOffTrackAlpha)
   val track by animateColorAsState(
     targetValue = if (checked) scheme.primary else trackOff,
     animationSpec = FluidMotion.color(200),
     label = "switch track",
+  )
+  val trackBorder by animateColorAsState(
+    targetValue = if (checked) {
+      Color.Transparent
+    } else {
+      scheme.onSurface.copy(alpha = FluidSwitchOffBorderAlpha)
+    },
+    animationSpec = FluidMotion.color(200),
+    label = "switch track border",
   )
   val progress by animateFloatAsState(
     targetValue = if (checked) 1f else 0f,
@@ -217,6 +228,7 @@ fun FluidSwitch(
       .size(TrackWidth, TrackHeight)
       .clip(FluidCapsuleShape)
       .background(track)
+      .border(1.dp, trackBorder, FluidCapsuleShape)
       .then(
         if (onCheckedChange != null) {
           Modifier.toggleable(
@@ -250,6 +262,12 @@ private val TrackWidth = 51.dp
 private val TrackHeight = 31.dp
 private val ThumbSize = 27.dp
 private val ThumbInset = 2.dp
+
+/** Keeps the neutral fill quiet; the outline carries the off-state boundary contrast. */
+internal const val FluidSwitchOffTrackAlpha = 0.12f
+
+/** Produces a >= 3:1 off-state outline against every app surface in light and dark themes. */
+internal const val FluidSwitchOffBorderAlpha = 0.55f
 
 /**
  * A segmented control.
@@ -367,11 +385,7 @@ fun FluidChip(
     label = "chip container",
   )
   val content by animateColorAsState(
-    targetValue = when {
-      selected && scheme.primary.luminanceIsLight() -> Color(0xFF121214)
-      selected -> Color.White
-      else -> scheme.onSurface
-    },
+    targetValue = if (selected) scheme.onPrimary else scheme.onSurface,
     animationSpec = FluidMotion.color(200),
     label = "chip content",
   )
@@ -379,10 +393,11 @@ fun FluidChip(
   Box(
     modifier = modifier
       .alpha(if (enabled) 1f else 0.4f)
+      .defaultMinSize(minHeight = 48.dp)
       .clip(FluidCapsuleShape)
       .background(container)
+      .semantics { this.selected = selected }
       .fluidPressable(onClick = onClick, enabled = enabled, role = Role.Button)
-      .defaultMinSize(minHeight = 32.dp)
       .padding(horizontal = 14.dp, vertical = 6.dp),
     contentAlignment = Alignment.Center,
   ) {
@@ -446,10 +461,12 @@ fun FluidColorDot(
   color: Color,
   selected: Boolean,
   onClick: () -> Unit,
+  label: String,
   modifier: Modifier = Modifier,
   size: Dp = 30.dp,
 ) {
   val scheme = MaterialTheme.colorScheme
+  val touchTargetSize = maxOf(48.dp, size + 10.dp)
   val ringAlpha by animateFloatAsState(
     targetValue = if (selected) 1f else 0f,
     animationSpec = FluidMotion.color(180),
@@ -457,12 +474,16 @@ fun FluidColorDot(
   )
   Box(
     modifier = modifier
-      .size(size + 10.dp)
+      .size(touchTargetSize)
+      .semantics {
+        contentDescription = label
+        this.selected = selected
+      }
       .fluidPressable(onClick = onClick, role = Role.RadioButton)
       .drawBehind {
         if (ringAlpha > 0.001f) {
           drawCircle(
-            color = scheme.onSurface.copy(alpha = 0.35f * ringAlpha),
+            color = scheme.onSurface.copy(alpha = FluidSelectedRingAlpha * ringAlpha),
             radius = size.toPx() / 2f + 4.dp.toPx(),
             style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx()),
           )
@@ -478,6 +499,9 @@ fun FluidColorDot(
     )
   }
 }
+
+/** Final-state contrast is at least 3:1 on the light and dark app container surfaces. */
+internal const val FluidSelectedRingAlpha = 0.55f
 
 /** Width helper so a row of controls can reserve the switch's footprint without instantiating one. */
 val FluidSwitchWidth: Dp = TrackWidth

@@ -1,6 +1,8 @@
 package dev.antigravity.classevivaexpressive.core.domain.model
 
+import java.time.LocalDate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SchoolYearRefTest {
@@ -39,5 +41,36 @@ class SchoolYearRefTest {
 
     assertEquals("2026-2027", year.id)
     assertEquals("2026/27", year.label)
+  }
+
+  @Test
+  fun juneThroughAugust_offerOnlyUpcomingAndItsImmediatePredecessor() {
+    assertEquals(
+      listOf(SchoolYearRef(2026, 2027), SchoolYearRef(2025, 2026)),
+      SchoolYearSelectionPolicy.available(LocalDate.of(2026, 6, 1)),
+    )
+    assertEquals(
+      listOf(SchoolYearRef(2026, 2027), SchoolYearRef(2025, 2026)),
+      SchoolYearSelectionPolicy.available(LocalDate.of(2026, 8, 31)),
+    )
+  }
+
+  @Test
+  fun september_doesNotOfferTheFollowingSchoolYear() {
+    assertEquals(
+      listOf(SchoolYearRef(2026, 2027), SchoolYearRef(2025, 2026)),
+      SchoolYearSelectionPolicy.available(LocalDate.of(2026, 9, 1)),
+    )
+  }
+
+  @Test
+  fun automaticFallback_onlyMovesNewestOfferedYearBackOnce() {
+    val available = SchoolYearSelectionPolicy.available(LocalDate.of(2026, 8, 22))
+    val newest = SchoolYearRef(2026, 2027)
+    val fallback = SchoolYearSelectionPolicy.automaticFallback(newest, available)
+
+    assertEquals(SchoolYearRef(2025, 2026), fallback)
+    assertNull(SchoolYearSelectionPolicy.automaticFallback(fallback!!, available))
+    assertNull(SchoolYearSelectionPolicy.automaticFallback(SchoolYearRef(2024, 2025), available))
   }
 }

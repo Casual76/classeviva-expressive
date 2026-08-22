@@ -1,12 +1,15 @@
 package dev.antigravity.classevivaexpressive.feature.absences
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.EventBusy
+import androidx.compose.material.icons.automirrored.rounded.FactCheck
+import androidx.compose.material.icons.automirrored.rounded.Login
+import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,8 +36,10 @@ import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSection
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
@@ -174,46 +179,24 @@ fun AbsencesRoute(
     itemSpacing = 18.dp,
   ) {
     item {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        MetricTile(
-          label = "Assenze",
-          value = absenceCount.toString(),
-          detail = "Assenze registrate",
-          tone = if (pending.any { it.type == AbsenceType.ABSENCE }) ExpressiveTone.Danger else ExpressiveTone.Neutral,
-          modifier = Modifier.weight(1f),
-        )
-        MetricTile(
-          label = "Ritardi",
-          value = lateCount.toString(),
-          detail = "Ingressi dopo l'orario",
-          tone = if (pending.any { it.type == AbsenceType.LATE }) ExpressiveTone.Warning else ExpressiveTone.Neutral,
-          modifier = Modifier.weight(1f),
-        )
-      }
-    }
-    item {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        MetricTile(
-          label = "Uscite",
-          value = exitCount.toString(),
-          detail = "Uscite anticipate registrate",
-          tone = if (pending.any { it.type == AbsenceType.EXIT }) ExpressiveTone.Warning else ExpressiveTone.Neutral,
-          modifier = Modifier.weight(1f),
-        )
-        MetricTile(
-          label = "Da giustificare",
-          value = pending.size.toString(),
-          detail = if (pending.isEmpty()) "Situazione allineata" else "Richiede una verifica rapida",
-          tone = if (pending.isEmpty()) ExpressiveTone.Neutral else ExpressiveTone.Warning,
-          modifier = Modifier.weight(1f),
-        )
-      }
+      FeatureHero(
+        identity = FeatureIdentity.Attendance,
+        eyebrow = "Presenze e giustificazioni",
+        value = pending.size.toString(),
+        title = if (pending.size == 1) "voce da giustificare" else "voci da giustificare",
+        description = if (pending.isEmpty()) {
+          "La situazione è allineata: non risultano azioni in sospeso."
+        } else {
+          "Controlla le registrazioni in sospeso e giustifica solo quelle corrette."
+        },
+        icon = if (pending.isEmpty()) Icons.AutoMirrored.Rounded.FactCheck else Icons.Rounded.EventBusy,
+        metrics = listOf(
+          FeatureHeroMetric("Assenze", absenceCount.toString()),
+          FeatureHeroMetric("Ritardi", lateCount.toString()),
+          FeatureHeroMetric("Uscite", exitCount.toString()),
+        ),
+        urgent = pending.isNotEmpty(),
+      )
     }
     if (state.isSubmitting) {
       item {
@@ -306,6 +289,16 @@ private fun AbsenceRow(
       }
     },
     tone = absenceTone(absence),
+    leading = {
+      Icon(
+        imageVector = when (absence.type) {
+          AbsenceType.ABSENCE -> Icons.Rounded.EventBusy
+          AbsenceType.LATE -> Icons.AutoMirrored.Rounded.Login
+          AbsenceType.EXIT -> Icons.AutoMirrored.Rounded.Logout
+        },
+        contentDescription = null,
+      )
+    },
     badge = {
       StatusBadge(
         label = badgeLabel(absence.type),

@@ -14,11 +14,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.Gavel
+import androidx.compose.material.icons.rounded.MarkEmailUnread
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -42,14 +45,20 @@ import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarActi
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotification
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationTone
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.LocalFluidNotificationHostState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
@@ -79,12 +88,29 @@ private const val FILTER_ALL = "Tutte"
 private const val FILTER_UNREAD = "Non lette"
 private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
 
+enum class CommunicationsMessageKind {
+  Success,
+  Error,
+  Info,
+}
+
+data class CommunicationsMessage(
+  val text: String,
+  val kind: CommunicationsMessageKind,
+)
+
+internal fun CommunicationsMessageKind.toFluidNotificationTone(): FluidNotificationTone = when (this) {
+  CommunicationsMessageKind.Success -> FluidNotificationTone.Success
+  CommunicationsMessageKind.Error -> FluidNotificationTone.Error
+  CommunicationsMessageKind.Info -> FluidNotificationTone.Info
+}
+
 data class CommunicationsUiState(
   val communications: List<Communication> = emptyList(),
   val notes: List<Note> = emptyList(),
   val selectedCommunication: CommunicationDetail? = null,
   val selectedNote: NoteDetail? = null,
-  val lastMessage: String? = null,
+  val lastMessage: CommunicationsMessage? = null,
   val isSubmittingAction: Boolean = false,
   val isRefreshing: Boolean = false,
   val pendingOpenUri: Uri? = null,
@@ -114,7 +140,7 @@ class CommunicationsViewModel @Inject constructor(
 ) : ViewModel() {
   private val selectedCommunication = MutableStateFlow<CommunicationDetail?>(null)
   private val selectedNote = MutableStateFlow<NoteDetail?>(null)
-  private val lastMessage = MutableStateFlow<String?>(null)
+  private val lastMessage = MutableStateFlow<CommunicationsMessage?>(null)
   private val isSubmittingAction = MutableStateFlow(false)
   private val isRefreshing = MutableStateFlow(false)
   private val pendingOpenUri = MutableStateFlow<Uri?>(null)
@@ -183,7 +209,10 @@ class CommunicationsViewModel @Inject constructor(
         }
         .onFailure { error ->
           if (cached == null) {
-            lastMessage.value = error.message ?: "Impossibile aprire la comunicazione."
+            lastMessage.value = CommunicationsMessage(
+              text = error.message ?: "Impossibile aprire la comunicazione.",
+              kind = CommunicationsMessageKind.Error,
+            )
           }
         }
     }
@@ -197,7 +226,10 @@ class CommunicationsViewModel @Inject constructor(
           selectedNote.value = it
         }
         .onFailure {
-          lastMessage.value = it.message ?: "Impossibile aprire la nota."
+          lastMessage.value = CommunicationsMessage(
+            text = it.message ?: "Impossibile aprire la nota.",
+            kind = CommunicationsMessageKind.Error,
+          )
         }
     }
   }
@@ -205,8 +237,18 @@ class CommunicationsViewModel @Inject constructor(
   fun downloadAttachment(attachment: RemoteAttachment) {
     viewModelScope.launch {
       communicationsRepository.queueDownload(attachment)
-        .onSuccess { lastMessage.value = "Download avviato per ${attachment.name}" }
-        .onFailure { lastMessage.value = it.message ?: "Download fallito." }
+        .onSuccess {
+          lastMessage.value = CommunicationsMessage(
+            text = "Download avviato per ${attachment.name}",
+            kind = CommunicationsMessageKind.Info,
+          )
+        }
+        .onFailure {
+          lastMessage.value = CommunicationsMessage(
+            text = it.message ?: "Download fallito.",
+            kind = CommunicationsMessageKind.Error,
+          )
+        }
     }
   }
 
@@ -241,7 +283,10 @@ class CommunicationsViewModel @Inject constructor(
             isWorking = false,
             isError = true,
           )
-          lastMessage.value = message
+          lastMessage.value = CommunicationsMessage(
+            text = message,
+            kind = CommunicationsMessageKind.Error,
+          )
         }
       isSubmittingAction.value = false
     }
@@ -265,7 +310,10 @@ class CommunicationsViewModel @Inject constructor(
       isWorking = false,
       isError = true,
     )
-    lastMessage.value = message
+    lastMessage.value = CommunicationsMessage(
+      text = message,
+      kind = CommunicationsMessageKind.Error,
+    )
   }
 
   fun dismissAttachmentDialog() {
@@ -318,8 +366,18 @@ class CommunicationsViewModel @Inject constructor(
   fun markAllAsRead() {
     viewModelScope.launch {
       communicationsRepository.markAllAsRead()
-        .onSuccess { lastMessage.value = "Tutte le comunicazioni segnate come lette." }
-        .onFailure { lastMessage.value = it.message ?: "Errore durante l'operazione." }
+        .onSuccess {
+          lastMessage.value = CommunicationsMessage(
+            text = "Tutte le comunicazioni segnate come lette.",
+            kind = CommunicationsMessageKind.Success,
+          )
+        }
+        .onFailure {
+          lastMessage.value = CommunicationsMessage(
+            text = it.message ?: "Errore durante l'operazione.",
+            kind = CommunicationsMessageKind.Error,
+          )
+        }
     }
   }
 
@@ -350,10 +408,16 @@ class CommunicationsViewModel @Inject constructor(
       block()
         .onSuccess {
           selectedCommunication.value = it
-          lastMessage.value = successMessage
+          lastMessage.value = CommunicationsMessage(
+            text = successMessage,
+            kind = CommunicationsMessageKind.Success,
+          )
         }
         .onFailure {
-          lastMessage.value = it.message ?: errorMessage
+          lastMessage.value = CommunicationsMessage(
+            text = it.message ?: errorMessage,
+            kind = CommunicationsMessageKind.Error,
+          )
         }
       isSubmittingAction.value = false
     }
@@ -365,7 +429,12 @@ class CommunicationsViewModel @Inject constructor(
         isRefreshing.value = true
       }
       communicationsRepository.refreshCommunications(force = force)
-        .onFailure { lastMessage.value = it.message ?: "Impossibile aggiornare la bacheca." }
+        .onFailure {
+          lastMessage.value = CommunicationsMessage(
+            text = it.message ?: "Impossibile aggiornare la bacheca.",
+            kind = CommunicationsMessageKind.Error,
+          )
+        }
       isRefreshing.value = false
     }
   }
@@ -388,7 +457,7 @@ fun CommunicationsRoute(
   var selectedTab by rememberSaveable { mutableStateOf(tabFromRoute(initialTab)) }
   var selectedFilter by rememberSaveable { mutableStateOf(FILTER_ALL) }
   var pendingUploadDetail by remember { mutableStateOf<CommunicationDetail?>(null) }
-  val snackbarHostState = remember { SnackbarHostState() }
+  val notificationHostState = LocalFluidNotificationHostState.current
 
   LaunchedEffect(initialTab) {
     selectedTab = tabFromRoute(initialTab)
@@ -409,9 +478,23 @@ fun CommunicationsRoute(
   }
 
   LaunchedEffect(state.lastMessage) {
-    val message = state.lastMessage
-    if (!message.isNullOrBlank()) {
-      snackbarHostState.showSnackbar(message)
+    val feedback = state.lastMessage
+    if (feedback != null) {
+      if (feedback.text.isNotBlank()) {
+        notificationHostState?.show(
+          FluidNotification(
+            id = "communications:${feedback.kind}:${feedback.text.hashCode()}",
+            title = when (feedback.kind) {
+              CommunicationsMessageKind.Error -> "Problema nelle comunicazioni"
+              CommunicationsMessageKind.Success -> "Comunicazioni aggiornate"
+              CommunicationsMessageKind.Info -> "Comunicazioni"
+            },
+            message = feedback.text,
+            tone = feedback.kind.toFluidNotificationTone(),
+            durationMillis = if (feedback.kind == CommunicationsMessageKind.Error) 7_000L else 4_500L,
+          ),
+        )
+      }
       viewModel.clearMessage()
     }
   }
@@ -452,6 +535,7 @@ fun CommunicationsRoute(
       }
     }
   }
+  val totalUnreadCount = remember(state.communications) { state.communications.count { !it.read } }
 
 
   FluidScreen(
@@ -473,6 +557,24 @@ fun CommunicationsRoute(
     onRefresh = viewModel::refresh,
     itemSpacing = 18.dp,
   ) {
+    item {
+      FeatureHero(
+        identity = FeatureIdentity.Communications,
+        eyebrow = "Centro messaggi",
+        value = totalUnreadCount.toString(),
+        title = if (totalUnreadCount == 1) "comunicazione da leggere" else "comunicazioni da leggere",
+        description = if (totalUnreadCount == 0) {
+          "Hai letto tutti gli avvisi disponibili; note e circolari restano raccolte qui."
+        } else {
+          "Dai priorità ai nuovi avvisi senza perdere allegati, richieste e annotazioni."
+        },
+        icon = if (totalUnreadCount > 0) Icons.Rounded.MarkEmailUnread else Icons.Rounded.Forum,
+        metrics = listOf(
+          FeatureHeroMetric("Circolari", state.communications.size.toString()),
+          FeatureHeroMetric("Note", state.notes.size.toString()),
+        ),
+      )
+    }
     item {
       ExpressivePillTabs(
         options = listOf(TAB_BOARD, TAB_NOTES),
@@ -512,6 +614,7 @@ fun CommunicationsRoute(
             eyebrow = communication.date.toReadableDate(),
             meta = communication.contentPreview.takeIf { it.isNotBlank() },
             tone = communicationTone(communication),
+            leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
             badge = {
               StatusBadge(
                 label = communicationBadgeLabel(communication),
@@ -539,6 +642,7 @@ fun CommunicationsRoute(
             eyebrow = note.date.toReadableDate(),
             meta = note.contentPreview.takeIf { it.isNotBlank() },
             tone = noteTone(note),
+            leading = { Icon(Icons.Rounded.Gavel, contentDescription = null) },
             badge = {
               StatusBadge(
                 label = if (note.read) "LETTA" else "NOTA",

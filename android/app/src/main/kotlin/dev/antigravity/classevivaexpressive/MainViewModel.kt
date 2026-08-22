@@ -7,11 +7,14 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.antigravity.classevivaexpressive.core.data.sync.SyncWorkScheduler
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotification
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationTone
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import javax.inject.Inject
@@ -65,6 +68,7 @@ class MainViewModel @Inject constructor(
   private val authRepository: AuthRepository,
   private val settingsRepository: SettingsRepository,
   private val appUpdateRepository: AppUpdateRepository,
+  private val schoolYearRepository: SchoolYearRepository,
   @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
   private val isRestoring = MutableStateFlow(true)
@@ -120,6 +124,18 @@ class MainViewModel @Inject constructor(
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
 
+  /** Durable repository events translated once into the app-wide visual notice vocabulary. */
+  val inAppNotifications = schoolYearRepository.observeFallbackEvents().map { event ->
+    FluidNotification(
+      id = event.id,
+      title = "Anno scolastico aggiornato",
+      message = "Il ${event.requested.label} non è ancora disponibile. " +
+        "Per ora mostro il ${event.selected.label}.",
+      tone = FluidNotificationTone.Info,
+      durationMillis = 8_000L,
+    )
+  }
+
   init {
     viewModelScope.launch {
       runCatching { authRepository.restore() }
@@ -169,6 +185,11 @@ class MainViewModel @Inject constructor(
       force = false,
       allowDisabled = false,
     )
+  }
+
+  /** Called only after the root host has accepted the notice into its in-memory queue. */
+  fun acknowledgeInAppNotification(id: String) {
+    viewModelScope.launch { schoolYearRepository.acknowledgeFallbackEvent(id) }
   }
 
   fun checkUpdate(showNoUpdateMessage: Boolean = true) {

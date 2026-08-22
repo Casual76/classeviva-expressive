@@ -33,4 +33,7 @@ dependencies {
   implementation libs.serialization.json
 
   ksp libs.hilt.compiler
+
+  testImplementation libs.junit4
+  testImplementation libs.kotlinx.coroutines.test
 }

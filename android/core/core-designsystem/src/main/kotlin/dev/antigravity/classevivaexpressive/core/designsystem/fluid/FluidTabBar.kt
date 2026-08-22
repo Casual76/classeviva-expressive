@@ -1,7 +1,9 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.fluid
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +45,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 @Immutable
 data class FluidTabItem(
@@ -51,7 +56,7 @@ data class FluidTabItem(
 )
 
 object FluidTabBarDefaults {
-  val Height = 56.dp
+  val Height = 64.dp
   val HorizontalMargin = 14.dp
   val BottomMargin = 8.dp
   val RailWidth = 84.dp
@@ -60,14 +65,25 @@ object FluidTabBarDefaults {
   val ContentInset = Height + BottomMargin
 }
 
+private fun indicatorLeadingSpec() = spring<Float>(
+  dampingRatio = 0.90f,
+  stiffness = FluidMotion.ResponseSnappy,
+  visibilityThreshold = 0.5f,
+)
+
+private fun indicatorTrailingSpec() = spring<Float>(
+  dampingRatio = FluidMotion.DampingStandard,
+  stiffness = FluidMotion.ResponseStandard,
+  visibilityThreshold = 0.5f,
+)
+
 /**
  * The floating tab bar: a capsule of frosted glass that content scrolls *under* rather than being
  * cut off above.
  *
- * Selection is carried by colour and by a short pop on the icon — there is no sliding pill. A filled
- * indicator behind the active tab is a Material signature, and on glass it is actively harmful: an
- * opaque shape sitting on a translucent panel flattens the material back into a solid bar, which is
- * the one thing the effect exists to avoid.
+ * Selection is carried by colour, a restrained icon settle and a translucent underglow that travels
+ * between tabs. The underglow is deliberately faint: it adds spatial continuity without flattening
+ * the glass into an opaque Material navigation indicator.
  */
 @Composable
 fun FluidTabBar(
@@ -79,6 +95,42 @@ fun FluidTabBar(
   onReselect: (FluidTabItem) -> Unit = {},
 ) {
   val tint = GlassDefaults.floatingTint()
+  val selectedIndex = items.indexOfFirst { it.route == selectedRoute }
+  val underglowColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+  val density = LocalDensity.current
+  var rowWidthPx by remember { mutableFloatStateOf(0f) }
+  val underglowStart = remember { Animatable(0f) }
+  val underglowEnd = remember { Animatable(0f) }
+  var underglowPlaced by remember { mutableStateOf(false) }
+  val itemWidthPx = if (items.isEmpty()) 0f else rowWidthPx / items.size
+  val underglowHorizontalInsetPx = with(density) { 5.dp.toPx() }
+  val underglowVerticalInsetPx = with(density) { 5.dp.toPx() }
+  val underglowRadiusPx = with(density) { 24.dp.toPx() }
+
+  LaunchedEffect(selectedIndex, itemWidthPx) {
+    if (selectedIndex < 0 || itemWidthPx <= 0f) return@LaunchedEffect
+    val targetStart = selectedIndex * itemWidthPx + underglowHorizontalInsetPx
+    val targetEnd = (selectedIndex + 1) * itemWidthPx - underglowHorizontalInsetPx
+    if (!underglowPlaced) {
+      underglowStart.snapTo(targetStart)
+      underglowEnd.snapTo(targetEnd)
+      underglowPlaced = true
+    } else {
+      val movingForward = targetStart > underglowStart.value
+      // The leading edge arrives first while the trailing edge follows with a calmer response. The
+      // capsule stretches in the direction of travel and then recomposes itself, carrying all tab
+      // continuity without wiping two full pages across one another.
+      coroutineScope {
+        if (movingForward) {
+          launch { underglowEnd.animateTo(targetEnd, indicatorLeadingSpec()) }
+          launch { underglowStart.animateTo(targetStart, indicatorTrailingSpec()) }
+        } else {
+          launch { underglowStart.animateTo(targetStart, indicatorLeadingSpec()) }
+          launch { underglowEnd.animateTo(targetEnd, indicatorTrailingSpec()) }
+        }
+      }
+    }
+  }
 
   Row(
     modifier = modifier
@@ -89,18 +141,36 @@ fun FluidTabBar(
         tint = tint,
         shape = FluidCapsuleShape,
         edge = GlassEdge.None,
-      ),
+      )
+      .onSizeChanged { rowWidthPx = it.width.toFloat() }
+      .drawBehind {
+        if (!underglowPlaced || selectedIndex < 0 || itemWidthPx <= 0f) return@drawBehind
+        drawRoundRect(
+          color = underglowColor,
+          topLeft = Offset(
+            x = underglowStart.value,
+            y = underglowVerticalInsetPx,
+          ),
+          size = Size(
+            width = (underglowEnd.value - underglowStart.value).coerceAtLeast(0f),
+            height = (size.height - underglowVerticalInsetPx * 2).coerceAtLeast(0f),
+          ),
+          cornerRadius = CornerRadius(underglowRadiusPx, underglowRadiusPx),
+        )
+      },
     verticalAlignment = Alignment.CenterVertically,
   ) {
     items.forEach { item ->
-      FluidTabItemContent(
-        item = item,
-        selected = item.route == selectedRoute,
-        modifier = Modifier.weight(1f),
-        onClick = {
-          if (item.route == selectedRoute) onReselect(item) else onSelect(item)
-        },
-      )
+      key(item.route) {
+        FluidTabItemContent(
+          item = item,
+          selected = item.route == selectedRoute,
+          modifier = Modifier.weight(1f),
+          onClick = {
+            if (item.route == selectedRoute) onReselect(item) else onSelect(item)
+          },
+        )
+      }
     }
   }
 }
@@ -122,17 +192,18 @@ private fun FluidTabItemContent(
     label = "fluid tab colour",
   )
 
-  // A small, quickly-settled pop on the icon when a tab becomes active. Big enough to notice out of
-  // the corner of the eye, small enough that repeated switching never looks busy.
-  val pop = remember { Animatable(1f) }
-  LaunchedEffect(selected) {
-    if (selected) {
-      pop.animateTo(1.16f, FluidMotion.instant())
-      pop.animateTo(1f, FluidMotion.expressive())
-    } else {
-      pop.animateTo(1f, FluidMotion.snappy())
-    }
-  }
+  val density = LocalDensity.current
+  val selectedLiftPx = with(density) { -1.5.dp.toPx() }
+  val iconScale by animateFloatAsState(
+    targetValue = if (selected) 1f else 0.96f,
+    animationSpec = FluidMotion.standard(),
+    label = "fluid tab scale",
+  )
+  val lift by animateFloatAsState(
+    targetValue = if (selected) selectedLiftPx else 0f,
+    animationSpec = FluidMotion.standard(),
+    label = "fluid tab lift",
+  )
 
   Box(
     modifier = modifier
@@ -142,7 +213,7 @@ private fun FluidTabItemContent(
         this.role = Role.Tab
         this.selected = selected
       }
-      .fluidPressable(onClick = onClick, pressedScale = 0.90f),
+      .fluidPressable(onClick = onClick, pressedScale = 0.96f),
     contentAlignment = Alignment.Center,
   ) {
     Column(
@@ -154,17 +225,17 @@ private fun FluidTabItemContent(
         contentDescription = null,
         tint = contentColor,
         modifier = Modifier
-          .size(23.dp)
+          .size(24.dp)
           .graphicsLayer {
-            val value = pop.value
-            scaleX = value
-            scaleY = value
+            scaleX = iconScale
+            scaleY = iconScale
+            translationY = lift
           },
       )
       Text(
         text = item.label,
         style = MaterialTheme.typography.labelSmall,
-        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+        fontWeight = FontWeight.Medium,
         color = contentColor,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -200,7 +271,10 @@ fun FluidTabRail(
       pillTop.snapTo(target)
       pillPlaced = true
     } else {
-      pillTop.animateTo(target, FluidMotion.standard())
+      pillTop.animateTo(
+        target,
+        FluidMotion.standard(),
+      )
     }
   }
 

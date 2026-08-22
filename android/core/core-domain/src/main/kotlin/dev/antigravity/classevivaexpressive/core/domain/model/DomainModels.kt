@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 import java.time.DayOfWeek
+import java.time.LocalDate
 
 @Serializable
 enum class ThemeMode {
@@ -144,6 +145,9 @@ data class SchoolYearRef(
     /** The month from which the upcoming year is worth offering, for schools that open early. */
     const val UpcomingYearOfferedFromMonth = 6
 
+    /** August is the last month in which the upcoming year is distinct from [current]. */
+    const val UpcomingYearOfferedThroughMonth = 8
+
     fun current(nowYear: Int, nowMonth: Int): SchoolYearRef {
       val start = if (nowMonth >= FirstMonth) nowYear else nowYear - 1
       return SchoolYearRef(start, start + 1)
@@ -154,6 +158,57 @@ data class SchoolYearRef(
       SchoolYearRef(year.startYear - 1, year.startYear)
   }
 }
+
+/**
+ * Pure calendar and fallback rules for the school-year selector.
+ *
+ * Keeping this policy independent from DataStore and the system clock makes the September boundary
+ * deterministic and, crucially, makes the one-step fallback invariant testable without Android.
+ */
+object SchoolYearSelectionPolicy {
+  fun current(today: LocalDate): SchoolYearRef = SchoolYearRef.current(today.year, today.monthValue)
+
+  fun available(today: LocalDate): List<SchoolYearRef> {
+    val current = current(today)
+    val offerUpcoming = today.monthValue in
+      SchoolYearRef.UpcomingYearOfferedFromMonth..SchoolYearRef.UpcomingYearOfferedThroughMonth
+    val newest = if (offerUpcoming) {
+      SchoolYearRef(startYear = current.startYear + 1, endYear = current.endYear + 1)
+    } else {
+      current
+    }
+    // Classeviva's non-year-scoped endpoints cannot reconstruct a trustworthy deeper archive.
+    // Exposing exactly the newest useful pair also normalises installations that the legacy
+    // repeated-fallback bug had left two years behind.
+    return listOf(newest, SchoolYearRef.previousOf(newest))
+  }
+
+  /**
+   * Returns the sole permitted automatic fallback.
+   *
+   * Only the newest offered year may fall back, and only to its immediate predecessor. Once that
+   * predecessor is selected this returns null, so repeated 422 responses can never walk backwards
+   * through the archive.
+   */
+  fun automaticFallback(
+    requested: SchoolYearRef,
+    available: List<SchoolYearRef>,
+  ): SchoolYearRef? {
+    val newest = available.maxWithOrNull(compareBy<SchoolYearRef> { it.startYear }.thenBy { it.endYear })
+      ?: return null
+    if (requested.id != newest.id) return null
+    val previous = SchoolYearRef.previousOf(newest)
+    return previous.takeIf { candidate -> available.any { it.id == candidate.id } }
+  }
+}
+
+/** A durable, user-visible record that the requested year was replaced with its predecessor. */
+@Serializable
+data class SchoolYearFallbackEvent(
+  val id: String,
+  val requested: SchoolYearRef,
+  val selected: SchoolYearRef,
+)
 
 @Serializable
 data class FeatureCapability(
@@ -960,7 +1015,10 @@ interface MeetingsRepository {
 interface SchoolYearRepository {
   fun observeSelectedSchoolYear(): Flow<SchoolYearRef>
   fun observeAvailableSchoolYears(): Flow<List<SchoolYearRef>>
+  fun observeFallbackEvents(): Flow<SchoolYearFallbackEvent>
   suspend fun selectSchoolYear(year: SchoolYearRef)
+  suspend fun selectAutomaticFallback(requested: SchoolYearRef): SchoolYearFallbackEvent?
+  suspend fun acknowledgeFallbackEvent(id: String)
 }
 
 interface CapabilityResolver {

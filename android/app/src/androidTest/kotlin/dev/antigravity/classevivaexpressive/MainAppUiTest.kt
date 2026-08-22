@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,12 +25,14 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -179,8 +182,59 @@ class MainAppUiTest {
     composeRule.onNodeWithTag("route_communications").assertIsDisplayed()
     composeRule.onNodeWithTag("top_level_communications").assertIsSelected()
     composeRule.runOnIdle {
-      assertEquals(MotionOrigin.DeepLink.wireName, navController.currentBackStackEntry?.savedStateHandle?.get<String>(MotionOriginStateKey))
+      assertEquals("communications?tab={tab}", navController.currentDestination?.route)
     }
+  }
+
+  @Test
+  fun bugReport_isARealDestination_andRestoresFormState() {
+    lateinit var navController: NavHostController
+    val restorationTester = StateRestorationTester(composeRule)
+    restorationTester.setContent {
+      ClassevivaExpressiveTheme(settings = AppSettings(dynamicColorEnabled = false)) {
+        ExpressiveScreenSurface {
+          BugReportNavigationTestGraph(onController = { navController = it })
+        }
+      }
+    }
+
+    composeRule.onNodeWithTag("open_bug_report").performClick()
+    composeRule.onNodeWithTag("bug_report_title").performTextInput("Animazione interrotta")
+    composeRule.onNodeWithTag("bug_report_description").performTextInput("La pagina si sovrappone")
+
+    composeRule.runOnIdle {
+      assertEquals(BugReportRoute, navController.currentDestination?.route)
+      assertEquals("more", navController.previousBackStackEntry?.destination?.route)
+    }
+
+    restorationTester.emulateSavedInstanceStateRestore()
+
+    composeRule.onNodeWithTag("bug_report_title")
+      .assertTextContains("Animazione interrotta")
+    composeRule.onNodeWithTag("bug_report_description")
+      .assertTextContains("La pagina si sovrappone")
+    composeRule.runOnIdle {
+      assertEquals(BugReportRoute, navController.currentDestination?.route)
+      assertTrue(navController.navigateUp())
+    }
+    composeRule.onNodeWithTag("bug_report_origin").assertIsDisplayed()
+  }
+
+  @Test
+  fun bugReport_keepsTheOpeningRouteInEditableDiagnostics() {
+    composeRule.setContent {
+      ClassevivaExpressiveTheme(settings = AppSettings(dynamicColorEnabled = false)) {
+        ExpressiveScreenSurface {
+          BugReportNavigationTestGraph(onController = {})
+        }
+      }
+    }
+
+    composeRule.onNodeWithTag("open_bug_report").performClick()
+    composeRule.onNodeWithText("Aggiungi passaggi e diagnostica").performScrollTo().performClick()
+    composeRule.onNodeWithTag("bug_report_diagnostics")
+      .performScrollTo()
+      .assertTextContains("Schermata: more", substring = true)
   }
 
   @Test
@@ -313,6 +367,42 @@ private fun NavigationTestGraph(
         TestRoute("route_communications", "Bacheca")
       }
       composable("more") { TestRoute("route_more", "Altro") }
+    }
+  }
+}
+
+@Composable
+private fun BugReportNavigationTestGraph(
+  onController: (NavHostController) -> Unit,
+) {
+  val navController = rememberNavController()
+  SideEffect { onController(navController) }
+
+  NavHost(
+    navController = navController,
+    startDestination = "more",
+    modifier = Modifier.fillMaxSize(),
+  ) {
+    composable("more") {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .testTag("bug_report_origin"),
+        contentAlignment = androidx.compose.ui.Alignment.Center,
+      ) {
+        Button(
+          onClick = { navController.navigate(BugReportRoute) },
+          modifier = Modifier.testTag("open_bug_report"),
+        ) {
+          Text("Segnala un problema")
+        }
+      }
+    }
+    composable(BugReportRoute) {
+      BugReportScreen(
+        currentRoute = "more",
+        onBack = navController::navigateUp,
+      )
     }
   }
 }

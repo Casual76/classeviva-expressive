@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.feature.communications
 
 import app.cash.turbine.test
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityState
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
@@ -149,7 +150,7 @@ class CommunicationsViewModelTest {
   @Test
   fun openCommunication_setsErrorMessageOnFailure() = runTest {
     stubBase()
-    coEvery { communicationsRepository.getCommunicationDetail(any(), any()) } returns Result.failure(Exception("Errore rete"))
+    coEvery { communicationsRepository.getCommunicationDetail(any(), any()) } returns Result.failure(Exception("Sessione scaduta"))
 
     val vm = buildViewModel()
 
@@ -157,7 +158,8 @@ class CommunicationsViewModelTest {
       awaitItem()
       vm.openCommunication("c1", "CIR")
       val updated = awaitItem()
-      assertEquals("Errore rete", updated.lastMessage)
+      assertEquals("Sessione scaduta", updated.lastMessage?.text)
+      assertEquals(CommunicationsMessageKind.Error, updated.lastMessage?.kind)
       cancelAndIgnoreRemainingEvents()
     }
   }
@@ -177,7 +179,8 @@ class CommunicationsViewModelTest {
       awaitItem()
       vm.acknowledge(detail)
       val updated = awaitItem()
-      assertEquals("Conferma inviata.", updated.lastMessage)
+      assertEquals("Conferma inviata.", updated.lastMessage?.text)
+      assertEquals(CommunicationsMessageKind.Success, updated.lastMessage?.kind)
       cancelAndIgnoreRemainingEvents()
     }
     coVerify { communicationsRepository.acknowledgeCommunication(detail) }
@@ -211,7 +214,26 @@ class CommunicationsViewModelTest {
       awaitItem()
       vm.downloadAttachment(attachment)
       val updated = awaitItem()
-      assertTrue(updated.lastMessage?.contains("circolare.pdf") == true)
+      assertTrue(updated.lastMessage?.text?.contains("circolare.pdf") == true)
+      assertEquals(CommunicationsMessageKind.Info, updated.lastMessage?.kind)
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
+  @Test
+  fun downloadAttachment_rateLimitWithoutErrorKeyword_isTypedAsError() = runTest {
+    stubBase()
+    val attachment = RemoteAttachment(id = "att1", name = "circolare.pdf", url = "https://example.test/file")
+    coEvery { communicationsRepository.queueDownload(attachment) } returns Result.failure(Exception("Rate limit raggiunto"))
+
+    val vm = buildViewModel()
+
+    vm.state.test {
+      awaitItem()
+      vm.downloadAttachment(attachment)
+      val updated = awaitItem()
+      assertEquals("Rate limit raggiunto", updated.lastMessage?.text)
+      assertEquals(CommunicationsMessageKind.Error, updated.lastMessage?.kind)
       cancelAndIgnoreRemainingEvents()
     }
   }
@@ -228,6 +250,27 @@ class CommunicationsViewModelTest {
     vm.upload(detail, "file.pdf", "application/pdf", byteArrayOf(1, 2, 3))
 
     coVerify { communicationsRepository.uploadCommunicationFile(detail, "file.pdf", "application/pdf", any()) }
+  }
+
+  @Test
+  fun uploadFile_oversizeFailureWithoutErrorKeyword_isTypedAsError() = runTest {
+    stubBase()
+    val detail = buildDetail()
+    coEvery {
+      communicationsRepository.uploadCommunicationFile(detail, "file.pdf", "application/pdf", any())
+    } returns Result.failure(Exception("Allegato troppo grande"))
+
+    val vm = buildViewModel()
+
+    vm.state.test {
+      awaitItem()
+      vm.upload(detail, "file.pdf", "application/pdf", byteArrayOf(1, 2, 3))
+      var updated = awaitItem()
+      while (updated.lastMessage == null) updated = awaitItem()
+      assertEquals("Allegato troppo grande", updated.lastMessage?.text)
+      assertEquals(CommunicationsMessageKind.Error, updated.lastMessage?.kind)
+      cancelAndIgnoreRemainingEvents()
+    }
   }
 
   // ─── Refresh ──────────────────────────────────────────────────────────────
@@ -252,5 +295,12 @@ class CommunicationsViewModelTest {
 
     assertEquals("NUOVA", communicationBadgeLabel(communication))
     assertEquals(ExpressiveTone.Danger, communicationTone(communication))
+  }
+
+  @Test
+  fun messageKinds_mapDirectlyToGlobalNotificationTones() {
+    assertEquals(FluidNotificationTone.Success, CommunicationsMessageKind.Success.toFluidNotificationTone())
+    assertEquals(FluidNotificationTone.Error, CommunicationsMessageKind.Error.toFluidNotificationTone())
+    assertEquals(FluidNotificationTone.Info, CommunicationsMessageKind.Info.toFluidNotificationTone())
   }
 }

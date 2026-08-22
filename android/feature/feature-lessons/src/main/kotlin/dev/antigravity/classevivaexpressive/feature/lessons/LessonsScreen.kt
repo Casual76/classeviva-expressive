@@ -10,9 +10,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.HistoryEdu
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.School
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,8 +51,10 @@ import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextFie
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
@@ -362,35 +367,40 @@ fun LessonsRoute(
     }
 
     item {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        MetricTile(
-          label = if (selectedTab == TAB_TIMETABLE) "Slot stabili" else "Lezioni",
-          value = if (selectedTab == TAB_TIMETABLE) {
-            state.timetableTemplate.slots.size.toString()
-          } else {
-            weekLessons.size.toString()
-          },
-          detail = if (selectedTab == TAB_TIMETABLE) "Template riutilizzabile." else "Settimana selezionata.",
-          modifier = Modifier.weight(1f),
-          tone = ExpressiveTone.Info,
-        )
-        MetricTile(
-          label = "Settimane",
-          value = state.timetableTemplate.sampledWeeks.toString(),
-          detail = "Storico usato per il template.",
-          modifier = Modifier.weight(1f),
-          tone = ExpressiveTone.Success,
-        )
-        MetricTile(
-          label = "Docenti",
-          value = state.totalTeachersCount.toString(),
-          detail = "Nomi distinti rilevati.",
-          modifier = Modifier.weight(1f),
-        )
-      }
+      val showingTemplate = selectedTab == TAB_TIMETABLE
+      val showingOfficialTemplate = showingTemplate && state.timetableTemplate.isOfficial
+      val visibleCount = if (showingTemplate) state.timetableTemplate.slots.size else weekLessons.size
+      FeatureHero(
+        identity = FeatureIdentity.Lessons,
+        eyebrow = when {
+          showingOfficialTemplate -> "Orario ufficiale"
+          showingTemplate -> "Settimana ricorrente"
+          else -> "Storico selezionato"
+        },
+        value = visibleCount.toString(),
+        title = if (showingTemplate) {
+          if (visibleCount == 1) "slot nell'orario" else "slot nell'orario"
+        } else {
+          if (visibleCount == 1) "lezione nella settimana" else "lezioni nella settimana"
+        },
+        description = when {
+          showingOfficialTemplate -> {
+            "L'orario ufficiale importato, con conferme e modifiche manuali sempre riconoscibili."
+          }
+          showingTemplate -> {
+            "Una mappa stabile costruita dalle ricorrenze reali e dalle tue conferme."
+          }
+          else -> {
+            "Argomenti e firme della settimana scelta, senza confonderli con il template."
+          }
+        },
+        icon = Icons.Rounded.AutoStories,
+        metrics = listOf(
+          FeatureHeroMetric("Settimane campione", state.timetableTemplate.sampledWeeks.toString()),
+          FeatureHeroMetric("Docenti rilevati", state.totalTeachersCount.toString()),
+          FeatureHeroMetric("Lezioni archiviate", state.lessons.size.toString()),
+        ),
+      )
     }
 
     when (selectedTab) {
@@ -477,6 +487,7 @@ fun LessonsRoute(
                   primary.confidence >= 0.6f -> ExpressiveTone.Info
                   else -> ExpressiveTone.Warning
                 },
+                leading = { Icon(Icons.Rounded.School, contentDescription = null) },
                 onClick = { viewModel.startConfirming(primary) },
                 onLongClick = { viewModel.startEditing(primary) },
                 badge = {
@@ -553,6 +564,7 @@ fun LessonsRoute(
                 } else {
                   ExpressiveTone.Neutral
                 },
+                leading = { Icon(Icons.Rounded.HistoryEdu, contentDescription = null) },
                 badge = {
                   StatusBadge(
                     label = if (lesson.isSigned) "FIRMATA" else "NON FIRMATA",

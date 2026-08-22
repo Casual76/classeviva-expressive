@@ -114,6 +114,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
 import dev.antigravity.classevivaexpressive.core.domain.model.RepositoryRefreshMetadata
 import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolbookCourse
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearFallbackEvent
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SeenGradeState
@@ -195,6 +196,28 @@ class SchoolAuthRepository @Inject constructor(
   }
 }
 
+internal fun AppSettings.withAccentMode(mode: AccentMode): AppSettings = copy(
+  accentMode = mode,
+  // The colour sources are mutually exclusive. Keeping the legacy boolean aligned prevents an
+  // apparently selected Dynamic swatch from silently resolving to a preset.
+  dynamicColorEnabled = mode == AccentMode.DYNAMIC,
+)
+
+internal fun AppSettings.withDynamicColorEnabled(enabled: Boolean): AppSettings = copy(
+  dynamicColorEnabled = enabled,
+  accentMode = when {
+    enabled -> AccentMode.DYNAMIC
+    accentMode == AccentMode.DYNAMIC -> AccentMode.BRAND
+    else -> accentMode
+  },
+)
+
+internal fun AppSettings.withCustomAccent(name: String): AppSettings = copy(
+  accentMode = AccentMode.CUSTOM_PRESET,
+  customAccentName = name,
+  dynamicColorEnabled = false,
+)
+
 @Singleton
 class SchoolSettingsRepository @Inject constructor(
   private val settingsStore: SettingsStore,
@@ -213,9 +236,11 @@ class SchoolSettingsRepository @Inject constructor(
   override fun observeSettings(): Flow<AppSettings> = settingsStore.settings
   override fun observeNotificationRuntimeState(): Flow<NotificationRuntimeState> = notificationRuntimeState
   override suspend fun updateThemeMode(mode: ThemeMode) = settingsStore.update { it.copy(themeMode = mode) }
-  override suspend fun updateAccentMode(mode: AccentMode) = settingsStore.update { it.copy(accentMode = mode) }
-  override suspend fun updateCustomAccent(name: String) = settingsStore.update { it.copy(customAccentName = name) }
-  override suspend fun setDynamicColorEnabled(enabled: Boolean) = settingsStore.update { it.copy(dynamicColorEnabled = enabled) }
+  override suspend fun updateAccentMode(mode: AccentMode) = settingsStore.update { it.withAccentMode(mode) }
+  override suspend fun updateCustomAccent(name: String) = settingsStore.update { it.withCustomAccent(name) }
+  override suspend fun setDynamicColorEnabled(enabled: Boolean) = settingsStore.update {
+    it.withDynamicColorEnabled(enabled)
+  }
   override suspend fun setAmoledEnabled(enabled: Boolean) = settingsStore.update { it.copy(amoledEnabled = enabled) }
   override suspend fun setNotificationsEnabled(enabled: Boolean) = settingsStore.update {
     it.copy(notificationPreferences = it.notificationPreferences.copy(enabled = enabled))
@@ -1117,7 +1142,15 @@ class SchoolDataRepository @Inject constructor(
 
   override fun observeSelectedSchoolYear(): Flow<SchoolYearRef> = schoolYearStore.observeSelectedSchoolYear()
   override fun observeAvailableSchoolYears(): Flow<List<SchoolYearRef>> = schoolYearStore.observeAvailableSchoolYears()
-  override suspend fun selectSchoolYear(year: SchoolYearRef) = schoolYearStore.selectSchoolYear(year)
+  override fun observeFallbackEvents(): Flow<SchoolYearFallbackEvent> = schoolYearStore.observeFallbackEvents()
+  override suspend fun selectSchoolYear(year: SchoolYearRef) {
+    schoolYearStore.selectSchoolYear(year)
+    syncCoordinator.refreshAll(force = true)
+    notifyExternalDashboardInvalidators()
+  }
+  override suspend fun selectAutomaticFallback(requested: SchoolYearRef): SchoolYearFallbackEvent? =
+    schoolYearStore.selectAutomaticFallback(requested)
+  override suspend fun acknowledgeFallbackEvent(id: String) = schoolYearStore.acknowledgeFallbackEvent(id)
 
   override fun observeCurrentScore(): Flow<StudentScoreSnapshot?> {
     return combine(observeStats(), observeAbsences(), studentScoreDao.observeLatest()) { stats, absences, cached ->
@@ -1518,6 +1551,7 @@ abstract class RepositoryModule {
   @Binds abstract fun bindDocumentsRepository(impl: SchoolDataRepository): DocumentsRepository
   @Binds abstract fun bindAbsencesRepository(impl: SchoolDataRepository): AbsencesRepository
   @Binds abstract fun bindMeetingsRepository(impl: SchoolDataRepository): MeetingsRepository
+  @Binds abstract fun bindSchoolYearRepository(impl: SchoolDataRepository): SchoolYearRepository
   @Binds abstract fun bindStatsRepository(impl: SchoolDataRepository): StatsRepository
   @Binds abstract fun bindStudentScoreRepository(impl: SchoolDataRepository): StudentScoreRepository
   @Binds abstract fun bindSimulationRepository(impl: SchoolDataRepository): SimulationRepository

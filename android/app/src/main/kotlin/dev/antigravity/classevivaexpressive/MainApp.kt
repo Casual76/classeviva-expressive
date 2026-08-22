@@ -7,18 +7,11 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -34,6 +27,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -83,9 +77,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.autofill.contentType
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -121,9 +117,13 @@ import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabBarD
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabItem
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabRail
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.LocalFluidOriginTracker
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationHost
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationDelivery
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.LocalFluidNotificationHostState
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ProvideFluidChrome
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberFluidOriginTracker
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberFluidChromeController
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberFluidChromeScrollConnection
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberFluidNotificationHostState
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberGlassBackdrop
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaExpressiveTheme
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
@@ -156,6 +156,9 @@ import kotlinx.coroutines.flow.emptyFlow
 private const val BugReportRepositoryOwner = "Casual76"
 private const val BugReportRepositoryName = "classeviva-expressive"
 private const val BugReportTemplateName = "app_bug_report.md"
+internal const val BugReportRoute = "bugReport"
+private const val BugReportSourceRoute = "more"
+private const val ConsumedGradeRequestKey = "consumed-grade-request"
 
 private data class TopLevelDestination(
   val baseRoute: String,
@@ -172,42 +175,27 @@ private val topLevelDestinations = listOf(
   TopLevelDestination("more", "more", "Altro", Icons.Rounded.Backpack),
 )
 
-internal val topLevelRoutes = topLevelDestinations.map { it.baseRoute }.toSet()
+internal val topLevelRouteOrder = topLevelDestinations.map { it.baseRoute }
+internal val topLevelRoutes = topLevelRouteOrder.toSet()
 
 /**
  * Route motion.
  *
- * The previous treatment moved screens by a fortieth of the viewport and scaled them by three parts
- * in a thousand. Movement that small does not read as movement — it reads as the screen twitching,
- * which is precisely the "something is wrong with the animation" feeling. A push either commits to
- * covering the full width or it does not happen at all.
+ * A hierarchical push follows the horizontal gesture that created and dismisses it. The child is an
+ * opaque surface that covers the parent while the parent recedes by roughly 28% of the width, so predictive
+ * back can seek the exact same geometry without ever blending two readable screens.
  *
- * The parallax ratio — the outgoing screen travelling a third as far as the incoming one — is what
+ * The restrained parallax ratio is what
  * creates the sense of a stack with depth rather than two slides passing each other.
+ *
+ * Top-level peers use only a short ordered settle. Hierarchical destinations use the full travel.
+ *
+ * The route surfaces never change alpha or scale. This is deliberately stricter than ordinary
+ * cross-fades: a paused predictive gesture must still contain one readable page at each pixel.
  */
-/**
- * How a pushed screen arrives.
- *
- * Not a slide. A slide says "the pages sit side by side in a strip"; this app's secondary screens
- * are opened *out of* something — a row, a card, a grade — and the motion says so: the new screen
- * blooms from the point that was tapped and collapses back into it on the way out.
- *
- * Three rules keep it from looking cheap:
- *
- *  * **The anchor is real.** [FluidOriginTracker] reports the tapped element's centre, so the
- *    expansion starts where the finger was, not from the middle of the display.
- *  * **Nothing is translucent for long.** The outgoing screen does not fade at all on the way in; it
- *    stays fully opaque underneath while the new screen grows over it. Two screens readable through
- *    each other is the single most broken-looking thing a transition can do.
- *  * **It springs, it does not ease.** A tween of fixed duration always arrives with the same
- *    mechanical thud. A spring settles, which is what makes the surface feel like an object.
- */
-private const val ExpandFromScale = 0.80f
-private const val ParentRecedeScale = 0.94f
-
-private fun expandSpec() = spring<Float>(
-  dampingRatio = 0.86f,
-  stiffness = FluidMotion.ResponseStandard,
+private fun routeSlideSpec() = FluidMotion.intOffset(
+  dampingRatio = FluidMotion.DampingStandard,
+  stiffness = FluidMotion.ResponseSmooth,
 )
 
 /**
@@ -222,64 +210,46 @@ private fun barSlideSpec() = FluidMotion.intOffset(
   stiffness = FluidMotion.ResponseSnappy,
 )
 
-private fun collapseSpec() = spring<Float>(
-  dampingRatio = FluidMotion.DampingChrome,
-  stiffness = FluidMotion.ResponseSnappy,
-)
-
 private fun routeEnterTransition(
   decision: RouteMotionDecision,
   isPop: Boolean,
-  origin: TransformOrigin,
 ): EnterTransition = when (decision.kind) {
-  // Switching tabs is lateral, not hierarchical: nothing was opened, so nothing should bloom.
-  RouteMotionKind.TopLevelSwitch ->
-    fadeIn(animationSpec = FluidMotion.crossFade(170)) +
-      scaleIn(initialScale = 0.994f, animationSpec = expandSpec())
+  // Native tab switches do not move whole pages. Continuity lives in the morphing pill indicator;
+  // keeping destinations discrete removes the artificial wipe and the competing glass snapshots.
+  RouteMotionKind.TopLevelSwitch -> EnterTransition.None
 
+  // Predictive back is a horizontal gesture, so the transition uses the same spatial model: the
+  // child covers the parent from the trailing edge and uncovers it one-to-one on pop. No alpha or
+  // whole-page scale means only one readable destination exists at every pixel.
   RouteMotionKind.Push -> if (isPop) {
-    // Coming back: the parent was left pushed slightly away, so it returns from just behind.
-    scaleIn(
-      initialScale = ParentRecedeScale,
-      transformOrigin = origin,
-      animationSpec = expandSpec(),
+    slideInHorizontally(
+      initialOffsetX = { width -> -width * 7 / 25 },
+      animationSpec = routeSlideSpec(),
     )
   } else {
-    // The 70 ms fade is not there to make the screen translucent — it is there so the first frame is
-    // not a hard-edged rectangle appearing out of nothing.
-    fadeIn(animationSpec = tween(70, easing = FluidMotion.EaseOut)) +
-      scaleIn(
-        initialScale = ExpandFromScale,
-        transformOrigin = origin,
-        animationSpec = expandSpec(),
-      )
+    slideInHorizontally(
+      initialOffsetX = { width -> width },
+      animationSpec = routeSlideSpec(),
+    )
   }
 }
 
 private fun routeExitTransition(
   decision: RouteMotionDecision,
   isPop: Boolean,
-  origin: TransformOrigin,
 ): ExitTransition = when (decision.kind) {
-  RouteMotionKind.TopLevelSwitch ->
-    fadeOut(animationSpec = FluidMotion.crossFade(170)) +
-      scaleOut(targetScale = 1.006f, animationSpec = expandSpec())
+  // Peer content changes atomically; the bar owns the animated relationship between destinations.
+  RouteMotionKind.TopLevelSwitch -> ExitTransition.None
 
   RouteMotionKind.Push -> if (isPop) {
-    // Imploding. The fade is held back until the screen is already well on its way down, so it reads
-    // as being absorbed into the row rather than dissolving in place.
-    fadeOut(animationSpec = tween(130, delayMillis = 110, easing = FluidMotion.EaseIn)) +
-      scaleOut(
-        targetScale = ExpandFromScale,
-        transformOrigin = origin,
-        animationSpec = collapseSpec(),
-      )
+    slideOutHorizontally(
+      targetOffsetX = { width -> width },
+      animationSpec = routeSlideSpec(),
+    )
   } else {
-    // Deliberately no fade: the parent stays solid underneath the screen growing over it.
-    scaleOut(
-      targetScale = ParentRecedeScale,
-      transformOrigin = origin,
-      animationSpec = expandSpec(),
+    slideOutHorizontally(
+      targetOffsetX = { width -> -width * 7 / 25 },
+      animationSpec = routeSlideSpec(),
     )
   }
 }
@@ -290,8 +260,20 @@ fun MainApp(
   incomingIntents: Flow<Intent> = emptyFlow(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val notificationHostState = rememberFluidNotificationHostState()
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     viewModel.onAppResumed()
+  }
+
+  LaunchedEffect(viewModel, notificationHostState) {
+    viewModel.inAppNotifications.collect { notification ->
+      // A queued item is still durable: rotation or process death can discard the in-memory FIFO.
+      // Remove it from DataStore only after the card has really been laid out or consumed.
+      val delivery = notificationHostState.show(notification)
+      if (delivery != FluidNotificationDelivery.Rejected) {
+        viewModel.acknowledgeInAppNotification(notification.id)
+      }
+    }
   }
 
   val context = LocalContext.current
@@ -321,168 +303,43 @@ fun MainApp(
   }
 
   ClassevivaExpressiveTheme(settings = uiState.settings) {
-    ExpressiveScreenSurface(modifier = Modifier.fillMaxSize()) {
-      Box(modifier = Modifier.fillMaxSize()) {
-        when {
-          uiState.isLoading -> LoadingScreen()
-          uiState.session == null -> LoginScreen(
-            isLoading = uiState.isAuthenticating,
-            error = uiState.authError,
-            onClearError = viewModel::clearAuthError,
-            onLogin = viewModel::login,
+    CompositionLocalProvider(LocalFluidNotificationHostState provides notificationHostState) {
+      ExpressiveScreenSurface(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.fillMaxSize()) {
+          when {
+            uiState.isLoading -> LoadingScreen()
+            uiState.session == null -> LoginScreen(
+              isLoading = uiState.isAuthenticating,
+              error = uiState.authError,
+              onClearError = viewModel::clearAuthError,
+              onLogin = viewModel::login,
+            )
+            else -> AuthenticatedApp(
+              isCheckingForUpdates = uiState.isCheckingUpdate,
+              updateCheckMessage = uiState.updateCheckMessage,
+              onCheckForUpdates = { viewModel.checkUpdate() },
+              onClearUpdateCheckMessage = viewModel::clearUpdateCheckMessage,
+              incomingIntents = incomingIntents,
+            )
+          }
+          FluidNotificationHost(
+            state = notificationHostState,
+            modifier = Modifier.align(Alignment.TopCenter),
           )
-          else -> AuthenticatedApp(
-            isCheckingForUpdates = uiState.isCheckingUpdate,
-            updateCheckMessage = uiState.updateCheckMessage,
-            onCheckForUpdates = { viewModel.checkUpdate() },
-            onClearUpdateCheckMessage = viewModel::clearUpdateCheckMessage,
-            incomingIntents = incomingIntents,
-          )
-        }
-        val update = uiState.availableUpdate
-        if (update != null && !uiState.isUpdateDismissedForSession) {
-          AppUpdateDialog(
-            update = update,
-            installState = uiState.updateInstallState,
-            onInstall = viewModel::startUpdateInstall,
-            onLater = viewModel::dismissUpdate,
-            onIgnore = viewModel::ignoreUpdateVersion,
-          )
+          val update = uiState.availableUpdate
+          if (update != null && !uiState.isUpdateDismissedForSession) {
+            AppUpdateDialog(
+              update = update,
+              installState = uiState.updateInstallState,
+              onInstall = viewModel::startUpdateInstall,
+              onLater = viewModel::dismissUpdate,
+              onIgnore = viewModel::ignoreUpdateVersion,
+            )
+          }
         }
       }
     }
   }
-}
-
-@Composable
-private fun BugReportDialog(
-  currentRoute: String,
-  onDismiss: () -> Unit,
-) {
-  val context = LocalContext.current
-  var title by rememberSaveable { mutableStateOf("") }
-  var description by rememberSaveable { mutableStateOf("") }
-  var steps by rememberSaveable { mutableStateOf("") }
-  var expected by rememberSaveable { mutableStateOf("") }
-  var actual by rememberSaveable { mutableStateOf("") }
-  var copied by rememberSaveable { mutableStateOf(false) }
-
-  val reportBody = remember(title, description, steps, expected, actual, currentRoute) {
-    buildBugReportBody(
-      context = context,
-      currentRoute = currentRoute,
-      description = description,
-      steps = steps,
-      expected = expected,
-      actual = actual,
-    )
-  }
-  val issueUri = remember(title, reportBody) {
-    buildBugReportIssueUri(title = title, body = reportBody)
-  }
-  val canOpenIssue = title.isNotBlank() && description.isNotBlank()
-
-  FluidAlert(
-    onDismissRequest = onDismiss,
-    title = "Segnala bug",
-    actions = listOf(
-      FluidAlertAction("Copia report", {
-            context.copyBugReport(reportBody)
-            copied = true
-          }),
-      FluidAlertAction("Chiudi", onDismiss),
-      FluidAlertAction("Apri GitHub", {
-          context.startActivity(Intent(Intent.ACTION_VIEW, issueUri))
-          onDismiss()
-        }, FluidAlertAction.Emphasis.Preferred, enabled = canOpenIssue),
-    ),
-    content = {
-      Column(
-        modifier = Modifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        Surface(
-          modifier = Modifier.fillMaxWidth(),
-          shape = MaterialTheme.shapes.medium,
-          color = MaterialTheme.colorScheme.errorContainer,
-          contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        ) {
-          Row(
-            modifier = Modifier.padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.Top,
-          ) {
-            Icon(
-              imageVector = Icons.Rounded.WarningAmber,
-              contentDescription = null,
-              modifier = Modifier.size(20.dp),
-            )
-            Text(
-              text = "Il report aprirà una issue GitHub pubblica, visibile da chiunque. Non inserire token, credenziali, nomi di studenti, nomi di docenti, screenshot con dati personali o dettagli scolastici sensibili.",
-              style = MaterialTheme.typography.bodyMedium,
-            )
-          }
-        }
-        FluidTextField(
-          value = title,
-          onValueChange = {
-            title = it
-            copied = false
-          },
-          modifier = Modifier.fillMaxWidth(),
-          label = "Titolo",
-          singleLine = true,
-        )
-        FluidTextField(
-          value = description,
-          onValueChange = {
-            description = it
-            copied = false
-          },
-          modifier = Modifier.fillMaxWidth(),
-          label = "Descrizione",
-          minLines = 3,
-        )
-        FluidTextField(
-          value = steps,
-          onValueChange = {
-            steps = it
-            copied = false
-          },
-          modifier = Modifier.fillMaxWidth(),
-          label = "Passaggi per riprodurre",
-          minLines = 3,
-        )
-        FluidTextField(
-          value = expected,
-          onValueChange = {
-            expected = it
-            copied = false
-          },
-          modifier = Modifier.fillMaxWidth(),
-          label = "Comportamento atteso",
-          minLines = 2,
-        )
-        FluidTextField(
-          value = actual,
-          onValueChange = {
-            actual = it
-            copied = false
-          },
-          modifier = Modifier.fillMaxWidth(),
-          label = "Comportamento ottenuto",
-          minLines = 2,
-        )
-        if (copied) {
-          Text(
-            text = "Report copiato negli appunti.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
-          )
-        }
-      }
-    },
-  )
 }
 
 private fun buildBugReportIssueUri(
@@ -502,34 +359,6 @@ private fun buildBugReportIssueUri(
     .appendQueryParameter("title", issueTitle)
     .appendQueryParameter("body", body)
     .build()
-}
-
-private fun buildBugReportBody(
-  context: Context,
-  currentRoute: String,
-  description: String,
-  steps: String,
-  expected: String,
-  actual: String,
-): String {
-  return """
-    ## Descrizione
-    ${reportValue(description)}
-
-    ## Passaggi per riprodurre
-    ${reportValue(steps)}
-
-    ## Comportamento atteso
-    ${reportValue(expected)}
-
-    ## Comportamento ottenuto
-    ${reportValue(actual)}
-
-    ## Diagnostica inclusa
-    - App: ${context.appVersionLabel()}
-    - SDK: ${Build.VERSION.SDK_INT}
-    - Schermata: ${normalizeRoute(currentRoute) ?: "sconosciuta"}
-  """.trimIndent()
 }
 
 private fun reportValue(value: String): String {
@@ -750,7 +579,18 @@ internal fun TopLevelNavigationSuite(
   scrollToTop: FluidScrollToTopBus = remember { FluidScrollToTopBus() },
   content: @Composable () -> Unit,
 ) {
-  val backdrop = rememberGlassBackdrop()
+  val chromeController = rememberFluidChromeController()
+  val fallbackBackdrop = rememberGlassBackdrop()
+  val bottomBarTravel = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
+    FluidTabBarDefaults.Height + FluidTabBarDefaults.BottomMargin
+  val bottomBarTravelPx = with(LocalDensity.current) { bottomBarTravel.toPx() }
+  LaunchedEffect(chromeController, bottomBarTravelPx) {
+    chromeController.updateBottomBarTravel(bottomBarTravelPx)
+  }
+  val chromeScrollConnection = rememberFluidChromeScrollConnection(
+    controller = chromeController,
+    enabled = showNavigationSuite,
+  )
   val tabItems = remember {
     topLevelDestinations.map { FluidTabItem(it.baseRoute, it.label, it.icon) }
   }
@@ -758,12 +598,17 @@ internal fun TopLevelNavigationSuite(
     topLevelDestinations.associate { it.baseRoute to it.navigateRoute }
   }
 
-  BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+  BoxWithConstraints(
+    modifier = Modifier
+      .fillMaxSize()
+      .nestedScroll(chromeScrollConnection),
+  ) {
     val useRail = maxWidth >= 600.dp
     val bottomInset = if (showNavigationSuite && !useRail) FluidTabBarDefaults.ContentInset else 0.dp
+    val backdrop = chromeController.activeBackdrop.value ?: fallbackBackdrop
 
     ProvideFluidChrome(
-      backdrop = backdrop,
+      controller = chromeController,
       bottomInset = bottomInset,
       scrollToTop = scrollToTop,
     ) {
@@ -784,10 +629,8 @@ internal fun TopLevelNavigationSuite(
     if (useRail) {
       AnimatedVisibility(
         visible = showNavigationSuite,
-        enter = slideInHorizontally(animationSpec = barSlideSpec()) { -it } +
-          fadeIn(animationSpec = tween(140, easing = FluidMotion.EaseOut)),
-        exit = slideOutHorizontally(animationSpec = barSlideSpec()) { -it } +
-          fadeOut(animationSpec = tween(110, easing = FluidMotion.EaseIn)),
+        enter = slideInHorizontally(animationSpec = barSlideSpec()) { -it },
+        exit = slideOutHorizontally(animationSpec = barSlideSpec()) { -it },
         modifier = Modifier
           .align(Alignment.CenterStart)
           .systemBarsPadding()
@@ -804,14 +647,13 @@ internal fun TopLevelNavigationSuite(
     } else {
       AnimatedVisibility(
         visible = showNavigationSuite,
-        enter = slideInVertically(animationSpec = barSlideSpec()) { it } +
-          fadeIn(animationSpec = tween(140, easing = FluidMotion.EaseOut)) +
-          scaleIn(initialScale = 0.94f, animationSpec = expandSpec()),
-        exit = slideOutVertically(animationSpec = barSlideSpec()) { it } +
-          fadeOut(animationSpec = tween(110, easing = FluidMotion.EaseIn)) +
-          scaleOut(targetScale = 0.94f, animationSpec = collapseSpec()),
+        enter = slideInVertically(animationSpec = barSlideSpec()) { it },
+        exit = slideOutVertically(animationSpec = barSlideSpec()) { it },
         modifier = Modifier
           .align(Alignment.BottomCenter)
+          .graphicsLayer {
+            translationY = chromeController.bottomBarOffsetPx.value
+          }
           .navigationBarsPadding()
           .padding(
             horizontal = FluidTabBarDefaults.HorizontalMargin,
@@ -832,11 +674,10 @@ internal fun TopLevelNavigationSuite(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BugReportScreen(
+internal fun BugReportScreen(
   currentRoute: String,
   onBack: () -> Unit,
 ) {
-  BackHandler(onBack = onBack)
   val context = LocalContext.current
   var title by rememberSaveable { mutableStateOf("") }
   var description by rememberSaveable { mutableStateOf("") }
@@ -885,7 +726,9 @@ private fun BugReportScreen(
       FluidTextField(
         value = title,
         onValueChange = { title = it; copied = false },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("bug_report_title"),
         label = "Titolo",
         singleLine = true,
       )
@@ -894,7 +737,9 @@ private fun BugReportScreen(
       FluidTextField(
         value = description,
         onValueChange = { description = it; copied = false },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+          .fillMaxWidth()
+          .testTag("bug_report_description"),
         label = "Cosa non ha funzionato?",
         minLines = 4,
       )
@@ -910,7 +755,14 @@ private fun BugReportScreen(
       item { BugReportField("Passaggi per riprodurre", steps) { steps = it; copied = false } }
       item { BugReportField("Comportamento atteso", expected) { expected = it; copied = false } }
       item { BugReportField("Comportamento ottenuto", actual) { actual = it; copied = false } }
-      item { BugReportField("Diagnostica inclusa (modificabile)", diagnostics) { diagnostics = it; copied = false } }
+      item {
+        BugReportField(
+          label = "Diagnostica inclusa (modificabile)",
+          value = diagnostics,
+          onValueChange = { diagnostics = it; copied = false },
+          modifier = Modifier.testTag("bug_report_diagnostics"),
+        )
+      }
     }
     if (copied) {
       item { Text("Report copiato negli appunti.", color = MaterialTheme.colorScheme.primary) }
@@ -944,12 +796,13 @@ private fun BugReportScreen(
 private fun BugReportField(
   label: String,
   value: String,
+  modifier: Modifier = Modifier,
   onValueChange: (String) -> Unit,
 ) {
   FluidTextField(
     value = value,
     onValueChange = onValueChange,
-    modifier = Modifier.fillMaxWidth(),
+    modifier = modifier.fillMaxWidth(),
     label = label,
     minLines = 3,
   )
@@ -1010,6 +863,7 @@ private fun TopLevelNavigationSuitePreview() {
         onNavigateRoute = {},
       ) {
         MoreHubScreen(
+          onOpenBugReport = {},
           onOpenLessons = {},
           onOpenAbsences = {},
           onOpenMaterials = {},
@@ -1042,6 +896,13 @@ internal fun NavHostController.navigateTopLevel(targetRoute: String) {
 
 internal fun NavHostController.handleIncomingIntent(intent: Intent): Boolean = handleDeepLink(intent)
 
+internal fun pendingGradeRequest(
+  requestedGradeId: String?,
+  consumedGradeId: String?,
+): String? = requestedGradeId
+  ?.takeIf(String::isNotBlank)
+  ?.takeUnless { it == consumedGradeId }
+
 @Composable
 private fun AuthenticatedApp(
   isCheckingForUpdates: Boolean,
@@ -1057,10 +918,8 @@ private fun AuthenticatedApp(
   val showNavigationSuite = currentRoute in topLevelRoutes
 
   val scrollToTop = remember { FluidScrollToTopBus() }
-  val originTracker = rememberFluidOriginTracker()
 
   fun navigateRoute(route: String) {
-    originTracker.claim(route)
     navController.navigate(route)
   }
 
@@ -1074,9 +933,6 @@ private fun AuthenticatedApp(
     }
   }
 
-  // Provided around everything, so any pressable anywhere in the tree can report where it was
-  // tapped without a single screen having to know that route transitions exist.
-  CompositionLocalProvider(LocalFluidOriginTracker provides originTracker) {
   TopLevelNavigationSuite(
     currentRoute = currentDestination?.hierarchy
       ?.mapNotNull { it.route?.substringBefore("?") }
@@ -1088,12 +944,11 @@ private fun AuthenticatedApp(
     onReselectRoute = { scrollToTop.request() },
     scrollToTop = scrollToTop,
   ) {
-      NavHost(
+    NavHost(
         navController = navController,
         startDestination = "home",
         modifier = Modifier.fillMaxSize(),
-        // Both directions read the *child's* anchor: it is the one the tap actually produced, and it
-        // is what makes leaving reverse the arrival instead of merely undoing it.
+        // One spatial model drives both ordinary navigation and predictive-back progress.
         enterTransition = {
           routeEnterTransition(
             decision = decideRouteMotion(
@@ -1101,7 +956,6 @@ private fun AuthenticatedApp(
               toRoute = targetState.destination.route,
             ),
             isPop = false,
-            origin = originTracker.originFor(targetState.destination.route),
           )
         },
         exitTransition = {
@@ -1111,7 +965,6 @@ private fun AuthenticatedApp(
               toRoute = targetState.destination.route,
             ),
             isPop = false,
-            origin = originTracker.originFor(targetState.destination.route),
           )
         },
         popEnterTransition = {
@@ -1121,7 +974,6 @@ private fun AuthenticatedApp(
               toRoute = targetState.destination.route,
             ),
             isPop = true,
-            origin = originTracker.originFor(initialState.destination.route),
           )
         },
         popExitTransition = {
@@ -1131,7 +983,6 @@ private fun AuthenticatedApp(
               toRoute = targetState.destination.route,
             ),
             isPop = true,
-            origin = originTracker.originFor(initialState.destination.route),
           )
         },
       ) {
@@ -1185,8 +1036,15 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/grades" },
           ),
         ) { entry ->
+          val requestedGradeId = entry.arguments?.getString("gradeId")
+          val consumedGradeId by entry.savedStateHandle
+            .getStateFlow<String?>(ConsumedGradeRequestKey, null)
+            .collectAsStateWithLifecycle()
           GradesRoute(
-            initialGradeId = entry.arguments?.getString("gradeId"),
+            initialGradeId = pendingGradeRequest(requestedGradeId, consumedGradeId),
+            onInitialGradeConsumed = { gradeId ->
+              entry.savedStateHandle[ConsumedGradeRequestKey] = gradeId
+            },
           )
         }
         composable(
@@ -1245,7 +1103,7 @@ private fun AuthenticatedApp(
         }
         composable("more") {
           MoreHubScreen(
-            currentRoute = currentRoute ?: "more",
+            onOpenBugReport = { navigateRoute(BugReportRoute) },
             onOpenNotes = { navigateRoute("notes") },
             onOpenLessons = { navigateRoute("lessons") },
             onOpenAbsences = { navigateRoute("absences") },
@@ -1255,6 +1113,14 @@ private fun AuthenticatedApp(
             onOpenDocuments = { navigateRoute("documents") },
             onOpenProfessors = { navigateRoute("professors") },
             onOpenMeetings = { navigateRoute("meetings") },
+          )
+        }
+        composable(BugReportRoute) {
+          // Keep the route that opened the form in the diagnostics. Reading currentRoute here would
+          // report "bugReport", because this is now (correctly) its own back-stack destination.
+          BugReportScreen(
+            currentRoute = BugReportSourceRoute,
+            onBack = navController::navigateUp,
           )
         }
         composable("materials") {
@@ -1351,7 +1217,6 @@ private fun AuthenticatedApp(
       }
     }
   }
-  }
 }
 
 private data class MoreHubAction(
@@ -1365,7 +1230,7 @@ private data class MoreHubAction(
 
 @Composable
 private fun MoreHubScreen(
-  currentRoute: String = "more",
+  onOpenBugReport: () -> Unit,
   onOpenLessons: () -> Unit,
   onOpenAbsences: () -> Unit,
   onOpenMaterials: () -> Unit,
@@ -1376,12 +1241,6 @@ private fun MoreHubScreen(
   onOpenProfessors: () -> Unit,
   onOpenMeetings: () -> Unit,
 ) {
-  var showBugReport by rememberSaveable { mutableStateOf(false) }
-  if (showBugReport) {
-    BugReportScreen(currentRoute = currentRoute, onBack = { showBugReport = false })
-    return
-  }
-
   val registerActions = listOf(
     MoreHubAction("Orario", "Lezioni di oggi e della settimana.", "Lezioni", ExpressiveTone.Info, Icons.Rounded.Schedule, onOpenLessons),
     MoreHubAction("Compiti", "Attività assegnate e scadenze.", "Agenda", ExpressiveTone.Warning, Icons.AutoMirrored.Rounded.Assignment, onOpenHomework),
@@ -1412,7 +1271,7 @@ private fun MoreHubScreen(
           eyebrow = "Feedback",
           tone = ExpressiveTone.Info,
           leading = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
-          onClick = { showBugReport = true },
+          onClick = onOpenBugReport,
         )
         ExpressiveListDivider()
         RegisterListRow(

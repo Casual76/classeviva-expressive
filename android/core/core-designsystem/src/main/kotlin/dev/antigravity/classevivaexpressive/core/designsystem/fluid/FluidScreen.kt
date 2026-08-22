@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.fluid
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,7 +23,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBackIos
 import androidx.compose.material3.Icon
@@ -32,8 +32,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.animation.core.animate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
@@ -46,6 +48,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,19 +59,149 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.unit.Velocity
 
 /**
- * The backdrop every glass surface in the app samples.
+ * Coordinates chrome that lives above the navigation host without sharing render layers between
+ * destinations.
  *
- * Hoisted to the app root and applied by each screen to its own scrolling body, so that the screen
- * chrome and the app-level tab bar sample exactly the content — and never each other, which is what
- * a naive "blur the whole window" setup ends up doing.
+ * Every [FluidScreen] owns its own [GlassBackdropState]. Screens register that state while composed;
+ * the most recently registered destination becomes the source sampled by the floating tab bar. A
+ * predictive-back cancellation simply disposes the briefly revealed destination and restores the
+ * previous registration, so no two screens ever write into the same graphics-layer instances.
  */
-val LocalGlassBackdrop: ProvidableCompositionLocal<GlassBackdropState?> =
+@Stable
+class FluidChromeController internal constructor(
+  private val bottomBarVelocityThresholdPx: Float,
+) {
+  private val backdrops = LinkedHashMap<Any, GlassBackdropState>()
+  private val _activeBackdrop = mutableStateOf<GlassBackdropState?>(null)
+  private val _bottomBarOffsetPx = mutableFloatStateOf(0f)
+  private var bottomBarTravelPx = 0f
+
+  val activeBackdrop: State<GlassBackdropState?> = _activeBackdrop
+  val bottomBarOffsetPx: State<Float> = _bottomBarOffsetPx
+
+  internal fun registerBackdrop(key: Any, backdrop: GlassBackdropState) {
+    backdrops.remove(key)
+    backdrops[key] = backdrop
+    _activeBackdrop.value = backdrop
+    revealBottomBar()
+  }
+
+  internal fun unregisterBackdrop(key: Any) {
+    val removed = backdrops.remove(key) ?: return
+    if (_activeBackdrop.value === removed) {
+      _activeBackdrop.value = backdrops.entries.lastOrNull()?.value
+    }
+  }
+
+  fun updateBottomBarTravel(travelPx: Float) {
+    bottomBarTravelPx = travelPx.coerceAtLeast(0f)
+    _bottomBarOffsetPx.floatValue = _bottomBarOffsetPx.floatValue
+      .coerceIn(0f, bottomBarTravelPx)
+  }
+
+  fun onBottomBarScroll(availableY: Float) {
+    _bottomBarOffsetPx.floatValue = calculateBottomBarOffset(
+      currentOffsetPx = _bottomBarOffsetPx.floatValue,
+      availableY = availableY,
+      travelPx = bottomBarTravelPx,
+    )
+  }
+
+  fun revealBottomBar() {
+    _bottomBarOffsetPx.floatValue = 0f
+  }
+
+  suspend fun settleBottomBar(velocityY: Float) {
+    val start = _bottomBarOffsetPx.floatValue
+    val target = calculateBottomBarSettleTarget(
+      currentOffsetPx = start,
+      travelPx = bottomBarTravelPx,
+      velocityY = velocityY,
+      velocityThresholdPx = bottomBarVelocityThresholdPx,
+    )
+    if (start == target) return
+    animate(
+      initialValue = start,
+      targetValue = target,
+      animationSpec = FluidMotion.snappy(),
+    ) { value, _ ->
+      _bottomBarOffsetPx.floatValue = value.coerceIn(0f, bottomBarTravelPx)
+    }
+  }
+}
+
+@Composable
+fun rememberFluidChromeController(): FluidChromeController {
+  val density = LocalDensity.current.density
+  val velocityThresholdPx = bottomBarVelocityThresholdPx(density)
+  return remember(velocityThresholdPx) {
+    FluidChromeController(bottomBarVelocityThresholdPx = velocityThresholdPx)
+  }
+}
+
+@Composable
+fun rememberFluidChromeScrollConnection(
+  controller: FluidChromeController,
+  enabled: Boolean,
+): NestedScrollConnection = remember(controller, enabled) {
+  object : NestedScrollConnection {
+    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+      if (enabled) controller.onBottomBarScroll(available.y)
+      return Offset.Zero
+    }
+
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+      if (enabled) controller.settleBottomBar(consumed.y + available.y)
+      return Velocity.Zero
+    }
+  }
+}
+
+internal fun calculateBottomBarOffset(
+  currentOffsetPx: Float,
+  availableY: Float,
+  travelPx: Float,
+): Float {
+  if (travelPx <= 0f) return 0f
+  // Nested-scroll Y is negative while content moves towards the end of the list.
+  return (currentOffsetPx - availableY).coerceIn(0f, travelPx)
+}
+
+internal fun calculateBottomBarSettleTarget(
+  currentOffsetPx: Float,
+  travelPx: Float,
+  velocityY: Float,
+  velocityThresholdPx: Float,
+): Float {
+  if (travelPx <= 0f) return 0f
+  val threshold = velocityThresholdPx.coerceAtLeast(0f)
+  return when {
+    velocityY < -threshold -> travelPx
+    velocityY > threshold -> 0f
+    currentOffsetPx >= travelPx * 0.5f -> travelPx
+    else -> 0f
+  }
+}
+
+internal fun bottomBarVelocityThresholdPx(density: Float): Float =
+  BottomBarVelocityThresholdDpPerSecond * density.coerceAtLeast(0f)
+
+private const val BottomBarVelocityThresholdDpPerSecond = 200f
+
+val LocalFluidChromeController: ProvidableCompositionLocal<FluidChromeController?> =
   staticCompositionLocalOf { null }
 
 /**
@@ -100,16 +235,14 @@ object FluidScreenDefaults {
   /** Travel over which the compact bar materialises once the large title reaches it. */
   val CollapseDistance: Dp = 30.dp
 
-  /**
-   * How far below the control row the bar's blur ramps out.
-   *
-   * Purely visual: the bar is drawn as an overlay, so this height never pushes content around. It
-   * exists so the material has room to reach zero instead of stopping at a line.
-   */
-  val FadeExtent: Dp = 26.dp
+  /** Initial travel kept optically clear, so a tiny touch does not flash the material on. */
+  val ShieldDeadZone: Dp = 8.dp
 
-  /** How far the list has to scroll before the top material is at full strength. */
-  val ShieldDistance: Dp = 14.dp
+  /** Travel after the dead zone over which the top material reaches full strength. */
+  val ShieldRampDistance: Dp = 64.dp
+
+  /** Soft tail below the 44 dp control row; it removes the hard edge of a rectangular top bar. */
+  val GlassFadeTail: Dp = 26.dp
 
   val HorizontalPadding: Dp = 20.dp
   val ItemSpacing: Dp = 14.dp
@@ -159,13 +292,32 @@ fun FluidScreen(
   extraBottomPadding: Dp = 0.dp,
   content: LazyListScope.() -> Unit,
 ) {
-  val ownBackdrop = rememberGlassBackdrop()
-  val backdrop = LocalGlassBackdrop.current ?: ownBackdrop
+  // A render layer may have only one writer. Keeping this state local is what makes overlapping
+  // NavHost destinations (including predictive back) safe: each screen records into its own layers.
+  val backdrop = rememberGlassBackdrop()
+  val chromeController = LocalFluidChromeController.current
+  val chromeRegistration = remember { Any() }
   val density = LocalDensity.current
   val scope = rememberCoroutineScope()
 
   val topBarHeight = FluidScreenDefaults.topBarHeight()
   val bottomPadding = FluidScreenDefaults.bottomContentPadding(extraBottomPadding)
+
+  DisposableEffect(chromeController, chromeRegistration, backdrop) {
+    chromeController?.registerBackdrop(chromeRegistration, backdrop)
+    onDispose { chromeController?.unregisterBackdrop(chromeRegistration) }
+  }
+
+  LaunchedEffect(chromeController, listState) {
+    if (chromeController == null) return@LaunchedEffect
+    snapshotFlow {
+      listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+    }
+      .distinctUntilChanged()
+      .collect { isAtTop ->
+        if (isAtTop) chromeController.revealBottomBar()
+      }
+  }
 
   LocalFluidScrollToTop.current?.let { bus ->
     LaunchedEffect(bus, listState) {
@@ -185,15 +337,22 @@ fun FluidScreen(
   // finished leaving. Waiting for the title means a stretch of scrolling where text slides under the
   // clock with nothing behind it — the moment that makes an edge-to-edge layout look unfinished
   // rather than deliberate.
-  val shieldDistancePx = with(density) { FluidScreenDefaults.ShieldDistance.toPx() }
-  val glassIntensity = remember(listState, shieldDistancePx) {
+  val shieldDeadZonePx = with(density) { FluidScreenDefaults.ShieldDeadZone.toPx() }
+  val shieldRampDistancePx = with(density) { FluidScreenDefaults.ShieldRampDistance.toPx() }
+  val glassIntensity = remember(
+    listState,
+    collapseProgress,
+    shieldDeadZonePx,
+    shieldRampDistancePx,
+  ) {
     derivedStateOf {
-      val scrolled = if (listState.firstVisibleItemIndex > 0) {
-        1f
-      } else {
-        (listState.firstVisibleItemScrollOffset / shieldDistancePx).coerceIn(0f, 1f)
-      }
-      maxOf(collapseProgress.value, scrolled)
+      calculateGlassIntensity(
+        firstVisibleItemIndex = listState.firstVisibleItemIndex,
+        firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
+        collapseProgress = collapseProgress.value,
+        deadZonePx = shieldDeadZonePx,
+        rampDistancePx = shieldRampDistancePx,
+      )
     }
   }
 
@@ -289,12 +448,55 @@ private fun rememberCollapseProgress(
   derivedStateOf {
     val info = listState.layoutInfo
     val titleItem = info.visibleItemsInfo.firstOrNull { it.key == TitleItemKey }
-      ?: return@derivedStateOf 1f
     // Expressed relative to the viewport's own top edge so the result does not depend on whether
     // item offsets are reported before or after the list's content padding.
-    val titleBottom = (titleItem.offset + titleItem.size - info.viewportStartOffset).toFloat()
-    ((topBarHeightPx + collapseDistancePx - titleBottom) / collapseDistancePx).coerceIn(0f, 1f)
+    val titleBottom = titleItem?.let {
+      (it.offset + it.size - info.viewportStartOffset).toFloat()
+    }
+    calculateCollapseProgress(
+      hasVisibleItems = info.visibleItemsInfo.isNotEmpty(),
+      firstVisibleItemIndex = listState.firstVisibleItemIndex,
+      titleBottomPx = titleBottom,
+      topBarHeightPx = topBarHeightPx,
+      collapseDistancePx = collapseDistancePx,
+    )
   }
+}
+
+internal fun calculateCollapseProgress(
+  hasVisibleItems: Boolean,
+  firstVisibleItemIndex: Int,
+  titleBottomPx: Float?,
+  topBarHeightPx: Float,
+  collapseDistancePx: Float,
+): Float {
+  // Before LazyColumn's first layout there is no evidence that the title has collapsed. Returning
+  // one here caused the compact title and full-strength blur to flash over every entering screen.
+  if (!hasVisibleItems) return 0f
+  if (titleBottomPx == null) return if (firstVisibleItemIndex > 0) 1f else 0f
+  val distance = collapseDistancePx.coerceAtLeast(1f)
+  return ((topBarHeightPx + distance - titleBottomPx) / distance).coerceIn(0f, 1f)
+}
+
+internal fun calculateGlassIntensity(
+  firstVisibleItemIndex: Int,
+  firstVisibleItemScrollOffset: Int,
+  collapseProgress: Float,
+  deadZonePx: Float,
+  rampDistancePx: Float,
+): Float {
+  val scrollProgress = if (firstVisibleItemIndex > 0) {
+    1f
+  } else {
+    val ramp = rampDistancePx.coerceAtLeast(1f)
+    ((firstVisibleItemScrollOffset - deadZonePx) / ramp).coerceIn(0f, 1f)
+  }
+  return maxOf(collapseProgress.coerceIn(0f, 1f), smoothStep(scrollProgress))
+}
+
+internal fun smoothStep(value: Float): Float {
+  val clamped = value.coerceIn(0f, 1f)
+  return clamped * clamped * (3f - 2f * clamped)
 }
 
 @Composable
@@ -352,13 +554,10 @@ private fun FluidTopBar(
   val interactionSource = remember { MutableInteractionSource() }
   val titleShift = with(LocalDensity.current) { 11.dp.toPx() }
 
-  Column(
+  Box(
     modifier = Modifier
       .fillMaxWidth()
-      // Taller than the controls it holds. The extra strip below the row carries the blur's ramp to
-      // zero, so the material has somewhere to end — and because the bar is an overlay rather than
-      // part of the layout, the extra height costs the content nothing.
-      .height(statusBar + FluidScreenDefaults.ControlRowHeight + FluidScreenDefaults.FadeExtent)
+      .height(statusBar + FluidScreenDefaults.ControlRowHeight + FluidScreenDefaults.GlassFadeTail)
       .glassSurface(
         state = backdrop,
         tint = tint,
@@ -367,19 +566,25 @@ private fun FluidTopBar(
         intensity = { glassIntensity.value },
       ),
   ) {
-    Spacer(Modifier.height(statusBar))
-    Box(
+    Column(
       modifier = Modifier
         .fillMaxWidth()
-        .height(FluidScreenDefaults.ControlRowHeight)
-        // Tap-the-bar-to-scroll-up covers the control row only. The fade strip below it is purely
-        // visual and sits over live content, so it must not swallow taps meant for the list.
-        .selectable(
-          selected = false,
+        .height(statusBar + FluidScreenDefaults.ControlRowHeight),
+    ) {
+      Spacer(Modifier.height(statusBar))
+      Box(
+        modifier = Modifier
+          .fillMaxWidth()
+          .height(FluidScreenDefaults.ControlRowHeight)
+        // Tap-the-bar-to-scroll-up covers the control row only and is exposed as a named action,
+        // never as the anonymous unchecked selection control that `selectable` would create.
+        .clickable(
           interactionSource = interactionSource,
           indication = null,
+          role = Role.Button,
           onClick = onTapTitle,
-        ),
+        )
+        .semantics { contentDescription = "Torna all'inizio" },
       contentAlignment = Alignment.Center,
     ) {
       Text(
@@ -399,22 +604,23 @@ private fun FluidTopBar(
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        if (onBack != null) {
-          FluidBackButton(onBack)
-        } else {
-          Spacer(Modifier.width(FluidScreenDefaults.HorizontalPadding))
-        }
-        Spacer(Modifier.weight(1f))
         Row(
-          horizontalArrangement = Arrangement.spacedBy(2.dp),
+          modifier = Modifier.fillMaxWidth(),
           verticalAlignment = Alignment.CenterVertically,
-          content = actions,
-        )
-        Spacer(Modifier.width(6.dp))
+        ) {
+          if (onBack != null) {
+            FluidBackButton(onBack)
+          } else {
+            Spacer(Modifier.width(FluidScreenDefaults.HorizontalPadding))
+          }
+          Spacer(Modifier.weight(1f))
+          Row(
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = actions,
+          )
+          Spacer(Modifier.width(6.dp))
+        }
       }
     }
   }
@@ -461,16 +667,16 @@ fun FluidBarAction(
   }
 }
 
-/** Provides the app-wide backdrop and tab-bar allowance to every screen below. */
+/** Provides the chrome registry, tab-bar allowance and scroll-to-top bus to every screen below. */
 @Composable
 fun ProvideFluidChrome(
-  backdrop: GlassBackdropState,
+  controller: FluidChromeController,
   bottomInset: Dp,
   scrollToTop: FluidScrollToTopBus,
   content: @Composable () -> Unit,
 ) {
   CompositionLocalProvider(
-    LocalGlassBackdrop provides backdrop,
+    LocalFluidChromeController provides controller,
     LocalFluidBottomInset provides bottomInset,
     LocalFluidScrollToTop provides scrollToTop,
     content = content,

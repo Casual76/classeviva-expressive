@@ -1,13 +1,15 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material.icons.rounded.Event
+import androidx.compose.material.icons.rounded.Grade
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -20,7 +22,9 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
@@ -142,70 +146,60 @@ fun DashboardRoute(
     itemSpacing = 18.dp,
   ) {
     item {
-      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (snapshot.averageNumeric != null) {
-          MetricTile(
+      FeatureHero(
+        identity = FeatureIdentity.Overview,
+        eyebrow = "La tua giornata",
+        value = snapshot.todayLessons.size.toString(),
+        title = if (snapshot.todayLessons.size == 1) "lezione oggi" else "lezioni oggi",
+        description = if (snapshot.todayLessons.isEmpty()) {
+          "Nessuna lezione registrata: il resto della giornata resta comunque sotto controllo."
+        } else {
+          "Orario, risultati e avvisi importanti in un solo colpo d'occhio."
+        },
+        icon = Icons.Rounded.Today,
+        metrics = listOf(
+          FeatureHeroMetric(
             label = "Media generale",
-            value = snapshot.averageLabel,
-            detail = "Tocca per vedere l'andamento",
-            tone = dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone(snapshot.averageNumeric),
-            modifier = Modifier
-              .fillMaxWidth(),
+            value = snapshot.averageNumeric?.let { snapshot.averageLabel } ?: "--",
             onClick = onNavigateGrades,
-          )
-        }
-        Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          MetricTile(
+          ),
+          FeatureHeroMetric(
             label = "Voti nuovi",
             value = snapshot.unseenGrades.size.toString(),
-            detail = "Da aprire",
-            tone = if (snapshot.unseenGrades.isNotEmpty()) ExpressiveTone.Primary else ExpressiveTone.Neutral,
-            modifier = Modifier.weight(1f),
             onClick = onNavigateGrades,
-          )
-          MetricTile(
-            label = "Bacheca",
+          ),
+          FeatureHeroMetric(
+            label = "Bacheca non letta",
             value = snapshot.unreadCommunications.size.toString(),
-            detail = "Non lette",
-            tone = if (snapshot.unreadCommunications.isNotEmpty()) ExpressiveTone.Warning else ExpressiveTone.Neutral,
-            modifier = Modifier
-              .weight(1f),
             onClick = onNavigateCommunications,
-          )
-        }
-      }
+          ),
+        ),
+        actionLabel = "Apri orario",
+        onAction = onNavigateLessons,
+      )
     }
-    
-    item { FluidSectionHeader("Lezioni di oggi") }
-    if (snapshot.todayLessons.isEmpty()) {
-        item {
-            EmptyState(
-              title = "Nessuna lezione oggi",
-              detail = "Non ci sono lezioni previste o registrate per la giornata odierna.",
+
+    if (snapshot.todayLessons.isNotEmpty()) {
+      item { FluidSectionHeader("Lezioni di oggi") }
+      items(snapshot.todayLessons, key = { it.id }) { lesson ->
+        val presentation = remember(lesson) { lesson.toDashboardPresentation() }
+        RegisterListRow(
+          title = lesson.subject,
+          subtitle = presentation.subtitle,
+          eyebrow = presentation.timeRangeLabel,
+          meta = listOfNotNull(
+            lesson.teacher?.takeIf(String::isNotBlank),
+          ).joinToString(" / "),
+          tone = presentation.tone,
+          leading = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
+          badge = {
+            StatusBadge(
+              label = presentation.badgeLabel,
+              tone = presentation.badgeTone,
             )
-        }
-    } else {
-        items(snapshot.todayLessons, key = { it.id }) { lesson ->
-            val presentation = remember(lesson) { lesson.toDashboardPresentation() }
-            RegisterListRow(
-              title = lesson.subject,
-              subtitle = presentation.subtitle,
-              eyebrow = presentation.timeRangeLabel,
-              meta = listOfNotNull(
-                lesson.teacher?.takeIf(String::isNotBlank),
-              ).joinToString(" / "),
-              tone = presentation.tone,
-              badge = {
-                StatusBadge(
-                  label = presentation.badgeLabel,
-                  tone = presentation.badgeTone,
-                )
-              },
-            )
-        }
+          },
+        )
+      }
     }
     item { FluidSectionHeader("Voti recenti") }
     if (recentGrades.isEmpty()) {
@@ -225,6 +219,7 @@ fun DashboardRoute(
           eyebrow = grade.date,
           meta = grade.description ?: grade.notes,
           tone = if (isUnseen) ExpressiveTone.Primary else ExpressiveTone.Neutral,
+          leading = { Icon(Icons.Rounded.Grade, contentDescription = null) },
           onClick = { onOpenGrade(grade.id) },
           badge = {
             StatusBadge(
@@ -252,6 +247,7 @@ fun DashboardRoute(
           eyebrow = item.date,
           meta = item.detail,
           tone = ExpressiveTone.Success,
+          leading = { Icon(Icons.Rounded.Event, contentDescription = null) },
           onClick = onNavigateAgenda,
           badge = { StatusBadge("AGENDA", tone = ExpressiveTone.Success) },
           animatePress = true
@@ -274,6 +270,7 @@ fun DashboardRoute(
           eyebrow = communication.date,
           meta = communication.contentPreview,
           tone = ExpressiveTone.Warning,
+          leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
           onClick = onNavigateCommunications,
           badge = { StatusBadge("NUOVA", tone = ExpressiveTone.Warning) },
           animatePress = true

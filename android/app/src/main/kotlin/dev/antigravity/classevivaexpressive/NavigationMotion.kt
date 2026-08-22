@@ -9,19 +9,28 @@ package dev.antigravity.classevivaexpressive
 internal enum class RouteMotionKind {
   /**
    * Between the tabs of the bottom bar. They are peers — neither is "inside" the other — so nothing
-   * slides. A cross-fade says "same level, different subject".
+   * recedes as if it were a parent. The incoming opaque page makes a short ordered settle in the
+   * real tab direction, keeping the relationship legible without ever cross-fading readable text.
    */
   TopLevelSwitch,
 
   /**
    * A detail arriving on top of what came before: it slides in from the trailing edge while the
-   * screen underneath eases away and dims. Reversing it on the way back is what makes the back
+   * screen underneath eases away spatially. Reversing it on the way back is what makes the back
    * gesture feel like it is undoing the push rather than playing a second, unrelated animation.
    */
   Push,
 }
 
-internal data class RouteMotionDecision(val kind: RouteMotionKind)
+internal enum class RouteMotionDirection(val sign: Int) {
+  Backward(-1),
+  Forward(1),
+}
+
+internal data class RouteMotionDecision(
+  val kind: RouteMotionKind,
+  val direction: RouteMotionDirection = RouteMotionDirection.Forward,
+)
 
 internal fun normalizeRoute(route: String?): String? {
   return route
@@ -37,7 +46,16 @@ internal fun decideRouteMotion(
   val from = normalizeRoute(fromRoute)
   val to = normalizeRoute(toRoute)
   return if (from in topLevelRoutes && to in topLevelRoutes) {
-    RouteMotionDecision(RouteMotionKind.TopLevelSwitch)
+    val fromIndex = topLevelRouteOrder.indexOf(from)
+    val toIndex = topLevelRouteOrder.indexOf(to)
+    RouteMotionDecision(
+      kind = RouteMotionKind.TopLevelSwitch,
+      direction = if (toIndex < fromIndex) {
+        RouteMotionDirection.Backward
+      } else {
+        RouteMotionDirection.Forward
+      },
+    )
   } else {
     RouteMotionDecision(RouteMotionKind.Push)
   }

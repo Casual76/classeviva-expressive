@@ -7,22 +7,19 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.SeekableTransitionState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -33,6 +30,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
@@ -55,8 +54,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -82,7 +83,6 @@ import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSegmentedControl
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSwitch
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.LocalFluidOriginTracker
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListDivider
@@ -111,10 +111,13 @@ import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -137,6 +140,7 @@ data class SettingsUiState(
   val capabilities: List<FeatureCapability> = emptyList(),
   val lastMessage: String? = null,
   val isRefreshing: Boolean = false,
+  val isChangingSchoolYear: Boolean = false,
 )
 
 @HiltViewModel
@@ -150,6 +154,7 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isRefreshing = MutableStateFlow(false)
+  private val isChangingSchoolYear = MutableStateFlow(false)
 
   private val contentState = combine(
     settingsRepository.observeSettings(),
@@ -177,7 +182,8 @@ class SettingsViewModel @Inject constructor(
     registryState,
     lastMessage,
     isRefreshing,
-  ) { content, registry, message, refreshing ->
+    isChangingSchoolYear,
+  ) { content, registry, message, refreshing, changingSchoolYear ->
     SettingsUiState(
       settings = content.settings,
       runtimeState = content.runtimeState,
@@ -187,6 +193,7 @@ class SettingsViewModel @Inject constructor(
       capabilities = registry.second,
       lastMessage = message,
       isRefreshing = refreshing,
+      isChangingSchoolYear = changingSchoolYear,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
@@ -217,10 +224,7 @@ class SettingsViewModel @Inject constructor(
   }
 
   fun setAccentPreset(name: String) {
-    viewModelScope.launch {
-      settingsRepository.updateAccentMode(AccentMode.CUSTOM_PRESET)
-      settingsRepository.updateCustomAccent(name)
-    }
+    viewModelScope.launch { settingsRepository.updateCustomAccent(name) }
   }
 
   fun setDynamicColor(enabled: Boolean) {
@@ -268,9 +272,26 @@ class SettingsViewModel @Inject constructor(
   }
 
   fun selectSchoolYear(year: SchoolYearRef) {
+    if (isChangingSchoolYear.value) return
+    isChangingSchoolYear.value = true
+    lastMessage.value = null
     viewModelScope.launch {
-      schoolYearRepository.selectSchoolYear(year)
-      lastMessage.value = "Anno scolastico impostato su ${year.label}."
+      try {
+        schoolYearRepository.selectSchoolYear(year)
+        val effectiveYear = schoolYearRepository.observeSelectedSchoolYear().first()
+        lastMessage.value = "Anno scolastico impostato su ${effectiveYear.label}."
+      } catch (cancelled: CancellationException) {
+        throw cancelled
+      } catch (error: Throwable) {
+        val detail = error.message?.trim()?.takeIf(String::isNotEmpty)
+        lastMessage.value = if (detail == null) {
+          "Non è stato possibile cambiare anno scolastico. Riprova tra poco."
+        } else {
+          "Non è stato possibile cambiare anno scolastico: $detail"
+        }
+      } finally {
+        isChangingSchoolYear.value = false
+      }
     }
   }
 
@@ -345,15 +366,6 @@ fun SettingsRoute(
   val state by viewModel.state.collectAsStateWithLifecycle()
   var sectionName by rememberSaveable { mutableStateOf<String?>(null) }
   val section = sectionName?.let { name -> SettingsSection.entries.firstOrNull { it.name == name } }
-  val originTracker = LocalFluidOriginTracker.current
-  var paneOrigin by remember { mutableStateOf(TransformOrigin.Center) }
-  LaunchedEffect(sectionName) {
-    // Read once, as the section changes: the tracker holds the tap that caused this change, and by
-    // the time the pane closes that tap is long gone — so the anchor has to be kept here.
-    if (sectionName != null) {
-      paneOrigin = originTracker?.consumePending() ?: TransformOrigin.Center
-    }
-  }
   val context = LocalContext.current
   val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
     viewModel.refresh()
@@ -372,50 +384,98 @@ fun SettingsRoute(
       Unit
     }
   }
-  BackHandler(enabled = section != null, onBack = navigateBack)
 
-  // Sections used to appear and disappear inside a single list with no transition at all, which is
-  // why moving around settings felt inert next to the rest of the app. Each section is now its own
-  // pane, pushed and popped on the same motion the navigator uses for real destinations.
-  AnimatedContent(
-    targetState = section,
+  // AnimatedContent normally starts its pop only after BackHandler fires. A seekable transition
+  // instead lets the child pane track Android's predictive-back progress while the root pane is
+  // already present behind it. The logical section is cleared only after the gesture commits, so a
+  // cancellation can settle back to the child without reconstructing either screen or jumping.
+  val sectionTransitionState = remember {
+    SeekableTransitionState<SettingsSection?>(section)
+  }
+  val sectionTransition = rememberTransition(
+    transitionState = sectionTransitionState,
+    label = "settings section transition",
+  )
+  val sectionSettleSpec = tween<Float>(
+    durationMillis = SettingsPaneMotionDurationMillis,
+    easing = FluidMotion.EaseOut,
+  )
+
+  LaunchedEffect(section) {
+    if (sectionTransitionState.targetState != section) {
+      sectionTransitionState.animateTo(section, animationSpec = sectionSettleSpec)
+    }
+  }
+
+  PredictiveBackHandler(enabled = section != null) { progress ->
+    val activeSection = section ?: return@PredictiveBackHandler
+    try {
+      progress.collect { backEvent ->
+        sectionTransitionState.seekTo(
+          fraction = clampSettingsBackProgress(backEvent.progress),
+          targetState = null,
+        )
+      }
+      sectionTransitionState.animateTo(
+        null,
+        animationSpec = tween(
+          durationMillis = settingsPaneSettleDurationMillis(
+            progress = sectionTransitionState.fraction,
+            completing = true,
+          ),
+          easing = FluidMotion.EaseOut,
+        ),
+      )
+      sectionName = null
+    } catch (cancelled: CancellationException) {
+      // The handler's coroutine is already cancelled here. NonCancellable is intentionally scoped
+      // only to the short visual settle, then the cancellation is propagated as required by the
+      // Activity Compose contract.
+      withContext(NonCancellable) {
+        sectionTransitionState.animateTo(
+          activeSection,
+          animationSpec = tween(
+            durationMillis = settingsPaneSettleDurationMillis(
+              progress = sectionTransitionState.fraction,
+              completing = false,
+            ),
+            easing = FluidMotion.EaseOut,
+          ),
+        )
+      }
+      throw cancelled
+    }
+  }
+
+  // A settings section is a real child pane. It uses the same opaque lateral stack as route
+  // navigation, so a paused transition never leaves two readable pages blended together.
+  sectionTransition.AnimatedContent(
     modifier = modifier.fillMaxSize(),
     transitionSpec = {
       val opening = targetState != null
-      val spring = spring<Float>(dampingRatio = 0.86f, stiffness = FluidMotion.ResponseStandard)
-      val collapse = spring<Float>(
-        dampingRatio = FluidMotion.DampingChrome,
-        stiffness = FluidMotion.ResponseSnappy,
-      )
-      // The same motion the route transitions use, for the same reason: a settings section is
-      // opened *out of* the row you tapped, so it grows from there and collapses back into it.
-      // Anchoring both panes to one point is what makes the pair read as a single movement.
-      val anchor = paneOrigin
       val transform = if (opening) {
-        (
-          fadeIn(animationSpec = tween(70, easing = FluidMotion.EaseOut)) +
-            scaleIn(initialScale = 0.80f, transformOrigin = anchor, animationSpec = spring)
-          ) togetherWith scaleOut(
-          targetScale = 0.94f,
-          transformOrigin = anchor,
-          animationSpec = spring,
+        slideInHorizontally(
+          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+          initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = true) },
+        ) togetherWith slideOutHorizontally(
+          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+          targetOffsetX = { width -> settingsPaneExitOffset(width, opening = true) },
         )
       } else {
-        scaleIn(
-          initialScale = 0.94f,
-          transformOrigin = anchor,
-          animationSpec = spring,
-        ) togetherWith (
-          fadeOut(animationSpec = tween(130, delayMillis = 110, easing = FluidMotion.EaseIn)) +
-            scaleOut(targetScale = 0.80f, transformOrigin = anchor, animationSpec = collapse)
-          )
+        slideInHorizontally(
+          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+          initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = false) },
+        ) togetherWith slideOutHorizontally(
+          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+          targetOffsetX = { width -> settingsPaneExitOffset(width, opening = false) },
+        )
       }
-      // Opening puts the arriving pane on top; closing leaves the departing one there, so the pane
-      // doing the travelling is always the one in front.
-      transform.targetContentZIndex = if (opening) 1f else 0f
-      transform.using(SizeTransform(clip = false))
+      // While popping, the root must remain physically behind the travelling opaque child. Giving
+      // the target a negative z-index also covers restored-process cases where the child did not
+      // previously acquire the opening transition's positive z-index.
+      transform.targetContentZIndex = settingsPaneTargetZIndex(opening)
+      transform.using(SizeTransform(clip = true))
     },
-    label = "settings section",
   ) { section ->
     FluidScreen(
       title = section?.title ?: "Impostazioni",
@@ -492,6 +552,7 @@ fun SettingsRoute(
                 label = year.label,
                 selected = state.selectedSchoolYear.id == year.id,
                 onClick = { viewModel.selectSchoolYear(year) },
+                enabled = !state.isRefreshing && !state.isChangingSchoolYear,
               )
             }
           }
@@ -507,6 +568,10 @@ fun SettingsRoute(
       }
 
       if (section == SettingsSection.Appearance) {
+        val dynamicColorSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        val dynamicColorActive = dynamicColorSupported &&
+          state.settings.dynamicColorEnabled &&
+          state.settings.accentMode == AccentMode.DYNAMIC
         item { FluidSectionHeader(title = "Tema") }
         item {
           // Four mutually exclusive options that all fit on one row: exactly what a segmented
@@ -525,16 +590,21 @@ fun SettingsRoute(
           AccentPicker(
             settings = state.settings,
             onSelectBrand = { viewModel.setAccentMode(AccentMode.BRAND) },
-            onSelectDynamic = { viewModel.setAccentMode(AccentMode.DYNAMIC) },
+            onSelectDynamic = { viewModel.setDynamicColor(true) },
             onSelectPreset = viewModel::setAccentPreset,
           )
         }
         item {
           SettingToggleRow(
             title = "Dynamic Color nativo",
-            subtitle = "Usa i colori del sistema quando l'accento è Dynamic.",
-            checked = state.settings.dynamicColorEnabled,
+            subtitle = if (dynamicColorSupported) {
+              "Usa subito la palette del sistema; disattivandolo torna Classeviva."
+            } else {
+              "Richiede Android 12 o versioni successive."
+            },
+            checked = dynamicColorActive,
             onCheckedChange = viewModel::setDynamicColor,
+            enabled = dynamicColorSupported,
           )
         }
         item {
@@ -696,6 +766,26 @@ fun SettingsRoute(
   }
 }
 
+private const val SettingsPaneMotionDurationMillis = 360
+private const val SettingsPaneMinSettleDurationMillis = 90
+
+internal fun clampSettingsBackProgress(progress: Float): Float = progress.coerceIn(0f, 1f)
+
+internal fun settingsPaneEnterOffset(width: Int, opening: Boolean): Int =
+  if (opening) width else -width / 4
+
+internal fun settingsPaneExitOffset(width: Int, opening: Boolean): Int =
+  if (opening) -width / 4 else width
+
+internal fun settingsPaneTargetZIndex(opening: Boolean): Float = if (opening) 1f else -1f
+
+internal fun settingsPaneSettleDurationMillis(progress: Float, completing: Boolean): Int {
+  val boundedProgress = clampSettingsBackProgress(progress)
+  val remainingFraction = if (completing) 1f - boundedProgress else boundedProgress
+  return (SettingsPaneMotionDurationMillis * remainingFraction).toInt()
+    .coerceIn(SettingsPaneMinSettleDurationMillis, SettingsPaneMotionDurationMillis)
+}
+
 @Composable
 private fun AppUpdateSettingsCard(
   isChecking: Boolean,
@@ -840,10 +930,20 @@ private fun SettingToggleRow(
   subtitle: String,
   checked: Boolean,
   onCheckedChange: (Boolean) -> Unit,
+  enabled: Boolean = true,
   icon: @Composable (() -> Unit)? = null,
   badge: @Composable (() -> Unit)? = null,
 ) {
-  ExpressiveCard {
+  ExpressiveCard(
+    modifier = Modifier
+      .semantics(mergeDescendants = true) {}
+      .toggleable(
+        value = checked,
+        enabled = enabled,
+        role = Role.Switch,
+        onValueChange = onCheckedChange,
+      ),
+  ) {
     Row(
       modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -860,7 +960,9 @@ private fun SettingToggleRow(
       badge?.invoke()
       FluidSwitch(
         checked = checked,
-        onCheckedChange = onCheckedChange,
+        // The whole labelled card owns the single switch semantic/action and 48dp+ target.
+        onCheckedChange = null,
+        enabled = enabled,
       )
     }
   }
@@ -879,33 +981,50 @@ private fun AccentPicker(
   onSelectDynamic: () -> Unit,
   onSelectPreset: (String) -> Unit,
 ) {
-  val isDark = isSystemInDarkTheme()
+  val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
   val dynamicColor = dynamicAccentColor(isDark)
+  val resolvedAccentMode = effectiveAccentMode(
+    settings = settings,
+    dynamicColorSupported = dynamicColor != null,
+  )
   FlowRow(
+    modifier = Modifier.selectableGroup(),
     horizontalArrangement = Arrangement.spacedBy(6.dp),
     verticalArrangement = Arrangement.spacedBy(6.dp),
   ) {
     FluidColorDot(
       color = classevivaBrandAccent(isDark),
-      selected = settings.accentMode == AccentMode.BRAND,
+      selected = resolvedAccentMode == AccentMode.BRAND,
       onClick = onSelectBrand,
+      label = "Classeviva",
     )
     if (dynamicColor != null) {
       FluidColorDot(
         color = dynamicColor,
-        selected = settings.accentMode == AccentMode.DYNAMIC,
+        selected = resolvedAccentMode == AccentMode.DYNAMIC,
         onClick = onSelectDynamic,
+        label = "Dynamic Color",
       )
     }
     expressiveAccentPresets.forEach { preset ->
       FluidColorDot(
         color = preset.resolve(isDark),
-        selected = settings.accentMode == AccentMode.CUSTOM_PRESET &&
+        selected = resolvedAccentMode == AccentMode.CUSTOM_PRESET &&
           settings.customAccentName == preset.name,
         onClick = { onSelectPreset(preset.name) },
+        label = preset.label,
       )
     }
   }
+}
+
+internal fun effectiveAccentMode(
+  settings: AppSettings,
+  dynamicColorSupported: Boolean,
+): AccentMode = when {
+  settings.accentMode == AccentMode.DYNAMIC &&
+    (!dynamicColorSupported || !settings.dynamicColorEnabled) -> AccentMode.BRAND
+  else -> settings.accentMode
 }
 
 @Composable

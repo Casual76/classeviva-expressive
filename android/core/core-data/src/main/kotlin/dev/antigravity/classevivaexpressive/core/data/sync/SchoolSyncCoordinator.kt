@@ -218,6 +218,7 @@ class SchoolSyncCoordinator @Inject constructor(
       refreshProfile = false,
       sections = sections,
       mode = mode,
+      allowAutomaticFallback = false,
     )
   }
 
@@ -228,6 +229,7 @@ class SchoolSyncCoordinator @Inject constructor(
       refreshProfile = true,
       sections = BackgroundSyncPolicy.maintenanceSections(),
       mode = BackgroundSyncMode.MAINTENANCE,
+      allowAutomaticFallback = false,
     )
   }
 
@@ -243,7 +245,8 @@ class SchoolSyncCoordinator @Inject constructor(
     if (status.state == SyncState.PARTIAL) {
       throw ClassevivaNetworkException("Impossibile aggiornare le assenze. Verificare la connessione.")
     }
-    readYearScopedValue(operation, AbsencesSection, selectedYear, emptyList<AbsenceRecord>())
+    val effectiveYear = schoolYearStore.observeSelectedSchoolYear().first()
+    readYearScopedValue(operation, AbsencesSection, effectiveYear, emptyList<AbsenceRecord>())
   }
 
   suspend fun refreshHomeworks(force: Boolean = false): List<Homework> {
@@ -255,7 +258,8 @@ class SchoolSyncCoordinator @Inject constructor(
       refreshProfile = false,
       sections = setOf(HomeworkSection),
     )
-    return readYearScopedValue(operation, HomeworkSection, selectedYear, emptyList())
+    val effectiveYear = schoolYearStore.observeSelectedSchoolYear().first()
+    return readYearScopedValue(operation, HomeworkSection, effectiveYear, emptyList())
   }
 
   suspend fun refreshMeetings(force: Boolean = false): List<MeetingBooking> {
@@ -267,7 +271,8 @@ class SchoolSyncCoordinator @Inject constructor(
       refreshProfile = false,
       sections = setOf(MeetingTeachersSection, MeetingSlotsSection, MeetingBookingsSection),
     )
-    return readYearScopedValue(operation, MeetingBookingsSection, selectedYear, emptyList())
+    val effectiveYear = schoolYearStore.observeSelectedSchoolYear().first()
+    return readYearScopedValue(operation, MeetingBookingsSection, effectiveYear, emptyList())
   }
 
   suspend fun submitHomework(submission: HomeworkSubmission): Result<HomeworkSubmissionReceipt> = runCatching {
@@ -670,6 +675,7 @@ class SchoolSyncCoordinator @Inject constructor(
     refreshProfile: Boolean,
     sections: Set<String>? = null,
     mode: BackgroundSyncMode = BackgroundSyncMode.FULL,
+    allowAutomaticFallback: Boolean = true,
   ): SyncStatus {
     if (!force && syncMutex.isLocked) return syncStatus.value
     return syncMutex.withLock {
@@ -680,12 +686,13 @@ class SchoolSyncCoordinator @Inject constructor(
         sections = sections,
         mode = mode,
       )
-      val fallbackYear = schoolYearFallbackFor(selectedYear, status)
+      if (!allowAutomaticFallback || !status.schoolYearNotStarted) return@withLock status
+      val fallbackEvent = schoolYearStore.selectAutomaticFallback(selectedYear)
         ?: return@withLock status
+      val fallbackYear = fallbackEvent.selected
 
       // Classeviva will keep refusing this year until the school opens it, so remember the choice:
       // otherwise every screen would pay for the same rejected round trip on every refresh.
-      schoolYearStore.selectSchoolYear(fallbackYear)
       val retried = refreshSchoolYear(
         selectedYear = fallbackYear,
         force = true,
@@ -697,23 +704,6 @@ class SchoolSyncCoordinator @Inject constructor(
         "mostro ${fallbackYear.label}."
       retried.copy(message = retried.message ?: notice).also { syncStatus.value = it }
     }
-  }
-
-  /**
-   * The year to fall back to when the selected one has not started, or null when there is nothing to
-   * fall back to.
-   *
-   * Only ever steps back one year, and only to a year the app already offers, so a persistent 422
-   * cannot walk the selection backwards through the archive one refresh at a time.
-   */
-  private suspend fun schoolYearFallbackFor(
-    selectedYear: SchoolYearRef,
-    status: SyncStatus,
-  ): SchoolYearRef? {
-    if (!status.schoolYearNotStarted) return null
-    val previous = SchoolYearRef.previousOf(selectedYear)
-    val offered = schoolYearStore.observeAvailableSchoolYears().first()
-    return previous.takeIf { candidate -> offered.any { it.id == candidate.id } }
   }
 
   private fun CommunicationDetail.requiresVerifiedRestAcknowledgement(): Boolean {

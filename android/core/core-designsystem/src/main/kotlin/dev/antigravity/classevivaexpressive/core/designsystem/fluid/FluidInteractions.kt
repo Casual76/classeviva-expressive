@@ -12,13 +12,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.findRootCoordinates
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -26,38 +19,6 @@ import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-
-/**
- * Reports this element's centre to the origin tracker whenever it is tapped.
- *
- * Kept as a modifier of its own so both press treatments share it, and so an element that is not
- * clickable never pays for the layout callback.
- */
-@Composable
-private fun Modifier.reportingOrigin(): Pair<Modifier, () -> Unit> {
-  val tracker = LocalFluidOriginTracker.current ?: return this to {}
-  var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-  val report = {
-    val layout = coordinates
-    if (layout != null && layout.isAttached) {
-      val root = layout.findRootCoordinates()
-      val width = root.size.width.toFloat()
-      val height = root.size.height.toFloat()
-      if (width > 0f && height > 0f) {
-        val centre = layout.localToRoot(
-          Offset(layout.size.width / 2f, layout.size.height / 2f),
-        )
-        tracker.record(
-          TransformOrigin(
-            (centre.x / width).coerceIn(0f, 1f),
-            (centre.y / height).coerceIn(0f, 1f),
-          ),
-        )
-      }
-    }
-  }
-  return this.onGloballyPositioned { coordinates = it } to report
-}
 
 /**
  * Press feedback in the shape Apple gives it: the element itself yields under the finger.
@@ -86,7 +47,6 @@ fun Modifier.fluidPressable(
 ): Modifier {
   if (onClick == null && onLongClick == null) return this
 
-  val (tracked, reportOrigin) = reportingOrigin()
   val interactionSource = remember { MutableInteractionSource() }
   val pressed by interactionSource.collectIsPressedAsState()
   val scale = remember { Animatable(1f) }
@@ -100,7 +60,7 @@ fun Modifier.fluidPressable(
     }
   }
 
-  return tracked
+  return this
     .graphicsLayer {
       val value = scale.value
       scaleX = value
@@ -112,7 +72,6 @@ fun Modifier.fluidPressable(
       enabled = enabled,
       role = role,
       onClick = {
-        reportOrigin()
         onClick?.invoke()
       },
       onLongClick = onLongClick?.let {
@@ -142,7 +101,6 @@ fun Modifier.fluidRowPressable(
 ): Modifier {
   if (onClick == null && onLongClick == null) return this
 
-  val (tracked, reportOrigin) = reportingOrigin()
   val interactionSource = remember { MutableInteractionSource() }
   val pressed by interactionSource.collectIsPressedAsState()
   val haptics = LocalHapticFeedback.current
@@ -154,7 +112,7 @@ fun Modifier.fluidRowPressable(
     label = "fluid row highlight",
   )
 
-  return tracked
+  return this
     .drawBehind {
       if (highlight <= 0.001f) return@drawBehind
       val color = highlightColor.copy(alpha = highlightColor.alpha * highlight)
@@ -169,7 +127,6 @@ fun Modifier.fluidRowPressable(
       indication = null,
       enabled = enabled,
       onClick = {
-        reportOrigin()
         onClick?.invoke()
       },
       onLongClick = onLongClick?.let {

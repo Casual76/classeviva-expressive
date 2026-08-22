@@ -51,10 +51,10 @@ import androidx.compose.ui.unit.dp
  *  3. [glassSurface] draws the slice of the snapshot that sits underneath it, translated so the
  *     sampled pixels line up with what is really behind the bar, and tints the result.
  *
- * Two blurred copies rather than one, because the top bar needs a *ramp*. A single radius can only
- * be faded in and out, and a half-transparent blur over sharp content ghosts. Cross-dissolving from
- * a heavy blur to a light one and then to nothing is a real gradient of blurriness, which is what
- * the effect looks like on iOS and why its bars have no visible bottom edge.
+ * Two blurred copies rather than one, because material strength must travel without fading a blurry
+ * text contour directly over a sharp one. The soft copy first replaces the sampled pixels, then the
+ * heavy copy takes over as the bar materialises. That changes radius instead of manufacturing the
+ * double contour that reads as noise while a list is moving.
  *
  * The snapshot trails the content by one frame: the source writes [GlassBackdropState.frameTick]
  * during its draw and the glass nodes read it during theirs. At 120 Hz that is 8 ms of lag on a
@@ -74,6 +74,13 @@ class GlassBackdropState internal constructor(
   /** Bumped on every source draw so glass surfaces know the snapshot changed. */
   internal val frameTick = mutableIntStateOf(0)
 
+  /**
+   * Deliberately plain state. Reading [frameTick] inside the source draw would subscribe the source
+   * to its own invalidation signal and keep all three full-screen layers redrawing forever.
+   */
+  private var publishedFrameTick = 0
+  private var snapshotPublished = false
+
   internal var sourceOrigin by mutableStateOf(Offset.Zero)
 
   /** True once the source has recorded a frame; before that there is nothing to sample. */
@@ -81,13 +88,25 @@ class GlassBackdropState internal constructor(
 
   internal val blurSupported: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+  /** Publishes one real source redraw without ever reading observable state from that draw pass. */
+  internal fun publishSourceDraw() {
+    if (!snapshotPublished) {
+      snapshotPublished = true
+      hasSnapshot = true
+    }
+    publishedFrameTick = nextGlassFrameTick(publishedFrameTick)
+    frameTick.intValue = publishedFrameTick
+  }
 }
 
-/** Blur strength of the app-wide material, in the weight range of a UIKit "thick" material. */
-val DefaultGlassBlurRadius: Dp = 36.dp
+internal fun nextGlassFrameTick(current: Int): Int = if (current == Int.MAX_VALUE) 0 else current + 1
 
-/** The light end of the ramp. Enough to soften, not enough to hide. */
-private val SoftBlurFraction = 0.28f
+/** Restrained blur; 8 dp is still about 22 physical pixels on the 120 Hz QA phone. */
+val DefaultGlassBlurRadius: Dp = 8.dp
+
+/** The light end of the ramp. It is intentionally subtle when material first crosses the dead zone. */
+private val SoftBlurFraction = 0.20f
 
 @Composable
 fun rememberGlassBackdrop(blurRadius: Dp = DefaultGlassBlurRadius): GlassBackdropState {
@@ -115,9 +134,9 @@ fun Modifier.glassBackdropSource(state: GlassBackdropState): Modifier = this
       val soft = heavy * SoftBlurFraction
       state.heavyLayer.renderEffect = BlurEffect(heavy, heavy, TileMode.Clamp)
       state.softLayer.renderEffect = BlurEffect(soft, soft, TileMode.Clamp)
-      // Apple's materials boost saturation, because a wide blur averages colour towards grey and the
-      // glass would otherwise read as washed out over anything colourful.
-      val saturate = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(1.7f) })
+      // Keep only a whisper of the saturation lift used by system materials. A stronger filter made
+      // fast-moving text behind the top bar turn into dark, noisy-looking colour bands.
+      val saturate = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(1.04f) })
       state.heavyLayer.colorFilter = saturate
       state.softLayer.colorFilter = saturate
     }
@@ -128,8 +147,7 @@ fun Modifier.glassBackdropSource(state: GlassBackdropState): Modifier = this
         state.heavyLayer.record { drawLayer(state.sourceLayer) }
         state.softLayer.record { drawLayer(state.sourceLayer) }
       }
-      if (!state.hasSnapshot) state.hasSnapshot = true
-      state.frameTick.intValue++
+      state.publishSourceDraw()
     }
   }
 
@@ -149,17 +167,16 @@ object GlassDefaults {
   /**
    * Bars.
    *
-   * The tint has one job: raise contrast for the controls sitting on the glass without erasing the
-   * blur underneath. Past roughly half opacity the blurred image stops reading as an image and the
-   * bar becomes a flat translucent panel — which is exactly what a plain `surface.copy(alpha = …)`
-   * bar has always looked like, and the whole reason for the effect is to not look like that.
+   * The tint raises contrast for controls and suppresses the one-frame trail inherent in a manually
+   * sampled Android backdrop. Enough of the softened colour remains to read as material, while text
+   * moving behind the bar no longer becomes a high-contrast grey smear.
    */
   @Composable
   fun barTint(): GlassTint {
     val dark = isDarkSurface()
     val surface = MaterialTheme.colorScheme.surface
     return GlassTint(
-      overlay = if (dark) surface.copy(alpha = 0.42f) else surface.copy(alpha = 0.46f),
+      overlay = if (dark) surface.copy(alpha = 0.58f) else surface.copy(alpha = 0.60f),
       fallback = if (dark) surface.copy(alpha = 0.95f) else surface.copy(alpha = 0.96f),
       hairline = MaterialTheme.colorScheme.onSurface.copy(alpha = if (dark) 0.16f else 0.10f),
     )
@@ -251,6 +268,11 @@ fun Modifier.glassSurface(
           val dy = state.sourceOrigin.y - anchor.originInRoot.y
           when (falloff) {
             GlassFalloff.Uniform -> {
+              // Always replace the sharp pixels with the lightly softened snapshot once material is
+              // present, then travel from that soft radius to the full radius. Fading a blurred copy
+              // directly over sharp text creates two readable contours — the noisy trail this glass
+              // implementation is specifically meant to avoid during fast scrolling.
+              translate(dx, dy) { drawLayer(state.softLayer) }
               state.heavyLayer.alpha = amount
               translate(dx, dy) { drawLayer(state.heavyLayer) }
               state.heavyLayer.alpha = 1f
@@ -303,7 +325,10 @@ private fun DrawScope.drawFadingGlass(
   tint: GlassTint,
   amount: Float,
 ) {
-  maskedLayer(state.softLayer, dx, dy, amount, SoftStops)
+  // The soft snapshot replaces sharp pixels instead of alpha-blending two readable contours. Only
+  // the heavy radius and tint grow with scroll intensity; this restores a progressive glass ramp
+  // without reintroducing the noisy text trail of the older implementation.
+  maskedLayer(state.softLayer, dx, dy, 1f, SoftStops)
   maskedLayer(state.heavyLayer, dx, dy, amount, HeavyStops)
   drawRect(brush = verticalFade(tint.overlay.copy(alpha = tint.overlay.alpha * amount)))
 }

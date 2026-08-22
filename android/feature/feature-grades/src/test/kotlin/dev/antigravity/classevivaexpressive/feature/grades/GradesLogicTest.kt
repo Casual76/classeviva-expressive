@@ -9,6 +9,17 @@ import java.time.LocalDate
 
 class GradesLogicTest {
   @Test
+  fun initialGradeRequest_waitsForTheRequestedGrade() {
+    val grades = listOf(
+      Grade(id = "g1", subject = "Matematica", valueLabel = "8", numericValue = 8.0, date = "2026-03-10", type = "Scritto"),
+    )
+
+    assertNull(initialGradeRequestToOpen("g2", grades))
+    assertEquals("g1", initialGradeRequestToOpen("g1", grades))
+    assertNull(initialGradeRequestToOpen("", grades))
+  }
+
+  @Test
   fun selectCurrentPeriodCode_prefersCurrentDateWhenNothingIsSelected() {
     val periods = listOf(
       Period("T1", 1, "Trimestre", "Trimestre", false, "2025-09-01", "2026-01-31"),

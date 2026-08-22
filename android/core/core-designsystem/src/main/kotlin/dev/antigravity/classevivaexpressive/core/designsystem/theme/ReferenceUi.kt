@@ -64,6 +64,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -689,9 +690,13 @@ private data class ToneColors(
 
 @Composable
 private fun toneColors(tone: ExpressiveTone): ToneColors {
-  val isDark = androidx.compose.foundation.isSystemInDarkTheme()
+  // The app can force Light, Dark or AMOLED independently from the operating-system theme.
+  val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
   return when (tone) {
-    ExpressiveTone.Primary -> ToneColors(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary)
+    ExpressiveTone.Primary -> ToneColors(
+      MaterialTheme.colorScheme.primaryContainer,
+      MaterialTheme.colorScheme.onPrimaryContainer,
+    )
     ExpressiveTone.Success -> if (isDark) {
       ToneColors(Color(0xFF0F2D1D), Color(0xFF81C784))
     } else {
@@ -702,8 +707,14 @@ private fun toneColors(tone: ExpressiveTone): ToneColors {
     } else {
       ToneColors(Color(0xFFFFF3E0), Color(0xFFE65100))
     }
-    ExpressiveTone.Danger -> ToneColors(MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.error)
-    ExpressiveTone.Info -> ToneColors(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.primary)
+    ExpressiveTone.Danger -> ToneColors(
+      MaterialTheme.colorScheme.errorContainer,
+      MaterialTheme.colorScheme.onErrorContainer,
+    )
+    ExpressiveTone.Info -> ToneColors(
+      MaterialTheme.colorScheme.secondaryContainer,
+      MaterialTheme.colorScheme.onSecondaryContainer,
+    )
     ExpressiveTone.Neutral -> ToneColors(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurfaceVariant)
   }
 }
@@ -740,7 +751,7 @@ fun ExpressiveHeroCard(
         Text(
           text = subtitle,
           style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f),
+          color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
       }
       trailing?.invoke() ?: Icon(

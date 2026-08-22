@@ -1,7 +1,10 @@
 package dev.antigravity.classevivaexpressive.core.datastore
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -16,8 +19,10 @@ import dagger.hilt.components.SingletonComponent
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPreferences
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearFallbackEvent
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearSelectionPolicy
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
 import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
@@ -27,7 +32,10 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -53,66 +61,83 @@ private val SettingsPeriodicSyncKey = booleanPreferencesKey("periodic_sync")
 private val SettingsNetworkConfigKey = stringPreferencesKey("network_config")
 private val SettingsIgnoredStableUpdateVersionKey = stringPreferencesKey("ignored_stable_update_version")
 private val SelectedSchoolYearKey = stringPreferencesKey("selected_school_year")
+private val SchoolYearFallbackEventsKey = stringPreferencesKey("school_year_fallback_events")
 private val TimetableTemplatesKey = stringPreferencesKey("timetable_templates")
 
 @Singleton
-class SettingsStore(@ApplicationContext context: Context) {
-  private val json = Json { ignoreUnknownKeys = true }
-  private val dataStore = PreferenceDataStoreFactory.create(
-    produceFile = { context.preferencesDataStoreFile("classeviva_settings.preferences_pb") },
+class SettingsStore internal constructor(
+  private val dataStore: DataStore<Preferences>,
+) {
+  constructor(@ApplicationContext context: Context) : this(
+    dataStore = PreferenceDataStoreFactory.create(
+      produceFile = { context.preferencesDataStoreFile("classeviva_settings.preferences_pb") },
+    ),
   )
 
-  val settings: Flow<AppSettings> =
-    dataStore.data.map { prefs ->
-      val networkConfig = prefs[SettingsNetworkConfigKey]?.let {
-        runCatching { json.decodeFromString<dev.antigravity.classevivaexpressive.core.domain.model.NetworkConfig>(it) }.getOrNull()
-      } ?: dev.antigravity.classevivaexpressive.core.domain.model.NetworkConfig()
+  private val json = Json { ignoreUnknownKeys = true }
 
-      AppSettings(
-        themeMode = prefs[SettingsThemeModeKey]?.let { ThemeMode.valueOf(it) } ?: ThemeMode.SYSTEM,
-        accentMode = prefs[SettingsAccentModeKey]?.let { AccentMode.valueOf(it) } ?: AccentMode.BRAND,
-        customAccentName = prefs[SettingsCustomAccentKey] ?: "ember",
-        dynamicColorEnabled = prefs[SettingsDynamicColorKey] ?: true,
-        amoledEnabled = prefs[SettingsAmoledKey] ?: false,
-        notificationPreferences = NotificationPreferences(
-          enabled = prefs[SettingsNotificationsEnabledKey] ?: true,
-          homework = prefs[SettingsNotificationsHomeworkKey] ?: true,
-          communications = prefs[SettingsNotificationsCommunicationsKey] ?: true,
-          absences = prefs[SettingsNotificationsAbsencesKey] ?: true,
-          grades = prefs[SettingsNotificationsGradesKey] ?: true,
-          agenda = prefs[SettingsNotificationsAgendaKey] ?: true,
-          notes = prefs[SettingsNotificationsNotesKey] ?: true,
-          test = prefs[SettingsNotificationsTestKey] ?: true,
-          liveTimetable = prefs[SettingsNotificationsLiveTimetableKey] ?: true,
-        ),
-        periodicSyncEnabled = prefs[SettingsPeriodicSyncKey] ?: true,
-        networkConfig = networkConfig,
-        ignoredStableUpdateVersion = prefs[SettingsIgnoredStableUpdateVersionKey] ?: "",
-      )
-    }
+  val settings: Flow<AppSettings> = dataStore.data.map(::decodeSettings)
 
   suspend fun update(transform: (AppSettings) -> AppSettings) {
-    val current = settings.first()
-    val next = transform(current)
     dataStore.edit { prefs ->
-      prefs[SettingsThemeModeKey] = next.themeMode.name
-      prefs[SettingsAccentModeKey] = next.accentMode.name
-      prefs[SettingsCustomAccentKey] = next.customAccentName
-      prefs[SettingsDynamicColorKey] = next.dynamicColorEnabled
-      prefs[SettingsAmoledKey] = next.amoledEnabled
-      prefs[SettingsNotificationsEnabledKey] = next.notificationPreferences.enabled
-      prefs[SettingsNotificationsHomeworkKey] = next.notificationPreferences.homework
-      prefs[SettingsNotificationsCommunicationsKey] = next.notificationPreferences.communications
-      prefs[SettingsNotificationsAbsencesKey] = next.notificationPreferences.absences
-      prefs[SettingsNotificationsGradesKey] = next.notificationPreferences.grades
-      prefs[SettingsNotificationsAgendaKey] = next.notificationPreferences.agenda
-      prefs[SettingsNotificationsNotesKey] = next.notificationPreferences.notes
-      prefs[SettingsNotificationsTestKey] = next.notificationPreferences.test
-      prefs[SettingsNotificationsLiveTimetableKey] = next.notificationPreferences.liveTimetable
-      prefs[SettingsPeriodicSyncKey] = next.periodicSyncEnabled
-      prefs[SettingsNetworkConfigKey] = json.encodeToString(next.networkConfig)
-      prefs[SettingsIgnoredStableUpdateVersionKey] = next.ignoredStableUpdateVersion
+      // Decode and transform inside DataStore's serialized edit transaction. Computing `next`
+      // before entering edit allowed two unrelated rapid changes to overwrite one another.
+      prefs.replaceWith(transform(decodeSettings(prefs)))
     }
+  }
+
+  private fun decodeSettings(prefs: Preferences): AppSettings {
+    val networkConfig = prefs[SettingsNetworkConfigKey]?.let {
+      runCatching {
+        json.decodeFromString<dev.antigravity.classevivaexpressive.core.domain.model.NetworkConfig>(it)
+      }.getOrNull()
+    } ?: dev.antigravity.classevivaexpressive.core.domain.model.NetworkConfig()
+
+    return AppSettings(
+      themeMode = prefs[SettingsThemeModeKey]
+        ?.let { stored -> runCatching { ThemeMode.valueOf(stored) }.getOrNull() }
+        ?: ThemeMode.SYSTEM,
+      accentMode = prefs[SettingsAccentModeKey]
+        ?.let { stored -> runCatching { AccentMode.valueOf(stored) }.getOrNull() }
+        ?: AccentMode.BRAND,
+      customAccentName = prefs[SettingsCustomAccentKey] ?: "expressive",
+      dynamicColorEnabled = prefs[SettingsDynamicColorKey] ?: true,
+      amoledEnabled = prefs[SettingsAmoledKey] ?: false,
+      notificationPreferences = NotificationPreferences(
+        enabled = prefs[SettingsNotificationsEnabledKey] ?: true,
+        homework = prefs[SettingsNotificationsHomeworkKey] ?: true,
+        communications = prefs[SettingsNotificationsCommunicationsKey] ?: true,
+        absences = prefs[SettingsNotificationsAbsencesKey] ?: true,
+        grades = prefs[SettingsNotificationsGradesKey] ?: true,
+        agenda = prefs[SettingsNotificationsAgendaKey] ?: true,
+        notes = prefs[SettingsNotificationsNotesKey] ?: true,
+        test = prefs[SettingsNotificationsTestKey] ?: true,
+        liveTimetable = prefs[SettingsNotificationsLiveTimetableKey] ?: true,
+      ),
+      periodicSyncEnabled = prefs[SettingsPeriodicSyncKey] ?: true,
+      networkConfig = networkConfig,
+      ignoredStableUpdateVersion = prefs[SettingsIgnoredStableUpdateVersionKey] ?: "",
+    )
+  }
+
+  private fun MutablePreferences.replaceWith(next: AppSettings) {
+    this[SettingsThemeModeKey] = next.themeMode.name
+    this[SettingsAccentModeKey] = next.accentMode.name
+    this[SettingsCustomAccentKey] = next.customAccentName
+    this[SettingsDynamicColorKey] = next.dynamicColorEnabled
+    this[SettingsAmoledKey] = next.amoledEnabled
+    this[SettingsNotificationsEnabledKey] = next.notificationPreferences.enabled
+    this[SettingsNotificationsHomeworkKey] = next.notificationPreferences.homework
+    this[SettingsNotificationsCommunicationsKey] = next.notificationPreferences.communications
+    this[SettingsNotificationsAbsencesKey] = next.notificationPreferences.absences
+    this[SettingsNotificationsGradesKey] = next.notificationPreferences.grades
+    this[SettingsNotificationsAgendaKey] = next.notificationPreferences.agenda
+    this[SettingsNotificationsNotesKey] = next.notificationPreferences.notes
+    this[SettingsNotificationsTestKey] = next.notificationPreferences.test
+    this[SettingsNotificationsLiveTimetableKey] = next.notificationPreferences.liveTimetable
+    this[SettingsPeriodicSyncKey] = next.periodicSyncEnabled
+    this[SettingsNetworkConfigKey] = json.encodeToString(next.networkConfig)
+    this[SettingsIgnoredStableUpdateVersionKey] = next.ignoredStableUpdateVersion
   }
 
   suspend fun readSettings(): AppSettings = settings.first()
@@ -123,22 +148,40 @@ class SettingsStore(@ApplicationContext context: Context) {
 }
 
 @Singleton
-class SchoolYearStore(@ApplicationContext context: Context) : SchoolYearRepository {
-  private val dataStore = PreferenceDataStoreFactory.create(
-    produceFile = { context.preferencesDataStoreFile("classeviva_school_year.preferences_pb") },
+class SchoolYearStore internal constructor(
+  private val dataStore: DataStore<Preferences>,
+  private val todayProvider: () -> LocalDate,
+  private val nowEpochMillisProvider: () -> Long,
+) : SchoolYearRepository {
+  constructor(@ApplicationContext context: Context) : this(
+    dataStore = PreferenceDataStoreFactory.create(
+      produceFile = { context.preferencesDataStoreFile("classeviva_school_year.preferences_pb") },
+    ),
+    todayProvider = LocalDate::now,
+    nowEpochMillisProvider = System::currentTimeMillis,
   )
 
-  private val current = currentSchoolYear()
+  private val json = Json { ignoreUnknownKeys = true }
 
   override fun observeSelectedSchoolYear(): Flow<SchoolYearRef> {
     return dataStore.data.map { prefs ->
-      prefs[SelectedSchoolYearKey]?.let(::decodeSchoolYearToken) ?: current
-    }.map { selected ->
-      availableYears().firstOrNull { it.id == selected.id } ?: current
-    }
+      selectedSchoolYear(prefs, todayProvider())
+    }.distinctUntilChanged()
   }
 
-  override fun observeAvailableSchoolYears(): Flow<List<SchoolYearRef>> = kotlinx.coroutines.flow.flowOf(availableYears())
+  override fun observeAvailableSchoolYears(): Flow<List<SchoolYearRef>> = flow {
+    // Re-evaluate the date for every collection instead of freezing it for the process lifetime.
+    emit(availableYears(todayProvider()))
+  }
+
+  override fun observeFallbackEvents(): Flow<SchoolYearFallbackEvent> = flow {
+    val emittedIds = mutableSetOf<String>()
+    dataStore.data.map(::decodeFallbackEvents).collect { pending ->
+      pending.forEach { event ->
+        if (emittedIds.add(event.id)) emit(event)
+      }
+    }
+  }
 
   override suspend fun selectSchoolYear(year: SchoolYearRef) {
     dataStore.edit { prefs ->
@@ -146,31 +189,62 @@ class SchoolYearStore(@ApplicationContext context: Context) : SchoolYearReposito
     }
   }
 
+  override suspend fun selectAutomaticFallback(requested: SchoolYearRef): SchoolYearFallbackEvent? {
+    var applied: SchoolYearFallbackEvent? = null
+    dataStore.edit { prefs ->
+      val today = todayProvider()
+      val currentSelection = selectedSchoolYear(prefs, today)
+      if (currentSelection.id != requested.id) return@edit
+
+      val fallback = SchoolYearSelectionPolicy.automaticFallback(
+        requested = requested,
+        available = availableYears(today),
+      ) ?: return@edit
+      val event = SchoolYearFallbackEvent(
+        id = "school-year:${requested.id}:${fallback.id}:${nowEpochMillisProvider()}",
+        requested = requested,
+        selected = fallback,
+      )
+      val pending = decodeFallbackEvents(prefs)
+      prefs[SelectedSchoolYearKey] = fallback.id
+      prefs[SchoolYearFallbackEventsKey] = json.encodeToString((pending + event).takeLast(MaxPendingFallbackEvents))
+      applied = event
+    }
+    return applied
+  }
+
+  override suspend fun acknowledgeFallbackEvent(id: String) {
+    dataStore.edit { prefs ->
+      val remaining = decodeFallbackEvents(prefs).filterNot { it.id == id }
+      if (remaining.isEmpty()) {
+        prefs.remove(SchoolYearFallbackEventsKey)
+      } else {
+        prefs[SchoolYearFallbackEventsKey] = json.encodeToString(remaining)
+      }
+    }
+  }
+
   suspend fun selectedSchoolYear(): SchoolYearRef = observeSelectedSchoolYear().first()
 
-  fun currentSchoolYearRef(): SchoolYearRef = current
+  fun currentSchoolYearRef(): SchoolYearRef = SchoolYearSelectionPolicy.current(todayProvider())
 
   /**
    * The years a student can switch between.
    *
-   * The upcoming year is offered from June onwards. Schools open the new year on their own schedule
-   * — some well before September — and without this the only selectable years during the summer
-   * would be the one that just ended and the one before it.
+   * The upcoming year is offered only during the summer. From September it becomes the current year,
+   * so adding yet another year would expose a school year that is almost twelve months away.
    */
-  private fun availableYears(): List<SchoolYearRef> {
-    val upcoming = SchoolYearRef(startYear = current.startYear + 1, endYear = current.endYear + 1)
-    val previous = SchoolYearRef.previousOf(current)
-    val offerUpcoming = LocalDate.now().monthValue >= SchoolYearRef.UpcomingYearOfferedFromMonth
-    return buildList {
-      if (offerUpcoming) add(upcoming)
-      add(current)
-      add(previous)
-    }.distinctBy { it.id }
+  private fun availableYears(today: LocalDate): List<SchoolYearRef> = SchoolYearSelectionPolicy.available(today)
+
+  private fun selectedSchoolYear(prefs: Preferences, today: LocalDate): SchoolYearRef {
+    val current = SchoolYearSelectionPolicy.current(today)
+    val selected = prefs[SelectedSchoolYearKey]?.let(::decodeSchoolYearToken) ?: current
+    return availableYears(today).firstOrNull { it.id == selected.id } ?: current
   }
 
-  private fun currentSchoolYear(): SchoolYearRef {
-    val now = LocalDate.now()
-    return SchoolYearRef.current(now.year, now.monthValue)
+  private fun decodeFallbackEvents(prefs: Preferences): List<SchoolYearFallbackEvent> {
+    val encoded = prefs[SchoolYearFallbackEventsKey] ?: return emptyList()
+    return runCatching { json.decodeFromString<List<SchoolYearFallbackEvent>>(encoded) }.getOrDefault(emptyList())
   }
 
   private fun decodeSchoolYearToken(value: String): SchoolYearRef? {
@@ -179,6 +253,10 @@ class SchoolYearStore(@ApplicationContext context: Context) : SchoolYearReposito
     val start = pieces[0].toIntOrNull() ?: return null
     val end = pieces[1].toIntOrNull() ?: return null
     return SchoolYearRef(startYear = start, endYear = end)
+  }
+
+  private companion object {
+    const val MaxPendingFallbackEvents = 8
   }
 }
 
@@ -372,7 +450,4 @@ object StoresModule {
   @Singleton
   fun provideSessionStorage(sessionStore: SessionStore): SessionStorage = sessionStore
 
-  @Provides
-  @Singleton
-  fun provideSchoolYearRepository(store: SchoolYearStore): SchoolYearRepository = store
 }
