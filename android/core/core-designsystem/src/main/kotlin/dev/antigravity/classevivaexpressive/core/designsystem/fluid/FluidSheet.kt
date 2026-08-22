@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -35,6 +37,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -160,6 +164,14 @@ fun FluidAlert(
     label = "alert alpha",
   )
 
+  // The buttons are the only way out of an alert, so they are the one part that may never be
+  // pushed off the screen. An unbounded content column did exactly that: a long enough message —
+  // an app changelog, say — grew the card past the display and left the actions unreachable, which
+  // turns an alert into a trap. The card is now bounded to the window, the message scrolls inside
+  // whatever is left over, and the actions are measured first so they always have their place.
+  val windowHeight = with(LocalDensity.current) {
+    LocalWindowInfo.current.containerSize.height.toDp()
+  }
   Dialog(
     onDismissRequest = onDismissRequest,
     properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -172,12 +184,17 @@ fun FluidAlert(
           this.alpha = alpha
         }
         .widthIn(max = 280.dp)
+        .heightIn(max = windowHeight * AlertMaxHeightFraction)
         .clip(ContinuousCornerShape(FluidRadius.Card))
         .background(scheme.surfaceContainerHigh),
     ) {
       Column(
         modifier = Modifier
           .fillMaxWidth()
+          // `fill = false` is what keeps a short alert the size of its content: it takes the space
+          // the actions left over only if it needs it, rather than always stretching to the cap.
+          .weight(1f, fill = false)
+          .verticalScroll(rememberScrollState())
           .padding(horizontal = 18.dp)
           .padding(top = 20.dp, bottom = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -219,6 +236,9 @@ fun FluidAlert(
     }
   }
 }
+
+/** How much of the window an alert may occupy before its message starts scrolling instead. */
+private const val AlertMaxHeightFraction = 0.86f
 
 @Composable
 private fun AlertButton(
