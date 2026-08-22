@@ -15,24 +15,33 @@
       "ref": ""
     },
     "stable": {
-      "version": "7.0.0",
-      "releaseDate": "2026-08-22",
-      "changelog": "Grande redesign dell'interfaccia con una nuova identita visiva premium; navigazione inferiore a pillola piu dinamica e motion piu naturale; blur progressivo e superfici rifinite; colori dinamici e accenti piu presenti; nuove notifiche interne contestuali; selezione dell'anno scolastico piu affidabile; corrette la riapertura involontaria dell'ultimo voto, le transizioni di navigazione e numerosi dettagli di stabilita e accessibilita.",
-      "releaseTag": "stable-classeviva-expressive-v7.0.0",
-      "apkAsset": "classeviva-expressive-7.0.0.apk",
+      "version": "7.1.0",
+      "releaseDate": "2026-08-23",
+      "changelog": "Un solo vocabolario di movimento per tutta l'app: le transizioni non sfumano piu la pagina in arrivo, che resta opaca e arrotondata mentre cresce, cosi una sola pagina e leggibile a ogni fotogramma anche tenendo ferma la predictive back; tolto il rimbalzo dalle pagine intere; i cambi di tab scorrono nella direzione della barra e toccare una card della home apre la sezione espandendola dal punto toccato. Il titolo in alto e ora agganciato allo scroll e non si sovrappone piu a sottotitolo e prima scheda, il blur parte piu avanti e sfuma piu in basso, e la barra mostra a rotazione solo cio che chiede attenzione invece dei totali. Un aggiornamento non riuscito dice ora il motivo con un avviso in pagina e la riprova, un anno scolastico non ancora aperto dalla scuola viene spiegato invece di comparire come errore, e scegliere un anno passato avvisa subito quali sezioni il registro non pubblica. Ridotti i frame persi durante i cambi di pagina.",
+      "releaseTag": "stable-classeviva-expressive-v7.1.0",
+      "apkAsset": "classeviva-expressive-7.1.0.apk",
       "exeAsset": "",
-      "sizeBytes": 23624083
+      "sizeBytes": 23755196
     },
     "beta": {
-      "version": "7.0.0",
-      "releaseDate": "2026-08-22",
-      "changelog": "Grande redesign dell'interfaccia con una nuova identita visiva premium; navigazione inferiore a pillola piu dinamica e motion piu naturale; blur progressivo e superfici rifinite; colori dinamici e accenti piu presenti; nuove notifiche interne contestuali; selezione dell'anno scolastico piu affidabile; corrette la riapertura involontaria dell'ultimo voto, le transizioni di navigazione e numerosi dettagli di stabilita e accessibilita.",
-      "releaseTag": "stable-classeviva-expressive-v7.0.0",
-      "apkAsset": "classeviva-expressive-7.0.0.apk",
+      "version": "7.1.0",
+      "releaseDate": "2026-08-23",
+      "changelog": "Un solo vocabolario di movimento per tutta l'app: le transizioni non sfumano piu la pagina in arrivo, che resta opaca e arrotondata mentre cresce, cosi una sola pagina e leggibile a ogni fotogramma anche tenendo ferma la predictive back; tolto il rimbalzo dalle pagine intere; i cambi di tab scorrono nella direzione della barra e toccare una card della home apre la sezione espandendola dal punto toccato. Il titolo in alto e ora agganciato allo scroll e non si sovrappone piu a sottotitolo e prima scheda, il blur parte piu avanti e sfuma piu in basso, e la barra mostra a rotazione solo cio che chiede attenzione invece dei totali. Un aggiornamento non riuscito dice ora il motivo con un avviso in pagina e la riprova, un anno scolastico non ancora aperto dalla scuola viene spiegato invece di comparire come errore, e scegliere un anno passato avvisa subito quali sezioni il registro non pubblica. Ridotti i frame persi durante i cambi di pagina.",
+      "releaseTag": "stable-classeviva-expressive-v7.1.0",
+      "apkAsset": "classeviva-expressive-7.1.0.apk",
       "exeAsset": "",
-      "sizeBytes": 23624083
+      "sizeBytes": 23755196
     },
     "history": [
+      {
+        "version": "7.0.0",
+        "releaseDate": "2026-08-22",
+        "changelog": "Grande redesign dell'interfaccia con una nuova identita visiva premium; navigazione inferiore a pillola piu dinamica e motion piu naturale; blur progressivo e superfici rifinite; colori dinamici e accenti piu presenti; nuove notifiche interne contestuali; selezione dell'anno scolastico piu affidabile; corrette la riapertura involontaria dell'ultimo voto, le transizioni di navigazione e numerosi dettagli di stabilita e accessibilita.",
+        "releaseTag": "stable-classeviva-expressive-v7.0.0",
+        "apkAsset": "classeviva-expressive-7.0.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 23624083
+      },
       {
         "version": "6.1.4",
         "releaseDate": "2026-06-23",
