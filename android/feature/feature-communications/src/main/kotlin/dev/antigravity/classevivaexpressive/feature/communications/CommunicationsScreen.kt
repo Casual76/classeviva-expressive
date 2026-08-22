@@ -4,38 +4,23 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
-import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,19 +29,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlert
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
@@ -460,115 +453,101 @@ fun CommunicationsRoute(
     }
   }
 
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-  Scaffold(
-    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Comunicazioni",
-        subtitle = state.syncStatus.lastSyncLabel(),
-        onBack = onBack,
-        scrollBehavior = scrollBehavior,
-        titleTrailing = {
-          SyncStatusDot(status = state.syncStatus)
-        },
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
+  FluidScreen(
+    modifier = modifier,
+    title = "Comunicazioni",
+    subtitle = state.syncStatus.lastSyncLabel(),
+    onBack = onBack,
+    titleTrailing = {
+      SyncStatusDot(status = state.syncStatus)
+    },
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
       )
     },
-    snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = state.isRefreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-      ) {
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 18.dp,
+  ) {
+    item {
+      ExpressivePillTabs(
+        options = listOf(TAB_BOARD, TAB_NOTES),
+        selected = selectedTab,
+        onSelect = { selectedTab = it },
+      )
+    }
+    if (selectedTab == TAB_BOARD) {
+      val unreadCount = filteredCommunications.count { !it.read }
+      item {
+        ExpressivePillTabs(
+          options = listOf(FILTER_ALL, FILTER_UNREAD),
+          selected = selectedFilter,
+          onSelect = { selectedFilter = it },
+        )
+      }
+      if (unreadCount > 0) {
+          item {
+              dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction(
+                  label = "Segna tutte come lette",
+                  onClick = viewModel::markAllAsRead
+              )
+          }
+      }
+      if (filteredCommunications.isEmpty()) {
         item {
-          ExpressivePillTabs(
-            options = listOf(TAB_BOARD, TAB_NOTES),
-            selected = selectedTab,
-            onSelect = { selectedTab = it },
+          EmptyState(
+            title = "Nessuna comunicazione visibile",
+            detail = "Nuove circolari e messaggi compariranno qui con stato di lettura, allegati e azioni richieste.",
           )
         }
-        if (selectedTab == TAB_BOARD) {
-          val unreadCount = filteredCommunications.count { !it.read }
-          item {
-            ExpressivePillTabs(
-              options = listOf(FILTER_ALL, FILTER_UNREAD),
-              selected = selectedFilter,
-              onSelect = { selectedFilter = it },
-            )
-          }
-          if (unreadCount > 0) {
-              item {
-                  dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction(
-                      label = "Segna tutte come lette",
-                      onClick = viewModel::markAllAsRead
-                  )
-              }
-          }
-          if (filteredCommunications.isEmpty()) {
-            item {
-              EmptyState(
-                title = "Nessuna comunicazione visibile",
-                detail = "Nuove circolari e messaggi compariranno qui con stato di lettura, allegati e azioni richieste.",
-              )
-            }
-          } else {
-            items(filteredCommunications, key = { it.id }) { communication ->
-              RegisterListRow(
-                title = communication.title,
-                subtitle = communication.sender.ifBlank { "Bacheca scuola" },
-                eyebrow = communication.date.toReadableDate(),
-                meta = communication.contentPreview.takeIf { it.isNotBlank() },
+      } else {
+        items(filteredCommunications, key = { it.id }) { communication ->
+          RegisterListRow(
+            title = communication.title,
+            subtitle = communication.sender.ifBlank { "Bacheca scuola" },
+            eyebrow = communication.date.toReadableDate(),
+            meta = communication.contentPreview.takeIf { it.isNotBlank() },
+            tone = communicationTone(communication),
+            badge = {
+              StatusBadge(
+                label = communicationBadgeLabel(communication),
                 tone = communicationTone(communication),
-                badge = {
-                  StatusBadge(
-                    label = communicationBadgeLabel(communication),
-                    tone = communicationTone(communication),
-                  )
-                },
-                onClick = { viewModel.openCommunication(communication.pubId, communication.evtCode) },
-                animatePress = true,
               )
-            }
-          }
-        } else {
-          if (state.notes.isEmpty()) {
-            item {
-              EmptyState(
-                title = "Nessuna nota disponibile",
-                detail = "Note disciplinari, annotazioni e richiami compariranno qui in forma sintetica e chiara.",
-              )
-            }
-          } else {
-            items(state.notes, key = { it.id }) { note ->
-              RegisterListRow(
-                title = note.title.ifBlank { note.author.uppercase(italianLocale) },
-                subtitle = note.categoryLabel,
-                eyebrow = note.date.toReadableDate(),
-                meta = note.contentPreview.takeIf { it.isNotBlank() },
+            },
+            onClick = { viewModel.openCommunication(communication.pubId, communication.evtCode) },
+            animatePress = true,
+          )
+        }
+      }
+    } else {
+      if (state.notes.isEmpty()) {
+        item {
+          EmptyState(
+            title = "Nessuna nota disponibile",
+            detail = "Note disciplinari, annotazioni e richiami compariranno qui in forma sintetica e chiara.",
+          )
+        }
+      } else {
+        items(state.notes, key = { it.id }) { note ->
+          RegisterListRow(
+            title = note.title.ifBlank { note.author.uppercase(italianLocale) },
+            subtitle = note.categoryLabel,
+            eyebrow = note.date.toReadableDate(),
+            meta = note.contentPreview.takeIf { it.isNotBlank() },
+            tone = noteTone(note),
+            badge = {
+              StatusBadge(
+                label = if (note.read) "LETTA" else "NOTA",
                 tone = noteTone(note),
-                badge = {
-                  StatusBadge(
-                    label = if (note.read) "LETTA" else "NOTA",
-                    tone = noteTone(note),
-                  )
-                },
-                onClick = { viewModel.openNote(note.id, note.categoryCode) },
-                animatePress = true,
               )
-            }
-          }
+            },
+            onClick = { viewModel.openNote(note.id, note.categoryCode) },
+            animatePress = true,
+          )
         }
       }
     }
@@ -579,7 +558,7 @@ fun CommunicationsRoute(
       mutableStateOf(detail.replyText.orEmpty())
     }
     val commSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
+    FluidSheet(
       onDismissRequest = viewModel::dismissDetail,
       sheetState = commSheetState,
     ) {
@@ -614,14 +593,14 @@ fun CommunicationsRoute(
               StatusBadge(label = detail.communication.category!!, tone = ExpressiveTone.Info)
             }
             if (!detail.communication.read) {
-              FilledTonalButton(
+              FluidButton(
+                text = "Segna come letta",
                 onClick = {
                   viewModel.markCommunicationRead(detail.communication.id)
                 },
-                modifier = Modifier.fillMaxWidth(),
-              ) {
-                Text("Segna come letta")
-              }
+                style = FluidButtonStyle.Tinted,
+                fillWidth = true,
+              )
             }
           }
         }
@@ -641,20 +620,20 @@ fun CommunicationsRoute(
         }
         val canReply = shouldShowReplyComposer(detail)
         if (canReply) {
-          item { ExpressiveAccentLabel("Risposta") }
+          item { FluidSectionHeader("Risposta") }
           item {
-            OutlinedTextField(
+            FluidTextField(
               value = replyDraft,
               onValueChange = { replyDraft = it },
               modifier = Modifier.fillMaxWidth(),
-              label = { Text(if (detail.replyText != null) "Risposta inviata" else "Scrivi una risposta") },
-              minLines = 3,
+              label = if (detail.replyText != null) "Risposta inviata" else "Scrivi una risposta",
               readOnly = detail.replyText != null,
+              minLines = 3,
             )
           }
         }
         if (detail.communication.noticeboardAttachments.isNotEmpty()) {
-          item { ExpressiveAccentLabel("Allegati") }
+          item { FluidSectionHeader("Allegati") }
           items(detail.communication.noticeboardAttachments, key = { it.id }) { attachment ->
             // Da v5.6.0: usiamo SEMPRE il path auth-aware (RestClient con
             // refresh automatico del token). Il vecchio downloadAttachment
@@ -715,19 +694,19 @@ fun CommunicationsRoute(
           }
         }
         item {
-          Button(
+          FluidButton(
+            text = "Chiudi",
             onClick = viewModel::dismissDetail,
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            Text("Chiudi")
-          }
+            style = FluidButtonStyle.Filled,
+            fillWidth = true,
+          )
         }
       }
     }
   }
 
   state.selectedNote?.let { detail ->
-    ModalBottomSheet(
+    FluidSheet(
       onDismissRequest = viewModel::dismissDetail,
     ) {
       LazyColumn(
@@ -743,12 +722,12 @@ fun CommunicationsRoute(
         }
         item { Text(detail.content) }
         item {
-          Button(
+          FluidButton(
+            text = "Chiudi",
             onClick = viewModel::dismissDetail,
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            Text("Chiudi")
-          }
+            style = FluidButtonStyle.Filled,
+            fillWidth = true,
+          )
         }
       }
     }
@@ -767,10 +746,13 @@ private fun AttachmentDownloadDialog(
   state: AttachmentDownloadDialogState,
   onDismiss: () -> Unit,
 ) {
-  AlertDialog(
+  FluidAlert(
     onDismissRequest = { if (!state.isWorking) onDismiss() },
-    title = { Text(state.title) },
-    text = {
+    title = state.title,
+    actions = listOf(
+      FluidAlertAction(if (state.isError) "Chiudi" else "Ok", onDismiss, FluidAlertAction.Emphasis.Preferred, enabled = !state.isWorking),
+    ),
+    content = {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
           text = state.fileName,
@@ -779,16 +761,8 @@ private fun AttachmentDownloadDialog(
         )
         Text(state.message)
         if (state.isWorking) {
-          LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+          FluidIndeterminateBar(modifier = Modifier.fillMaxWidth())
         }
-      }
-    },
-    confirmButton = {
-      TextButton(
-        onClick = onDismiss,
-        enabled = !state.isWorking,
-      ) {
-        Text(if (state.isError) "Chiudi" else "Ok")
       }
     },
   )
@@ -814,30 +788,40 @@ private fun CommunicationActions(
   ) {
     if (canAck) {
       val ackLabel = "Conferma lettura"
-      FilledTonalButton(onClick = onAcknowledge, modifier = Modifier.fillMaxWidth()) {
-        Text(ackLabel)
-      }
+      FluidButton(
+        text = ackLabel,
+        onClick = onAcknowledge,
+        style = FluidButtonStyle.Tinted,
+        fillWidth = true,
+      )
     }
     if (canReply) {
-      FilledTonalButton(
+      FluidButton(
+        text = if (detail.replyText != null) "Risposta già inviata" else "Invia risposta",
         onClick = onReply,
-        enabled = replyDraft.isNotBlank() && detail.replyText == null,
         modifier = Modifier.fillMaxWidth(),
-      ) {
-        Text(if (detail.replyText != null) "Risposta già inviata" else "Invia risposta")
-      }
+        style = FluidButtonStyle.Tinted,
+        enabled = replyDraft.isNotBlank() && detail.replyText == null,
+        fillWidth = true,
+      )
     }
     if (canJoin) {
-      FilledTonalButton(onClick = onJoin, modifier = Modifier.fillMaxWidth()) {
-        Text("Aderisci")
-      }
+      FluidButton(
+        text = "Aderisci",
+        onClick = onJoin,
+        style = FluidButtonStyle.Tinted,
+        fillWidth = true,
+      )
     }
     if (canUpload) {
       val uploadLabel = detail.actions.firstOrNull { it.type == NoticeboardActionType.UPLOAD }?.label
         ?: "Carica file"
-      TextButton(onClick = onUpload, modifier = Modifier.fillMaxWidth()) {
-        Text(uploadLabel)
-      }
+      FluidButton(
+        text = uploadLabel,
+        onClick = onUpload,
+        style = FluidButtonStyle.Plain,
+        fillWidth = true,
+      )
     }
   }
 }

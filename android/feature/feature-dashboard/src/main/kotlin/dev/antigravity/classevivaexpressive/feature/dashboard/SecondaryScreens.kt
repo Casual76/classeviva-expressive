@@ -7,12 +7,9 @@ import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
@@ -20,19 +17,10 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,7 +30,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -50,13 +37,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidLoadingBlock
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
@@ -67,8 +60,8 @@ import dev.antigravity.classevivaexpressive.core.domain.model.DocumentsRepositor
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkRepository
-import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialAsset
+import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.MeetingBooking
 import dev.antigravity.classevivaexpressive.core.domain.model.MeetingSlot
@@ -313,102 +306,88 @@ fun MeetingsRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   val context = LocalContext.current
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
   val teachersById = remember(state.teachers) { state.teachers.associateBy { it.id } }
 
-  Scaffold(
-    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Colloqui",
-        subtitle = "Prenotazioni e disponibilita dei docenti.",
-        onBack = onBack,
-        scrollBehavior = scrollBehavior,
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
+  FluidScreen(
+    title = "Colloqui",
+    subtitle = "Prenotazioni e disponibilita dei docenti.",
+    onBack = onBack,
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
       )
     },
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = state.isRefreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        state.lastMessage?.let { message ->
-          item {
-            InlineMessageCard(
-              message = message,
-              title = "Colloqui",
-              onDismiss = viewModel::clearMessage,
-            )
-          }
-        }
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 12.dp,
+  ) {
+    state.lastMessage?.let { message ->
+      item {
+        InlineMessageCard(
+          message = message,
+          title = "Colloqui",
+          onDismiss = viewModel::clearMessage,
+        )
+      }
+    }
 
-        if (state.bookings.isNotEmpty()) {
-          item { ExpressiveAccentLabel("Prenotati") }
-          items(state.bookings, key = { it.id }) { booking ->
-            RegisterListRow(
-              title = booking.teacher.name,
-              subtitle = booking.slot.meetingSlotLabel(),
-              eyebrow = booking.teacher.subject ?: "Colloquio",
-              meta = booking.bookingPosition?.let { "Posizione: $it" } ?: booking.status,
-              tone = ExpressiveTone.Success,
-              onClick = { viewModel.selectBooking(booking) },
-              badge = { StatusBadge("PRENOTATO", tone = ExpressiveTone.Success) },
-              animatePress = true,
-            )
-          }
-        }
+    if (state.bookings.isNotEmpty()) {
+      item { FluidSectionHeader("Prenotati") }
+      items(state.bookings, key = { it.id }) { booking ->
+        RegisterListRow(
+          title = booking.teacher.name,
+          subtitle = booking.slot.meetingSlotLabel(),
+          eyebrow = booking.teacher.subject ?: "Colloquio",
+          meta = booking.bookingPosition?.let { "Posizione: $it" } ?: booking.status,
+          tone = ExpressiveTone.Success,
+          onClick = { viewModel.selectBooking(booking) },
+          badge = { StatusBadge("PRENOTATO", tone = ExpressiveTone.Success) },
+          animatePress = true,
+        )
+      }
+    }
 
-        val availableSlots = state.slots.filter { it.available }
-        if (availableSlots.isNotEmpty()) {
-          item { ExpressiveAccentLabel("Disponibili") }
-          items(availableSlots, key = { it.id }) { slot ->
-            val teacher = teachersById[slot.teacherId]
-            RegisterListRow(
-              title = teacher?.name ?: "Docente",
-              subtitle = slot.meetingSlotLabel(),
-              eyebrow = teacher?.subject ?: "Disponibile",
-              meta = slot.location,
-              tone = ExpressiveTone.Info,
-              onClick = { viewModel.selectSlot(slot) },
-              badge = { StatusBadge("PRENOTA", tone = ExpressiveTone.Info) },
-              animatePress = true,
-            )
-          }
-        }
+    val availableSlots = state.slots.filter { it.available }
+    if (availableSlots.isNotEmpty()) {
+      item { FluidSectionHeader("Disponibili") }
+      items(availableSlots, key = { it.id }) { slot ->
+        val teacher = teachersById[slot.teacherId]
+        RegisterListRow(
+          title = teacher?.name ?: "Docente",
+          subtitle = slot.meetingSlotLabel(),
+          eyebrow = teacher?.subject ?: "Disponibile",
+          meta = slot.location,
+          tone = ExpressiveTone.Info,
+          onClick = { viewModel.selectSlot(slot) },
+          badge = { StatusBadge("PRENOTA", tone = ExpressiveTone.Info) },
+          animatePress = true,
+        )
+      }
+    }
 
-        if (state.bookings.isEmpty() && availableSlots.isEmpty() && !state.isRefreshing) {
-          item {
-            EmptyState(
-              title = "Nessun colloquio disponibile",
-              detail = "Le prenotazioni e le disponibilita compariranno qui dopo la sincronizzazione o quando il portale le espone.",
-            )
-          }
-          item {
-            OutlinedButton(
-              onClick = { context.openUrl(viewModel.portalUrl()) },
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-              Text("Apri portale colloqui")
-            }
-          }
-        }
+    if (state.bookings.isEmpty() && availableSlots.isEmpty() && !state.isRefreshing) {
+      item {
+        EmptyState(
+          title = "Nessun colloquio disponibile",
+          detail = "Le prenotazioni e le disponibilita compariranno qui dopo la sincronizzazione o quando il portale le espone.",
+        )
+      }
+      item {
+        FluidButton(
+          text = "Apri portale colloqui",
+          onClick = { context.openUrl(viewModel.portalUrl()) },
+          style = FluidButtonStyle.Tinted,
+          fillWidth = true,
+          leading = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null,) },
+        )
       }
     }
   }
 
   state.selectedBooking?.let { booking ->
-    ModalBottomSheet(onDismissRequest = viewModel::dismissSelection) {
+    FluidSheet(onDismissRequest = viewModel::dismissSelection) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -418,32 +397,32 @@ fun MeetingsRoute(
         booking.bookingPosition?.let {
           Text("Posizione: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Button(
+        FluidButton(
+          text = "Partecipa",
           onClick = { viewModel.joinSelectedBooking(context::openUrl) },
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-          Text("Partecipa")
-        }
-        OutlinedButton(
+          style = FluidButtonStyle.Filled,
+          fillWidth = true,
+          leading = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null,) },
+        )
+        FluidButton(
+          text = "Annulla prenotazione",
           onClick = viewModel::cancelSelectedBooking,
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Text("Annulla prenotazione")
-        }
-        TextButton(
+          style = FluidButtonStyle.Tinted,
+          fillWidth = true,
+        )
+        FluidButton(
+          text = "Apri portale",
           onClick = { context.openUrl(viewModel.portalUrl()) },
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Text("Apri portale")
-        }
+          style = FluidButtonStyle.Plain,
+          fillWidth = true,
+        )
       }
     }
   }
 
   state.selectedSlot?.let { slot ->
     val teacher = teachersById[slot.teacherId]
-    ModalBottomSheet(onDismissRequest = viewModel::dismissSelection) {
+    FluidSheet(onDismissRequest = viewModel::dismissSelection) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -453,18 +432,18 @@ fun MeetingsRoute(
         slot.location?.takeIf(String::isNotBlank)?.let {
           Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Button(
+        FluidButton(
+          text = "Prenota colloquio",
           onClick = viewModel::bookSelectedSlot,
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Text("Prenota colloquio")
-        }
-        TextButton(
+          style = FluidButtonStyle.Filled,
+          fillWidth = true,
+        )
+        FluidButton(
+          text = "Apri portale",
           onClick = { context.openUrl(viewModel.portalUrl()) },
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Text("Apri portale")
-        }
+          style = FluidButtonStyle.Plain,
+          fillWidth = true,
+        )
       }
     }
   }
@@ -519,82 +498,71 @@ fun MaterialsRoute(
   var isDownloading by rememberSaveable { mutableStateOf(false) }
   var downloadMessage by rememberSaveable { mutableStateOf<String?>(null) }
   val context = LocalContext.current
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-  Scaffold(
-    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Didattica",
-        subtitle = "Materiali condivisi dai docenti, link a risorse esterne e file da scaricare.",
-        onBack = onBack,
-        scrollBehavior = scrollBehavior,
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
+  FluidScreen(
+    title = "Didattica",
+    subtitle = "Materiali condivisi dai docenti, link a risorse esterne e file da scaricare.",
+    onBack = onBack,
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
       )
     },
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = state.refreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      if (state.initialLoading && items.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-          ExpressiveLoading()
-        }
-      } else if (items.isEmpty() && state.refreshError != null) {
+    isRefreshing = state.refreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 12.dp,
+  ) {
+    // Loading, error and empty all live inside the scroll rather than replacing it, so the title
+    // stays put and pull-to-refresh keeps working while the screen has nothing to show.
+    when {
+      state.initialLoading && items.isEmpty() -> item { FluidLoadingBlock() }
+
+      items.isEmpty() && state.refreshError != null -> item {
         InlineMessageCard(
           title = "Didattica non disponibile",
           message = state.refreshError.orEmpty(),
           tone = ExpressiveTone.Warning,
-          modifier = Modifier.padding(20.dp),
         )
-      } else if (items.isEmpty()) {
+      }
+
+      items.isEmpty() -> item {
         EmptyState(
           title = "Nessun materiale",
           detail = "Non ci sono ancora file o link condivisi dai tuoi professori.",
-          modifier = Modifier.padding(20.dp),
         )
-      } else {
-        LazyColumn(
-          modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          if (state.isStale && state.refreshError != null) {
-            item {
-              InlineMessageCard(
-                title = "Contenuti non aggiornati",
-                message = "Mostro l'ultima copia disponibile. ${state.refreshError}",
-                tone = ExpressiveTone.Warning,
-              )
-            }
-          }
-          items(items, key = { it.id }) { item ->
-            RegisterListRow(
-              title = item.title,
-              subtitle = item.teacherName,
-              eyebrow = item.folderName,
-              meta = item.sharedAt,
-              tone = ExpressiveTone.Info,
-              onClick = { selectedItem = item },
-              badge = {
-                StatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = ExpressiveTone.Info)
-              },
-              animatePress = true,
+      }
+
+      else -> {
+        if (state.isStale && state.refreshError != null) {
+          item {
+            InlineMessageCard(
+              title = "Contenuti non aggiornati",
+              message = "Mostro l'ultima copia disponibile. ${state.refreshError}",
+              tone = ExpressiveTone.Warning,
             )
           }
+        }
+        items(items, key = { it.id }) { item ->
+          RegisterListRow(
+            title = item.title,
+            subtitle = item.teacherName,
+            eyebrow = item.folderName,
+            meta = item.sharedAt,
+            tone = ExpressiveTone.Info,
+            onClick = { selectedItem = item },
+            badge = {
+              StatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = ExpressiveTone.Info)
+            },
+          )
         }
       }
     }
   }
 
   selectedItem?.let { item ->
-    ModalBottomSheet(onDismissRequest = {
+    FluidSheet(onDismissRequest = {
       selectedItem = null
       assetPreviewText = null
       assetErrorMessage = null
@@ -619,7 +587,8 @@ fun MaterialsRoute(
         assetErrorMessage?.let {
           Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
         }
-        Button(
+        FluidButton(
+          text = if (item.isLinkMaterial()) "Vai al link" else "Apri file",
           onClick = {
             assetErrorMessage = null
             viewModel.openAsset(
@@ -640,17 +609,13 @@ fun MaterialsRoute(
               onError = { error -> assetErrorMessage = error },
             )
           },
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Icon(
-            if (item.isLinkMaterial()) Icons.Rounded.Link else Icons.Rounded.Download,
-            contentDescription = null,
-            modifier = Modifier.padding(end = 8.dp),
-          )
-          Text(if (item.isLinkMaterial()) "Vai al link" else "Apri file")
-        }
+          style = FluidButtonStyle.Filled,
+          fillWidth = true,
+          leading = { Icon( if (item.isLinkMaterial()) Icons.Rounded.Link else Icons.Rounded.Download, contentDescription = null, ) },
+        )
         if (!item.isLinkMaterial()) {
-          OutlinedButton(
+          FluidButton(
+            text = if (isDownloading) "Download in corso" else "Salva per uso offline",
             onClick = {
               isDownloading = true
               downloadMessage = null
@@ -667,19 +632,12 @@ fun MaterialsRoute(
                 },
               )
             },
+            style = FluidButtonStyle.Tinted,
             enabled = !isDownloading,
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            if (isDownloading) {
-              ExpressiveLoading(modifier = Modifier.size(20.dp))
-            } else {
-              Icon(Icons.Rounded.Download, contentDescription = null)
-            }
-            Text(
-              text = if (isDownloading) "Download in corso" else "Salva per uso offline",
-              modifier = Modifier.padding(start = 8.dp),
-            )
-          }
+            loading = isDownloading,
+            fillWidth = true,
+            leading = { Icon(Icons.Rounded.Download, contentDescription = null) },
+          )
         }
       }
     }
@@ -753,7 +711,6 @@ fun HomeworkRoute(
   viewModel: HomeworkViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
   LaunchedEffect(initialHomeworkId, state.homeworks) {
     if (!initialHomeworkId.isNullOrBlank() && state.selectedHomework?.id != initialHomeworkId) {
@@ -761,70 +718,61 @@ fun HomeworkRoute(
     }
   }
 
-  Scaffold(
-    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Compiti",
-        subtitle = "Compiti assegnati dai docenti con data di consegna e dettaglio.",
-        onBack = onBack,
-        scrollBehavior = scrollBehavior,
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
+  FluidScreen(
+    title = "Compiti",
+    subtitle = "Compiti assegnati dai docenti con data di consegna e dettaglio.",
+    onBack = onBack,
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
       )
     },
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = state.isRefreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      if (state.homeworks.isEmpty() && !state.isRefreshing) {
-        EmptyState(
-          title = "Nessun compito",
-          detail = "Non ci sono compiti assegnati al momento.",
-          modifier = Modifier.padding(20.dp),
-        )
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 12.dp,
+  ) {
+    if (state.homeworks.isEmpty()) {
+      if (state.isRefreshing) {
+        item { FluidLoadingBlock() }
       } else {
-        LazyColumn(
-          modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          items(state.homeworks, key = { it.id }) { item ->
-            RegisterListRow(
-              title = item.subject,
-              subtitle = item.description,
-              eyebrow = "COMPITO",
-              meta = item.homeworkMeta(),
-              tone = ExpressiveTone.Warning,
-              onClick = { viewModel.selectHomework(item) },
-              badge = {
-                if (item.history.isNotEmpty()) {
-                  StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
-                }
-                StatusBadge("COMPITO", tone = ExpressiveTone.Warning)
-              },
-              animatePress = true,
-            )
-          }
+        item {
+          EmptyState(
+            title = "Nessun compito",
+            detail = "Non ci sono compiti assegnati al momento.",
+          )
         }
+      }
+    } else {
+      items(state.homeworks, key = { it.id }) { item ->
+        RegisterListRow(
+          title = item.subject,
+          subtitle = item.description,
+          eyebrow = "COMPITO",
+          meta = item.homeworkMeta(),
+          tone = ExpressiveTone.Warning,
+          onClick = { viewModel.selectHomework(item) },
+          badge = {
+            if (item.history.isNotEmpty()) {
+              StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
+            }
+            StatusBadge("COMPITO", tone = ExpressiveTone.Warning)
+          },
+        )
       }
     }
   }
 
   state.selectedHomework?.let { hw ->
-    ModalBottomSheet(onDismissRequest = viewModel::dismiss) {
+    FluidSheet(onDismissRequest = viewModel::dismiss) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
         Text(text = hw.subject, style = MaterialTheme.typography.headlineSmall)
         if (state.isLoadingDetail) {
-          LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+          FluidIndeterminateBar(modifier = Modifier.fillMaxWidth())
         }
         state.selectedDetail?.let { detail ->
           Text(text = detail.fullText, style = MaterialTheme.typography.bodyMedium)
@@ -1056,121 +1004,107 @@ fun DocumentsRoute(
     state.schoolbooksAreStale
   }
   val context = LocalContext.current
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-  Scaffold(
-    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Documenti e libri",
-        subtitle = "Documenti della scuola, pagelle e libri scolastici adottati.",
-        onBack = onBack,
-        scrollBehavior = scrollBehavior,
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
+  FluidScreen(
+    title = "Documenti e libri",
+    subtitle = "Documenti della scuola, pagelle e libri scolastici adottati.",
+    onBack = onBack,
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
       )
     },
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = state.refreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        if (state.initialLoading && state.documents.isEmpty() && state.schoolbookCourses.isEmpty()) {
-          item {
-            Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-              ExpressiveLoading()
-            }
-          }
+    isRefreshing = state.refreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 12.dp,
+  ) {
+    if (state.initialLoading && state.documents.isEmpty() && state.schoolbookCourses.isEmpty()) {
+      item {
+        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+          ExpressiveLoading()
         }
+      }
+    }
+    item {
+      ExpressivePillTabs(
+        options = listOf("Documenti", "Libri"),
+        selected = selectedTab,
+        onSelect = { selectedTab = it },
+      )
+    }
+
+    if (selectedContentIsStale && selectedRefreshError != null) {
+      item {
+        InlineMessageCard(
+          title = if (selectedTab == "Documenti") "Documenti non aggiornati" else "Libri non aggiornati",
+          message = "Mostro l'ultima copia disponibile. $selectedRefreshError",
+          tone = ExpressiveTone.Warning,
+        )
+      }
+    } else if (selectedRefreshError != null) {
+      item {
+        InlineMessageCard(
+          title = if (selectedTab == "Documenti") "Documenti non disponibili" else "Libri non disponibili",
+          message = selectedRefreshError,
+          tone = ExpressiveTone.Warning,
+        )
+      }
+    }
+
+    if (selectedTab == "Documenti") {
+      if (state.documents.isEmpty() && !state.initialLoading && state.documentsRefreshError == null) {
         item {
-          ExpressivePillTabs(
-            options = listOf("Documenti", "Libri"),
-            selected = selectedTab,
-            onSelect = { selectedTab = it },
+          EmptyState(
+            title = "Nessun documento",
+            detail = "Non ci sono ancora documenti disponibili.",
           )
         }
-
-        if (selectedContentIsStale && selectedRefreshError != null) {
-          item {
-            InlineMessageCard(
-              title = if (selectedTab == "Documenti") "Documenti non aggiornati" else "Libri non aggiornati",
-              message = "Mostro l'ultima copia disponibile. $selectedRefreshError",
-              tone = ExpressiveTone.Warning,
-            )
-          }
-        } else if (selectedRefreshError != null) {
-          item {
-            InlineMessageCard(
-              title = if (selectedTab == "Documenti") "Documenti non disponibili" else "Libri non disponibili",
-              message = selectedRefreshError,
-              tone = ExpressiveTone.Warning,
-            )
-          }
+      } else {
+        items(state.documents, key = { it.id }) { doc ->
+          RegisterListRow(
+            title = doc.title,
+            subtitle = doc.detail,
+            tone = ExpressiveTone.Info,
+            onClick = { viewModel.openDocument(doc) },
+            badge = { StatusBadge("DOCUMENTO", tone = ExpressiveTone.Info) },
+            animatePress = true,
+          )
         }
-
-        if (selectedTab == "Documenti") {
-          if (state.documents.isEmpty() && !state.initialLoading && state.documentsRefreshError == null) {
-            item {
-              EmptyState(
-                title = "Nessun documento",
-                detail = "Non ci sono ancora documenti disponibili.",
-              )
-            }
-          } else {
-            items(state.documents, key = { it.id }) { doc ->
-              RegisterListRow(
-                title = doc.title,
-                subtitle = doc.detail,
-                tone = ExpressiveTone.Info,
-                onClick = { viewModel.openDocument(doc) },
-                badge = { StatusBadge("DOCUMENTO", tone = ExpressiveTone.Info) },
-                animatePress = true,
-              )
-            }
+      }
+    } else {
+      if (state.schoolbookCourses.isEmpty() && !state.initialLoading && state.schoolbooksRefreshError == null) {
+        item {
+          EmptyState(
+            title = "Nessun libro",
+            detail = "Non ci sono libri scolastici disponibili per quest'anno.",
+          )
+        }
+      } else {
+        state.schoolbookCourses.forEach { course ->
+          item(key = "header_${course.id}") {
+            FluidSectionHeader(course.title)
           }
-        } else {
-          if (state.schoolbookCourses.isEmpty() && !state.initialLoading && state.schoolbooksRefreshError == null) {
-            item {
-              EmptyState(
-                title = "Nessun libro",
-                detail = "Non ci sono libri scolastici disponibili per quest'anno.",
-              )
+          items(course.books, key = { it.id }) { book ->
+            val bookTone = when {
+              book.alreadyOwned -> ExpressiveTone.Success
+              book.toBuy -> ExpressiveTone.Warning
+              else -> ExpressiveTone.Neutral
             }
-          } else {
-            state.schoolbookCourses.forEach { course ->
-              item(key = "header_${course.id}") {
-                ExpressiveAccentLabel(course.title)
-              }
-              items(course.books, key = { it.id }) { book ->
-                val bookTone = when {
-                  book.alreadyOwned -> ExpressiveTone.Success
-                  book.toBuy -> ExpressiveTone.Warning
-                  else -> ExpressiveTone.Neutral
-                }
-                val bookBadge = when {
-                  book.alreadyOwned -> "POSSEDUTO"
-                  book.toBuy -> "DA ACQUISTARE"
-                  else -> "INFO"
-                }
-                RegisterListRow(
-                  title = book.title,
-                  subtitle = book.author ?: "—",
-                  eyebrow = book.subject,
-                  meta = "ISBN: ${book.isbn}",
-                  tone = bookTone,
-                  badge = { StatusBadge(bookBadge, tone = bookTone) },
-                )
-              }
+            val bookBadge = when {
+              book.alreadyOwned -> "POSSEDUTO"
+              book.toBuy -> "DA ACQUISTARE"
+              else -> "INFO"
             }
+            RegisterListRow(
+              title = book.title,
+              subtitle = book.author ?: "—",
+              eyebrow = book.subject,
+              meta = "ISBN: ${book.isbn}",
+              tone = bookTone,
+              badge = { StatusBadge(bookBadge, tone = bookTone) },
+            )
           }
         }
       }
@@ -1178,7 +1112,7 @@ fun DocumentsRoute(
   }
 
   state.selectedDocument?.let { doc ->
-    ModalBottomSheet(onDismissRequest = viewModel::dismissDocument) {
+    FluidSheet(onDismissRequest = viewModel::dismissDocument) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1200,30 +1134,24 @@ fun DocumentsRoute(
               Text(text = it, style = MaterialTheme.typography.bodySmall)
             }
             if (!asset.contentUri.isNullOrBlank() || !asset.externalUrl.isNullOrBlank()) {
-              Button(
+              FluidButton(
+                text = "Apri documento",
                 onClick = { context.openResource(asset.contentUri, asset.externalUrl, asset.mimeType) },
-                modifier = Modifier.fillMaxWidth(),
-              ) {
-                Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                Text("Apri documento")
-              }
+                style = FluidButtonStyle.Filled,
+                fillWidth = true,
+                leading = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null,) },
+              )
             }
             if (asset.fileName != null) {
-              OutlinedButton(
+              FluidButton(
+                text = if (state.isDownloadingDocument) "Download in corso" else "Salva per uso offline",
                 onClick = { viewModel.queueDownload(doc) },
+                style = FluidButtonStyle.Tinted,
                 enabled = !state.isDownloadingDocument,
-                modifier = Modifier.fillMaxWidth(),
-              ) {
-                if (state.isDownloadingDocument) {
-                  ExpressiveLoading(modifier = Modifier.size(20.dp))
-                } else {
-                  Icon(Icons.Rounded.Download, contentDescription = null)
-                }
-                Text(
-                  text = if (state.isDownloadingDocument) "Download in corso" else "Salva per uso offline",
-                  modifier = Modifier.padding(start = 8.dp),
-                )
-              }
+                loading = state.isDownloadingDocument,
+                fillWidth = true,
+                leading = { Icon(Icons.Rounded.Download, contentDescription = null) },
+              )
             }
             state.downloadMessage?.let { message ->
               Text(message, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
@@ -1239,20 +1167,20 @@ fun DocumentsRoute(
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.error,
             )
-            Button(
+            FluidButton(
+              text = "Riprova",
               onClick = { viewModel.openDocument(doc) },
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Text("Riprova")
-            }
+              style = FluidButtonStyle.Filled,
+              fillWidth = true,
+            )
           }
           else -> {
-            Button(
+            FluidButton(
+              text = "Apri",
               onClick = { viewModel.openDocument(doc) },
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Text("Apri")
-            }
+              style = FluidButtonStyle.Filled,
+              fillWidth = true,
+            )
           }
         }
       }
@@ -1330,7 +1258,6 @@ fun StudentScoreRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   val context = LocalContext.current
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
   LaunchedEffect(initialImportPayload) {
     if (!initialImportPayload.isNullOrBlank()) {
@@ -1338,126 +1265,114 @@ fun StudentScoreRoute(
     }
   }
 
-  Scaffold(
-    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Media studente",
-        subtitle = "Punteggio composito calcolato su media voti, frequenza e costanza.",
-        scrollBehavior = scrollBehavior,
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
+  FluidScreen(
+    title = "Media studente",
+    subtitle = "Punteggio composito calcolato su media voti, frequenza e costanza.",
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
       )
     },
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = state.isRefreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        state.currentScore?.let { score ->
-          item {
-            ExpressiveHeroCard(
-              title = "${score.score.roundToInt()}/100",
-              subtitle = score.label,
-            )
-          }
-          if (score.components.isNotEmpty()) {
-            item { ExpressiveAccentLabel("Componenti") }
-            items(score.components, key = { it.title }) { component ->
-              MetricTile(
-                label = component.title,
-                value = "%.1f / %.0f".format(component.value, component.maxValue),
-                detail = "Peso ${(component.weight * 100).roundToInt()}%",
-              )
-            }
-          }
-        } ?: item {
-          EmptyState(
-            title = "Punteggio non disponibile",
-            detail = "Il punteggio verrà calcolato dopo il primo aggiornamento dei dati.",
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 12.dp,
+  ) {
+    state.currentScore?.let { score ->
+      item {
+        ExpressiveHeroCard(
+          title = "${score.score.roundToInt()}/100",
+          subtitle = score.label,
+        )
+      }
+      if (score.components.isNotEmpty()) {
+        item { FluidSectionHeader("Componenti") }
+        items(score.components, key = { it.title }) { component ->
+          MetricTile(
+            label = component.title,
+            value = "%.1f / %.0f".format(component.value, component.maxValue),
+            detail = "Peso ${(component.weight * 100).roundToInt()}%",
           )
         }
+      }
+    } ?: item {
+      EmptyState(
+        title = "Punteggio non disponibile",
+        detail = "Il punteggio verrà calcolato dopo il primo aggiornamento dei dati.",
+      )
+    }
 
-        item { ExpressiveAccentLabel("Azioni") }
-        item {
-          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-              onClick = {
-                viewModel.exportPayload { payload ->
-                  val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, payload)
-                  }
-                  context.startActivity(Intent.createChooser(sendIntent, "Condividi punteggio"))
-                }
-              },
-              modifier = Modifier.fillMaxWidth(),
-              enabled = state.currentScore != null && !state.isExporting,
-            ) {
-              Icon(Icons.Rounded.Share, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-              Text(if (state.isExporting) "Esportando..." else "Esporta punteggio")
+    item { FluidSectionHeader("Azioni") }
+    item {
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FluidButton(
+          text = if (state.isExporting) "Esportando..." else "Esporta punteggio",
+          onClick = {
+            viewModel.exportPayload { payload ->
+              val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, payload)
+              }
+              context.startActivity(Intent.createChooser(sendIntent, "Condividi punteggio"))
             }
-            OutlinedButton(
-              onClick = {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                val text = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
-                if (text.isNotBlank()) viewModel.importPayload(text)
-              },
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Text("Importa da clipboard")
-            }
-          }
-        }
+          },
+          modifier = Modifier.fillMaxWidth(),
+          style = FluidButtonStyle.Filled,
+          enabled = state.currentScore != null && !state.isExporting,
+          fillWidth = true,
+          leading = { Icon(Icons.Rounded.Share, contentDescription = null,) },
+        )
+        FluidButton(
+          text = "Importa da clipboard",
+          onClick = {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            val text = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+            if (text.isNotBlank()) viewModel.importPayload(text)
+          },
+          style = FluidButtonStyle.Tinted,
+          fillWidth = true,
+        )
+      }
+    }
 
-        if (state.snapshots.size > 1) {
-          item { ExpressiveAccentLabel("Storico") }
-          items(
-            state.snapshots.sortedByDescending { it.computedAtEpochMillis },
-            key = { it.computedAtEpochMillis },
-          ) { snap ->
-            val dateLabel = try {
-              val instant = Instant.ofEpochMilli(snap.computedAtEpochMillis)
-              DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
-                .withZone(ZoneId.systemDefault())
-                .format(instant)
-            } catch (_: Exception) {
-              "—"
-            }
-            RegisterListRow(
-              title = "${snap.score.roundToInt()}/100",
-              subtitle = snap.label,
-              meta = dateLabel,
-              tone = ExpressiveTone.Neutral,
-            )
-          }
+    if (state.snapshots.size > 1) {
+      item { FluidSectionHeader("Storico") }
+      items(
+        state.snapshots.sortedByDescending { it.computedAtEpochMillis },
+        key = { it.computedAtEpochMillis },
+      ) { snap ->
+        val dateLabel = try {
+          val instant = Instant.ofEpochMilli(snap.computedAtEpochMillis)
+          DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+            .withZone(ZoneId.systemDefault())
+            .format(instant)
+        } catch (_: Exception) {
+          "—"
         }
+        RegisterListRow(
+          title = "${snap.score.roundToInt()}/100",
+          subtitle = snap.label,
+          meta = dateLabel,
+          tone = ExpressiveTone.Neutral,
+        )
+      }
+    }
 
-        state.lastMessage?.let { msg ->
-          item {
-            InlineMessageCard(
-              message = msg,
-              title = "Media studente",
-              tone = ExpressiveTone.Warning,
-              onDismiss = viewModel::clearMessage,
-            )
-          }
-        }
+    state.lastMessage?.let { msg ->
+      item {
+        InlineMessageCard(
+          message = msg,
+          title = "Media studente",
+          tone = ExpressiveTone.Warning,
+          onDismiss = viewModel::clearMessage,
+        )
       }
     }
   }
 
   state.importResult?.let { comparison ->
-    ModalBottomSheet(onDismissRequest = viewModel::dismissImport) {
+    FluidSheet(onDismissRequest = viewModel::dismissImport) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),

@@ -1,26 +1,13 @@
 package dev.antigravity.classevivaexpressive.feature.absences
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,17 +16,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlert
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
@@ -155,7 +148,6 @@ fun AbsencesRoute(
   val pending = remember(state.absences) { state.absences.filter { !it.justified && it.canJustify }.sortedByDescending { it.date } }
   val history = remember(state.absences) { state.absences.sortedByDescending { it.date } }
 
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
   LaunchedEffect(initialAbsenceId, state.absences) {
     if (!initialAbsenceId.isNullOrBlank() && state.selectedAbsence?.id != initialAbsenceId) {
@@ -165,153 +157,129 @@ fun AbsencesRoute(
     }
   }
 
-  Scaffold(
-    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Assenze",
-        subtitle = "Situazione sintetica, giustificazioni pendenti e cronologia ordinata.",
-        onBack = onBack,
-        scrollBehavior = scrollBehavior,
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
+  FluidScreen(
+    modifier = modifier,
+    title = "Assenze",
+    subtitle = "Situazione sintetica, giustificazioni pendenti e cronologia ordinata.",
+    onBack = onBack,
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
       )
     },
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = state.isRefreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 18.dp,
+  ) {
+    item {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
       ) {
-        item {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            MetricTile(
-              label = "Assenze",
-              value = absenceCount.toString(),
-              detail = "Assenze registrate",
-              tone = if (pending.any { it.type == AbsenceType.ABSENCE }) ExpressiveTone.Danger else ExpressiveTone.Neutral,
-              modifier = Modifier.weight(1f),
-            )
-            MetricTile(
-              label = "Ritardi",
-              value = lateCount.toString(),
-              detail = "Ingressi dopo l'orario",
-              tone = if (pending.any { it.type == AbsenceType.LATE }) ExpressiveTone.Warning else ExpressiveTone.Neutral,
-              modifier = Modifier.weight(1f),
-            )
-          }
-        }
-        item {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            MetricTile(
-              label = "Uscite",
-              value = exitCount.toString(),
-              detail = "Uscite anticipate registrate",
-              tone = if (pending.any { it.type == AbsenceType.EXIT }) ExpressiveTone.Warning else ExpressiveTone.Neutral,
-              modifier = Modifier.weight(1f),
-            )
-            MetricTile(
-              label = "Da giustificare",
-              value = pending.size.toString(),
-              detail = if (pending.isEmpty()) "Situazione allineata" else "Richiede una verifica rapida",
-              tone = if (pending.isEmpty()) ExpressiveTone.Neutral else ExpressiveTone.Warning,
-              modifier = Modifier.weight(1f),
-            )
-          }
-        }
-        if (state.isSubmitting) {
-          item {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-          }
-        }
-        item { ExpressiveAccentLabel("Da giustificare") }
-        if (pending.isEmpty()) {
-          item {
-            EmptyState(
-              title = "Nessuna giustificazione in sospeso",
-              detail = "Assenze, ritardi e uscite risultano già allineati con lo stato corrente.",
-            )
-          }
-        } else {
-          items(pending, key = { it.id }) { absence ->
-            AbsenceRow(
-              absence = absence,
-              onJustify = { viewModel.requestJustification(absence) },
-            )
-          }
-        }
-        item { ExpressiveAccentLabel("Storico") }
-        if (history.isEmpty()) {
-          item {
-            EmptyState(
-              title = "Nessuna registrazione disponibile",
-              detail = "Quando le API ufficiali sincronizzano presenze e uscite, qui trovi una cronologia leggibile.",
-            )
-          }
-        } else {
-          items(history.take(20), key = { it.id }) { absence ->
-            AbsenceRow(
-              absence = absence,
-              onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
-            )
-          }
-        }
-        if (!state.lastMessage.isNullOrBlank()) {
-          item {
-            InlineMessageCard(
-              message = state.lastMessage.orEmpty(),
-              title = "Assenze",
-              onDismiss = viewModel::clearMessage,
-            )
-          }
-        }
+        MetricTile(
+          label = "Assenze",
+          value = absenceCount.toString(),
+          detail = "Assenze registrate",
+          tone = if (pending.any { it.type == AbsenceType.ABSENCE }) ExpressiveTone.Danger else ExpressiveTone.Neutral,
+          modifier = Modifier.weight(1f),
+        )
+        MetricTile(
+          label = "Ritardi",
+          value = lateCount.toString(),
+          detail = "Ingressi dopo l'orario",
+          tone = if (pending.any { it.type == AbsenceType.LATE }) ExpressiveTone.Warning else ExpressiveTone.Neutral,
+          modifier = Modifier.weight(1f),
+        )
+      }
+    }
+    item {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        MetricTile(
+          label = "Uscite",
+          value = exitCount.toString(),
+          detail = "Uscite anticipate registrate",
+          tone = if (pending.any { it.type == AbsenceType.EXIT }) ExpressiveTone.Warning else ExpressiveTone.Neutral,
+          modifier = Modifier.weight(1f),
+        )
+        MetricTile(
+          label = "Da giustificare",
+          value = pending.size.toString(),
+          detail = if (pending.isEmpty()) "Situazione allineata" else "Richiede una verifica rapida",
+          tone = if (pending.isEmpty()) ExpressiveTone.Neutral else ExpressiveTone.Warning,
+          modifier = Modifier.weight(1f),
+        )
+      }
+    }
+    if (state.isSubmitting) {
+      item {
+        FluidIndeterminateBar(modifier = Modifier.fillMaxWidth())
+      }
+    }
+    item { FluidSectionHeader("Da giustificare") }
+    if (pending.isEmpty()) {
+      item {
+        EmptyState(
+          title = "Nessuna giustificazione in sospeso",
+          detail = "Assenze, ritardi e uscite risultano già allineati con lo stato corrente.",
+        )
+      }
+    } else {
+      items(pending, key = { it.id }) { absence ->
+        AbsenceRow(
+          absence = absence,
+          onJustify = { viewModel.requestJustification(absence) },
+        )
+      }
+    }
+    item { FluidSectionHeader("Storico") }
+    if (history.isEmpty()) {
+      item {
+        EmptyState(
+          title = "Nessuna registrazione disponibile",
+          detail = "Quando le API ufficiali sincronizzano presenze e uscite, qui trovi una cronologia leggibile.",
+        )
+      }
+    } else {
+      items(history.take(20), key = { it.id }) { absence ->
+        AbsenceRow(
+          absence = absence,
+          onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
+        )
+      }
+    }
+    if (!state.lastMessage.isNullOrBlank()) {
+      item {
+        InlineMessageCard(
+          message = state.lastMessage.orEmpty(),
+          title = "Assenze",
+          onDismiss = viewModel::clearMessage,
+        )
       }
     }
   }
 
   state.selectedAbsence?.let { absence ->
     var reason by rememberSaveable(absence.id) { mutableStateOf(absence.justificationReason.orEmpty()) }
-    AlertDialog(
+    FluidAlert(
       onDismissRequest = viewModel::dismissJustification,
-      title = { Text("Giustifica ${absenceLabel(absence.type).lowercase(italianLocale)}") },
-      text = {
-        OutlinedTextField(
+      title = "Giustifica ${absenceLabel(absence.type).lowercase(italianLocale)}",
+      actions = listOf(
+        FluidAlertAction("Annulla", viewModel::dismissJustification, FluidAlertAction.Emphasis.Normal, enabled = !state.isSubmitting),
+        FluidAlertAction("Invia", { viewModel.justify(reason) }, FluidAlertAction.Emphasis.Preferred, enabled = !state.isSubmitting),
+      ),
+      content = {
+        FluidTextField(
           value = reason,
           onValueChange = { reason = it },
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Motivazione opzionale") },
+          label = "Motivazione opzionale",
           minLines = 3,
         )
-      },
-      confirmButton = {
-        TextButton(
-          onClick = { viewModel.justify(reason) },
-          enabled = !state.isSubmitting,
-        ) {
-          Text("Invia")
-        }
-      },
-      dismissButton = {
-        TextButton(
-          onClick = viewModel::dismissJustification,
-          enabled = !state.isSubmitting,
-        ) {
-          Text("Annulla")
-        }
       },
     )
   }

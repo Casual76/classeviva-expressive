@@ -7,43 +7,48 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.automirrored.rounded.Assignment
 import androidx.compose.material.icons.automirrored.rounded.LibraryBooks
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Backpack
 import androidx.compose.material.icons.rounded.BugReport
@@ -51,39 +56,23 @@ import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.CoPresent
 import androidx.compose.material.icons.rounded.ContentCopy
-import androidx.compose.material.icons.rounded.Description
-import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.FolderCopy
-import androidx.compose.material.icons.rounded.Grade
-import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.EventBusy
+import androidx.compose.material.icons.rounded.FolderCopy
 import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Leaderboard
-import androidx.compose.material.icons.rounded.Menu
-import androidx.compose.material.icons.rounded.MenuBook
-import androidx.compose.material.icons.rounded.Notifications
-import androidx.compose.material.icons.rounded.PeopleAlt
+import androidx.compose.material.icons.rounded.Report
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.SportsScore
-import androidx.compose.material.icons.rounded.Report
 import androidx.compose.material.icons.rounded.WarningAmber
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,23 +81,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.autofill.contentType
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.autofill.ContentType
-import androidx.compose.ui.autofill.contentType
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -123,20 +107,33 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlert
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidMotion
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScrollToTopBus
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabBar
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabBarDefaults
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabItem
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabRail
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.LocalFluidOriginTracker
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ProvideFluidChrome
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberFluidOriginTracker
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberGlassBackdrop
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaExpressiveTheme
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListDivider
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListGroup
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveScreenSurface
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MotionTokens
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveSharedBounds
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
 import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
@@ -177,25 +174,84 @@ private val topLevelDestinations = listOf(
 
 internal val topLevelRoutes = topLevelDestinations.map { it.baseRoute }.toSet()
 
+/**
+ * Route motion.
+ *
+ * The previous treatment moved screens by a fortieth of the viewport and scaled them by three parts
+ * in a thousand. Movement that small does not read as movement — it reads as the screen twitching,
+ * which is precisely the "something is wrong with the animation" feeling. A push either commits to
+ * covering the full width or it does not happen at all.
+ *
+ * The parallax ratio — the outgoing screen travelling a third as far as the incoming one — is what
+ * creates the sense of a stack with depth rather than two slides passing each other.
+ */
+/**
+ * How a pushed screen arrives.
+ *
+ * Not a slide. A slide says "the pages sit side by side in a strip"; this app's secondary screens
+ * are opened *out of* something — a row, a card, a grade — and the motion says so: the new screen
+ * blooms from the point that was tapped and collapses back into it on the way out.
+ *
+ * Three rules keep it from looking cheap:
+ *
+ *  * **The anchor is real.** [FluidOriginTracker] reports the tapped element's centre, so the
+ *    expansion starts where the finger was, not from the middle of the display.
+ *  * **Nothing is translucent for long.** The outgoing screen does not fade at all on the way in; it
+ *    stays fully opaque underneath while the new screen grows over it. Two screens readable through
+ *    each other is the single most broken-looking thing a transition can do.
+ *  * **It springs, it does not ease.** A tween of fixed duration always arrives with the same
+ *    mechanical thud. A spring settles, which is what makes the surface feel like an object.
+ */
+private const val ExpandFromScale = 0.80f
+private const val ParentRecedeScale = 0.94f
+
+private fun expandSpec() = spring<Float>(
+  dampingRatio = 0.86f,
+  stiffness = FluidMotion.ResponseStandard,
+)
+
+/**
+ * The tab bar's own timing.
+ *
+ * Faster than the page transition on purpose. The bar is chrome: it should already be out of the way
+ * by the time the new screen has finished arriving, otherwise the two movements read as one confused
+ * gesture rather than as a screen opening over a bar that stepped aside.
+ */
+private fun barSlideSpec() = FluidMotion.intOffset(
+  dampingRatio = FluidMotion.DampingChrome,
+  stiffness = FluidMotion.ResponseSnappy,
+)
+
+private fun collapseSpec() = spring<Float>(
+  dampingRatio = FluidMotion.DampingChrome,
+  stiffness = FluidMotion.ResponseSnappy,
+)
+
 private fun routeEnterTransition(
   decision: RouteMotionDecision,
   isPop: Boolean,
+  origin: TransformOrigin,
 ): EnterTransition = when (decision.kind) {
-  RouteMotionKind.TopLevelSwitch -> {
-    fadeIn(animationSpec = MotionTokens.routeEffects()) +
-      scaleIn(initialScale = 0.997f, animationSpec = MotionTokens.routeSpatial())
-  }
+  // Switching tabs is lateral, not hierarchical: nothing was opened, so nothing should bloom.
+  RouteMotionKind.TopLevelSwitch ->
+    fadeIn(animationSpec = FluidMotion.crossFade(170)) +
+      scaleIn(initialScale = 0.994f, animationSpec = expandSpec())
 
-  RouteMotionKind.SharedContainer -> {
-    fadeIn(animationSpec = MotionTokens.routeEffects())
-  }
-
-  RouteMotionKind.FallbackScale -> {
-    fadeIn(animationSpec = MotionTokens.routeEffects()) +
-      scaleIn(initialScale = if (isPop) 1.006f else 0.992f, animationSpec = MotionTokens.routeSpatial()) +
-      slideInVertically(
-        initialOffsetY = { fullHeight -> if (isPop) -fullHeight / 42 else fullHeight / 42 },
-        animationSpec = MotionTokens.routeSpatial(),
+  RouteMotionKind.Push -> if (isPop) {
+    // Coming back: the parent was left pushed slightly away, so it returns from just behind.
+    scaleIn(
+      initialScale = ParentRecedeScale,
+      transformOrigin = origin,
+      animationSpec = expandSpec(),
+    )
+  } else {
+    // The 70 ms fade is not there to make the screen translucent — it is there so the first frame is
+    // not a hard-edged rectangle appearing out of nothing.
+    fadeIn(animationSpec = tween(70, easing = FluidMotion.EaseOut)) +
+      scaleIn(
+        initialScale = ExpandFromScale,
+        transformOrigin = origin,
+        animationSpec = expandSpec(),
       )
   }
 }
@@ -203,23 +259,28 @@ private fun routeEnterTransition(
 private fun routeExitTransition(
   decision: RouteMotionDecision,
   isPop: Boolean,
+  origin: TransformOrigin,
 ): ExitTransition = when (decision.kind) {
-  RouteMotionKind.TopLevelSwitch -> {
-    fadeOut(animationSpec = MotionTokens.routeEffects()) +
-      scaleOut(targetScale = 1.002f, animationSpec = MotionTokens.routeSpatial())
-  }
+  RouteMotionKind.TopLevelSwitch ->
+    fadeOut(animationSpec = FluidMotion.crossFade(170)) +
+      scaleOut(targetScale = 1.006f, animationSpec = expandSpec())
 
-  RouteMotionKind.SharedContainer -> {
-    fadeOut(animationSpec = MotionTokens.routeEffects())
-  }
-
-  RouteMotionKind.FallbackScale -> {
-    fadeOut(animationSpec = MotionTokens.routeEffects()) +
-      scaleOut(targetScale = if (isPop) 0.992f else 1.006f, animationSpec = MotionTokens.routeSpatial()) +
-      slideOutVertically(
-        targetOffsetY = { fullHeight -> if (isPop) fullHeight / 42 else -fullHeight / 42 },
-        animationSpec = MotionTokens.routeSpatial(),
+  RouteMotionKind.Push -> if (isPop) {
+    // Imploding. The fade is held back until the screen is already well on its way down, so it reads
+    // as being absorbed into the row rather than dissolving in place.
+    fadeOut(animationSpec = tween(130, delayMillis = 110, easing = FluidMotion.EaseIn)) +
+      scaleOut(
+        targetScale = ExpandFromScale,
+        transformOrigin = origin,
+        animationSpec = collapseSpec(),
       )
+  } else {
+    // Deliberately no fade: the parent stays solid underneath the screen growing over it.
+    scaleOut(
+      targetScale = ParentRecedeScale,
+      transformOrigin = origin,
+      animationSpec = expandSpec(),
+    )
   }
 }
 
@@ -321,10 +382,21 @@ private fun BugReportDialog(
   }
   val canOpenIssue = title.isNotBlank() && description.isNotBlank()
 
-  AlertDialog(
+  FluidAlert(
     onDismissRequest = onDismiss,
-    title = { Text("Segnala bug") },
-    text = {
+    title = "Segnala bug",
+    actions = listOf(
+      FluidAlertAction("Copia report", {
+            context.copyBugReport(reportBody)
+            copied = true
+          }),
+      FluidAlertAction("Chiudi", onDismiss),
+      FluidAlertAction("Apri GitHub", {
+          context.startActivity(Intent(Intent.ACTION_VIEW, issueUri))
+          onDismiss()
+        }, FluidAlertAction.Emphasis.Preferred, enabled = canOpenIssue),
+    ),
+    content = {
       Column(
         modifier = Modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -351,54 +423,54 @@ private fun BugReportDialog(
             )
           }
         }
-        OutlinedTextField(
+        FluidTextField(
           value = title,
           onValueChange = {
             title = it
             copied = false
           },
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Titolo") },
+          label = "Titolo",
           singleLine = true,
         )
-        OutlinedTextField(
+        FluidTextField(
           value = description,
           onValueChange = {
             description = it
             copied = false
           },
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Descrizione") },
+          label = "Descrizione",
           minLines = 3,
         )
-        OutlinedTextField(
+        FluidTextField(
           value = steps,
           onValueChange = {
             steps = it
             copied = false
           },
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Passaggi per riprodurre") },
+          label = "Passaggi per riprodurre",
           minLines = 3,
         )
-        OutlinedTextField(
+        FluidTextField(
           value = expected,
           onValueChange = {
             expected = it
             copied = false
           },
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Comportamento atteso") },
+          label = "Comportamento atteso",
           minLines = 2,
         )
-        OutlinedTextField(
+        FluidTextField(
           value = actual,
           onValueChange = {
             actual = it
             copied = false
           },
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Comportamento ottenuto") },
+          label = "Comportamento ottenuto",
           minLines = 2,
         )
         if (copied) {
@@ -407,34 +479,6 @@ private fun BugReportDialog(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.primary,
           )
-        }
-      }
-    },
-    confirmButton = {
-      Button(
-        onClick = {
-          context.startActivity(Intent(Intent.ACTION_VIEW, issueUri))
-          onDismiss()
-        },
-        enabled = canOpenIssue,
-      ) {
-        Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
-        Text("Apri GitHub")
-      }
-    },
-    dismissButton = {
-      Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        OutlinedButton(
-          onClick = {
-            context.copyBugReport(reportBody)
-            copied = true
-          },
-        ) {
-          Icon(Icons.Rounded.ContentCopy, contentDescription = null)
-          Text("Copia report")
-        }
-        TextButton(onClick = onDismiss) {
-          Text("Chiudi")
         }
       }
     },
@@ -536,32 +580,19 @@ private fun AppUpdateDialog(
     is AppUpdateInstallState.Error -> installState.message
   }
 
-  AlertDialog(
+  FluidAlert(
     onDismissRequest = { if (!busy) onLater() },
-    title = { Text("Aggiornamento ${update.version}") },
-    text = {
+    title = "Aggiornamento ${update.version}",
+    actions = listOf(
+      FluidAlertAction("Ignora", onIgnore, FluidAlertAction.Emphasis.Normal, enabled = !busy),
+      FluidAlertAction("Più tardi", onLater, FluidAlertAction.Emphasis.Normal, enabled = !busy),
+      FluidAlertAction(if (installState is AppUpdateInstallState.Error) "Riprova" else "Aggiorna", onInstall, FluidAlertAction.Emphasis.Preferred, enabled = !busy && installState !is AppUpdateInstallState.Installed),
+    ),
+    content = {
       Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(statusText)
         if (busy) {
-          LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-      }
-    },
-    confirmButton = {
-      Button(
-        onClick = onInstall,
-        enabled = !busy && installState !is AppUpdateInstallState.Installed,
-      ) {
-        Text(if (installState is AppUpdateInstallState.Error) "Riprova" else "Aggiorna")
-      }
-    },
-    dismissButton = {
-      Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        TextButton(onClick = onIgnore, enabled = !busy) {
-          Text("Ignora")
-        }
-        TextButton(onClick = onLater, enabled = !busy) {
-          Text("Più tardi")
+          FluidIndeterminateBar(modifier = Modifier.fillMaxWidth())
         }
       }
     },
@@ -605,9 +636,15 @@ internal fun LoginScreen(
     }
   }
 
+  val systemBars = WindowInsets.systemBars.asPaddingValues()
   LazyColumn(
     modifier = Modifier.fillMaxSize(),
-    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 28.dp),
+    contentPadding = PaddingValues(
+      start = 24.dp,
+      end = 24.dp,
+      top = systemBars.calculateTopPadding() + 28.dp,
+      bottom = systemBars.calculateBottomPadding() + 28.dp,
+    ),
     verticalArrangement = Arrangement.spacedBy(20.dp),
   ) {
     item {
@@ -619,7 +656,7 @@ internal fun LoginScreen(
     }
     item {
       Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        OutlinedTextField(
+        FluidTextField(
           value = username,
           onValueChange = {
             username = it
@@ -629,14 +666,14 @@ internal fun LoginScreen(
             .fillMaxWidth()
             .testTag("login_username")
             .contentType(ContentType.Username + ContentType.EmailAddress),
-          label = { Text("Username o codice studente") },
+          label = "Username o codice studente",
           singleLine = true,
           keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Text,
             imeAction = ImeAction.Next,
           ),
         )
-        OutlinedTextField(
+        FluidTextField(
           value = password,
           onValueChange = {
             password = it
@@ -646,19 +683,21 @@ internal fun LoginScreen(
             .fillMaxWidth()
             .testTag("login_password")
             .contentType(ContentType.Password),
-          label = { Text("Password") },
+          label = "Password",
           singleLine = true,
-          visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-          trailingIcon = {
-            TextButton(onClick = { passwordVisible = !passwordVisible }) {
-              Text(if (passwordVisible) "Nascondi" else "Mostra")
-            }
-          },
           keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Password,
             imeAction = ImeAction.Done,
           ),
           keyboardActions = KeyboardActions(onDone = { submit() }),
+          visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+          trailing = {
+            FluidButton(
+              text = if (passwordVisible) "Nascondi" else "Mostra",
+              onClick = { passwordVisible = !passwordVisible },
+              style = FluidButtonStyle.Plain,
+            )
+          },
         )
         if (error != null) {
           Text(
@@ -694,71 +733,98 @@ internal fun LoginScreen(
   }
 }
 
+/**
+ * The app shell: screen content edge to edge, with a floating tab bar over it.
+ *
+ * The bar no longer reserves layout space. It used to consume a hard 92dp strip at the bottom of
+ * every screen, which is why text ran into an invisible wall near the bottom of a list. Now content
+ * occupies the whole display and simply pads its *scroll* by the bar's height, so the last item can
+ * be scrolled clear of the bar while everything in between passes underneath it through the glass.
+ */
 @Composable
 internal fun TopLevelNavigationSuite(
   currentRoute: String?,
   showNavigationSuite: Boolean,
   onNavigateRoute: (String) -> Unit,
+  onReselectRoute: (String) -> Unit = {},
+  scrollToTop: FluidScrollToTopBus = remember { FluidScrollToTopBus() },
   content: @Composable () -> Unit,
 ) {
+  val backdrop = rememberGlassBackdrop()
+  val tabItems = remember {
+    topLevelDestinations.map { FluidTabItem(it.baseRoute, it.label, it.icon) }
+  }
+  val routeOf = remember {
+    topLevelDestinations.associate { it.baseRoute to it.navigateRoute }
+  }
+
   BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
     val useRail = maxWidth >= 600.dp
-    Box(
-      modifier = Modifier
-        .fillMaxSize()
-        .padding(
-          start = if (showNavigationSuite && useRail) 104.dp else 0.dp,
-          bottom = if (showNavigationSuite && !useRail) 92.dp else 0.dp,
-        ),
+    val bottomInset = if (showNavigationSuite && !useRail) FluidTabBarDefaults.ContentInset else 0.dp
+
+    ProvideFluidChrome(
+      backdrop = backdrop,
+      bottomInset = bottomInset,
+      scrollToTop = scrollToTop,
     ) {
-      content()
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .padding(start = if (showNavigationSuite && useRail) 100.dp else 0.dp),
+      ) {
+        content()
+      }
     }
 
-    AnimatedVisibility(
-      visible = showNavigationSuite,
-      modifier = if (useRail) {
-        Modifier.align(Alignment.CenterStart).padding(start = 16.dp)
-      } else {
-        Modifier
+    val onSelect: (FluidTabItem) -> Unit = { item ->
+      onNavigateRoute(routeOf[item.route] ?: item.route)
+    }
+    val onReselect: (FluidTabItem) -> Unit = { item -> onReselectRoute(item.route) }
+
+    if (useRail) {
+      AnimatedVisibility(
+        visible = showNavigationSuite,
+        enter = slideInHorizontally(animationSpec = barSlideSpec()) { -it } +
+          fadeIn(animationSpec = tween(140, easing = FluidMotion.EaseOut)),
+        exit = slideOutHorizontally(animationSpec = barSlideSpec()) { -it } +
+          fadeOut(animationSpec = tween(110, easing = FluidMotion.EaseIn)),
+        modifier = Modifier
+          .align(Alignment.CenterStart)
+          .systemBarsPadding()
+          .padding(start = 14.dp),
+      ) {
+        FluidTabRail(
+          items = tabItems,
+          selectedRoute = currentRoute,
+          onSelect = onSelect,
+          onReselect = onReselect,
+          backdrop = backdrop,
+        )
+      }
+    } else {
+      AnimatedVisibility(
+        visible = showNavigationSuite,
+        enter = slideInVertically(animationSpec = barSlideSpec()) { it } +
+          fadeIn(animationSpec = tween(140, easing = FluidMotion.EaseOut)) +
+          scaleIn(initialScale = 0.94f, animationSpec = expandSpec()),
+        exit = slideOutVertically(animationSpec = barSlideSpec()) { it } +
+          fadeOut(animationSpec = tween(110, easing = FluidMotion.EaseIn)) +
+          scaleOut(targetScale = 0.94f, animationSpec = collapseSpec()),
+        modifier = Modifier
           .align(Alignment.BottomCenter)
           .navigationBarsPadding()
-          .padding(horizontal = 16.dp, vertical = 8.dp)
-      },
-    ) {
-      Surface(
-        modifier = if (useRail) Modifier.width(72.dp) else Modifier.fillMaxWidth().height(68.dp),
-        shape = if (useRail) MaterialTheme.shapes.extraLarge else CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 8.dp,
-        shadowElevation = 6.dp,
+          .padding(
+            horizontal = FluidTabBarDefaults.HorizontalMargin,
+            vertical = FluidTabBarDefaults.BottomMargin,
+          ),
       ) {
-        if (useRail) {
-          Column(
-            modifier = Modifier.padding(vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-          ) {
-            topLevelDestinations.forEach { destination ->
-              TopLevelNavigationItem(
-                destination = destination,
-                selected = currentRoute == destination.baseRoute,
-                vertical = true,
-                onNavigateRoute = onNavigateRoute,
-              )
-            }
-          }
-        } else {
-          Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-            topLevelDestinations.forEach { destination ->
-              TopLevelNavigationItem(
-                destination = destination,
-                selected = currentRoute == destination.baseRoute,
-                vertical = false,
-                onNavigateRoute = onNavigateRoute,
-                modifier = Modifier.weight(1f),
-              )
-            }
-          }
-        }
+        FluidTabBar(
+          items = tabItems,
+          selectedRoute = currentRoute,
+          onSelect = onSelect,
+          onReselect = onReselect,
+          backdrop = backdrop,
+        )
       }
     }
   }
@@ -789,98 +855,86 @@ private fun BugReportScreen(
   }
   val issueUri = remember(title, reportBody) { buildBugReportIssueUri(title, reportBody) }
 
-  Scaffold(
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Segnala un problema",
-        subtitle = "Controlla cosa verrà condiviso prima di aprire GitHub.",
-        onBack = onBack,
-      )
-    },
-  ) { paddingValues ->
-    LazyColumn(
-      modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(
-        start = 20.dp,
-        end = 20.dp,
-        top = paddingValues.calculateTopPadding() + 16.dp,
-        bottom = paddingValues.calculateBottomPadding() + 32.dp,
-      ),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      item {
-        Surface(
-          modifier = Modifier.fillMaxWidth(),
-          shape = MaterialTheme.shapes.large,
-          color = MaterialTheme.colorScheme.errorContainer,
-          contentColor = MaterialTheme.colorScheme.onErrorContainer,
+  FluidScreen(
+    title = "Segnala un problema",
+    subtitle = "Controlla cosa verrà condiviso prima di aprire GitHub.",
+    onBack = onBack,
+    itemSpacing = 12.dp,
+  ) {
+    item {
+      Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+      ) {
+        Row(
+          modifier = Modifier.padding(16.dp),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          verticalAlignment = Alignment.Top,
         ) {
-          Row(
-            modifier = Modifier.padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top,
-          ) {
-            Icon(Icons.Rounded.WarningAmber, contentDescription = null)
-            Text(
-              "La segnalazione sarà una issue GitHub pubblica e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
-              style = MaterialTheme.typography.bodyMedium,
-            )
-          }
+          Icon(Icons.Rounded.WarningAmber, contentDescription = null)
+          Text(
+            "La segnalazione sarà una issue GitHub pubblica e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
+            style = MaterialTheme.typography.bodyMedium,
+          )
         }
       }
-      item {
-        OutlinedTextField(
-          value = title,
-          onValueChange = { title = it; copied = false },
-          modifier = Modifier.fillMaxWidth(),
-          label = { Text("Titolo") },
-          singleLine = true,
+    }
+    item {
+      FluidTextField(
+        value = title,
+        onValueChange = { title = it; copied = false },
+        modifier = Modifier.fillMaxWidth(),
+        label = "Titolo",
+        singleLine = true,
+      )
+    }
+    item {
+      FluidTextField(
+        value = description,
+        onValueChange = { description = it; copied = false },
+        modifier = Modifier.fillMaxWidth(),
+        label = "Cosa non ha funzionato?",
+        minLines = 4,
+      )
+    }
+    item {
+      FluidButton(
+        text = if (showAdvanced) "Nascondi dettagli" else "Aggiungi passaggi e diagnostica",
+        onClick = { showAdvanced = !showAdvanced },
+        style = FluidButtonStyle.Plain,
+      )
+    }
+    if (showAdvanced) {
+      item { BugReportField("Passaggi per riprodurre", steps) { steps = it; copied = false } }
+      item { BugReportField("Comportamento atteso", expected) { expected = it; copied = false } }
+      item { BugReportField("Comportamento ottenuto", actual) { actual = it; copied = false } }
+      item { BugReportField("Diagnostica inclusa (modificabile)", diagnostics) { diagnostics = it; copied = false } }
+    }
+    if (copied) {
+      item { Text("Report copiato negli appunti.", color = MaterialTheme.colorScheme.primary) }
+    }
+    item {
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FluidButton(
+          text = "Copia",
+          onClick = { context.copyBugReport(reportBody); copied = true },
+          modifier = Modifier.weight(1f),
+          style = FluidButtonStyle.Tinted,
+          leading = { Icon(Icons.Rounded.ContentCopy, contentDescription = null) },
         )
-      }
-      item {
-        OutlinedTextField(
-          value = description,
-          onValueChange = { description = it; copied = false },
-          modifier = Modifier.fillMaxWidth(),
-          label = { Text("Cosa non ha funzionato?") },
-          minLines = 4,
+        FluidButton(
+          text = "Apri GitHub",
+          onClick = {
+            context.startActivity(Intent(Intent.ACTION_VIEW, issueUri))
+            onBack()
+          },
+          modifier = Modifier.weight(1f),
+          style = FluidButtonStyle.Filled,
+          enabled = title.isNotBlank() && description.isNotBlank(),
+          leading = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null) },
         )
-      }
-      item {
-        TextButton(onClick = { showAdvanced = !showAdvanced }) {
-          Text(if (showAdvanced) "Nascondi dettagli" else "Aggiungi passaggi e diagnostica")
-        }
-      }
-      if (showAdvanced) {
-        item { BugReportField("Passaggi per riprodurre", steps) { steps = it; copied = false } }
-        item { BugReportField("Comportamento atteso", expected) { expected = it; copied = false } }
-        item { BugReportField("Comportamento ottenuto", actual) { actual = it; copied = false } }
-        item { BugReportField("Diagnostica inclusa (modificabile)", diagnostics) { diagnostics = it; copied = false } }
-      }
-      if (copied) {
-        item { Text("Report copiato negli appunti.", color = MaterialTheme.colorScheme.primary) }
-      }
-      item {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          OutlinedButton(
-            onClick = { context.copyBugReport(reportBody); copied = true },
-            modifier = Modifier.weight(1f),
-          ) {
-            Icon(Icons.Rounded.ContentCopy, contentDescription = null)
-            Text("Copia")
-          }
-          Button(
-            onClick = {
-              context.startActivity(Intent(Intent.ACTION_VIEW, issueUri))
-              onBack()
-            },
-            enabled = title.isNotBlank() && description.isNotBlank(),
-            modifier = Modifier.weight(1f),
-          ) {
-            Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null)
-            Text("Apri GitHub")
-          }
-        }
       }
     }
   }
@@ -892,11 +946,11 @@ private fun BugReportField(
   value: String,
   onValueChange: (String) -> Unit,
 ) {
-  OutlinedTextField(
+  FluidTextField(
     value = value,
     onValueChange = onValueChange,
     modifier = Modifier.fillMaxWidth(),
-    label = { Text(label) },
+    label = label,
     minLines = 3,
   )
 }
@@ -923,72 +977,6 @@ private fun buildMinimalBugReportBody(
   ## Diagnostica inclusa
   ${reportValue(diagnostics)}
 """.trimIndent()
-
-@Composable
-private fun TopLevelNavigationItem(
-  destination: TopLevelDestination,
-  selected: Boolean,
-  vertical: Boolean,
-  onNavigateRoute: (String) -> Unit,
-  modifier: Modifier = Modifier,
-) {
-  Surface(
-    modifier = modifier
-      .padding(horizontal = if (vertical) 8.dp else 4.dp, vertical = 4.dp)
-      .testTag("top_level_${destination.baseRoute}")
-      .semantics {
-        role = Role.Tab
-        this.selected = selected
-      },
-    onClick = { onNavigateRoute(destination.navigateRoute) },
-    shape = CircleShape,
-    color = if (selected) MaterialTheme.colorScheme.primaryContainer else androidx.compose.ui.graphics.Color.Transparent,
-    contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-  ) {
-    if (vertical) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp),
-      ) {
-        Icon(destination.icon, contentDescription = destination.label)
-        if (selected) Text(destination.label, style = MaterialTheme.typography.labelSmall)
-      }
-    } else {
-      Row(
-        modifier = Modifier.padding(horizontal = if (selected) 10.dp else 6.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Icon(destination.icon, contentDescription = destination.label)
-        if (selected) {
-          Text(destination.label, modifier = Modifier.padding(start = 6.dp), style = MaterialTheme.typography.labelLarge)
-        }
-      }
-    }
-  }
-}
-
-@OptIn(ExperimentalSharedTransitionApi::class)
-@Composable
-private fun SharedRouteContainer(
-  sharedTransitionScope: SharedTransitionScope,
-  animatedVisibilityScope: AnimatedVisibilityScope,
-  sharedKey: String?,
-  content: @Composable () -> Unit,
-) {
-  Box(
-    modifier = Modifier
-      .fillMaxSize()
-      .expressiveSharedBounds(
-        sharedTransitionScope = sharedTransitionScope,
-        animatedVisibilityScope = animatedVisibilityScope,
-        sharedKey = sharedKey,
-      ),
-  ) {
-    content()
-  }
-}
 
 @Preview(name = "Login Light", showBackground = true)
 @Preview(
@@ -1017,7 +1005,7 @@ private fun TopLevelNavigationSuitePreview() {
   ClassevivaExpressiveTheme(settings = AppSettings()) {
     ExpressiveScreenSurface {
       TopLevelNavigationSuite(
-        currentRoute = "home",
+        currentRoute = "more",
         showNavigationSuite = true,
         onNavigateRoute = {},
       ) {
@@ -1037,18 +1025,10 @@ private fun TopLevelNavigationSuitePreview() {
   }
 }
 
-internal fun NavHostController.recordMotionOrigin(origin: MotionOrigin) {
-  currentBackStackEntry?.savedStateHandle?.set(MotionOriginStateKey, origin.wireName)
-}
-
-internal fun NavHostController.navigateTopLevel(
-  targetRoute: String,
-  origin: MotionOrigin = MotionOrigin.NavigationPill,
-) {
+internal fun NavHostController.navigateTopLevel(targetRoute: String) {
   val startDestination = graph.findStartDestination()
   val targetBaseRoute = targetRoute.substringBefore('?')
   val targetsStartDestination = targetBaseRoute == startDestination.route?.substringBefore('?')
-  recordMotionOrigin(origin)
   navigate(targetRoute) {
     popUpTo(startDestination.id) {
       saveState = true
@@ -1058,16 +1038,10 @@ internal fun NavHostController.navigateTopLevel(
     // so Back from Home would reopen that tab. Its state remains saved for later tab selection.
     restoreState = !targetsStartDestination
   }
-  recordMotionOrigin(origin)
 }
 
-internal fun NavHostController.handleIncomingIntent(intent: Intent): Boolean {
-  val handled = handleDeepLink(intent)
-  if (handled) recordMotionOrigin(MotionOrigin.DeepLink)
-  return handled
-}
+internal fun NavHostController.handleIncomingIntent(intent: Intent): Boolean = handleDeepLink(intent)
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun AuthenticatedApp(
   isCheckingForUpdates: Boolean,
@@ -1082,24 +1056,16 @@ private fun AuthenticatedApp(
   val currentRoute = currentDestination?.route?.substringBefore("?")
   val showNavigationSuite = currentRoute in topLevelRoutes
 
-  fun navigateRoute(route: String, origin: MotionOrigin = MotionOrigin.NavigationPill) {
-    navController.recordMotionOrigin(origin)
+  val scrollToTop = remember { FluidScrollToTopBus() }
+  val originTracker = rememberFluidOriginTracker()
+
+  fun navigateRoute(route: String) {
+    originTracker.claim(route)
     navController.navigate(route)
-    navController.recordMotionOrigin(origin)
   }
 
-  fun navigateTopLevelRoute(
-    targetRoute: String,
-    origin: MotionOrigin = MotionOrigin.NavigationPill,
-  ) {
-    navController.navigateTopLevel(targetRoute, origin)
-  }
-
-  fun currentSharedKey(expected: String): String? {
-    val origin = MotionOrigin.fromWireName(
-      navController.currentBackStackEntry?.savedStateHandle?.get<String>(MotionOriginStateKey),
-    )
-    return origin?.sharedKey?.takeIf { it == expected }
+  fun navigateTopLevelRoute(targetRoute: String) {
+    navController.navigateTopLevel(targetRoute)
   }
 
   LaunchedEffect(navController, incomingIntents) {
@@ -1108,6 +1074,9 @@ private fun AuthenticatedApp(
     }
   }
 
+  // Provided around everything, so any pressable anywhere in the tree can report where it was
+  // tapped without a single screen having to know that route transitions exist.
+  CompositionLocalProvider(LocalFluidOriginTracker provides originTracker) {
   TopLevelNavigationSuite(
     currentRoute = currentDestination?.hierarchy
       ?.mapNotNull { it.route?.substringBefore("?") }
@@ -1116,20 +1085,23 @@ private fun AuthenticatedApp(
     onNavigateRoute = { targetRoute ->
       navigateTopLevelRoute(targetRoute)
     },
+    onReselectRoute = { scrollToTop.request() },
+    scrollToTop = scrollToTop,
   ) {
-    SharedTransitionLayout {
       NavHost(
         navController = navController,
         startDestination = "home",
         modifier = Modifier.fillMaxSize(),
+        // Both directions read the *child's* anchor: it is the one the tap actually produced, and it
+        // is what makes leaving reverse the arrival instead of merely undoing it.
         enterTransition = {
           routeEnterTransition(
             decision = decideRouteMotion(
               fromRoute = initialState.destination.route,
               toRoute = targetState.destination.route,
-              motionOrigin = MotionOrigin.fromWireName(targetState.savedStateHandle[MotionOriginStateKey]),
             ),
             isPop = false,
+            origin = originTracker.originFor(targetState.destination.route),
           )
         },
         exitTransition = {
@@ -1137,9 +1109,9 @@ private fun AuthenticatedApp(
             decision = decideRouteMotion(
               fromRoute = initialState.destination.route,
               toRoute = targetState.destination.route,
-              motionOrigin = MotionOrigin.fromWireName(targetState.savedStateHandle[MotionOriginStateKey]),
             ),
             isPop = false,
+            origin = originTracker.originFor(targetState.destination.route),
           )
         },
         popEnterTransition = {
@@ -1147,9 +1119,9 @@ private fun AuthenticatedApp(
             decision = decideRouteMotion(
               fromRoute = initialState.destination.route,
               toRoute = targetState.destination.route,
-              motionOrigin = MotionOrigin.fromWireName(initialState.savedStateHandle[MotionOriginStateKey]),
             ),
             isPop = true,
+            origin = originTracker.originFor(initialState.destination.route),
           )
         },
         popExitTransition = {
@@ -1157,25 +1129,21 @@ private fun AuthenticatedApp(
             decision = decideRouteMotion(
               fromRoute = initialState.destination.route,
               toRoute = targetState.destination.route,
-              motionOrigin = MotionOrigin.fromWireName(initialState.savedStateHandle[MotionOriginStateKey]),
             ),
             isPop = true,
+            origin = originTracker.originFor(initialState.destination.route),
           )
         },
       ) {
         composable("home") {
           DashboardRoute(
-            onNavigateGrades = { navigateTopLevelRoute("grades", MotionOrigin.DashboardGrades) },
+            onNavigateGrades = { navigateTopLevelRoute("grades") },
             onNavigateAgenda = { navigateTopLevelRoute("agenda") },
             onNavigateLessons = { navigateRoute("lessons") },
             onNavigateCommunications = {
-              navigateTopLevelRoute("communications?tab=board", MotionOrigin.DashboardCommunications)
+              navigateTopLevelRoute("communications?tab=board")
             },
-            onOpenGrade = { gradeId -> navigateTopLevelRoute("grades?gradeId=$gradeId", MotionOrigin.DashboardGrades) },
-            gradesSharedTransitionKey = RouteSharedKeys.DashboardGrades,
-            communicationsSharedTransitionKey = RouteSharedKeys.DashboardCommunications,
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
+            onOpenGrade = { gradeId -> navigateTopLevelRoute("grades?gradeId=$gradeId") },
           )
         }
         composable(
@@ -1201,8 +1169,6 @@ private fun AuthenticatedApp(
           AgendaRoute(
             initialAgendaId = entry.arguments?.getString("agendaId"),
             initialDate = entry.arguments?.getString("date"),
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
           )
         }
         composable(
@@ -1219,17 +1185,9 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/grades" },
           ),
         ) { entry ->
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.DashboardGrades),
-          ) {
-            GradesRoute(
-              initialGradeId = entry.arguments?.getString("gradeId"),
-              sharedTransitionScope = this@SharedTransitionLayout,
-              animatedVisibilityScope = this@composable,
-            )
-          }
+          GradesRoute(
+            initialGradeId = entry.arguments?.getString("gradeId"),
+          )
         }
         composable(
           route = "communications?tab={tab}&pubId={pubId}&evtCode={evtCode}&noteId={noteId}&categoryCode={categoryCode}",
@@ -1270,57 +1228,37 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/notes" },
           ),
         ) { entry ->
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.DashboardCommunications),
-          ) {
-            CommunicationsRoute(
-              initialTab = entry.arguments?.getString("tab") ?: "board",
-              initialCommunicationPubId = entry.arguments?.getString("pubId"),
-              initialCommunicationEvtCode = entry.arguments?.getString("evtCode"),
-              initialNoteId = entry.arguments?.getString("noteId"),
-              initialNoteCategoryCode = entry.arguments?.getString("categoryCode"),
-              onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
-            )
-          }
+          CommunicationsRoute(
+            initialTab = entry.arguments?.getString("tab") ?: "board",
+            initialCommunicationPubId = entry.arguments?.getString("pubId"),
+            initialCommunicationEvtCode = entry.arguments?.getString("evtCode"),
+            initialNoteId = entry.arguments?.getString("noteId"),
+            initialNoteCategoryCode = entry.arguments?.getString("categoryCode"),
+            onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
+          )
         }
         composable("notes") {
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.HubNotes),
-          ) {
-            CommunicationsRoute(
-              initialTab = "notes",
-              onBack = navController::navigateUp,
-            )
-          }
+          CommunicationsRoute(
+            initialTab = "notes",
+            onBack = navController::navigateUp,
+          )
         }
         composable("more") {
           MoreHubScreen(
             currentRoute = currentRoute ?: "more",
-            onOpenNotes = { navigateRoute("notes", MotionOrigin.HubNotes) },
-            onOpenLessons = { navigateRoute("lessons", MotionOrigin.HubLessons) },
-            onOpenAbsences = { navigateRoute("absences", MotionOrigin.HubAbsences) },
-            onOpenMaterials = { navigateRoute("materials", MotionOrigin.HubMaterials) },
-            onOpenSettings = { navigateRoute("settings", MotionOrigin.HubSettings) },
-            onOpenHomework = { navigateRoute("homework", MotionOrigin.HubHomework) },
-            onOpenDocuments = { navigateRoute("documents", MotionOrigin.HubDocuments) },
-            onOpenProfessors = { navigateRoute("professors", MotionOrigin.HubProfessors) },
-            onOpenMeetings = { navigateRoute("meetings", MotionOrigin.HubMeetings) },
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
+            onOpenNotes = { navigateRoute("notes") },
+            onOpenLessons = { navigateRoute("lessons") },
+            onOpenAbsences = { navigateRoute("absences") },
+            onOpenMaterials = { navigateRoute("materials") },
+            onOpenSettings = { navigateRoute("settings") },
+            onOpenHomework = { navigateRoute("homework") },
+            onOpenDocuments = { navigateRoute("documents") },
+            onOpenProfessors = { navigateRoute("professors") },
+            onOpenMeetings = { navigateRoute("meetings") },
           )
         }
         composable("materials") {
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.HubMaterials),
-          ) {
-            MaterialsRoute(onBack = navController::navigateUp)
-          }
+          MaterialsRoute(onBack = navController::navigateUp)
         }
         composable(
           route = "homework?homeworkId={homeworkId}",
@@ -1336,25 +1274,13 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/homework" },
           ),
         ) { entry ->
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.HubHomework),
-          ) {
-            HomeworkRoute(
-              initialHomeworkId = entry.arguments?.getString("homeworkId"),
-              onBack = navController::navigateUp,
-            )
-          }
+          HomeworkRoute(
+            initialHomeworkId = entry.arguments?.getString("homeworkId"),
+            onBack = navController::navigateUp,
+          )
         }
         composable("documents") {
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.HubDocuments),
-          ) {
-            DocumentsRoute(onBack = navController::navigateUp)
-          }
+          DocumentsRoute(onBack = navController::navigateUp)
         }
         composable(
           route = "lessons",
@@ -1362,13 +1288,7 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/lessons" },
           ),
         ) {
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.HubLessons),
-          ) {
-            LessonsRoute(onBack = navController::navigateUp)
-          }
+          LessonsRoute(onBack = navController::navigateUp)
         }
         composable(
           route = "absences?absenceId={absenceId}",
@@ -1384,16 +1304,10 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/absences" },
           ),
         ) { entry ->
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.HubAbsences),
-          ) {
-            AbsencesRoute(
-              initialAbsenceId = entry.arguments?.getString("absenceId"),
-              onBack = navController::navigateUp,
-            )
-          }
+          AbsencesRoute(
+            initialAbsenceId = entry.arguments?.getString("absenceId"),
+            onBack = navController::navigateUp,
+          )
         }
         composable(
           route = "meetings",
@@ -1401,22 +1315,10 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/meetings" },
           ),
         ) {
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.HubMeetings),
-          ) {
-            MeetingsRoute(onBack = navController::navigateUp)
-          }
+          MeetingsRoute(onBack = navController::navigateUp)
         }
         composable("professors") {
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.HubProfessors),
-          ) {
-            ProfessorsRoute(onBack = navController::navigateUp)
-          }
+          ProfessorsRoute(onBack = navController::navigateUp)
         }
         composable(
           route = "settings",
@@ -1424,21 +1326,13 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/settings" },
           ),
         ) {
-          SharedRouteContainer(
-            sharedTransitionScope = this@SharedTransitionLayout,
-            animatedVisibilityScope = this@composable,
-            sharedKey = currentSharedKey(RouteSharedKeys.HubSettings),
-          ) {
-            SettingsRoute(
-              onBack = navController::navigateUp,
-              isCheckingForUpdates = isCheckingForUpdates,
-              updateCheckMessage = updateCheckMessage,
-              onCheckForUpdates = onCheckForUpdates,
-              onClearUpdateCheckMessage = onClearUpdateCheckMessage,
-              sharedTransitionScope = this@SharedTransitionLayout,
-              animatedVisibilityScope = this@composable,
-            )
-          }
+          SettingsRoute(
+            onBack = navController::navigateUp,
+            isCheckingForUpdates = isCheckingForUpdates,
+            updateCheckMessage = updateCheckMessage,
+            onCheckForUpdates = onCheckForUpdates,
+            onClearUpdateCheckMessage = onClearUpdateCheckMessage,
+          )
         }
         composable(
           route = "studentScore?payload={payload}",
@@ -1453,10 +1347,10 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://student-score/import?payload={payload}" },
           ),
         ) { entry ->
-          StudentScoreRoute(initialImportPayload = entry.arguments?.getString("payload"))
-        }
+        StudentScoreRoute(initialImportPayload = entry.arguments?.getString("payload"))
       }
     }
+  }
   }
 }
 
@@ -1466,11 +1360,9 @@ private data class MoreHubAction(
   val eyebrow: String,
   val tone: ExpressiveTone,
   val icon: ImageVector,
-  val sharedKey: String? = null,
   val onClick: () -> Unit,
 )
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 private fun MoreHubScreen(
   currentRoute: String = "more",
@@ -1483,10 +1375,7 @@ private fun MoreHubScreen(
   onOpenDocuments: () -> Unit,
   onOpenProfessors: () -> Unit,
   onOpenMeetings: () -> Unit,
-  sharedTransitionScope: SharedTransitionScope? = null,
-  animatedVisibilityScope: AnimatedVisibilityScope? = null,
 ) {
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
   var showBugReport by rememberSaveable { mutableStateOf(false) }
   if (showBugReport) {
     BugReportScreen(currentRoute = currentRoute, onBack = { showBugReport = false })
@@ -1494,83 +1383,52 @@ private fun MoreHubScreen(
   }
 
   val registerActions = listOf(
-    MoreHubAction("Orario", "Lezioni di oggi e della settimana.", "Lezioni", ExpressiveTone.Info, Icons.Rounded.Schedule, RouteSharedKeys.HubLessons, onOpenLessons),
-    MoreHubAction("Compiti", "Attività assegnate e scadenze.", "Agenda", ExpressiveTone.Warning, Icons.AutoMirrored.Rounded.Assignment, RouteSharedKeys.HubHomework, onOpenHomework),
-    MoreHubAction("Didattica", "File, link e cartelle dei docenti.", "Materiali", ExpressiveTone.Info, Icons.Rounded.FolderCopy, RouteSharedKeys.HubMaterials, onOpenMaterials),
-    MoreHubAction("Documenti e libri", "Pagelle, documenti e testi adottati.", "Archivio", ExpressiveTone.Info, Icons.AutoMirrored.Rounded.LibraryBooks, RouteSharedKeys.HubDocuments, onOpenDocuments),
+    MoreHubAction("Orario", "Lezioni di oggi e della settimana.", "Lezioni", ExpressiveTone.Info, Icons.Rounded.Schedule, onOpenLessons),
+    MoreHubAction("Compiti", "Attività assegnate e scadenze.", "Agenda", ExpressiveTone.Warning, Icons.AutoMirrored.Rounded.Assignment, onOpenHomework),
+    MoreHubAction("Didattica", "File, link e cartelle dei docenti.", "Materiali", ExpressiveTone.Info, Icons.Rounded.FolderCopy, onOpenMaterials),
+    MoreHubAction("Documenti e libri", "Pagelle, documenti e testi adottati.", "Archivio", ExpressiveTone.Info, Icons.AutoMirrored.Rounded.LibraryBooks, onOpenDocuments),
   )
   val peopleActions = listOf(
-    MoreHubAction("Note disciplinari", "Note e sanzioni del registro.", "Comunicazioni", ExpressiveTone.Danger, Icons.Rounded.Report, RouteSharedKeys.HubNotes, onOpenNotes),
-    MoreHubAction("Assenze", "Assenze, ritardi e uscite.", "Presenze", ExpressiveTone.Warning, Icons.Rounded.EventBusy, RouteSharedKeys.HubAbsences, onOpenAbsences),
-    MoreHubAction("Colloqui", "Disponibilità e prenotazioni.", "Docenti", ExpressiveTone.Info, Icons.Rounded.Forum, RouteSharedKeys.HubMeetings, onOpenMeetings),
-    MoreHubAction("Professori", "Contatti e andamento per docente.", "Docenti", ExpressiveTone.Neutral, Icons.Rounded.CoPresent, RouteSharedKeys.HubProfessors, onOpenProfessors),
+    MoreHubAction("Note disciplinari", "Note e sanzioni del registro.", "Comunicazioni", ExpressiveTone.Danger, Icons.Rounded.Report, onOpenNotes),
+    MoreHubAction("Assenze", "Assenze, ritardi e uscite.", "Presenze", ExpressiveTone.Warning, Icons.Rounded.EventBusy, onOpenAbsences),
+    MoreHubAction("Colloqui", "Disponibilità e prenotazioni.", "Docenti", ExpressiveTone.Info, Icons.Rounded.Forum, onOpenMeetings),
+    MoreHubAction("Professori", "Contatti e andamento per docente.", "Docenti", ExpressiveTone.Neutral, Icons.Rounded.CoPresent, onOpenProfessors),
   )
 
-  Scaffold(
-    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Altro",
-        subtitle = "Strumenti del registro, raccolti per ciò che devi fare.",
-        scrollBehavior = scrollBehavior,
-      )
-    },
-  ) { paddingValues ->
-    LazyColumn(
-      modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(
-        start = 20.dp,
-        end = 20.dp,
-        top = paddingValues.calculateTopPadding() + 18.dp,
-        bottom = paddingValues.calculateBottomPadding() + 24.dp,
-      ),
-      verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-      item { ExpressiveAccentLabel("Registro") }
-      item {
-        MoreHubActionGroup(registerActions, sharedTransitionScope, animatedVisibilityScope)
-      }
-      item { ExpressiveAccentLabel("Persone e presenza") }
-      item {
-        MoreHubActionGroup(peopleActions, sharedTransitionScope, animatedVisibilityScope)
-      }
-      item { ExpressiveAccentLabel("App") }
-      item {
-        ExpressiveListGroup {
-          RegisterListRow(
-            title = "Segnala un problema",
-            subtitle = "Issue GitHub pubblica con diagnostica minima modificabile.",
-            eyebrow = "Feedback",
-            tone = ExpressiveTone.Info,
-            leading = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
-            onClick = { showBugReport = true },
-          )
-          ExpressiveListDivider()
-          RegisterListRow(
-            title = "Impostazioni",
-            subtitle = "Account, aspetto, notifiche, dati e aggiornamenti.",
-            eyebrow = "Profilo",
-            modifier = Modifier.expressiveSharedBounds(
-              sharedTransitionScope = sharedTransitionScope,
-              animatedVisibilityScope = animatedVisibilityScope,
-              sharedKey = RouteSharedKeys.HubSettings,
-            ),
-            leading = { Icon(Icons.Rounded.Settings, contentDescription = null) },
-            onClick = onOpenSettings,
-          )
-        }
+  FluidScreen(
+    title = "Altro",
+    subtitle = "Strumenti del registro, raccolti per ciò che devi fare.",
+  ) {
+    item { FluidSectionHeader("Registro") }
+    item { MoreHubActionGroup(registerActions) }
+    item { FluidSectionHeader("Persone e presenza") }
+    item { MoreHubActionGroup(peopleActions) }
+    item { FluidSectionHeader("App") }
+    item {
+      ExpressiveListGroup {
+        RegisterListRow(
+          title = "Segnala un problema",
+          subtitle = "Issue GitHub pubblica con diagnostica minima modificabile.",
+          eyebrow = "Feedback",
+          tone = ExpressiveTone.Info,
+          leading = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
+          onClick = { showBugReport = true },
+        )
+        ExpressiveListDivider()
+        RegisterListRow(
+          title = "Impostazioni",
+          subtitle = "Account, aspetto, notifiche, dati e aggiornamenti.",
+          eyebrow = "Profilo",
+          leading = { Icon(Icons.Rounded.Settings, contentDescription = null) },
+          onClick = onOpenSettings,
+        )
       }
     }
   }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun MoreHubActionGroup(
-  actions: List<MoreHubAction>,
-  sharedTransitionScope: SharedTransitionScope?,
-  animatedVisibilityScope: AnimatedVisibilityScope?,
-) {
+private fun MoreHubActionGroup(actions: List<MoreHubAction>) {
   ExpressiveListGroup {
     actions.forEachIndexed { index, action ->
       RegisterListRow(
@@ -1578,11 +1436,6 @@ private fun MoreHubActionGroup(
         subtitle = action.subtitle,
         eyebrow = action.eyebrow,
         tone = action.tone,
-        modifier = Modifier.expressiveSharedBounds(
-          sharedTransitionScope = sharedTransitionScope,
-          animatedVisibilityScope = animatedVisibilityScope,
-          sharedKey = action.sharedKey,
-        ),
         leading = { Icon(action.icon, contentDescription = null) },
         onClick = action.onClick,
       )
@@ -1591,212 +1444,3 @@ private fun MoreHubActionGroup(
   }
 }
 
-@Deprecated("Kept temporarily as a visual reference while the grouped hub stabilizes")
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun LegacyMoreHubScreen(
-  currentRoute: String = "more",
-  onOpenLessons: () -> Unit,
-  onOpenAbsences: () -> Unit,
-  onOpenMaterials: () -> Unit,
-  onOpenSettings: () -> Unit,
-  onOpenNotes: () -> Unit,
-  onOpenHomework: () -> Unit,
-  onOpenDocuments: () -> Unit,
-  onOpenProfessors: () -> Unit,
-  onOpenMeetings: () -> Unit,
-  sharedTransitionScope: SharedTransitionScope? = null,
-  animatedVisibilityScope: AnimatedVisibilityScope? = null,
-) {
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-  var showBugReport by rememberSaveable { mutableStateOf(false) }
-
-  if (showBugReport) {
-    BugReportScreen(
-      currentRoute = currentRoute,
-      onBack = { showBugReport = false },
-    )
-    return
-  }
-
-  Scaffold(
-    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Altro",
-        subtitle = "Le sezioni secondarie restano ordinate per compito, con orario, assenze e profilo in una vista unica.",
-        scrollBehavior = scrollBehavior,
-      )
-    },
-  ) { paddingValues ->
-    LazyColumn(
-      modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(
-        start = 20.dp,
-        end = 20.dp,
-        top = paddingValues.calculateTopPadding() + 24.dp,
-        bottom = paddingValues.calculateBottomPadding() + 24.dp,
-      ),
-      verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-      item { ExpressiveAccentLabel("Registro") }
-      item {
-        RegisterListRow(
-          title = "Orario",
-          subtitle = "Lezioni del giorno e settimana corrente, generato automaticamente.",
-          eyebrow = "Lezioni",
-          tone = ExpressiveTone.Info,
-          modifier = Modifier.expressiveSharedBounds(
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            sharedKey = RouteSharedKeys.HubLessons,
-          ),
-          onClick = onOpenLessons,
-          badge = { StatusBadge("ORARIO", tone = ExpressiveTone.Info) },
-          leading = { Icon(Icons.Rounded.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-      }
-      item {
-        RegisterListRow(
-          title = "Didattica",
-          subtitle = "Materiali condivisi, link e file dei docenti.",
-          eyebrow = "Didattica",
-          tone = ExpressiveTone.Info,
-          modifier = Modifier.expressiveSharedBounds(
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            sharedKey = RouteSharedKeys.HubMaterials,
-          ),
-          onClick = onOpenMaterials,
-          badge = { StatusBadge("DIDATTICA", tone = ExpressiveTone.Info) },
-          leading = { Icon(Icons.Rounded.FolderCopy, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-      }
-      item {
-        RegisterListRow(
-          title = "Compiti",
-          subtitle = "Compiti assegnati dai docenti con data di consegna.",
-          eyebrow = "Agenda",
-          tone = ExpressiveTone.Warning,
-          modifier = Modifier.expressiveSharedBounds(
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            sharedKey = RouteSharedKeys.HubHomework,
-          ),
-          onClick = onOpenHomework,
-          badge = { StatusBadge("COMPITI", tone = ExpressiveTone.Warning) },
-          leading = { Icon(Icons.AutoMirrored.Rounded.Assignment, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-      }
-      item {
-        RegisterListRow(
-          title = "Documenti e libri",
-          subtitle = "Documenti della scuola, pagelle e libri scolastici adottati.",
-          eyebrow = "Documenti",
-          tone = ExpressiveTone.Info,
-          modifier = Modifier.expressiveSharedBounds(
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            sharedKey = RouteSharedKeys.HubDocuments,
-          ),
-          onClick = onOpenDocuments,
-          badge = { StatusBadge("DOCUMENTI", tone = ExpressiveTone.Info) },
-          leading = { Icon(Icons.AutoMirrored.Rounded.LibraryBooks, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-      }
-      item {
-        RegisterListRow(
-          title = "Note disciplinari",
-          subtitle = "Storico delle note e sanzioni disciplinari.",
-          eyebrow = "Comunicazioni",
-          tone = ExpressiveTone.Danger,
-          modifier = Modifier.expressiveSharedBounds(
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            sharedKey = RouteSharedKeys.HubNotes,
-          ),
-          onClick = onOpenNotes,
-          badge = { StatusBadge("NOTE", tone = ExpressiveTone.Danger) },
-          leading = { Icon(Icons.Rounded.Report, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-      }
-      item {
-        RegisterListRow(
-          title = "Assenze",
-          subtitle = "Storico di assenze, ritardi e uscite anticipate.",
-          eyebrow = "Presenze",
-          tone = ExpressiveTone.Warning,
-          modifier = Modifier.expressiveSharedBounds(
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            sharedKey = RouteSharedKeys.HubAbsences,
-          ),
-          onClick = onOpenAbsences,
-          badge = { StatusBadge("PRESENZE", tone = ExpressiveTone.Warning) },
-          leading = { Icon(Icons.Rounded.EventBusy, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-      }
-      item {
-        RegisterListRow(
-          title = "Colloqui",
-          subtitle = "Prenotazioni, disponibilita dei docenti e link per partecipare.",
-          eyebrow = "Docenti",
-          tone = ExpressiveTone.Info,
-          modifier = Modifier.expressiveSharedBounds(
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            sharedKey = RouteSharedKeys.HubMeetings,
-          ),
-          onClick = onOpenMeetings,
-          badge = { StatusBadge("COLLOQUI", tone = ExpressiveTone.Info) },
-          leading = { Icon(Icons.Rounded.Forum, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-      }
-      item {
-        RegisterListRow(
-          title = "Professori",
-          subtitle = "Statistiche di presenza, voti assegnati e rigore per ogni docente.",
-          eyebrow = "Docenti",
-          tone = ExpressiveTone.Neutral,
-          modifier = Modifier.expressiveSharedBounds(
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            sharedKey = RouteSharedKeys.HubProfessors,
-          ),
-          onClick = onOpenProfessors,
-          badge = { StatusBadge("PROF") },
-          leading = { Icon(Icons.Rounded.CoPresent, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-      }
-      item { ExpressiveAccentLabel("Profilo") }
-      item {
-        RegisterListRow(
-          title = "Segnala bug",
-          subtitle = "Apri una issue GitHub pubblica con una diagnostica minima modificabile.",
-          eyebrow = "Feedback",
-          tone = ExpressiveTone.Info,
-          onClick = { showBugReport = true },
-          badge = { StatusBadge("BUG", tone = ExpressiveTone.Info) },
-          leading = { Icon(Icons.Rounded.BugReport, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-      }
-      item {
-        RegisterListRow(
-          title = "Profilo e impostazioni",
-          subtitle = "Tema, notifiche, canali Android, sync periodica e account attivo.",
-          eyebrow = "Profilo",
-          tone = ExpressiveTone.Neutral,
-          modifier = Modifier.expressiveSharedBounds(
-            sharedTransitionScope = sharedTransitionScope,
-            animatedVisibilityScope = animatedVisibilityScope,
-            sharedKey = RouteSharedKeys.HubSettings,
-          ),
-          onClick = onOpenSettings,
-          badge = { StatusBadge("PROFILO") },
-          leading = { Icon(Icons.Rounded.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        )
-      }
-    }
-  }
-
-}

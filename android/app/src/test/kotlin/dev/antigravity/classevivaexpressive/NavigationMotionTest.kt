@@ -1,79 +1,55 @@
 package dev.antigravity.classevivaexpressive
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class NavigationMotionTest {
 
   @Test
-  fun topLevelSibling_usesTopLevelSwitch() {
+  fun topLevelSibling_crossFades() {
     val decision = decideRouteMotion(fromRoute = "home", toRoute = "grades")
 
     assertEquals(RouteMotionKind.TopLevelSwitch, decision.kind)
-    assertNull(decision.sharedKey)
   }
 
   @Test
-  fun requestedDashboardSharedKey_usesSharedContainer() {
-    val decision = decideRouteMotion(
-      fromRoute = "home",
-      toRoute = "grades",
-      motionOrigin = MotionOrigin.DashboardGrades,
-    )
+  fun topLevelSibling_crossFadesWhenTargetCarriesArguments() {
+    val decision = decideRouteMotion(fromRoute = "home", toRoute = "communications?tab=board")
 
-    assertEquals(RouteMotionKind.SharedContainer, decision.kind)
-    assertEquals(RouteSharedKeys.DashboardGrades, decision.sharedKey)
+    assertEquals(RouteMotionKind.TopLevelSwitch, decision.kind)
   }
 
   @Test
-  fun returningFromSharedDestination_keepsSharedContainer() {
-    val decision = decideRouteMotion(
-      fromRoute = "grades",
-      toRoute = "home",
-      motionOrigin = MotionOrigin.DashboardGrades,
-    )
+  fun tabToDetail_pushes() {
+    val decision = decideRouteMotion(fromRoute = "more", toRoute = "settings")
 
-    assertEquals(RouteMotionKind.SharedContainer, decision.kind)
-    assertEquals(RouteSharedKeys.DashboardGrades, decision.sharedKey)
+    assertEquals(RouteMotionKind.Push, decision.kind)
   }
 
   @Test
-  fun moreToHubChild_usesSharedContainer() {
-    val decision = decideRouteMotion(
-      fromRoute = "more",
-      toRoute = "settings",
-      motionOrigin = MotionOrigin.HubSettings,
-    )
+  fun detailBackToTab_pushes() {
+    val decision = decideRouteMotion(fromRoute = "settings", toRoute = "more")
 
-    assertEquals(RouteMotionKind.SharedContainer, decision.kind)
-    assertEquals(RouteSharedKeys.HubSettings, decision.sharedKey)
+    assertEquals(RouteMotionKind.Push, decision.kind)
   }
 
   @Test
-  fun destinationSharedKey_mapsCommunicationsRoute() {
-    val sharedKey = RouteSharedKeys.forDestinationBase("communications?tab={tab}")
-
-    assertEquals(RouteSharedKeys.DashboardCommunications, sharedKey)
-  }
-
-  @Test
-  fun unknownRoute_usesFallbackScale() {
+  fun detailToDetail_pushes() {
     val decision = decideRouteMotion(fromRoute = "studentScore", toRoute = "settings")
 
-    assertEquals(RouteMotionKind.FallbackScale, decision.kind)
-    assertNull(decision.sharedKey)
+    assertEquals(RouteMotionKind.Push, decision.kind)
+  }
+
+  @Test
+  fun unknownRoutes_push() {
+    val decision = decideRouteMotion(fromRoute = null, toRoute = null)
+
+    assertEquals(RouteMotionKind.Push, decision.kind)
   }
 
   @Test
   fun routeNormalization_stripsArgumentsAndPath() {
     assertEquals("grades", normalizeRoute("grades?gradeId={gradeId}"))
     assertEquals("student-score", normalizeRoute("student-score/import"))
-  }
-
-  @Test
-  fun motionOrigin_roundTripsThroughStableWireName() {
-    assertEquals(MotionOrigin.HubDocuments, MotionOrigin.fromWireName("hub_documents"))
-    assertNull(MotionOrigin.fromWireName("unknown"))
   }
 }

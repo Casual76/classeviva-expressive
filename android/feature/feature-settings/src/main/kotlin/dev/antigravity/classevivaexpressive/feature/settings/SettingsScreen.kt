@@ -7,49 +7,46 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.FileUpload
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material.icons.rounded.ColorLens
-import androidx.compose.material.icons.rounded.Dns
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,8 +54,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -72,22 +69,30 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.AgendaChanne
 import dev.antigravity.classevivaexpressive.core.data.notifications.CommunicationsChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.GradesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChannelId
+import dev.antigravity.classevivaexpressive.core.data.notifications.LiveTimetableChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.NotesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
-import dev.antigravity.classevivaexpressive.core.data.notifications.LiveTimetableChannelId
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidChip
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidColorDot
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidMotion
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSegmentedControl
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSwitch
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.LocalFluidOriginTracker
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListDivider
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListGroup
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SectionTitle
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.classevivaBrandAccent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveAccentPresets
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
 import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupRepository
@@ -103,9 +108,9 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearReposito
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
-import javax.inject.Inject
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -336,14 +341,19 @@ fun SettingsRoute(
   onCheckForUpdates: () -> Unit = {},
   onClearUpdateCheckMessage: () -> Unit = {},
   viewModel: SettingsViewModel = hiltViewModel(),
-  sharedTransitionScope: SharedTransitionScope? = null,
-  animatedVisibilityScope: AnimatedVisibilityScope? = null,
 ) {
-  @Suppress("UNUSED_VARIABLE")
-  val motionScopes = sharedTransitionScope to animatedVisibilityScope
   val state by viewModel.state.collectAsStateWithLifecycle()
   var sectionName by rememberSaveable { mutableStateOf<String?>(null) }
   val section = sectionName?.let { name -> SettingsSection.entries.firstOrNull { it.name == name } }
+  val originTracker = LocalFluidOriginTracker.current
+  var paneOrigin by remember { mutableStateOf(TransformOrigin.Center) }
+  LaunchedEffect(sectionName) {
+    // Read once, as the section changes: the tracker holds the tap that caused this change, and by
+    // the time the pane closes that tap is long gone — so the anchor has to be kept here.
+    if (sectionName != null) {
+      paneOrigin = originTracker?.consumePending() ?: TransformOrigin.Center
+    }
+  }
   val context = LocalContext.current
   val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
     viewModel.refresh()
@@ -363,35 +373,66 @@ fun SettingsRoute(
     }
   }
   BackHandler(enabled = section != null, onBack = navigateBack)
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-  Scaffold(
-    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = section?.title ?: "Impostazioni",
-        subtitle = section?.subtitle ?: "Tutto ciò che serve, senza il muro di opzioni.",
-        onBack = if (section != null || onBack != null) navigateBack else null,
-        scrollBehavior = scrollBehavior,
-        actions = {
-          if (section == SettingsSection.Diagnostics) {
-            IconButton(onClick = viewModel::refresh) {
-              Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna diagnostica")
-            }
-          }
-        },
+  // Sections used to appear and disappear inside a single list with no transition at all, which is
+  // why moving around settings felt inert next to the rest of the app. Each section is now its own
+  // pane, pushed and popped on the same motion the navigator uses for real destinations.
+  AnimatedContent(
+    targetState = section,
+    modifier = modifier.fillMaxSize(),
+    transitionSpec = {
+      val opening = targetState != null
+      val spring = spring<Float>(dampingRatio = 0.86f, stiffness = FluidMotion.ResponseStandard)
+      val collapse = spring<Float>(
+        dampingRatio = FluidMotion.DampingChrome,
+        stiffness = FluidMotion.ResponseSnappy,
       )
+      // The same motion the route transitions use, for the same reason: a settings section is
+      // opened *out of* the row you tapped, so it grows from there and collapses back into it.
+      // Anchoring both panes to one point is what makes the pair read as a single movement.
+      val anchor = paneOrigin
+      val transform = if (opening) {
+        (
+          fadeIn(animationSpec = tween(70, easing = FluidMotion.EaseOut)) +
+            scaleIn(initialScale = 0.80f, transformOrigin = anchor, animationSpec = spring)
+          ) togetherWith scaleOut(
+          targetScale = 0.94f,
+          transformOrigin = anchor,
+          animationSpec = spring,
+        )
+      } else {
+        scaleIn(
+          initialScale = 0.94f,
+          transformOrigin = anchor,
+          animationSpec = spring,
+        ) togetherWith (
+          fadeOut(animationSpec = tween(130, delayMillis = 110, easing = FluidMotion.EaseIn)) +
+            scaleOut(targetScale = 0.80f, transformOrigin = anchor, animationSpec = collapse)
+          )
+      }
+      // Opening puts the arriving pane on top; closing leaves the departing one there, so the pane
+      // doing the travelling is always the one in front.
+      transform.targetContentZIndex = if (opening) 1f else 0f
+      transform.using(SizeTransform(clip = false))
     },
-  ) { paddingValues ->
-    LazyColumn(
-      modifier = Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(
-        start = 20.dp,
-        end = 20.dp,
-        top = paddingValues.calculateTopPadding() + 18.dp,
-        bottom = paddingValues.calculateBottomPadding() + 32.dp,
-      ),
-      verticalArrangement = Arrangement.spacedBy(12.dp),
+    label = "settings section",
+  ) { section ->
+    FluidScreen(
+      title = section?.title ?: "Impostazioni",
+      subtitle = section?.subtitle ?: "Tutto ciò che serve, senza il muro di opzioni.",
+      onBack = if (section != null || onBack != null) navigateBack else null,
+      actions = {
+        if (section == SettingsSection.Diagnostics) {
+          FluidBarAction(
+            icon = Icons.Rounded.Refresh,
+            contentDescription = "Aggiorna diagnostica",
+            onClick = viewModel::refresh,
+          )
+        }
+      },
+      isRefreshing = state.isRefreshing,
+      onRefresh = viewModel::refresh,
+      itemSpacing = 12.dp,
     ) {
       if (section == null) {
         item {
@@ -442,60 +483,51 @@ fun SettingsRoute(
           )
         }
         item {
-          SectionTitle(eyebrow = "Registro", title = "Anno scolastico")
+          FluidSectionHeader(title = "Anno scolastico")
         }
         item {
           FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             state.availableSchoolYears.forEach { year ->
-              FilterChip(
+              FluidChip(
+                label = year.label,
                 selected = state.selectedSchoolYear.id == year.id,
                 onClick = { viewModel.selectSchoolYear(year) },
-                label = { Text(year.label) },
               )
             }
           }
         }
         item {
-          Button(onClick = viewModel::logout, modifier = Modifier.fillMaxWidth()) {
-            Text("Disconnetti questo dispositivo")
-          }
+          FluidButton(
+            text = "Disconnetti questo dispositivo",
+            onClick = viewModel::logout,
+            style = FluidButtonStyle.Filled,
+            fillWidth = true,
+          )
         }
       }
 
       if (section == SettingsSection.Appearance) {
-        item { SectionTitle(eyebrow = "Tema", title = "Modalità colore") }
+        item { FluidSectionHeader(title = "Tema") }
         item {
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ThemeMode.entries.forEach { mode ->
-              FilterChip(
-                selected = state.settings.themeMode == mode,
-                onClick = { viewModel.setThemeMode(mode) },
-                label = { Text(mode.label()) },
-              )
-            }
-          }
+          // Four mutually exclusive options that all fit on one row: exactly what a segmented
+          // control is for. As a row of chips it read as four independent toggles.
+          FluidSegmentedControl(
+            options = ThemeMode.entries,
+            selected = state.settings.themeMode,
+            onSelect = viewModel::setThemeMode,
+            label = { it.label() },
+          )
         }
-        item { SectionTitle(eyebrow = "Personalità", title = "Colore accento") }
+        item { FluidSectionHeader(title = "Accento") }
         item {
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-              selected = state.settings.accentMode == AccentMode.BRAND,
-              onClick = { viewModel.setAccentMode(AccentMode.BRAND) },
-              label = { Text("Classeviva") },
-            )
-            FilterChip(
-              selected = state.settings.accentMode == AccentMode.DYNAMIC,
-              onClick = { viewModel.setAccentMode(AccentMode.DYNAMIC) },
-              label = { Text("Dynamic") },
-            )
-            expressiveAccentPresets.forEach { preset ->
-              FilterChip(
-                selected = state.settings.accentMode == AccentMode.CUSTOM_PRESET && state.settings.customAccentName == preset.name,
-                onClick = { viewModel.setAccentPreset(preset.name) },
-                label = { Text(preset.name.replaceFirstChar(Char::uppercase)) },
-              )
-            }
-          }
+          // Colour is the whole point of this control, so the swatch *is* the control. A row of
+          // named chips made the reader map a word onto a colour they could not see.
+          AccentPicker(
+            settings = state.settings,
+            onSelectBrand = { viewModel.setAccentMode(AccentMode.BRAND) },
+            onSelectDynamic = { viewModel.setAccentMode(AccentMode.DYNAMIC) },
+            onSelectPreset = viewModel::setAccentPreset,
+          )
         }
         item {
           SettingToggleRow(
@@ -568,22 +600,22 @@ fun SettingsRoute(
           )
         }
         item {
-          OutlinedButton(
+          FluidButton(
+            text = "Esporta backup",
             onClick = { exportBackupLauncher.launch(viewModel.backupFileName()) },
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            Icon(Icons.Rounded.FileDownload, contentDescription = null)
-            Text("Esporta backup")
-          }
+            style = FluidButtonStyle.Tinted,
+            fillWidth = true,
+            leading = { Icon(Icons.Rounded.FileDownload, contentDescription = null) },
+          )
         }
         item {
-          Button(
+          FluidButton(
+            text = "Importa backup",
             onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*", "*/*")) },
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            Icon(Icons.Rounded.FileUpload, contentDescription = null)
-            Text("Importa backup")
-          }
+            style = FluidButtonStyle.Filled,
+            fillWidth = true,
+            leading = { Icon(Icons.Rounded.FileUpload, contentDescription = null) },
+          )
         }
       }
 
@@ -597,7 +629,7 @@ fun SettingsRoute(
           )
         }
         if (state.capabilities.isNotEmpty()) {
-          item { SectionTitle(eyebrow = "Registro", title = "Funzionalità disponibili") }
+          item { FluidSectionHeader(title = "Funzionalità disponibili") }
           items(state.capabilities, key = { it.feature.name }) { capability -> CapabilityRow(capability) }
         }
       }
@@ -637,466 +669,27 @@ fun SettingsRoute(
             checked = channelEnabledInSettings(channel.id, state.settings),
             onCheckedChange = { viewModel.setNotificationCategoryEnabled(channel.id, it) },
             badge = {
-              TextButton(onClick = { context.openChannelNotificationSettings(channel.id) }) {
-                Text("Android")
-              }
+              FluidButton(
+                text = "Android",
+                onClick = { context.openChannelNotificationSettings(channel.id) },
+                style = FluidButtonStyle.Plain,
+              )
             },
           )
         }
         item {
-          OutlinedButton(onClick = viewModel::sendTestNotification, modifier = Modifier.fillMaxWidth()) {
-            Text("Invia notifica di test")
-          }
+          FluidButton(
+            text = "Invia notifica di test",
+            onClick = viewModel::sendTestNotification,
+            style = FluidButtonStyle.Tinted,
+            fillWidth = true,
+          )
         }
       }
 
       state.lastMessage?.let { message ->
         item {
           InlineMessageCard(message = message, title = "Impostazioni", onDismiss = viewModel::clearMessage)
-        }
-      }
-    }
-  }
-}
-
-@Deprecated("Kept temporarily as a reference while the sectioned settings UI stabilizes")
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
-@Composable
-private fun LegacySettingsRoute(
-  modifier: Modifier = Modifier,
-  onBack: (() -> Unit)? = null,
-  isCheckingForUpdates: Boolean = false,
-  updateCheckMessage: String? = null,
-  onCheckForUpdates: () -> Unit = {},
-  onClearUpdateCheckMessage: () -> Unit = {},
-  viewModel: SettingsViewModel = hiltViewModel(),
-  sharedTransitionScope: SharedTransitionScope? = null,
-  animatedVisibilityScope: AnimatedVisibilityScope? = null,
-) {
-  val state by viewModel.state.collectAsStateWithLifecycle()
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-  val lazyListState = rememberLazyListState()
-
-  val permissionLauncher = rememberLauncherForActivityResult(
-    ActivityResultContracts.RequestPermission()
-  ) { isGranted ->
-    viewModel.refresh()
-  }
-
-  val requestNotificationPermission = {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-    }
-  }
-
-  val context = LocalContext.current
-  val requestBatteryOptimizationExemption = {
-    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-      data = Uri.parse("package:${context.packageName}")
-    }
-    context.startActivity(intent)
-  }
-  val exportBackupLauncher = rememberLauncherForActivityResult(
-    ActivityResultContracts.CreateDocument("application/json"),
-  ) { uri ->
-    uri?.let(viewModel::exportBackup)
-  }
-  val importBackupLauncher = rememberLauncherForActivityResult(
-    ActivityResultContracts.OpenDocument(),
-  ) { uri ->
-    uri?.let(viewModel::importBackup)
-  }
-
-  val localChannelStates = listOf(
-    state.settings.notificationPreferences.homework,
-    state.settings.notificationPreferences.communications,
-    state.settings.notificationPreferences.absences,
-    state.settings.notificationPreferences.grades,
-    state.settings.notificationPreferences.agenda,
-    state.settings.notificationPreferences.notes,
-    state.settings.notificationPreferences.test,
-    state.settings.notificationPreferences.liveTimetable,
-  )
-  val enabledLocalChannels = localChannelStates.count { it }
-  val enabledSystemChannels = state.runtimeState.channels.count { it.enabled }
-  val openAppNotificationSettings = remember(context) {
-    { context.openAppNotificationSettings() }
-  }
-  val openChannelNotificationSettings = remember(context) {
-    { channelId: String -> context.openChannelNotificationSettings(channelId) }
-  }
-
-  Scaffold(
-    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Impostazioni",
-        subtitle = "Gestisci aspetto, notifiche e sincronizzazione account.",
-        onBack = onBack,
-        scrollBehavior = scrollBehavior,
-        actions = {
-          IconButton(onClick = { viewModel.refresh() }) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
-      )
-    }
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier
-        .padding(paddingValues)
-        .fillMaxSize(),
-      isRefreshing = state.isRefreshing,
-      onRefresh = { viewModel.refresh() },
-    ) {
-      LazyColumn(
-        state = lazyListState,
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-      ) {
-        item {
-          val parallaxOffset = remember {
-            derivedStateOf {
-              val firstVisibleItemIndex = lazyListState.firstVisibleItemIndex
-              if (firstVisibleItemIndex == 0) {
-                val offset = lazyListState.firstVisibleItemScrollOffset
-                -offset.toFloat() * 0.2f
-              } else {
-                0f
-              }
-            }
-          }
-
-          ExpressiveHeroCard(
-            modifier = Modifier
-              .fillMaxWidth()
-              .graphicsLayer {
-                translationY = parallaxOffset.value
-              },
-            title = state.session?.profile?.name?.ifBlank { "Studente" } ?: "Nessuna sessione attiva",
-            subtitle = buildString {
-              append(state.session?.username ?: "Login richiesto")
-              state.session?.profile?.schoolClass?.takeIf(String::isNotBlank)?.let {
-                append(" / ")
-                append(it)
-              }
-              state.session?.profile?.school?.takeIf(String::isNotBlank)?.let {
-                append(" / ")
-                append(it)
-              }
-            },
-          )
-        }
-        item {
-          AppUpdateSettingsCard(
-            isChecking = isCheckingForUpdates,
-            message = updateCheckMessage,
-            onCheckForUpdates = onCheckForUpdates,
-            onClearMessage = onClearUpdateCheckMessage,
-          )
-        }
-
-        item {
-          SectionTitle(
-            eyebrow = "Comunicazione",
-            title = "Notifiche e Sincronizzazione",
-          )
-        }
-        item {
-          RuntimeStateCard(
-            runtimeState = state.runtimeState,
-            notificationsEnabled = state.settings.notificationsEnabled,
-            periodicSyncEnabled = state.settings.periodicSyncEnabled,
-            enabledLocalChannels = enabledLocalChannels,
-            totalLocalChannels = localChannelStates.size,
-            enabledSystemChannels = enabledSystemChannels,
-            totalSystemChannels = state.runtimeState.channels.size,
-            onRequestPermission = requestNotificationPermission,
-            onOpenNotificationSettings = openAppNotificationSettings,
-          )
-        }
-        item {
-          SettingToggleRow(
-            title = "Notifiche in app",
-            subtitle = "Abilita o disabilita globalmente le notifiche inviate dall'app.",
-            checked = state.settings.notificationsEnabled,
-            onCheckedChange = { enabled ->
-              viewModel.setNotifications(enabled)
-              if (enabled && !state.runtimeState.permissionGranted) {
-                requestNotificationPermission()
-              }
-            },
-            icon = { Icon(Icons.Rounded.NotificationsActive, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
-          )
-        }
-        item {
-          SettingToggleRow(
-            title = "Sincronizzazione periodica",
-            subtitle = "Mantiene aggiornati i dati in background con frequenza adattiva.",
-            checked = state.settings.periodicSyncEnabled,
-            onCheckedChange = viewModel::setPeriodicSync,
-            icon = { Icon(Icons.Rounded.Sync, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
-          )
-        }
-        item {
-          ExpressiveCard {
-            Text("Ottimizzazione Batteria", style = MaterialTheme.typography.titleMedium)
-            Text(
-              "Per garantire che le notifiche e la sincronizzazione funzionino in background, l'app non deve essere soggetta a ottimizzazioni batteria aggressive.",
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            OutlinedButton(
-              onClick = requestBatteryOptimizationExemption,
-              modifier = Modifier.padding(top = 8.dp)
-            ) {
-              Text("Esonera da ottimizzazioni batteria")
-            }
-          }
-        }
-
-        if (state.settings.notificationsEnabled) {
-          item {
-            ExpressiveCard(highlighted = false) {
-              Text(
-                "Canali Notifiche",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-              )
-              Text(
-                "Configura quali eventi generano notifiche push.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-              )
-              
-              Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                state.runtimeState.channels.forEach { channel ->
-                  val localChannelEnabled = channelEnabledInSettings(channel.id, state.settings)
-                  val canTestChannel = state.runtimeState.permissionGranted &&
-                    state.runtimeState.appNotificationsEnabled &&
-                    channel.enabled &&
-                    localChannelEnabled
-                  SettingToggleRow(
-                    title = channel.label.ifBlank { channel.id },
-                    subtitle = channelSubtitle(channel, state.settings),
-                    checked = localChannelEnabled,
-                    onCheckedChange = { enabled ->
-                      viewModel.setNotificationCategoryEnabled(channel.id, enabled)
-                    },
-                    badge = {
-                      Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        if (localChannelEnabled) {
-                          TextButton(
-                            onClick = { viewModel.sendTestNotificationForChannel(channel.id) },
-                            enabled = canTestChannel,
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                          ) {
-                            Text("Test", style = MaterialTheme.typography.labelSmall)
-                          }
-                        }
-                        TextButton(
-                          onClick = { openChannelNotificationSettings(channel.id) },
-                          contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                        ) {
-                          Text("OS", style = MaterialTheme.typography.labelSmall)
-                        }
-                        StatusBadge(
-                          label = if (channel.enabled) "ON" else "OFF",
-                          tone = if (channel.enabled) ExpressiveTone.Success else ExpressiveTone.Warning,
-                        )
-                      }
-                    },
-                  )
-                }
-              }
-            }
-          }
-          item {
-            FlowRow(
-              horizontalArrangement = Arrangement.spacedBy(10.dp),
-              verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-              val canSendTestNotification = state.runtimeState.permissionGranted &&
-                state.runtimeState.appNotificationsEnabled &&
-                state.runtimeState.channels.firstOrNull { it.id == TestChannelId }?.enabled != false &&
-                state.settings.notificationPreferences.test
-              OutlinedButton(
-                onClick = viewModel::sendTestNotification,
-                enabled = canSendTestNotification,
-              ) {
-                Text("Invia notifica di test")
-              }
-              TextButton(onClick = { viewModel.refresh() }) {
-                Text("Rileggi stato di sistema")
-              }
-            }
-          }
-        }
-
-        item {
-          SectionTitle(
-            eyebrow = "Interfaccia",
-            title = "Personalizzazione Aspetto",
-          )
-        }
-        item {
-          ExpressiveCard {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              Icon(Icons.Rounded.ColorLens, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-              Text("Modalità colore", style = MaterialTheme.typography.titleMedium)
-            }
-            FlowRow(
-              horizontalArrangement = Arrangement.spacedBy(10.dp),
-              verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-              ThemeMode.entries.forEach { mode ->
-                FilterChip(
-                  selected = state.settings.themeMode == mode,
-                  onClick = { viewModel.setThemeMode(mode) },
-                  label = { Text(mode.label()) },
-                )
-              }
-            }
-            
-            Text("Colore Accento", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
-            FlowRow(
-              horizontalArrangement = Arrangement.spacedBy(10.dp),
-              verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-              FilterChip(
-                selected = state.settings.accentMode == AccentMode.BRAND,
-                onClick = { viewModel.setAccentMode(AccentMode.BRAND) },
-                label = { Text("Brand Originale") },
-              )
-              FilterChip(
-                selected = state.settings.accentMode == AccentMode.DYNAMIC,
-                onClick = { viewModel.setAccentMode(AccentMode.DYNAMIC) },
-                label = { Text("Dynamic Color") },
-              )
-              expressiveAccentPresets.forEach { preset ->
-                FilterChip(
-                  selected = state.settings.accentMode == AccentMode.CUSTOM_PRESET &&
-                    state.settings.customAccentName == preset.name,
-                  onClick = { viewModel.setAccentPreset(preset.name) },
-                  label = { Text(preset.name.replaceFirstChar { it.uppercase() }) },
-                )
-              }
-            }
-          }
-        }
-        item {
-          SettingToggleRow(
-            title = "Dynamic Color Nativo",
-            subtitle = "Forza i colori monet estratti dal sistema se l'accento e impostato su Dynamic.",
-            checked = state.settings.dynamicColorEnabled,
-            onCheckedChange = viewModel::setDynamicColor,
-          )
-        }
-        item {
-          SettingToggleRow(
-            title = "Contrasto AMOLED",
-            subtitle = "Sostituisce il grigio scuro con il nero profondo per risparmiare batteria.",
-            checked = state.settings.amoledEnabled,
-            onCheckedChange = viewModel::setAmoled,
-          )
-        }
-
-        item {
-          SectionTitle(
-            eyebrow = "Configurazione",
-            title = "Connettività e registro",
-          )
-        }
-        item {
-          ExpressiveCard {
-            Text("Anno Scolastico Attivo", style = MaterialTheme.typography.titleMedium)
-            FlowRow(
-              horizontalArrangement = Arrangement.spacedBy(10.dp),
-              verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-              state.availableSchoolYears.forEach { year ->
-                FilterChip(
-                  selected = state.selectedSchoolYear.id == year.id,
-                  onClick = { viewModel.selectSchoolYear(year) },
-                  label = { Text(year.label) },
-                )
-              }
-            }
-          }
-        }
-        item {
-          ExpressiveCard {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-              Icon(Icons.Rounded.FileDownload, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-              Text("Backup Impostazioni", style = MaterialTheme.typography.titleMedium)
-            }
-            Text(
-              "Esporta o ripristina preferenze, anno scolastico, orario salvato, eventi personalizzati, obiettivi materia e dati locali come voti simulati o già visti.",
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            FlowRow(
-              modifier = Modifier.padding(top = 8.dp),
-              horizontalArrangement = Arrangement.spacedBy(10.dp),
-              verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-              OutlinedButton(onClick = { exportBackupLauncher.launch(viewModel.backupFileName()) }) {
-                Icon(Icons.Rounded.FileDownload, contentDescription = null)
-                Text("Esporta file")
-              }
-              Button(onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*", "*/*")) }) {
-                Icon(Icons.Rounded.FileUpload, contentDescription = null)
-                Text("Importa file")
-              }
-            }
-          }
-        }
-        if (state.capabilities.isNotEmpty()) {
-          item {
-            ExpressiveCard {
-              Text("Capability Sbloccate", style = MaterialTheme.typography.titleMedium)
-            }
-          }
-          items(state.capabilities, key = { it.feature.name }) { capability ->
-            CapabilityRow(capability = capability)
-          }
-        }
-
-        item {
-          SectionTitle(
-            eyebrow = "Account",
-            title = "Sessione e Sicurezza",
-          )
-        }
-        item {
-          ExpressiveCard {
-            Text(
-              text = state.session?.profile?.schoolYear?.ifBlank { "Nessun anno selezionato" } ?: "Non sei autenticato",
-              style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-              text = state.session?.profile?.email?.ifBlank { "Email non presente" } ?: "Effettua l'accesso per sincronizzare.",
-              style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Button(
-              onClick = viewModel::logout,
-              modifier = Modifier.padding(top = 8.dp)
-            ) {
-              Text("Disconnetti Dispositivo")
-            }
-          }
-        }
-        
-        state.lastMessage?.let { message ->
-          item {
-            InlineMessageCard(
-              message = message,
-              title = "Impostazioni",
-              onDismiss = viewModel::clearMessage,
-            )
-          }
         }
       }
     }
@@ -1125,24 +718,20 @@ private fun AppUpdateSettingsCard(
       horizontalArrangement = Arrangement.spacedBy(10.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      OutlinedButton(
+      FluidButton(
+        text = if (isChecking) "Controllo..." else "Controlla aggiornamenti",
         onClick = onCheckForUpdates,
+        style = FluidButtonStyle.Tinted,
         enabled = !isChecking,
-      ) {
-        if (isChecking) {
-          ExpressiveLoading(
-            modifier = Modifier.size(18.dp),
-          )
-          Text("Controllo...")
-        } else {
-          Icon(Icons.Rounded.Refresh, contentDescription = null)
-          Text("Controlla aggiornamenti")
-        }
-      }
+        loading = isChecking,
+        leading = { Icon(Icons.Rounded.Refresh, contentDescription = null) },
+      )
       message?.let {
-        TextButton(onClick = onClearMessage) {
-          Text("Nascondi")
-        }
+        FluidButton(
+          text = "Nascondi",
+          onClick = onClearMessage,
+          style = FluidButtonStyle.Plain,
+        )
       }
     }
     message?.let {
@@ -1222,13 +811,17 @@ private fun RuntimeStateCard(
       verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
       if (notificationsEnabled && !runtimeState.permissionGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        OutlinedButton(onClick = onRequestPermission) {
-          Text("Richiedi permesso")
-        }
+        FluidButton(
+          text = "Richiedi permesso",
+          onClick = onRequestPermission,
+          style = FluidButtonStyle.Tinted,
+        )
       }
-      OutlinedButton(onClick = onOpenNotificationSettings) {
-        Text("Impostazioni Android")
-      }
+      FluidButton(
+        text = "Impostazioni Android",
+        onClick = onOpenNotificationSettings,
+        style = FluidButtonStyle.Tinted,
+      )
     }
     if (notificationsEnabled && !runtimeState.appNotificationsEnabled) {
       Text(
@@ -1265,11 +858,64 @@ private fun SettingToggleRow(
         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       badge?.invoke()
-      Switch(
+      FluidSwitch(
         checked = checked,
         onCheckedChange = onCheckedChange,
       )
     }
+  }
+}
+
+/**
+ * The accent row.
+ *
+ * "Dynamic" is shown as the colour the system would actually hand over rather than as a word, and
+ * the brand entry keeps its own swatch so choosing it is a visible choice like any other.
+ */
+@Composable
+private fun AccentPicker(
+  settings: AppSettings,
+  onSelectBrand: () -> Unit,
+  onSelectDynamic: () -> Unit,
+  onSelectPreset: (String) -> Unit,
+) {
+  val isDark = isSystemInDarkTheme()
+  val dynamicColor = dynamicAccentColor(isDark)
+  FlowRow(
+    horizontalArrangement = Arrangement.spacedBy(6.dp),
+    verticalArrangement = Arrangement.spacedBy(6.dp),
+  ) {
+    FluidColorDot(
+      color = classevivaBrandAccent(isDark),
+      selected = settings.accentMode == AccentMode.BRAND,
+      onClick = onSelectBrand,
+    )
+    if (dynamicColor != null) {
+      FluidColorDot(
+        color = dynamicColor,
+        selected = settings.accentMode == AccentMode.DYNAMIC,
+        onClick = onSelectDynamic,
+      )
+    }
+    expressiveAccentPresets.forEach { preset ->
+      FluidColorDot(
+        color = preset.resolve(isDark),
+        selected = settings.accentMode == AccentMode.CUSTOM_PRESET &&
+          settings.customAccentName == preset.name,
+        onClick = { onSelectPreset(preset.name) },
+      )
+    }
+  }
+}
+
+@Composable
+private fun dynamicAccentColor(isDark: Boolean): Color? {
+  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+  val context = LocalContext.current
+  return if (isDark) {
+    dynamicDarkColorScheme(context).primary
+  } else {
+    dynamicLightColorScheme(context).primary
   }
 }
 

@@ -1,8 +1,5 @@
 package dev.antigravity.classevivaexpressive.feature.grades
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,19 +18,11 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,7 +32,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -52,13 +39,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidChip
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveEditorialCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveMiniChart
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradePill
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction
@@ -234,21 +227,18 @@ class GradesViewModel @Inject constructor(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GradesRoute(
   initialGradeId: String? = null,
   modifier: Modifier = Modifier,
   viewModel: GradesViewModel = hiltViewModel(),
-  sharedTransitionScope: SharedTransitionScope? = null,
-  animatedVisibilityScope: AnimatedVisibilityScope? = null,
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   var selectedTab by rememberSaveable { mutableStateOf(TAB_RECENT) }
   var showSimulationDialog by rememberSaveable { mutableStateOf(false) }
   var goalDialogSubject by rememberSaveable { mutableStateOf<String?>(null) }
   var detailSubject by rememberSaveable { mutableStateOf<String?>(null) }
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
   val effectivePeriodCode = remember(state.periods, state.selectedPeriodCode, state.grades) {
     if (state.selectedPeriodCode != null) state.selectedPeriodCode else {
@@ -297,212 +287,204 @@ fun GradesRoute(
     }
   }
 
-  Scaffold(
-    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Voti",
-        subtitle = state.syncStatus.lastSyncLabel(),
-        scrollBehavior = scrollBehavior,
-        titleTrailing = {
-          SyncStatusDot(status = state.syncStatus)
-        },
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
+  FluidScreen(
+    modifier = modifier,
+    title = "Voti",
+    subtitle = state.syncStatus.lastSyncLabel(),
+    titleTrailing = {
+      SyncStatusDot(status = state.syncStatus)
+    },
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
+      )
+      FluidBarAction(
+        icon = Icons.Rounded.Add,
+        contentDescription = "Simulazione",
+        onClick = { showSimulationDialog = true },
+      )
+      if (state.simulation.grades.isNotEmpty()) {
+        FluidBarAction(
+          icon = Icons.Rounded.DeleteSweep,
+          contentDescription = "Pulisci",
+          onClick = viewModel::clearSimulation,
+        )
+      }
+    },
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 18.dp,
+  ) {
+    item {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        MetricTile(
+          label = "Annuale",
+          value = overallAverage?.format2() ?: "--",
+          detail = "Media globale anno",
+          tone = gradeTone(overallAverage),
+          modifier = Modifier.weight(1f),
+        )
+        MetricTile(
+          label = "Periodo",
+          value = periodAverage?.format2() ?: "--",
+          detail = effectivePeriodLabel(state.periods, effectivePeriodCode),
+          tone = gradeTone(periodAverage),
+          modifier = Modifier.weight(1f),
+        )
+        MetricTile(
+          label = "A rischio",
+          value = riskSubjectsCount.toString(),
+          detail = "Materie sotto il 6.0",
+          tone = if (riskSubjectsCount > 0) ExpressiveTone.Danger else ExpressiveTone.Success,
+          modifier = Modifier.weight(1f),
+        )
+      }
+    }
+    
+    if (chartPoints.isNotEmpty()) {
+      item {
+        ExpressiveEditorialCard {
+          Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+              Text(
+                text = "ANDAMENTO",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+              )
+              val latestValue = chartPoints.lastOrNull()
+              if (latestValue != null) {
+                  Text(
+                    text = "Ultimo: ${latestValue.toDouble().format1()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+              }
           }
-          IconButton(onClick = { showSimulationDialog = true }) {
-            Icon(Icons.Rounded.Add, contentDescription = "Simulazione")
+          Box(modifier = Modifier.fillMaxWidth()) {
+              ExpressiveMiniChart(
+                points = chartPoints.takeLast(15),
+                color = MaterialTheme.colorScheme.primary,
+                threshold = 6f,
+                modifier = Modifier.height(110.dp)
+              )
+              // Min/Max axis indicators
+              Column(modifier = Modifier.align(Alignment.TopStart).padding(4.dp)) {
+                  Text("10", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                  Spacer(Modifier.height(70.dp))
+                  Text("2", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+              }
           }
-          if (state.simulation.grades.isNotEmpty()) {
-            IconButton(onClick = viewModel::clearSimulation) {
-              Icon(Icons.Rounded.DeleteSweep, contentDescription = "Pulisci")
-            }
-          }
-        },
+        }
+      }
+    }
+
+    if (state.periods.isNotEmpty()) {
+      item {
+        PeriodSelector(
+          periods = state.periods,
+          selectedCode = effectivePeriodCode,
+          onSelect = viewModel::selectPeriod,
+        )
+      }
+    }
+    
+    item {
+      ExpressivePillTabs(
+        options = listOf(TAB_RECENT, TAB_SUBJECTS),
+        selected = selectedTab,
+        onSelect = { selectedTab = it },
       )
     }
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.padding(paddingValues).fillMaxSize(),
-      isRefreshing = state.isRefreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-      ) {
-        item {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            MetricTile(
-              label = "Annuale",
-              value = overallAverage?.format2() ?: "--",
-              detail = "Media globale anno",
-              tone = gradeTone(overallAverage),
-              modifier = Modifier.weight(1f),
-            )
-            MetricTile(
-              label = "Periodo",
-              value = periodAverage?.format2() ?: "--",
-              detail = effectivePeriodLabel(state.periods, effectivePeriodCode),
-              tone = gradeTone(periodAverage),
-              modifier = Modifier.weight(1f),
-            )
-            MetricTile(
-              label = "A rischio",
-              value = riskSubjectsCount.toString(),
-              detail = "Materie sotto il 6.0",
-              tone = if (riskSubjectsCount > 0) ExpressiveTone.Danger else ExpressiveTone.Success,
-              modifier = Modifier.weight(1f),
+    
+    if (periodUnseen.isNotEmpty()) {
+      item {
+        QuickAction(
+          label = "Segna tutto come già visto",
+          onClick = { viewModel.markGradesSeen(periodUnseen.map(Grade::id)) },
+        )
+      }
+    }
+
+    when (selectedTab) {
+      TAB_RECENT -> {
+        if (filteredGrades.isEmpty()) {
+          item {
+            EmptyState(
+              title = "Nessun voto in questo periodo",
+              detail = "Seleziona un altro periodo oppure attendi la sincronizzazione dei dati.",
             )
           }
-        }
-        
-        if (chartPoints.isNotEmpty()) {
-          item {
-            ExpressiveEditorialCard {
-              Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                  Text(
-                    text = "ANDAMENTO",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                  )
-                  val latestValue = chartPoints.lastOrNull()
-                  if (latestValue != null) {
-                      Text(
-                        text = "Ultimo: ${latestValue.toDouble().format1()}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                      )
-                  }
-              }
-              Box(modifier = Modifier.fillMaxWidth()) {
-                  ExpressiveMiniChart(
-                    points = chartPoints.takeLast(15),
-                    color = MaterialTheme.colorScheme.primary,
-                    threshold = 6f,
-                    modifier = Modifier.height(110.dp)
-                  )
-                  // Min/Max axis indicators
-                  Column(modifier = Modifier.align(Alignment.TopStart).padding(4.dp)) {
-                      Text("10", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                      Spacer(Modifier.height(70.dp))
-                      Text("2", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                  }
-              }
+        } else {
+          items(recentGrades, key = { it.id }) { grade ->
+            val unseen = !state.seenGradeIds.contains(grade.id)
+            val readableDate = remember(grade.date) { grade.date.toReadableDate() }
+            val meta = remember(grade.description, grade.notes, grade.teacher) {
+              listOfNotNull(
+                grade.description ?: grade.notes,
+                grade.teacher,
+              ).joinToString(" / ").ifBlank { null }
             }
-          }
-        }
 
-        if (state.periods.isNotEmpty()) {
-          item {
-            PeriodSelector(
-              periods = state.periods,
-              selectedCode = effectivePeriodCode,
-              onSelect = viewModel::selectPeriod,
-            )
-          }
-        }
-        
-        item {
-          ExpressivePillTabs(
-            options = listOf(TAB_RECENT, TAB_SUBJECTS),
-            selected = selectedTab,
-            onSelect = { selectedTab = it },
-          )
-        }
-        
-        if (periodUnseen.isNotEmpty()) {
-          item {
-            QuickAction(
-              label = "Segna tutto come già visto",
-              onClick = { viewModel.markGradesSeen(periodUnseen.map(Grade::id)) },
-            )
-          }
-        }
-
-        when (selectedTab) {
-          TAB_RECENT -> {
-            if (filteredGrades.isEmpty()) {
-              item {
-                EmptyState(
-                  title = "Nessun voto in questo periodo",
-                  detail = "Seleziona un altro periodo oppure attendi la sincronizzazione dei dati.",
-                )
-              }
-            } else {
-              items(recentGrades, key = { it.id }) { grade ->
-                val unseen = !state.seenGradeIds.contains(grade.id)
-                val readableDate = remember(grade.date) { grade.date.toReadableDate() }
-                val meta = remember(grade.description, grade.notes, grade.teacher) {
-                  listOfNotNull(
-                    grade.description ?: grade.notes,
-                    grade.teacher,
-                  ).joinToString(" / ").ifBlank { null }
+            RegisterListRow(
+              modifier = Modifier,
+              title = grade.subject,
+              subtitle = grade.type.ifBlank { "Valutazione" },
+              eyebrow = readableDate,
+              meta = meta,
+              tone = gradeTone(grade.numericValue),
+              badge = {
+                if (unseen) {
+                  StatusBadge(label = "NUOVO", tone = ExpressiveTone.Primary)
                 }
-
-                RegisterListRow(
-                  modifier = Modifier,
-                  title = grade.subject,
-                  subtitle = grade.type.ifBlank { "Valutazione" },
-                  eyebrow = readableDate,
-                  meta = meta,
-                  tone = gradeTone(grade.numericValue),
-                  badge = {
-                    if (unseen) {
-                      StatusBadge(label = "NUOVO", tone = ExpressiveTone.Primary)
-                    }
-                    if (grade.history.isNotEmpty()) {
-                      StatusBadge(label = "MODIFICATO", tone = ExpressiveTone.Info)
-                    }
-                    GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
-                  },
-                  onClick = { viewModel.openGrade(grade.id) },
-                  animatePress = true,
-                )
-              }
-            }
+                if (grade.history.isNotEmpty()) {
+                  StatusBadge(label = "MODIFICATO", tone = ExpressiveTone.Info)
+                }
+                GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
+              },
+              onClick = { viewModel.openGrade(grade.id) },
+              animatePress = true,
+            )
           }
+        }
+      }
 
-          TAB_SUBJECTS -> {
-            if (subjectRows.isEmpty()) {
-              item {
-                EmptyState(
-                  title = "Mancano voti numerici",
-                  detail = "Le medie per materia vengono calcolate solo in presenza di valutazioni con valore decimale.",
+      TAB_SUBJECTS -> {
+        if (subjectRows.isEmpty()) {
+          item {
+            EmptyState(
+              title = "Mancano voti numerici",
+              detail = "Le medie per materia vengono calcolate solo in presenza di valutazioni con valore decimale.",
+            )
+          }
+        } else {
+          items(subjectRows, key = { it.subject }) { row ->
+            RegisterListRow(
+              modifier = Modifier,
+              title = row.subject,
+              subtitle = row.detail,
+              eyebrow = if (row.average != null && row.average < 6.0) "Materia a rischio" else "Per materia",
+              meta = row.meta,
+              tone = gradeTone(row.average),
+              badge = {
+                row.target?.let {
+                  StatusBadge(
+                    label = "TARGET ${it.format1()}",
+                    tone = ExpressiveTone.Primary,
+                  )
+                }
+                GradePill(
+                  value = row.average?.format2() ?: "--",
+                  numericValue = row.average,
                 )
-              }
-            } else {
-              items(subjectRows, key = { it.subject }) { row ->
-                RegisterListRow(
-                  modifier = Modifier,
-                  title = row.subject,
-                  subtitle = row.detail,
-                  eyebrow = if (row.average != null && row.average < 6.0) "Materia a rischio" else "Per materia",
-                  meta = row.meta,
-                  tone = gradeTone(row.average),
-                  badge = {
-                    row.target?.let {
-                      StatusBadge(
-                        label = "TARGET ${it.format1()}",
-                        tone = ExpressiveTone.Primary,
-                      )
-                    }
-                    GradePill(
-                      value = row.average?.format2() ?: "--",
-                      numericValue = row.average,
-                    )
-                  },
-                  onClick = { detailSubject = row.subject },
-                  animatePress = true,
-                )
-              }
-            }
+              },
+              onClick = { detailSubject = row.subject },
+              animatePress = true,
+            )
           }
         }
       }
@@ -551,7 +533,7 @@ fun GradesRoute(
 
   selectedGrade?.let { grade ->
     var showHistory by rememberSaveable(grade.id) { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = viewModel::dismissGrade) {
+    FluidSheet(onDismissRequest = viewModel::dismissGrade) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -571,19 +553,22 @@ fun GradesRoute(
           }
         )
         if (grade.history.isNotEmpty()) {
-          Button(
+          FluidButton(
+            text = if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${grade.history.size})",
             onClick = { showHistory = !showHistory },
-            modifier = Modifier.fillMaxWidth(),
-          ) {
-            Text(if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${grade.history.size})")
-          }
+            style = FluidButtonStyle.Filled,
+            fillWidth = true,
+          )
         }
         if (showHistory && grade.history.isNotEmpty()) {
           GradeHistorySection(grade = grade)
         }
-        TextButton(onClick = viewModel::dismissGrade, modifier = Modifier.fillMaxWidth()) {
-          Text("Chiudi")
-        }
+        FluidButton(
+          text = "Chiudi",
+          onClick = viewModel::dismissGrade,
+          style = FluidButtonStyle.Plain,
+          fillWidth = true,
+        )
       }
     }
   }
@@ -592,7 +577,7 @@ fun GradesRoute(
 @Composable
 private fun GradeHistorySection(grade: Grade) {
   Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    ExpressiveAccentLabel("Cronologia versioni")
+    FluidSectionHeader("Cronologia versioni")
     GradeVersionRow(
       label = "Versione attuale",
       valueLabel = grade.valueLabel,
@@ -662,7 +647,7 @@ private fun SubjectDetailSheet(
   val oralAvg = calculateSubjectAverage(grades.filter { it.type.contains("orale", true) })
   val practicalAvg = calculateSubjectAverage(grades.filter { it.type.contains("pratico", true) })
 
-  ModalBottomSheet(onDismissRequest = onDismiss) {
+  FluidSheet(onDismissRequest = onDismiss) {
     LazyColumn(
       modifier = Modifier.fillMaxWidth(),
       contentPadding = PaddingValues(24.dp),
@@ -683,7 +668,7 @@ private fun SubjectDetailSheet(
           MetricTile(label = "Pratico", value = practicalAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(practicalAvg))
         }
       }
-      item { ExpressiveAccentLabel("Tutti i voti") }
+      item { FluidSectionHeader("Tutti i voti") }
       items(grades.sortedByDescending { it.date }) { grade ->
           RegisterListRow(
             title = grade.valueLabel,
@@ -712,10 +697,10 @@ private fun PeriodSelector(
     horizontalArrangement = Arrangement.spacedBy(10.dp),
   ) {
     periods.sortedBy { it.order }.forEach { period ->
-      FilterChip(
+      FluidChip(
+        label = period.label.ifBlank { period.description },
         selected = period.code == selectedCode,
         onClick = { onSelect(period.code) },
-        label = { Text(period.label.ifBlank { period.description }) },
       )
     }
   }
@@ -736,25 +721,38 @@ private fun GoalSheet(
   }
   val numeric = valueText.parseDecimal()
 
-  ModalBottomSheet(onDismissRequest = onDismiss) {
+  FluidSheet(onDismissRequest = onDismiss) {
     Column(
       modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Text(text = "Imposta Obiettivo / $subject", style = MaterialTheme.typography.titleLarge)
       Text(text = "Periodo: $periodLabel", style = MaterialTheme.typography.bodyMedium)
-      OutlinedTextField(
+      FluidTextField(
         value = valueText,
         onValueChange = { valueText = it },
         modifier = Modifier.fillMaxWidth(),
-        label = { Text("Media desiderata") },
+        label = "Media desiderata",
         singleLine = true,
       )
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = onClear) { Text("Rimuovi") }
+        FluidButton(
+          text = "Rimuovi",
+          onClick = onClear,
+          style = FluidButtonStyle.Plain,
+        )
         Spacer(Modifier.weight(1f))
-        TextButton(onClick = onDismiss) { Text("Annulla") }
-        Button(onClick = { onSave(numeric ?: 6.0) }, enabled = numeric != null) { Text("Salva") }
+        FluidButton(
+          text = "Annulla",
+          onClick = onDismiss,
+          style = FluidButtonStyle.Plain,
+        )
+        FluidButton(
+          text = "Salva",
+          onClick = { onSave(numeric ?: 6.0) },
+          style = FluidButtonStyle.Filled,
+          enabled = numeric != null,
+        )
       }
     }
   }
@@ -772,19 +770,48 @@ private fun AddSimulationSheet(
   var note by rememberSaveable { mutableStateOf("") }
   val numeric = valueText.parseDecimal()
 
-  ModalBottomSheet(onDismissRequest = onDismiss) {
+  FluidSheet(onDismissRequest = onDismiss) {
     Column(
       modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Text(text = "Voto Simulato", style = MaterialTheme.typography.titleLarge)
-      OutlinedTextField(value = subject, onValueChange = { subject = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Materia") })
-      OutlinedTextField(value = valueText, onValueChange = { valueText = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Valore") })
-      OutlinedTextField(value = type, onValueChange = { type = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Tipologia") })
-      OutlinedTextField(value = note, onValueChange = { note = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Nota") })
+      FluidTextField(
+        value = subject,
+        onValueChange = { subject = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = "Materia",
+      )
+      FluidTextField(
+        value = valueText,
+        onValueChange = { valueText = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = "Valore",
+      )
+      FluidTextField(
+        value = type,
+        onValueChange = { type = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = "Tipologia",
+      )
+      FluidTextField(
+        value = note,
+        onValueChange = { note = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = "Nota",
+      )
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        TextButton(onClick = onDismiss) { Text("Annulla") }
-        Button(onClick = { onSave(subject, numeric ?: 0.0, type, note) }, enabled = subject.isNotBlank() && numeric != null) { Text("Aggiungi") }
+        FluidButton(
+          text = "Annulla",
+          onClick = onDismiss,
+          style = FluidButtonStyle.Plain,
+        )
+        FluidButton(
+          text = "Aggiungi",
+          onClick = { onSave(subject, numeric ?: 0.0, type, note) },
+          style = FluidButtonStyle.Filled,
+          enabled = subject.isNotBlank() && numeric != null,
+        )
       }
     }
   }

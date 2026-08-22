@@ -2,34 +2,23 @@ package dev.antigravity.classevivaexpressive.feature.lessons
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material.icons.rounded.AutoFixHigh
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,7 +29,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -48,11 +36,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlert
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
@@ -60,7 +55,6 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
-import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
 import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
 import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
 import dev.antigravity.classevivaexpressive.core.domain.model.slotFingerprint
@@ -326,261 +320,246 @@ fun LessonsRoute(
     }
   }
 
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-  Scaffold(
-    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Orario",
-        subtitle = "Template settimanale stabile e storico delle lezioni svolte in una sola vista.",
-        onBack = onBack,
-        scrollBehavior = scrollBehavior,
-        actions = {
-          IconButton(onClick = viewModel::regenerateTemplate) {
-            Icon(Icons.Rounded.AutoFixHigh, contentDescription = "Ricalcola orario")
-          }
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
+  FluidScreen(
+    modifier = modifier,
+    title = "Orario",
+    subtitle = "Template settimanale stabile e storico delle lezioni svolte in una sola vista.",
+    onBack = onBack,
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.AutoFixHigh,
+        contentDescription = "Ricalcola orario",
+        onClick = viewModel::regenerateTemplate,
+      )
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
       )
     },
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = state.isRefreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 18.dp,
+  ) {
+    if (!state.lastMessage.isNullOrBlank()) {
+      item {
+        InlineMessageCard(
+          message = state.lastMessage.orEmpty(),
+          title = "Aggiornamento orario",
+          tone = ExpressiveTone.Warning,
+          onDismiss = viewModel::clearMessage,
+        )
+      }
+    }
+
+    item {
+      ExpressivePillTabs(
+        options = listOf(TAB_TIMETABLE, TAB_HISTORY),
+        selected = selectedTab,
+        onSelect = { selectedTab = it },
+      )
+    }
+
+    item {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
       ) {
-        if (!state.lastMessage.isNullOrBlank()) {
+        MetricTile(
+          label = if (selectedTab == TAB_TIMETABLE) "Slot stabili" else "Lezioni",
+          value = if (selectedTab == TAB_TIMETABLE) {
+            state.timetableTemplate.slots.size.toString()
+          } else {
+            weekLessons.size.toString()
+          },
+          detail = if (selectedTab == TAB_TIMETABLE) "Template riutilizzabile." else "Settimana selezionata.",
+          modifier = Modifier.weight(1f),
+          tone = ExpressiveTone.Info,
+        )
+        MetricTile(
+          label = "Settimane",
+          value = state.timetableTemplate.sampledWeeks.toString(),
+          detail = "Storico usato per il template.",
+          modifier = Modifier.weight(1f),
+          tone = ExpressiveTone.Success,
+        )
+        MetricTile(
+          label = "Docenti",
+          value = state.totalTeachersCount.toString(),
+          detail = "Nomi distinti rilevati.",
+          modifier = Modifier.weight(1f),
+        )
+      }
+    }
+
+    when (selectedTab) {
+      TAB_TIMETABLE -> {
+        if (templateDayOptions.isEmpty()) {
           item {
-            InlineMessageCard(
-              message = state.lastMessage.orEmpty(),
-              title = "Aggiornamento orario",
-              tone = ExpressiveTone.Warning,
-              onDismiss = viewModel::clearMessage,
+            EmptyState(
+              title = "Orario non disponibile",
+              detail = "Il template settimanale apparira qui appena la sincronizzazione raccoglie abbastanza lezioni.",
             )
           }
-        }
-
-        item {
-          ExpressivePillTabs(
-            options = listOf(TAB_TIMETABLE, TAB_HISTORY),
-            selected = selectedTab,
-            onSelect = { selectedTab = it },
-          )
-        }
-
-        item {
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            MetricTile(
-              label = if (selectedTab == TAB_TIMETABLE) "Slot stabili" else "Lezioni",
-              value = if (selectedTab == TAB_TIMETABLE) {
-                state.timetableTemplate.slots.size.toString()
-              } else {
-                weekLessons.size.toString()
+        } else {
+          item {
+            ExpressivePillTabs(
+              options = templateDayOptions.map { it.label },
+              selected = templateDayOptions.firstOrNull { it.key == selectedTemplateDayKey }?.label ?: templateDayOptions.first().label,
+              onSelect = { label ->
+                selectedTemplateDayKey = templateDayOptions.firstOrNull { it.label == label }?.key
               },
-              detail = if (selectedTab == TAB_TIMETABLE) "Template riutilizzabile." else "Settimana selezionata.",
-              modifier = Modifier.weight(1f),
-              tone = ExpressiveTone.Info,
-            )
-            MetricTile(
-              label = "Settimane",
-              value = state.timetableTemplate.sampledWeeks.toString(),
-              detail = "Storico usato per il template.",
-              modifier = Modifier.weight(1f),
-              tone = ExpressiveTone.Success,
-            )
-            MetricTile(
-              label = "Docenti",
-              value = state.totalTeachersCount.toString(),
-              detail = "Nomi distinti rilevati.",
-              modifier = Modifier.weight(1f),
             )
           }
-        }
-
-        when (selectedTab) {
-          TAB_TIMETABLE -> {
-            if (templateDayOptions.isEmpty()) {
-              item {
-                EmptyState(
-                  title = "Orario non disponibile",
-                  detail = "Il template settimanale apparira qui appena la sincronizzazione raccoglie abbastanza lezioni.",
-                )
-              }
-            } else {
-              item {
-                ExpressivePillTabs(
-                  options = templateDayOptions.map { it.label },
-                  selected = templateDayOptions.firstOrNull { it.key == selectedTemplateDayKey }?.label ?: templateDayOptions.first().label,
-                  onSelect = { label ->
-                    selectedTemplateDayKey = templateDayOptions.firstOrNull { it.label == label }?.key
-                  },
-                )
-              }
-              item {
-                val selectedDay = selectedTemplateDayKey?.let(DayOfWeek::valueOf)
-                ExpressiveAccentLabel(
-                  text = selectedDay?.longLabel()?.let { "$it ricorrente" } ?: "Orario ricorrente",
-                )
-              }
-              item {
-                Text(
-                  text = "Tocca uno slot per confermarlo · Tieni premuto per modificarlo.",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  modifier = Modifier.padding(horizontal = 4.dp),
-                )
-              }
-              if (state.canImportOfficialTimetable) {
-                item {
-                  Button(
-                    onClick = viewModel::importOfficialTimetable,
-                    modifier = Modifier.fillMaxWidth(),
-                  ) {
-                    Icon(
-                      Icons.Rounded.AutoFixHigh,
-                      contentDescription = null,
-                      modifier = Modifier.padding(end = 8.dp),
-                    )
-                    Text("Importa Orario Ufficiale 4F")
-                  }
-                }
-              }
-              if (templateBlocks.isEmpty()) {
-                item {
-                  EmptyState(
-                    title = "Nessuno slot stabile",
-                    detail = "Per questo giorno servono più settimane coerenti prima di proporre un template affidabile.",
-                  )
-                }
-              } else {
-                items(templateBlocks, key = { "${it.primary.dayOfWeek}-${it.primary.time}" }) { block ->
-                  val primary = block.primary
-                  val isOverridden = block.allSlots.any {
-                    state.timetableTemplate.manualOverrides.containsKey(it.slotFingerprint())
-                  }
-                  val isConfirmed = block.allSlots.all { it.confirmed }
-                  val displayRoom = block.allSlots
-                    .mapNotNull { it.room?.trim()?.takeIf(String::isNotBlank) }
-                    .firstOrNull()
-                  val isOfficial = state.timetableTemplate.isOfficial
-                  RegisterListRow(
-                    title = block.displaySubject,
-                    subtitle = primary.teacher ?: "Docente non specificato",
-                    eyebrow = block.timeRangeLabel(),
-                    meta = listOfNotNull(
-                      displayRoom,
-                      when {
-                        isConfirmed -> "Confermato manualmente"
-                        isOverridden -> "Modificato manualmente"
-                        isOfficial -> "Importato da orario ufficiale"
-                        block.isMulti -> "Blocco ${block.allSlots.size}h · ${(primary.confidence * 100).toInt()}%"
-                        else -> "Ricorrenza ${(primary.confidence * 100).toInt()}% · ${primary.sampleCount} settimane"
-                      },
-                    ).joinToString(" / "),
-                    tone = when {
-                      isConfirmed -> ExpressiveTone.Success
-                      isOverridden -> ExpressiveTone.Info
-                      isOfficial -> ExpressiveTone.Success
-                      primary.confidence >= 0.8f -> ExpressiveTone.Success
-                      primary.confidence >= 0.6f -> ExpressiveTone.Info
-                      else -> ExpressiveTone.Warning
-                    },
-                    onClick = { viewModel.startConfirming(primary) },
-                    onLongClick = { viewModel.startEditing(primary) },
-                    badge = {
-                      when {
-                        isConfirmed -> StatusBadge("CONFERMATO", tone = ExpressiveTone.Success)
-                        isOverridden -> StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
-                        isOfficial -> StatusBadge("IMPORT", tone = ExpressiveTone.Success)
-                        block.isMulti -> StatusBadge("BLOCCO ${block.allSlots.size}H", tone = ExpressiveTone.Info)
-                        primary.confidence >= 0.75f -> StatusBadge("STABILE", tone = ExpressiveTone.Success)
-                        else -> StatusBadge("DINAMICO", tone = ExpressiveTone.Warning)
-                      }
-                    },
-                    animatePress = true,
-                  )
-                }
-              }
-            }
+          item {
+            val selectedDay = selectedTemplateDayKey?.let(DayOfWeek::valueOf)
+            FluidSectionHeader(
+              title = selectedDay?.longLabel()?.let { "$it ricorrente" } ?: "Orario ricorrente",
+            )
           }
-
-          TAB_HISTORY -> {
+          item {
+            Text(
+              text = "Tocca uno slot per confermarlo · Tieni premuto per modificarlo.",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(horizontal = 4.dp),
+            )
+          }
+          if (state.canImportOfficialTimetable) {
             item {
-              WeekNavigator(
-                weekStart = currentWeekStart,
-                weekOffset = weekOffset,
-                onPrevious = { weekOffset -= 1 },
-                onNext = { if (weekOffset < 0) weekOffset += 1 },
-                onToday = { weekOffset = 0 },
+              FluidButton(
+                text = "Importa Orario Ufficiale 4F",
+                onClick = viewModel::importOfficialTimetable,
+                style = FluidButtonStyle.Filled,
+                fillWidth = true,
+                leading = { Icon( Icons.Rounded.AutoFixHigh, contentDescription = null, ) },
               )
             }
-            if (historyDayOptions.isEmpty()) {
-              item {
-                EmptyState(
-                  title = "Storico vuoto",
-                  detail = "Le lezioni svolte compariranno qui appena il registro restituisce date e argomenti firmati.",
-                )
+          }
+          if (templateBlocks.isEmpty()) {
+            item {
+              EmptyState(
+                title = "Nessuno slot stabile",
+                detail = "Per questo giorno servono più settimane coerenti prima di proporre un template affidabile.",
+              )
+            }
+          } else {
+            items(templateBlocks, key = { "${it.primary.dayOfWeek}-${it.primary.time}" }) { block ->
+              val primary = block.primary
+              val isOverridden = block.allSlots.any {
+                state.timetableTemplate.manualOverrides.containsKey(it.slotFingerprint())
               }
-            } else {
-              item {
-                ExpressivePillTabs(
-                  options = historyDayOptions.map { it.label },
-                  selected = historyDayOptions.firstOrNull { it.key == selectedHistoryDayKey }?.label ?: historyDayOptions.first().label,
-                  onSelect = { label ->
-                    selectedHistoryDayKey = historyDayOptions.firstOrNull { it.label == label }?.key
+              val isConfirmed = block.allSlots.all { it.confirmed }
+              val displayRoom = block.allSlots
+                .mapNotNull { it.room?.trim()?.takeIf(String::isNotBlank) }
+                .firstOrNull()
+              val isOfficial = state.timetableTemplate.isOfficial
+              RegisterListRow(
+                title = block.displaySubject,
+                subtitle = primary.teacher ?: "Docente non specificato",
+                eyebrow = block.timeRangeLabel(),
+                meta = listOfNotNull(
+                  displayRoom,
+                  when {
+                    isConfirmed -> "Confermato manualmente"
+                    isOverridden -> "Modificato manualmente"
+                    isOfficial -> "Importato da orario ufficiale"
+                    block.isMulti -> "Blocco ${block.allSlots.size}h · ${(primary.confidence * 100).toInt()}%"
+                    else -> "Ricorrenza ${(primary.confidence * 100).toInt()}% · ${primary.sampleCount} settimane"
                   },
-                )
-              }
-              item {
-                val label = selectedHistoryDayKey?.toLocalDateOrNull()
-                  ?.format(DateTimeFormatter.ofPattern("EEEE d MMMM", italianLocale))
-                  ?.replaceFirstChar { it.uppercase() }
-                  ?: "Lezioni svolte"
-                ExpressiveAccentLabel(label)
-              }
-              if (lessonsForSelectedDay.isEmpty()) {
-                item {
-                  EmptyState(
-                    title = "Nessuna lezione registrata",
-                    detail = "Per questa giornata non risultano argomenti o firme nel registro sincronizzato.",
+                ).joinToString(" / "),
+                tone = when {
+                  isConfirmed -> ExpressiveTone.Success
+                  isOverridden -> ExpressiveTone.Info
+                  isOfficial -> ExpressiveTone.Success
+                  primary.confidence >= 0.8f -> ExpressiveTone.Success
+                  primary.confidence >= 0.6f -> ExpressiveTone.Info
+                  else -> ExpressiveTone.Warning
+                },
+                onClick = { viewModel.startConfirming(primary) },
+                onLongClick = { viewModel.startEditing(primary) },
+                badge = {
+                  when {
+                    isConfirmed -> StatusBadge("CONFERMATO", tone = ExpressiveTone.Success)
+                    isOverridden -> StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
+                    isOfficial -> StatusBadge("IMPORT", tone = ExpressiveTone.Success)
+                    block.isMulti -> StatusBadge("BLOCCO ${block.allSlots.size}H", tone = ExpressiveTone.Info)
+                    primary.confidence >= 0.75f -> StatusBadge("STABILE", tone = ExpressiveTone.Success)
+                    else -> StatusBadge("DINAMICO", tone = ExpressiveTone.Warning)
+                  }
+                },
+                animatePress = true,
+              )
+            }
+          }
+        }
+      }
+
+      TAB_HISTORY -> {
+        item {
+          WeekNavigator(
+            weekStart = currentWeekStart,
+            weekOffset = weekOffset,
+            onPrevious = { weekOffset -= 1 },
+            onNext = { if (weekOffset < 0) weekOffset += 1 },
+            onToday = { weekOffset = 0 },
+          )
+        }
+        if (historyDayOptions.isEmpty()) {
+          item {
+            EmptyState(
+              title = "Storico vuoto",
+              detail = "Le lezioni svolte compariranno qui appena il registro restituisce date e argomenti firmati.",
+            )
+          }
+        } else {
+          item {
+            ExpressivePillTabs(
+              options = historyDayOptions.map { it.label },
+              selected = historyDayOptions.firstOrNull { it.key == selectedHistoryDayKey }?.label ?: historyDayOptions.first().label,
+              onSelect = { label ->
+                selectedHistoryDayKey = historyDayOptions.firstOrNull { it.label == label }?.key
+              },
+            )
+          }
+          item {
+            val label = selectedHistoryDayKey?.toLocalDateOrNull()
+              ?.format(DateTimeFormatter.ofPattern("EEEE d MMMM", italianLocale))
+              ?.replaceFirstChar { it.uppercase() }
+              ?: "Lezioni svolte"
+            FluidSectionHeader(label)
+          }
+          if (lessonsForSelectedDay.isEmpty()) {
+            item {
+              EmptyState(
+                title = "Nessuna lezione registrata",
+                detail = "Per questa giornata non risultano argomenti o firme nel registro sincronizzato.",
+              )
+            }
+          } else {
+            items(lessonsForSelectedDay, key = { it.id }) { lesson ->
+              RegisterListRow(
+                title = lesson.subject,
+                subtitle = lesson.topic?.takeIf(String::isNotBlank)
+                  ?: if (lesson.isSigned) "Argomento non inserito" else "Lezione non firmata",
+                eyebrow = lesson.timeRangeLabel(),
+                meta = listOfNotNull(
+                  lesson.teacher?.takeIf(String::isNotBlank),
+                  lesson.room?.takeIf(String::isNotBlank),
+                ).joinToString(" / ").ifBlank { null },
+                tone = if (lesson.isSigned || !lesson.topic.isNullOrBlank()) {
+                  ExpressiveTone.Success
+                } else {
+                  ExpressiveTone.Neutral
+                },
+                badge = {
+                  StatusBadge(
+                    label = if (lesson.isSigned) "FIRMATA" else "NON FIRMATA",
+                    tone = if (lesson.isSigned) ExpressiveTone.Success else ExpressiveTone.Neutral,
                   )
-                }
-              } else {
-                items(lessonsForSelectedDay, key = { it.id }) { lesson ->
-                  RegisterListRow(
-                    title = lesson.subject,
-                    subtitle = lesson.topic?.takeIf(String::isNotBlank)
-                      ?: if (lesson.isSigned) "Argomento non inserito" else "Lezione non firmata",
-                    eyebrow = lesson.timeRangeLabel(),
-                    meta = listOfNotNull(
-                      lesson.teacher?.takeIf(String::isNotBlank),
-                      lesson.room?.takeIf(String::isNotBlank),
-                    ).joinToString(" / ").ifBlank { null },
-                    tone = if (lesson.isSigned || !lesson.topic.isNullOrBlank()) {
-                      ExpressiveTone.Success
-                    } else {
-                      ExpressiveTone.Neutral
-                    },
-                    badge = {
-                      StatusBadge(
-                        label = if (lesson.isSigned) "FIRMATA" else "NON FIRMATA",
-                        tone = if (lesson.isSigned) ExpressiveTone.Success else ExpressiveTone.Neutral,
-                      )
-                    },
-                  )
-                }
-              }
+                },
+              )
             }
           }
         }
@@ -642,9 +621,12 @@ private fun WeekNavigator(
       }
     }
     if (weekOffset != 0) {
-      Button(onClick = onToday, modifier = Modifier.align(Alignment.End)) {
-        Text("Oggi")
-      }
+      FluidButton(
+        text = "Oggi",
+        onClick = onToday,
+        modifier = Modifier.align(Alignment.End),
+        style = FluidButtonStyle.Filled,
+      )
     }
   }
 }
@@ -751,32 +733,24 @@ private fun ConfirmSlotDialog(
   onRemoveConfirm: () -> Unit,
 ) {
   if (slot.confirmed) {
-    AlertDialog(
+    FluidAlert(
       onDismissRequest = onDismiss,
-      title = { Text("Slot confermato") },
-      text = { Text("Questo slot è già confermato. Vuoi rimuovere la conferma e lasciare che l'algoritmo lo rivaluti?") },
-      confirmButton = {
-        TextButton(onClick = onRemoveConfirm) { Text("Rimuovi conferma") }
-      },
-      dismissButton = {
-        TextButton(onClick = onDismiss) { Text("Annulla") }
-      },
+      title = "Slot confermato",
+      message = "Questo slot è già confermato. Vuoi rimuovere la conferma e lasciare che l'algoritmo lo rivaluti?",
+      actions = listOf(
+        FluidAlertAction("Annulla", onDismiss),
+        FluidAlertAction("Rimuovi conferma", onRemoveConfirm, FluidAlertAction.Emphasis.Preferred),
+      ),
     )
   } else {
-    AlertDialog(
+    FluidAlert(
       onDismissRequest = onDismiss,
-      title = { Text("È corretto?") },
-      text = {
-        Text(
-          "${slot.subject}${slot.teacher?.let { " con $it" }.orEmpty()} · ${slot.timeRangeLabel()}.",
-        )
-      },
-      confirmButton = {
-        TextButton(onClick = onConfirm) { Text("Sì, è corretto") }
-      },
-      dismissButton = {
-        TextButton(onClick = onDismiss) { Text("Annulla") }
-      },
+      title = "È corretto?",
+      message = "${slot.subject}${slot.teacher?.let { " con $it" }.orEmpty()} · ${slot.timeRangeLabel()}.",
+      actions = listOf(
+        FluidAlertAction("Annulla", onDismiss),
+        FluidAlertAction("Sì, è corretto", onConfirm, FluidAlertAction.Emphasis.Preferred),
+      ),
     )
   }
 }
@@ -788,24 +762,22 @@ private fun RoomInputDialog(
   onSave: (room: String?) -> Unit,
 ) {
   var room by rememberSaveable { mutableStateOf(slot.room.orEmpty()) }
-  AlertDialog(
+  FluidAlert(
     onDismissRequest = onDismiss,
-    title = { Text("Aula") },
-    text = {
-      OutlinedTextField(
+    title = "Aula",
+    actions = listOf(
+      FluidAlertAction("Salta", onDismiss),
+      FluidAlertAction("Salva", { onSave(room.trim().ifBlank { null }) }, FluidAlertAction.Emphasis.Preferred),
+    ),
+    content = {
+      FluidTextField(
         value = room,
         onValueChange = { room = it },
         modifier = Modifier.fillMaxWidth(),
-        label = { Text("Aula (opzionale)") },
-        placeholder = { Text("es. P1 Aula 21") },
+        label = "Aula (opzionale)",
+        placeholder = "es. P1 Aula 21",
         singleLine = true,
       )
-    },
-    confirmButton = {
-      TextButton(onClick = { onSave(room.trim().ifBlank { null }) }) { Text("Salva") }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) { Text("Salta") }
     },
   )
 }
@@ -825,7 +797,7 @@ private fun EditSlotSheet(
   var endTime by rememberSaveable { mutableStateOf(slot.endTime.orEmpty()) }
   var editingField by rememberSaveable { mutableStateOf<String?>(null) }
 
-  ModalBottomSheet(onDismissRequest = onDismiss) {
+  FluidSheet(onDismissRequest = onDismiss) {
     Column(
       modifier = Modifier
         .fillMaxWidth()
@@ -834,25 +806,25 @@ private fun EditSlotSheet(
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Text("Modifica slot orario", style = MaterialTheme.typography.headlineSmall)
-      OutlinedTextField(
+      FluidTextField(
         value = subject,
         onValueChange = { subject = it },
         modifier = Modifier.fillMaxWidth(),
-        label = { Text("Materia") },
+        label = "Materia",
         singleLine = true,
       )
-      OutlinedTextField(
+      FluidTextField(
         value = teacher,
         onValueChange = { teacher = it },
         modifier = Modifier.fillMaxWidth(),
-        label = { Text("Docente (opzionale)") },
+        label = "Docente (opzionale)",
         singleLine = true,
       )
-      OutlinedTextField(
+      FluidTextField(
         value = room,
         onValueChange = { room = it },
         modifier = Modifier.fillMaxWidth(),
-        label = { Text("Aula (opzionale)") },
+        label = "Aula (opzionale)",
         singleLine = true,
       )
       RegisterListRow(
@@ -877,9 +849,18 @@ private fun EditSlotSheet(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        TextButton(onClick = { onReset(); onDismiss() }) { Text("Ripristina") }
-        TextButton(onClick = onDismiss) { Text("Annulla") }
-        Button(
+        FluidButton(
+          text = "Ripristina",
+          onClick = { onReset(); onDismiss() },
+          style = FluidButtonStyle.Plain,
+        )
+        FluidButton(
+          text = "Annulla",
+          onClick = onDismiss,
+          style = FluidButtonStyle.Plain,
+        )
+        FluidButton(
+          text = "Salva",
           onClick = {
             val resolvedDuration = runCatching {
               val s = LocalTime.parse(startTime)
@@ -898,10 +879,9 @@ private fun EditSlotSheet(
               ),
             )
           },
+          style = FluidButtonStyle.Filled,
           enabled = subject.isNotBlank(),
-        ) {
-          Text("Salva")
-        }
+        )
       }
     }
   }
@@ -914,22 +894,18 @@ private fun EditSlotSheet(
       initialMinute = initialTime.minute,
       is24Hour = true,
     )
-    AlertDialog(
+    FluidAlert(
       onDismissRequest = { editingField = null },
-      title = { Text(if (editingField == "start") "Ora inizio" else "Ora fine") },
-      text = { TimePicker(state = timePickerState) },
-      confirmButton = {
-        TextButton(
-          onClick = {
+      title = if (editingField == "start") "Ora inizio" else "Ora fine",
+      actions = listOf(
+        FluidAlertAction("Annulla", { editingField = null }),
+        FluidAlertAction("Imposta", {
             val formatted = "%02d:%02d".format(timePickerState.hour, timePickerState.minute)
             if (editingField == "start") startTime = formatted else endTime = formatted
             editingField = null
-          },
-        ) { Text("Imposta") }
-      },
-      dismissButton = {
-        TextButton(onClick = { editingField = null }) { Text("Annulla") }
-      },
+          }, FluidAlertAction.Emphasis.Preferred),
+      ),
+      content = { TimePicker(state = timePickerState) },
     )
   }
 }

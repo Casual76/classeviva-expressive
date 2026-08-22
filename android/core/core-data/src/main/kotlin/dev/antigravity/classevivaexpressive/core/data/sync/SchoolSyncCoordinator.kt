@@ -622,7 +622,7 @@ class SchoolSyncCoordinator @Inject constructor(
       schoolYearStart(selectedYear).toString(),
       schoolYearEnd(selectedYear).toString(),
     )
-    syncAbsences(selectedYear, mutableListOf(), operation) { updated }
+    syncAbsences(selectedYear, SyncErrors(), operation) { updated }
     ensureSessionUnchanged(operation)
     updated
   }
@@ -673,14 +673,47 @@ class SchoolSyncCoordinator @Inject constructor(
   ): SyncStatus {
     if (!force && syncMutex.isLocked) return syncStatus.value
     return syncMutex.withLock {
-      refreshSchoolYear(
+      val status = refreshSchoolYear(
         selectedYear = selectedYear,
         force = force,
         refreshProfile = refreshProfile,
         sections = sections,
         mode = mode,
       )
+      val fallbackYear = schoolYearFallbackFor(selectedYear, status)
+        ?: return@withLock status
+
+      // Classeviva will keep refusing this year until the school opens it, so remember the choice:
+      // otherwise every screen would pay for the same rejected round trip on every refresh.
+      schoolYearStore.selectSchoolYear(fallbackYear)
+      val retried = refreshSchoolYear(
+        selectedYear = fallbackYear,
+        force = true,
+        refreshProfile = refreshProfile,
+        sections = sections,
+        mode = mode,
+      )
+      val notice = "L'anno ${selectedYear.label} non è ancora aperto dalla scuola: " +
+        "mostro ${fallbackYear.label}."
+      retried.copy(message = retried.message ?: notice).also { syncStatus.value = it }
     }
+  }
+
+  /**
+   * The year to fall back to when the selected one has not started, or null when there is nothing to
+   * fall back to.
+   *
+   * Only ever steps back one year, and only to a year the app already offers, so a persistent 422
+   * cannot walk the selection backwards through the archive one refresh at a time.
+   */
+  private suspend fun schoolYearFallbackFor(
+    selectedYear: SchoolYearRef,
+    status: SyncStatus,
+  ): SchoolYearRef? {
+    if (!status.schoolYearNotStarted) return null
+    val previous = SchoolYearRef.previousOf(selectedYear)
+    val offered = schoolYearStore.observeAvailableSchoolYears().first()
+    return previous.takeIf { candidate -> offered.any { it.id == candidate.id } }
   }
 
   private fun CommunicationDetail.requiresVerifiedRestAcknowledgement(): Boolean {
@@ -730,7 +763,7 @@ class SchoolSyncCoordinator @Inject constructor(
       syncStatus.value = SyncStatusFactory.syncing(previousStatus)
     }
 
-    val errors = mutableListOf<String>()
+    val errors = SyncErrors()
 
     if (refreshProfile && selectedSections.contains(ProfileSection)) {
       syncGlobal(operation, ProfileSection, errors) { restClient.getProfile() }
@@ -852,8 +885,8 @@ class SchoolSyncCoordinator @Inject constructor(
       selectedSections.contains(MeetingSlotsSection) ||
       selectedSections.contains(MeetingBookingsSection)
     ) {
-      runCatching { refreshMeetingsSnapshot(selectedYear, operation) }.onFailure {
-        errors += MeetingBookingsSection
+      runCatching { refreshMeetingsSnapshot(selectedYear, operation) }.onFailure { cause ->
+        errors.record(MeetingBookingsSection, cause)
         clearMeetings(selectedYear, operation)
       }
     }
@@ -861,8 +894,8 @@ class SchoolSyncCoordinator @Inject constructor(
     if (mode != BackgroundSyncMode.FAST &&
       (selectedSections.contains(LessonsSection) || selectedSections.contains(AgendaSection))
     ) {
-      runCatching { persistTimetableTemplate(selectedYear, operation) }.onFailure {
-        errors += LessonsSection
+      runCatching { persistTimetableTemplate(selectedYear, operation) }.onFailure { cause ->
+        errors.record(LessonsSection, cause)
       }
     }
 
@@ -877,10 +910,10 @@ class SchoolSyncCoordinator @Inject constructor(
     recordSyncResults(operation, selectedYear, selectedSections, errors, completedAt)
     val hasSuccessfulSection = selectedSections.any { section -> section !in errors }
     val next = SyncStatusFactory.completed(
-      errors = errors,
+      errors = errors.sections,
       previous = previousStatus,
       completedAtEpochMillis = completedAt,
-    )
+    ).copy(schoolYearNotStarted = errors.schoolYearNotStarted)
     val visibleStatus = next.visibleStatusFor(
       publishForegroundStatus = publishForegroundStatus,
       attemptedSections = selectedSections,
@@ -1018,7 +1051,7 @@ class SchoolSyncCoordinator @Inject constructor(
 
   private suspend fun syncGrades(
     schoolYear: SchoolYearRef,
-    errors: MutableList<String>,
+    errors: SyncErrors,
     operation: SessionOperation,
     fetch: suspend () -> List<Grade>,
   ) {
@@ -1103,14 +1136,14 @@ class SchoolSyncCoordinator @Inject constructor(
         schoolYear,
         resolvedGrades.map { it.grade.copy(id = it.localId) },
       )
-    }.onFailure {
-      errors += GradesSection
+    }.onFailure { cause ->
+      errors.record(GradesSection, cause)
     }
   }
 
   private suspend fun syncAgenda(
     schoolYear: SchoolYearRef,
-    errors: MutableList<String>,
+    errors: SyncErrors,
     operation: SessionOperation,
     fetch: suspend () -> List<AgendaItem>,
   ) {
@@ -1195,14 +1228,14 @@ class SchoolSyncCoordinator @Inject constructor(
           )
         },
       )
-    }.onFailure {
-      errors += AgendaSection
+    }.onFailure { cause ->
+      errors.record(AgendaSection, cause)
     }
   }
 
   private suspend fun syncAbsences(
     schoolYear: SchoolYearRef,
-    errors: MutableList<String>,
+    errors: SyncErrors,
     operation: SessionOperation,
     fetch: suspend () -> List<AbsenceRecord>,
   ) {
@@ -1229,14 +1262,14 @@ class SchoolSyncCoordinator @Inject constructor(
       absenceDao.deleteByYear(session.studentId, schoolYear.id)
       absenceDao.upsertAll(entities)
       storeYearScopedValue(operation, AbsencesSection, schoolYear, absences)
-    }.onFailure {
-      errors += AbsencesSection
+    }.onFailure { cause ->
+      errors.record(AbsencesSection, cause)
     }
   }
 
   private suspend fun syncCommunications(
     schoolYear: SchoolYearRef,
-    errors: MutableList<String>,
+    errors: SyncErrors,
     operation: SessionOperation,
     fetch: suspend () -> List<Communication>,
   ) {
@@ -1271,14 +1304,14 @@ class SchoolSyncCoordinator @Inject constructor(
       communicationDao.deleteByYear(session.studentId, schoolYear.id)
       communicationDao.upsertAll(entities)
       storeYearScopedValue(operation, CommunicationsSection, schoolYear, communications)
-    }.onFailure {
-      errors += CommunicationsSection
+    }.onFailure { cause ->
+      errors.record(CommunicationsSection, cause)
     }
   }
 
   private suspend fun syncMaterials(
     schoolYear: SchoolYearRef,
-    errors: MutableList<String>,
+    errors: SyncErrors,
     operation: SessionOperation,
     fetch: suspend () -> List<MaterialItem>,
   ) {
@@ -1305,14 +1338,14 @@ class SchoolSyncCoordinator @Inject constructor(
       ensureSessionUnchanged(operation)
       materialDao.replaceByYear(session.studentId, schoolYear.id, entities)
       storeYearScopedValue(operation, MaterialsSection, schoolYear, materials)
-    }.onFailure {
-      errors += MaterialsSection
+    }.onFailure { cause ->
+      errors.record(MaterialsSection, cause)
     }
   }
 
   private suspend fun syncDocuments(
     schoolYear: SchoolYearRef,
-    errors: MutableList<String>,
+    errors: SyncErrors,
     operation: SessionOperation,
     fetch: suspend () -> List<DocumentItem>,
   ) {
@@ -1339,15 +1372,15 @@ class SchoolSyncCoordinator @Inject constructor(
       ensureSessionUnchanged(operation)
       documentDao.replaceByYear(session.studentId, schoolYear.id, entities)
       storeYearScopedValue(operation, DocumentsSection, schoolYear, documents)
-    }.onFailure {
-      errors += DocumentsSection
+    }.onFailure { cause ->
+      errors.record(DocumentsSection, cause)
     }
   }
 
   private suspend inline fun <reified T> syncGlobal(
     operation: SessionOperation,
     key: String,
-    errors: MutableList<String>,
+    errors: SyncErrors,
     crossinline fetch: suspend () -> T,
   ) {
     runCatching {
@@ -1357,8 +1390,8 @@ class SchoolSyncCoordinator @Inject constructor(
         studentScopedCacheKey(operation.session.studentId, key),
         json.encodeToString(value),
       )
-    }.onFailure {
-      errors += key
+    }.onFailure { cause ->
+      errors.record(key, cause)
     }
   }
 
@@ -1366,13 +1399,13 @@ class SchoolSyncCoordinator @Inject constructor(
     operation: SessionOperation,
     section: String,
     schoolYear: SchoolYearRef,
-    errors: MutableList<String>,
+    errors: SyncErrors,
     crossinline fetch: suspend () -> T,
   ) {
     runCatching {
       storeYearScopedValue(operation, section, schoolYear, fetch())
-    }.onFailure {
-      errors += section
+    }.onFailure { cause ->
+      errors.record(section, cause)
     }
   }
 
@@ -1459,7 +1492,7 @@ class SchoolSyncCoordinator @Inject constructor(
     operation: SessionOperation,
     schoolYear: SchoolYearRef,
     sections: Set<String>,
-    errors: List<String>,
+    errors: SyncErrors,
     completedAt: Long,
   ) {
     val studentId = operation.session.studentId
@@ -1475,7 +1508,7 @@ class SchoolSyncCoordinator @Inject constructor(
           section = section,
           lastAttemptAtEpochMillis = previous?.lastAttemptAtEpochMillis ?: completedAt,
           lastSuccessAtEpochMillis = if (failed) previous?.lastSuccessAtEpochMillis else completedAt,
-          lastError = if (failed) "Aggiornamento non riuscito" else null,
+          lastError = if (failed) errors.reasonFor(section) ?: GenericSyncFailure else null,
         ),
       )
     }
@@ -1487,7 +1520,7 @@ class SchoolSyncCoordinator @Inject constructor(
   ) {
     if (schoolYear.id != schoolYearStore.currentSchoolYearRef().id) return
     ensureSessionUnchanged(operation)
-    syncCommunications(schoolYear, mutableListOf(), operation) {
+    syncCommunications(schoolYear, SyncErrors(), operation) {
       restClient.getCommunications()
     }
   }

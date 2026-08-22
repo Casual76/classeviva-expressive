@@ -150,11 +150,22 @@ class SchoolYearStore(@ApplicationContext context: Context) : SchoolYearReposito
 
   fun currentSchoolYearRef(): SchoolYearRef = current
 
+  /**
+   * The years a student can switch between.
+   *
+   * The upcoming year is offered from June onwards. Schools open the new year on their own schedule
+   * — some well before September — and without this the only selectable years during the summer
+   * would be the one that just ended and the one before it.
+   */
   private fun availableYears(): List<SchoolYearRef> {
-    return listOf(
-      current,
-      SchoolYearRef(startYear = current.startYear - 1, endYear = current.startYear),
-    ).distinctBy { it.id }
+    val upcoming = SchoolYearRef(startYear = current.startYear + 1, endYear = current.endYear + 1)
+    val previous = SchoolYearRef.previousOf(current)
+    val offerUpcoming = LocalDate.now().monthValue >= SchoolYearRef.UpcomingYearOfferedFromMonth
+    return buildList {
+      if (offerUpcoming) add(upcoming)
+      add(current)
+      add(previous)
+    }.distinctBy { it.id }
   }
 
   private fun currentSchoolYear(): SchoolYearRef {

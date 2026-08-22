@@ -16,15 +16,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +36,10 @@ import androidx.glance.appwidget.state.getAppWidgetState
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.lifecycle.lifecycleScope
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidChip
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSwitch
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaExpressiveTheme
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import kotlinx.coroutines.launch
@@ -153,15 +153,15 @@ private fun WidgetConfigurationScreen(
 
       ConfigurationSection(title = "Privacy") {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          FilterChip(
+          FluidChip(
+            label = "Completa",
             selected = preferences.privacyMode == WidgetPrivacyMode.FULL,
             onClick = { onPreferencesChange(preferences.copy(privacyMode = WidgetPrivacyMode.FULL)) },
-            label = { Text("Completa") },
           )
-          FilterChip(
+          FluidChip(
+            label = "Discreta",
             selected = preferences.privacyMode == WidgetPrivacyMode.DISCREET,
             onClick = { onPreferencesChange(preferences.copy(privacyMode = WidgetPrivacyMode.DISCREET)) },
-            label = { Text("Discreta") },
           )
         }
       }
@@ -171,12 +171,16 @@ private fun WidgetConfigurationScreen(
         horizontalArrangement = Arrangement.End,
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        TextButton(onClick = onCancel) {
-          Text("Annulla")
-        }
-        Button(onClick = { onSave(preferences) }) {
-          Text("Salva")
-        }
+        FluidButton(
+          text = "Annulla",
+          onClick = onCancel,
+          style = FluidButtonStyle.Plain,
+        )
+        FluidButton(
+          text = "Salva",
+          onClick = { onSave(preferences) },
+          style = FluidButtonStyle.Filled,
+        )
       }
     }
   }
@@ -217,10 +221,10 @@ private fun SegmentedChoice(
     Text(label, style = MaterialTheme.typography.labelLarge)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       options.forEach { value ->
-        FilterChip(
+        FluidChip(
+          label = valueLabel(value),
           selected = selected == value,
           onClick = { onSelected(value) },
-          label = { Text(valueLabel(value)) },
         )
       }
     }
@@ -239,7 +243,7 @@ private fun ToggleRow(
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Text(label, style = MaterialTheme.typography.bodyLarge)
-    Switch(
+    FluidSwitch(
       checked = checked,
       onCheckedChange = onCheckedChange,
     )

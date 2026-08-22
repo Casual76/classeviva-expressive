@@ -31,7 +31,22 @@ import retrofit2.HttpException
 
 private val NoticeboardAttachmentIndexedUrl = Regex("""(.*/noticeboard/attach/[^/]+/[^/?#]+)/(\d+)([?#].*)?$""")
 
-class ClassevivaNetworkException(message: String, cause: Throwable? = null) : IOException(message, cause)
+open class ClassevivaNetworkException(message: String, cause: Throwable? = null) : IOException(message, cause)
+
+/**
+ * Classeviva refuses every request for a school year the school has not opened yet, answering 422
+ * with `school year not started yet`. It is not a failure so much as an instruction: read last year
+ * instead. Typed separately so the sync layer can act on it rather than just reporting it.
+ */
+class ClassevivaSchoolYearNotStartedException(
+  message: String,
+  cause: Throwable? = null,
+) : ClassevivaNetworkException(message, cause)
+
+private const val MaxErrorPayloadChars = 160
+
+private const val SchoolYearNotStartedCode = 422
+private const val SchoolYearNotStartedMarker = "school year not started"
 
 data class LoginResult(
   val token: String,
@@ -410,11 +425,22 @@ class ClassevivaRestClient @Inject constructor(
     payload: String,
     cause: Throwable? = null,
   ): ClassevivaNetworkException {
+    if (code == SchoolYearNotStartedCode && payload.contains(SchoolYearNotStartedMarker, ignoreCase = true)) {
+      return ClassevivaSchoolYearNotStartedException(
+        "L'anno scolastico selezionato non è ancora stato aperto dalla scuola.",
+        cause,
+      )
+    }
     val message = when (code) {
       401 -> "Sessione scaduta o credenziali non più valide."
+      403 -> "Questa sezione non è abilitata per il tuo profilo Classeviva."
       404 -> "Risorsa Classeviva non trovata."
-      500 -> "Classeviva ha restituito un errore server."
-      else -> "Classeviva ha risposto con $code${payload.takeIf(String::isNotBlank)?.let { ": $it" } ?: ""}"
+      429 -> "Troppe richieste a Classeviva: riprova tra qualche minuto."
+      500, 502, 503 -> "Classeviva ha restituito un errore server ($code)."
+      // The body is Classeviva's own error text and is worth showing, but it is unbounded and
+      // occasionally a whole HTML page — truncate it so a failure never turns into a wall of markup.
+      else -> "Classeviva ha risposto con $code" +
+        (payload.trim().takeIf(String::isNotBlank)?.take(MaxErrorPayloadChars)?.let { ": $it" } ?: "")
     }
     return ClassevivaNetworkException(message, cause)
   }

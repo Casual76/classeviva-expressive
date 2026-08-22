@@ -1,5 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.theme
 
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSpinner
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -28,7 +30,6 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -37,22 +38,26 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.SuggestionChip
-import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidRadius
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidCapsuleShape
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContinuousCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -64,6 +69,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidMotion
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.fluidPressable
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.fluidRowPressable
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import java.time.Instant
@@ -187,17 +195,16 @@ fun ExpressiveEditorialCard(
   contentColor: Color = MaterialTheme.colorScheme.onSurface,
   content: @Composable ColumnScope.() -> Unit,
 ) {
-  ElevatedCard(
-    modifier = modifier.fillMaxWidth(),
-    colors = CardDefaults.elevatedCardColors(
-      containerColor = color,
-      contentColor = contentColor,
-    ),
-    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
-  ) {
+  // A fill, not a card. Elevation is a Material idea: it puts a shadow under every grouped block and
+  // tints the surface by depth, so a screen of cards reads as a stack of floating slabs. iOS
+  // separates a group from its background with colour alone, and keeps shadows for things that
+  // genuinely float above the page — a switch thumb, a sheet.
+  CompositionLocalProvider(LocalContentColor provides contentColor) {
     Column(
-      modifier = Modifier
+      modifier = modifier
         .fillMaxWidth()
+        .clip(ContinuousCornerShape(FluidRadius.Group))
+        .background(color)
         .padding(20.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
       content = content,
@@ -285,23 +292,18 @@ fun StatusBadge(
   tone: ExpressiveTone = ExpressiveTone.Neutral,
 ) {
   val colors = toneColors(tone)
-  SuggestionChip(
-    modifier = modifier,
-    onClick = {},
-    label = {
-      Text(
-        text = label,
-        style = MaterialTheme.typography.labelMedium,
-        fontWeight = FontWeight.SemiBold,
-      )
-    },
-    colors = SuggestionChipDefaults.suggestionChipColors(
-      containerColor = colors.container,
-      labelColor = colors.content,
-      disabledContainerColor = colors.container,
-      disabledLabelColor = colors.content,
-    ),
-    enabled = false,
+  // Not a disabled chip. A chip is a control, and a disabled one is drawn to look unavailable — the
+  // wrong signal entirely for a badge, which is a label that was never meant to be tapped.
+  Text(
+    text = label,
+    modifier = modifier
+      .clip(FluidCapsuleShape)
+      .background(colors.container)
+      .padding(horizontal = 10.dp, vertical = 4.dp),
+    style = MaterialTheme.typography.labelMedium,
+    fontWeight = FontWeight.SemiBold,
+    color = colors.content,
+    maxLines = 1,
   )
 }
 
@@ -317,20 +319,16 @@ fun MetricTile(
 ) {
   val colors = toneColors(tone)
   val clickableModifier = if (onClick != null) {
-    if (animatePress) {
-      modifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick)
-    } else {
-      modifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick)
-    }
+    modifier.fluidPressable(onClick = onClick, pressedScale = if (animatePress) 0.968f else 1f)
   } else {
     modifier
   }
 
-  ElevatedCard(
-    modifier = clickableModifier.animateContentSize(
-      animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-    ),
-    colors = CardDefaults.elevatedCardColors(containerColor = colors.container),
+  Box(
+    modifier = clickableModifier
+      .animateContentSize(animationSpec = FluidMotion.intSize())
+      .clip(ContinuousCornerShape(FluidRadius.Card))
+      .background(colors.container),
   ) {
     Column(
       modifier = Modifier
@@ -371,20 +369,14 @@ fun ExpressiveCard(
     .fillMaxWidth()
     .then(
       if (animateContent) {
-        Modifier.animateContentSize(
-          animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-        )
+        Modifier.animateContentSize(animationSpec = FluidMotion.intSize())
       } else {
         Modifier
       },
     )
 
   val clickableModifier = if (onClick != null) {
-    if (animatePress) {
-      baseModifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick)
-    } else {
-      baseModifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick)
-    }
+    baseModifier.fluidPressable(onClick = onClick, pressedScale = if (animatePress) 0.974f else 1f)
   } else {
     baseModifier
   }
@@ -518,25 +510,34 @@ fun QuickAction(
 private val lastSyncDateFormatter: DateTimeFormatter =
   DateTimeFormatter.ofPattern("dd/MM HH:mm").withZone(ZoneId.systemDefault())
 
+/**
+ * A grouped list: rows share one rounded container, the way an inset-grouped table view does.
+ *
+ * The container clips, so a row's press highlight is trimmed to the group's corners instead of
+ * painting a square patch over them.
+ */
 @Composable
 fun ExpressiveListGroup(
   modifier: Modifier = Modifier,
   content: @Composable ColumnScope.() -> Unit,
 ) {
+  val shape = RoundedCornerShape(20.dp)
   Surface(
-    modifier = modifier.fillMaxWidth(),
-    shape = MaterialTheme.shapes.large,
+    modifier = modifier.fillMaxWidth().clip(shape),
+    shape = shape,
     color = MaterialTheme.colorScheme.surfaceContainerLow,
   ) {
     Column(modifier = Modifier.fillMaxWidth(), content = content)
   }
 }
 
+/** Separator between rows of a group, inset so it starts where the row's text does. */
 @Composable
 fun ExpressiveListDivider(modifier: Modifier = Modifier) {
   HorizontalDivider(
-    modifier = modifier.padding(horizontal = 16.dp),
-    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f),
+    modifier = modifier.padding(start = 16.dp),
+    thickness = 0.5.dp,
+    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f),
   )
 }
 
@@ -558,35 +559,25 @@ fun RegisterListRow(
   animateContent: Boolean = false,
 ) {
   val colors = toneColors(tone)
-  val isTinted = tone != ExpressiveTone.Neutral
   Column(
     modifier = modifier
       .fillMaxWidth()
       .then(
         if (animateContent) {
-          Modifier.animateContentSize(
-            animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
-          )
+          Modifier.animateContentSize(animationSpec = FluidMotion.intSize())
         } else {
           Modifier
         },
       )
-      .then(
-        if (onClick != null || onLongClick != null) {
-          if (animatePress) {
-            Modifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick, onLongClick = onLongClick)
-          } else {
-            Modifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick, onLongClick = onLongClick)
-          }
-        } else {
-          Modifier
-        },
-      ),
+      // A row inside a grouped list tints instead of scaling: shrinking one row of a stack breaks
+      // the group's silhouette and is what made the previous treatment look unsettled.
+      .fluidRowPressable(onClick = onClick, onLongClick = onLongClick),
   ) {
     ListItem(
-      colors = ListItemDefaults.colors(
-        containerColor = if (isTinted) colors.container.copy(alpha = 0.16f) else Color.Transparent,
-      ),
+      // Rows in a group share one background. Tinting individual rows by tone turned a tidy group
+      // into a patchwork of coloured blocks; the tone now lives on the icon tile and the eyebrow,
+      // where it labels the row instead of shouting over it.
+      colors = ListItemDefaults.colors(containerColor = Color.Transparent),
       overlineContent = eyebrow?.let {
         {
           Text(
@@ -620,18 +611,56 @@ fun RegisterListRow(
           }
         }
       },
-      leadingContent = leading,
-      trailingContent = badge?.let {
+      leadingContent = leading?.let {
+        { ToneIconTile(tone = tone, content = it) }
+      },
+      trailingContent = if (badge != null || onClick != null) {
         {
           Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
           ) {
-            it()
+            badge?.invoke()
+            if (onClick != null) {
+              // The disclosure chevron is the one affordance that tells a row apart from a label
+              // without needing colour, weight or a border to do it.
+              Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+              )
+            }
           }
         }
+      } else {
+        null
       },
     )
+  }
+}
+
+/**
+ * The rounded, filled square an icon sits in at the head of a list row.
+ *
+ * Carrying the row's tone here rather than on the row's background is what keeps a grouped list
+ * looking like one object: the colour identifies the row without breaking the group into blocks.
+ */
+@Composable
+private fun ToneIconTile(
+  tone: ExpressiveTone,
+  content: @Composable () -> Unit,
+) {
+  val colors = toneColors(tone)
+  Box(
+    modifier = Modifier
+      .size(32.dp)
+      .background(colors.content.copy(alpha = 0.16f), RoundedCornerShape(9.dp)),
+    contentAlignment = Alignment.Center,
+  ) {
+    CompositionLocalProvider(LocalContentColor provides colors.content) {
+      Box(modifier = Modifier.size(19.dp)) { content() }
+    }
   }
 }
 
@@ -754,9 +783,10 @@ fun StatChip(
   value: String,
   modifier: Modifier = Modifier,
 ) {
-  ElevatedCard(
-    modifier = modifier,
-    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+  Box(
+    modifier = modifier
+      .clip(ContinuousCornerShape(FluidRadius.Card))
+      .background(MaterialTheme.colorScheme.surfaceContainerHigh),
   ) {
     Column(
       modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
@@ -809,8 +839,9 @@ fun ExpressiveLoading(
   modifier: Modifier = Modifier,
   color: Color = MaterialTheme.colorScheme.primary,
 ) {
-  LoadingIndicator(
+  FluidSpinner(
     modifier = modifier,
+    size = 24.dp,
     color = color,
   )
 }
@@ -827,13 +858,7 @@ fun AppListItem(
   Column(
     modifier = modifier
       .fillMaxWidth()
-      .then(
-        if (onClick != null) {
-          Modifier.bouncyClickable(shape = RoundedCornerShape(24.dp), onClick = onClick)
-        } else {
-          Modifier
-        },
-      ),
+      .fluidRowPressable(onClick = onClick),
   ) {
     ListItem(
       colors = ListItemDefaults.colors(containerColor = Color.Transparent),

@@ -1,47 +1,72 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.theme
 
+import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContinuousCornerShape
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidRadius
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.fluidTypography
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 
+/**
+ * An accent, and nothing else.
+ *
+ * The palette is deliberately neutral: greys carry the whole interface, and colour is spent only on
+ * things a person can act on or on states that mean something. A preset therefore holds one hue,
+ * given twice — a colour that is legible on white is rarely the same colour that is legible on black,
+ * and iOS ships both for exactly that reason.
+ */
 @Immutable
 data class AccentPreset(
   val name: String,
-  val primary: Color,
-  val secondary: Color,
-  val tertiary: Color,
+  val label: String,
+  val light: Color,
+  val dark: Color,
+) {
+  fun resolve(isDark: Boolean): Color = if (isDark) dark else light
+}
+
+/**
+ * Names are kept from the previous palette so a stored preference still resolves; the colours are
+ * the iOS system set, which is tuned for exactly this job.
+ */
+val expressiveAccentPresets = listOf(
+  AccentPreset("expressive", "Blu", Color(0xFF007AFF), Color(0xFF0A84FF)),
+  AccentPreset("ember", "Arancio", Color(0xFFFF9500), Color(0xFFFF9F0A)),
+  AccentPreset("ocean", "Indaco", Color(0xFF5856D6), Color(0xFF7D7AFF)),
+  AccentPreset("jade", "Verde", Color(0xFF34C759), Color(0xFF30D158)),
 )
 
-val expressiveAccentPresets = listOf(
-  AccentPreset("expressive", Color(0xFF6750A4), Color(0xFF625B71), Color(0xFF7D5260)),
-  AccentPreset("ember", Color(0xFF176B63), Color(0xFF233239), Color(0xFFC48A3A)),
-  AccentPreset("ocean", Color(0xFF275F7A), Color(0xFF223541), Color(0xFFD0A15B)),
-  AccentPreset("jade", Color(0xFF3F6D58), Color(0xFF27352F), Color(0xFFB98A5F)),
-)
+/**
+ * The app's own accent, used when the accent mode is "Classeviva" rather than a preset.
+ *
+ * It used to resolve to whichever preset was last stored, which made the brand option a no-op that
+ * silently agreed with the previous choice.
+ */
+private val BrandAccent = AccentPreset("classeviva", "Classeviva", Color(0xFF1F9E6E), Color(0xFF2ED8A0))
+
+fun classevivaBrandAccent(isDark: Boolean): Color = BrandAccent.resolve(isDark)
 
 private fun presetFor(name: String): AccentPreset {
   return expressiveAccentPresets.firstOrNull { it.name.equals(name, ignoreCase = true) }
@@ -49,11 +74,11 @@ private fun presetFor(name: String): AccentPreset {
 }
 
 private val ClassevivaShapes = Shapes(
-  extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-  small = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-  medium = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-  large = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-  extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(32.dp),
+  extraSmall = ContinuousCornerShape(FluidRadius.Small),
+  small = ContinuousCornerShape(FluidRadius.Control),
+  medium = ContinuousCornerShape(FluidRadius.Card),
+  large = ContinuousCornerShape(FluidRadius.Group),
+  extraLarge = ContinuousCornerShape(FluidRadius.Sheet),
 )
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -70,116 +95,193 @@ fun ClassevivaExpressiveTheme(
     ThemeMode.AMOLED,
     -> true
   }
-  val accent = presetFor(settings.customAccentName)
+  val amoled = isDark && (settings.themeMode == ThemeMode.AMOLED || settings.amoledEnabled)
+  val accent = when (settings.accentMode) {
+    AccentMode.BRAND -> BrandAccent
+    else -> presetFor(settings.customAccentName)
+  }.resolve(isDark)
+  val useDynamic = settings.dynamicColorEnabled &&
+    settings.accentMode == AccentMode.DYNAMIC &&
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
   val colors = when {
-    settings.dynamicColorEnabled &&
-      settings.accentMode == AccentMode.DYNAMIC &&
-      Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-      if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    // Dynamic colour is honoured as a *hue source* only. Taking the system scheme wholesale would
+    // repaint every surface in a tinted grey and undo the neutral palette, so only the accent is
+    // borrowed and it is dropped into the same neutral scheme as every other preset.
+    useDynamic -> {
+      val system = if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+      neutralScheme(system.primary, isDark, amoled)
     }
-    isDark && (settings.themeMode == ThemeMode.AMOLED || settings.amoledEnabled) -> amoledScheme(accent)
-    isDark -> darkBrandScheme(accent)
-    else -> lightBrandScheme(accent)
+    else -> neutralScheme(accent, isDark, amoled)
   }
+
+  SystemBarsAppearance(colors)
 
   MaterialTheme(
     colorScheme = colors,
-    motionScheme = MotionScheme.expressive(),
+    motionScheme = ClassevivaMotionScheme,
     shapes = ClassevivaShapes,
-    typography = expressiveTypography(),
+    typography = fluidTypography(),
     content = content,
   )
 }
 
-private fun lightBrandScheme(accent: AccentPreset): ColorScheme = lightColorScheme(
-  primary = accent.primary,
-  onPrimary = Color.White,
-  primaryContainer = Color(0xFFDCECE8),
-  onPrimaryContainer = Color(0xFF133C39),
-  secondary = accent.secondary,
-  onSecondary = Color.White,
-  secondaryContainer = Color(0xFFE9EEEC),
-  onSecondaryContainer = Color(0xFF182228),
-  tertiary = accent.tertiary,
-  onTertiary = Color(0xFF271600),
-  tertiaryContainer = Color(0xFFFFDDB6),
-  onTertiaryContainer = Color(0xFF291800),
-  background = Color(0xFFF5F4EF),
-  surface = Color(0xFFFFFBF7),
-  surfaceContainer = Color(0xFFF1F0EA),
-  surfaceContainerHigh = Color(0xFFE9E7E1),
-  surfaceContainerHighest = Color(0xFFE1DED7),
-  onSurface = Color(0xFF161D1A),
-  onSurfaceVariant = Color(0xFF55605B),
-  error = Color(0xFFDC3545),
-  errorContainer = Color(0xFFFFDAD6),
-  onError = Color.White,
-  onErrorContainer = Color(0xFF410002),
-  outline = Color(0xFFCAD2CC),
-)
+/**
+ * Keeps the status and navigation bar icons legible against whatever the app is actually painting.
+ *
+ * Driven by the resolved colour scheme rather than by the system's dark-mode flag, because the app
+ * carries its own theme setting: with the system in light mode and the app forced to AMOLED, dark
+ * icons would be invisible against a black background.
+ */
+@Composable
+private fun SystemBarsAppearance(colors: ColorScheme) {
+  val view = LocalView.current
+  val lightBars = colors.background.luminance() > 0.5f
+  if (!view.isInEditMode) {
+    SideEffect {
+      val window = (view.context as? Activity)?.window ?: return@SideEffect
+      WindowCompat.getInsetsController(window, view).apply {
+        isAppearanceLightStatusBars = lightBars
+        isAppearanceLightNavigationBars = lightBars
+      }
+    }
+  }
+}
 
-private fun darkBrandScheme(accent: AccentPreset): ColorScheme = darkColorScheme(
-  primary = accent.primary,
-  onPrimary = Color.White,
-  primaryContainer = Color(0xFF113632),
-  onPrimaryContainer = Color(0xFFDCECE8),
-  secondary = Color(0xFFC7D0CC),
-  onSecondary = Color(0xFF172026),
-  secondaryContainer = Color(0xFF1E2624),
-  onSecondaryContainer = Color(0xFFE8EEEB),
-  tertiary = accent.tertiary,
-  onTertiary = Color(0xFF3B2B15),
-  tertiaryContainer = Color(0xFF5A4221),
-  onTertiaryContainer = Color(0xFFFFDDB6),
-  background = Color(0xFF0E1110),
-  surface = Color(0xFF131716),
-  surfaceContainer = Color(0xFF191D1C),
-  surfaceContainerHigh = Color(0xFF1F2523),
-  surfaceContainerHighest = Color(0xFF272E2B),
-  onSurface = Color(0xFFF0F3F1),
-  onSurfaceVariant = Color(0xFFB8C1BC),
-  error = Color(0xFFFFB4AB),
-  outline = Color(0xFF3F4844),
-)
+/**
+ * The whole palette, from one accent.
+ *
+ * Two rules hold everywhere:
+ *
+ *  * **The greys are neutral.** Not blue-grey, not warm-grey — the previous palette leaned green and
+ *    the tint was visible on every large surface, which is what made the app read as "themed" rather
+ *    than as a piece of system software.
+ *  * **Text has two levels.** [ColorScheme.onSurface] for anything that carries meaning,
+ *    [ColorScheme.onSurfaceVariant] for everything supporting. A third grey only ever makes the
+ *    second one look broken.
+ *
+ * Containers are derived from the accent by mixing it into the base surface rather than by picking a
+ * separate colour, so every preset stays consistent and a dynamic accent cannot produce a clash.
+ */
+private fun neutralScheme(accent: Color, isDark: Boolean, amoled: Boolean): ColorScheme {
+  val background = when {
+    amoled -> Color.Black
+    isDark -> Color(0xFF0D0D0F)
+    else -> Color(0xFFF2F2F7)
+  }
+  val surface = when {
+    amoled -> Color(0xFF0E0E10)
+    isDark -> Color(0xFF1B1B1E)
+    else -> Color(0xFFFFFFFF)
+  }
+  val surfaceHigh = when {
+    amoled -> Color(0xFF161618)
+    isDark -> Color(0xFF232326)
+    else -> Color(0xFFF7F7FA)
+  }
+  val surfaceHighest = when {
+    amoled -> Color(0xFF1D1D20)
+    isDark -> Color(0xFF2C2C2F)
+    else -> Color(0xFFEBEBF0)
+  }
+  val onSurface = if (isDark) Color(0xFFF2F2F5) else Color(0xFF121214)
+  // Apple's secondary label, resolved against the surface it sits on.
+  val onSurfaceVariant = if (isDark) Color(0xFF98989F) else Color(0xFF8A8A8E)
+  val outline = when {
+    amoled -> Color(0xFF2A2A2C)
+    isDark -> Color(0xFF3A3A3C)
+    else -> Color(0xFFD3D3D8)
+  }
+  val outlineVariant = when {
+    amoled -> Color(0xFF1A1A1C)
+    isDark -> Color(0xFF2A2A2C)
+    else -> Color(0xFFE3E3E8)
+  }
+  val error = if (isDark) Color(0xFFFF453A) else Color(0xFFFF3B30)
+  val containerMix = if (isDark) 0.24f else 0.14f
+  val accentContainer = lerp(surface, accent, containerMix)
+  val errorContainer = lerp(surface, error, containerMix)
+  val onAccent = if (accent.luminance() > 0.6f) Color(0xFF121214) else Color.White
 
-private fun amoledScheme(accent: AccentPreset): ColorScheme = darkColorScheme(
-  primary = accent.primary,
-  onPrimary = Color.White,
-  primaryContainer = Color(0xFF0B2824),
-  onPrimaryContainer = Color(0xFFDCECE8),
-  secondary = Color(0xFFE4E1E8),
-  onSecondary = Color.Black,
-  secondaryContainer = Color(0xFF0D0F0E),
-  onSecondaryContainer = Color(0xFFF4F4F8),
-  tertiary = accent.tertiary,
-  onTertiary = Color(0xFF2E1E09),
-  tertiaryContainer = Color(0xFF463310),
-  onTertiaryContainer = Color(0xFFFFDDB6),
-  background = Color.Black,
-  surface = Color.Black,
-  surfaceContainer = Color.Black,
-  surfaceContainerHigh = Color(0xFF020202),
-  surfaceContainerHighest = Color(0xFF060606),
-  onSurface = Color(0xFFF0F3F1),
-  onSurfaceVariant = Color(0xFFB8C1BC),
-  error = Color(0xFFFFB4AB),
-  outline = Color(0xFF141817),
-)
-
-private fun expressiveTypography(): Typography {
-  return Typography(
-    displaySmall = TextStyle(fontSize = 32.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold),
-    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold),
-    headlineSmall = TextStyle(fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.Bold),
-    titleLarge = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.Normal),
-    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Normal),
-    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 18.sp, fontWeight = FontWeight.Normal),
-    labelLarge = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium),
-    labelMedium = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium),
-    labelSmall = TextStyle(fontSize = 11.sp, lineHeight = 14.sp, fontWeight = FontWeight.Bold),
-  )
+  return if (isDark) {
+    darkColorScheme(
+      primary = accent,
+      onPrimary = onAccent,
+      primaryContainer = accentContainer,
+      onPrimaryContainer = accent,
+      inversePrimary = accent,
+      secondary = accent,
+      onSecondary = onAccent,
+      secondaryContainer = accentContainer,
+      onSecondaryContainer = accent,
+      tertiary = accent,
+      onTertiary = onAccent,
+      tertiaryContainer = surfaceHighest,
+      onTertiaryContainer = onSurface,
+      background = background,
+      onBackground = onSurface,
+      surface = surface,
+      onSurface = onSurface,
+      surfaceVariant = surfaceHigh,
+      onSurfaceVariant = onSurfaceVariant,
+      surfaceTint = Color.Transparent,
+      surfaceBright = surfaceHighest,
+      surfaceDim = background,
+      surfaceContainerLowest = background,
+      surfaceContainerLow = surface,
+      surfaceContainer = surface,
+      surfaceContainerHigh = surfaceHigh,
+      surfaceContainerHighest = surfaceHighest,
+      inverseSurface = Color(0xFFF2F2F5),
+      inverseOnSurface = Color(0xFF121214),
+      error = error,
+      onError = Color.White,
+      errorContainer = errorContainer,
+      onErrorContainer = error,
+      outline = outline,
+      outlineVariant = outlineVariant,
+      scrim = Color.Black,
+    )
+  } else {
+    lightColorScheme(
+      primary = accent,
+      onPrimary = onAccent,
+      primaryContainer = accentContainer,
+      onPrimaryContainer = accent,
+      inversePrimary = accent,
+      secondary = accent,
+      onSecondary = onAccent,
+      secondaryContainer = accentContainer,
+      onSecondaryContainer = accent,
+      tertiary = accent,
+      onTertiary = onAccent,
+      tertiaryContainer = surfaceHighest,
+      onTertiaryContainer = onSurface,
+      background = background,
+      onBackground = onSurface,
+      surface = surface,
+      onSurface = onSurface,
+      surfaceVariant = surfaceHigh,
+      onSurfaceVariant = onSurfaceVariant,
+      surfaceTint = Color.Transparent,
+      surfaceBright = surface,
+      surfaceDim = background,
+      surfaceContainerLowest = Color.White,
+      surfaceContainerLow = surface,
+      surfaceContainer = surface,
+      surfaceContainerHigh = surfaceHigh,
+      surfaceContainerHighest = surfaceHighest,
+      inverseSurface = Color(0xFF1C1C1E),
+      inverseOnSurface = Color(0xFFF2F2F7),
+      error = error,
+      onError = Color.White,
+      errorContainer = errorContainer,
+      onErrorContainer = error,
+      outline = outline,
+      outlineVariant = outlineVariant,
+      scrim = Color.Black,
+    )
+  }
 }
 
 @Composable

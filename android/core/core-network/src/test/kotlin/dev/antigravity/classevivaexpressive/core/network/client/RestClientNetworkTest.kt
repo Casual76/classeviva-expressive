@@ -581,7 +581,43 @@ class RestClientNetworkTest {
       restClient.getProfile()
       fail("Expected ClassevivaNetworkException")
     } catch (exception: ClassevivaNetworkException) {
-      assertEquals("Classeviva ha restituito un errore server.", exception.message)
+      assertEquals("Classeviva ha restituito un errore server (500).", exception.message)
+    }
+  }
+
+  @Test
+  fun getMaterials_mapsClosedSchoolYearToTypedError() = runBlocking {
+    setActiveSession(token = "token-422", studentId = "312345")
+    server.enqueue(
+      MockResponse().setResponseCode(422).setBody(
+        """{"statusCode":422,"error":"112:CvvRestApi/school year not started yet",""" +
+          """"message":"you can only access from previous school year"}""",
+      ),
+    )
+
+    try {
+      restClient.getMaterials()
+      fail("Expected ClassevivaSchoolYearNotStartedException")
+    } catch (exception: ClassevivaSchoolYearNotStartedException) {
+      assertEquals(
+        "L'anno scolastico selezionato non è ancora stato aperto dalla scuola.",
+        exception.message,
+      )
+    }
+  }
+
+  @Test
+  fun getProfile_keepsUnrecognised422AsAGenericError() = runBlocking {
+    setActiveSession(token = "token-422b", studentId = "312345")
+    server.enqueue(MockResponse().setResponseCode(422).setBody("""{"error":"something else"}"""))
+
+    try {
+      restClient.getProfile()
+      fail("Expected ClassevivaNetworkException")
+    } catch (exception: ClassevivaSchoolYearNotStartedException) {
+      fail("A 422 without the school-year marker must not be treated as a closed year")
+    } catch (exception: ClassevivaNetworkException) {
+      assertTrue(exception.message.orEmpty().startsWith("Classeviva ha risposto con 422"))
     }
   }
 

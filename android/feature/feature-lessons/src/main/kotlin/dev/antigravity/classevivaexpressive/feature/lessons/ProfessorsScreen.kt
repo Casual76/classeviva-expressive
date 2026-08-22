@@ -3,36 +3,30 @@ package dev.antigravity.classevivaexpressive.feature.lessons
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidLoadingBlock
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
@@ -401,95 +395,86 @@ fun ProfessorsRoute(
   viewModel: ProfessorsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-  Scaffold(
-    modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Professori",
-        subtitle = "Presenza, rigore e valutazioni per i tuoi docenti — solo i docenti ufficiali della classe.",
-        onBack = onBack,
-        scrollBehavior = scrollBehavior,
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
+  FluidScreen(
+    title = "Professori",
+    subtitle = "Presenza, rigore e valutazioni per i tuoi docenti — solo i docenti ufficiali della classe.",
+    onBack = onBack,
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
       )
     },
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.fillMaxSize().padding(paddingValues),
-      isRefreshing = state.isRefreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      if (state.professors.isEmpty() && !state.isRefreshing) {
-        EmptyState(
-          title = "Nessun docente rilevato",
-          detail = "Le statistiche appariranno dopo che lezioni e voti saranno sincronizzati.",
-          modifier = Modifier.padding(20.dp),
-        )
-      } else {
-        LazyColumn(
-          modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-          item {
-            Row(
-              modifier = Modifier.fillMaxWidth(),
-              horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-              val avgPresence = state.professors
-                .map { it.presenceRate }
-                .takeIf { it.isNotEmpty() }
-                ?.average()
-              MetricTile(
-                label = "Docenti",
-                value = state.professors.size.toString(),
-                detail = "Docenti ufficiali rilevati.",
-                modifier = Modifier.weight(1f),
-                tone = ExpressiveTone.Info,
-              )
-              MetricTile(
-                label = "Presenza media",
-                value = avgPresence?.let { "${(it * 100).toInt()}%" } ?: "N/D",
-                detail = "Media classe.",
-                modifier = Modifier.weight(1f),
-                tone = if ((avgPresence ?: 0.0) >= 0.85) ExpressiveTone.Success else ExpressiveTone.Warning,
-              )
-            }
-          }
-          item { ExpressiveAccentLabel("Docenti") }
-          items(state.professors, key = { it.teacherName }) { prof ->
-            val presenceTone = when {
-              prof.presenceRate >= 0.85f -> ExpressiveTone.Success
-              prof.presenceRate >= 0.65f -> ExpressiveTone.Warning
-              else -> ExpressiveTone.Danger
-            }
-            val strictnessTone = when (prof.strictnessLabel) {
-              "Molto esigente" -> ExpressiveTone.Danger
-              "Esigente" -> ExpressiveTone.Warning
-              "Equilibrato" -> ExpressiveTone.Info
-              else -> ExpressiveTone.Success
-            }
-            RegisterListRow(
-              title = prof.teacherName,
-              subtitle = prof.subjects.joinToString(", ").ifBlank { "Materia non specificata" },
-              eyebrow = "Presenza ${(prof.presenceRate * 100).toInt()}%",
-              meta = buildString {
-                if (prof.gradeCount > 0) append("${prof.gradeCount} voti")
-                prof.averageGrade?.let { append(" · media %.1f".format(it)) }
-                if (prof.gradeCount == 0) append("Nessun voto assegnato")
-              },
-              tone = presenceTone,
-              onClick = { viewModel.selectProfessor(prof) },
-              badge = { StatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
-              animatePress = true,
-            )
-          }
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 12.dp,
+  ) {
+    if (state.professors.isEmpty()) {
+      item {
+        if (state.isRefreshing) {
+          FluidLoadingBlock()
+        } else {
+          EmptyState(
+            title = "Nessun docente rilevato",
+            detail = "Le statistiche appariranno dopo che lezioni e voti saranno sincronizzati.",
+          )
         }
+      }
+    } else {
+      item {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          val avgPresence = state.professors
+            .map { it.presenceRate }
+            .takeIf { it.isNotEmpty() }
+            ?.average()
+          MetricTile(
+            label = "Docenti",
+            value = state.professors.size.toString(),
+            detail = "Docenti ufficiali rilevati.",
+            modifier = Modifier.weight(1f),
+            tone = ExpressiveTone.Info,
+          )
+          MetricTile(
+            label = "Presenza media",
+            value = avgPresence?.let { "${(it * 100).toInt()}%" } ?: "N/D",
+            detail = "Media classe.",
+            modifier = Modifier.weight(1f),
+            tone = if ((avgPresence ?: 0.0) >= 0.85) ExpressiveTone.Success else ExpressiveTone.Warning,
+          )
+        }
+      }
+      item { FluidSectionHeader("Docenti") }
+      items(state.professors, key = { it.teacherName }) { prof ->
+        val presenceTone = when {
+          prof.presenceRate >= 0.85f -> ExpressiveTone.Success
+          prof.presenceRate >= 0.65f -> ExpressiveTone.Warning
+          else -> ExpressiveTone.Danger
+        }
+        val strictnessTone = when (prof.strictnessLabel) {
+          "Molto esigente" -> ExpressiveTone.Danger
+          "Esigente" -> ExpressiveTone.Warning
+          "Equilibrato" -> ExpressiveTone.Info
+          else -> ExpressiveTone.Success
+        }
+        RegisterListRow(
+          title = prof.teacherName,
+          subtitle = prof.subjects.joinToString(", ").ifBlank { "Materia non specificata" },
+          eyebrow = "Presenza ${(prof.presenceRate * 100).toInt()}%",
+          meta = buildString {
+            if (prof.gradeCount > 0) append("${prof.gradeCount} voti")
+            prof.averageGrade?.let { append(" · media %.1f".format(it)) }
+            if (prof.gradeCount == 0) append("Nessun voto assegnato")
+          },
+          tone = presenceTone,
+          onClick = { viewModel.selectProfessor(prof) },
+          badge = { StatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
+          animatePress = true,
+        )
       }
     }
   }
@@ -512,7 +497,7 @@ private fun ProfessorDetailSheet(
     else -> ExpressiveTone.Success
   }
 
-  ModalBottomSheet(onDismissRequest = onDismiss) {
+  FluidSheet(onDismissRequest = onDismiss) {
     LazyColumn(
       modifier = Modifier.fillMaxWidth(),
       contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
@@ -521,7 +506,7 @@ private fun ProfessorDetailSheet(
       item {
         Text(prof.teacherName, style = MaterialTheme.typography.headlineSmall)
       }
-      item { ExpressiveAccentLabel("Materie") }
+      item { FluidSectionHeader("Materie") }
       item {
         Text(
           text = prof.subjects.joinToString(", ").ifBlank { "Non specificato" },
@@ -530,7 +515,7 @@ private fun ProfessorDetailSheet(
       }
 
       // ── Presenza ──────────────────────────────────────────────────────
-      item { ExpressiveAccentLabel("Presenza") }
+      item { FluidSectionHeader("Presenza") }
       item {
         Row(
           modifier = Modifier.fillMaxWidth(),
@@ -564,7 +549,7 @@ private fun ProfessorDetailSheet(
         }
       }
       if (prof.absenceDays.isNotEmpty()) {
-        item { ExpressiveAccentLabel("Probabili assenze recenti") }
+        item { FluidSectionHeader("Probabili assenze recenti") }
         items(prof.absenceDays.takeLast(5), key = { "abs_$it" }) { date ->
           RegisterListRow(
             title = date,
@@ -576,7 +561,7 @@ private fun ProfessorDetailSheet(
       }
 
       // ── Indice di rigore ──────────────────────────────────────────────
-      item { ExpressiveAccentLabel("Indice di rigore — ${prof.strictnessScore}/100") }
+      item { FluidSectionHeader("Indice di rigore — ${prof.strictnessScore}/100") }
       item {
         RegisterListRow(
           title = prof.strictnessLabel,
@@ -623,7 +608,7 @@ private fun ProfessorDetailSheet(
 
       // ── Voti ──────────────────────────────────────────────────────────
       if (prof.gradeCount > 0) {
-        item { ExpressiveAccentLabel("Voti") }
+        item { FluidSectionHeader("Voti") }
         item {
           Row(
             modifier = Modifier.fillMaxWidth(),
@@ -662,7 +647,7 @@ private fun ProfessorDetailSheet(
       }
 
       // ── Dossier Segreto 🔥 ─────────────────────────────────────────────
-      item { ExpressiveAccentLabel("Dossier Segreto 🕵️") }
+      item { FluidSectionHeader("Dossier Segreto 🕵️") }
       item {
         RegisterListRow(
           title = prof.funNickname,

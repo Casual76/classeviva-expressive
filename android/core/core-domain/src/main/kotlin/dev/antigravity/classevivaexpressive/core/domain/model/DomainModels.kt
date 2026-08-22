@@ -134,10 +134,24 @@ data class SchoolYearRef(
     get() = "$startYear/${endYear.toString().takeLast(2)}"
 
   companion object {
+    /**
+     * The month a new school year starts. September, because that is when Italian schools open and
+     * when Classeviva starts serving the new year — asking for it in August is answered with
+     * "school year not started yet" and leaves every section empty.
+     */
+    const val FirstMonth = 9
+
+    /** The month from which the upcoming year is worth offering, for schools that open early. */
+    const val UpcomingYearOfferedFromMonth = 6
+
     fun current(nowYear: Int, nowMonth: Int): SchoolYearRef {
-      val start = if (nowMonth >= 8) nowYear else nowYear - 1
+      val start = if (nowMonth >= FirstMonth) nowYear else nowYear - 1
       return SchoolYearRef(start, start + 1)
     }
+
+    /** The year before [year]. */
+    fun previousOf(year: SchoolYearRef): SchoolYearRef =
+      SchoolYearRef(year.startYear - 1, year.startYear)
   }
 }
 
@@ -156,6 +170,11 @@ data class SyncStatus(
   val lastSuccessfulSyncEpochMillis: Long? = null,
   val message: String? = null,
   val failedSections: List<String> = emptyList(),
+  /**
+   * Classeviva rejected the requested school year because the school has not opened it yet. Not an
+   * error to report so much as a cue to read the previous year instead.
+   */
+  val schoolYearNotStarted: Boolean = false,
 )
 
 @Serializable

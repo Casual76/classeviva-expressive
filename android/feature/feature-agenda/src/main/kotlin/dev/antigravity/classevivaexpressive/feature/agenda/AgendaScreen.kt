@@ -2,9 +2,6 @@ package dev.antigravity.classevivaexpressive.feature.agenda
 
 import android.content.Intent
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -15,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -23,29 +19,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
@@ -59,7 +44,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -69,11 +53,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlert
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveAccentLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTopHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
@@ -178,15 +169,13 @@ class AgendaViewModel @Inject constructor(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgendaRoute(
   initialAgendaId: String? = null,
   initialDate: String? = null,
   modifier: Modifier = Modifier,
   viewModel: AgendaViewModel = hiltViewModel(),
-  sharedTransitionScope: SharedTransitionScope? = null,
-  animatedVisibilityScope: AnimatedVisibilityScope? = null,
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   val context = LocalContext.current
@@ -197,7 +186,6 @@ fun AgendaRoute(
   }
   var selectedMonthText by rememberSaveable(initialDateValue) { mutableStateOf(YearMonth.from(initialDateValue).toString()) }
   var selectedDateText by rememberSaveable(initialDateValue) { mutableStateOf(initialDateValue.toString()) }
-  val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
   val selectedMonth = remember(selectedMonthText) { YearMonth.parse(selectedMonthText) }
   val selectedDate = remember(selectedDateText) { LocalDate.parse(selectedDateText) }
@@ -268,86 +256,64 @@ fun AgendaRoute(
     }
   }
 
-  Scaffold(
-    modifier = modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
-    topBar = {
-      ExpressiveTopHeader(
-        title = "Agenda",
-        subtitle = state.syncStatus.lastSyncLabel(),
-        scrollBehavior = scrollBehavior,
-        titleTrailing = {
-          SyncStatusDot(status = state.syncStatus)
-        },
-        actions = {
-          IconButton(onClick = viewModel::refresh) {
-            Icon(Icons.Rounded.Refresh, contentDescription = "Aggiorna")
-          }
-        },
+  FluidScreen(
+    modifier = modifier,
+    title = "Agenda",
+    subtitle = state.syncStatus.lastSyncLabel(),
+    titleTrailing = {
+      SyncStatusDot(status = state.syncStatus)
+    },
+    actions = {
+      FluidBarAction(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = "Aggiorna",
+        onClick = viewModel::refresh,
       )
     },
-    floatingActionButton = {
-      FloatingActionButton(
-        onClick = { showDialog = true },
-        modifier = Modifier.padding(16.dp),
-        containerColor = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-      ) {
-        Icon(Icons.Rounded.Add, contentDescription = "Nuovo evento")
-      }
-    },
-  ) { paddingValues ->
-    PullToRefreshBox(
-      modifier = Modifier.padding(paddingValues).fillMaxSize(),
-      isRefreshing = state.isRefreshing,
-      onRefresh = viewModel::refresh,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        item {
-          MonthHeader(
-            month = selectedMonth,
-            onPrevious = {
-              val previous = selectedMonth.minusMonths(1)
-              selectedMonthText = previous.toString()
-              selectedDateText = previous.atDay(selectedDate.dayOfMonth.coerceAtMost(previous.lengthOfMonth())).toString()
-            },
-            onNext = {
-              val next = selectedMonth.plusMonths(1)
-              selectedMonthText = next.toString()
-              selectedDateText = next.atDay(selectedDate.dayOfMonth.coerceAtMost(next.lengthOfMonth())).toString()
-            },
-          )
-        }
-        item {
-          MonthGrid(
-            month = selectedMonth,
-            entriesByDate = monthEntriesByDate,
-            selectedDate = selectedDate,
-            onSelectDate = { selectedDateText = it.toString() },
-          )
-        }
-        item { Spacer(modifier = Modifier.height(8.dp)) }
-        item { ExpressiveAccentLabel(formatDayHeader(selectedDate)) }
+    isRefreshing = state.isRefreshing,
+    onRefresh = viewModel::refresh,
+    itemSpacing = 12.dp,
+  ) {
+    item {
+      MonthHeader(
+        month = selectedMonth,
+        onPrevious = {
+          val previous = selectedMonth.minusMonths(1)
+          selectedMonthText = previous.toString()
+          selectedDateText = previous.atDay(selectedDate.dayOfMonth.coerceAtMost(previous.lengthOfMonth())).toString()
+        },
+        onNext = {
+          val next = selectedMonth.plusMonths(1)
+          selectedMonthText = next.toString()
+          selectedDateText = next.atDay(selectedDate.dayOfMonth.coerceAtMost(next.lengthOfMonth())).toString()
+        },
+      )
+    }
+    item {
+      MonthGrid(
+        month = selectedMonth,
+        entriesByDate = monthEntriesByDate,
+        selectedDate = selectedDate,
+        onSelectDate = { selectedDateText = it.toString() },
+      )
+    }
+    item { Spacer(modifier = Modifier.height(8.dp)) }
+    item { FluidSectionHeader(formatDayHeader(selectedDate)) }
 
-        if (selectedDayEntries.isEmpty()) {
-          item {
-            EmptyState(
-              title = "Nulla di pianificato",
-              detail = "Non ci sono compiti, verifiche o eventi per questa data.",
-            )
-          }
-        } else {
-          items(selectedDayEntries, key = { it.id }) { entry ->
-            AgendaEntryRow(
-              entry = entry,
-              onClick = { selectedEntry = entry },
-              onLongClick = { shareEntry(context, entry) },
-            )
-          }
-        }
+    if (selectedDayEntries.isEmpty()) {
+      item {
+        EmptyState(
+          title = "Nulla di pianificato",
+          detail = "Non ci sono compiti, verifiche o eventi per questa data.",
+        )
+      }
+    } else {
+      items(selectedDayEntries, key = { it.id }) { entry ->
+        AgendaEntryRow(
+          entry = entry,
+          onClick = { selectedEntry = entry },
+          onLongClick = { shareEntry(context, entry) },
+        )
       }
     }
   }
@@ -367,8 +333,6 @@ fun AgendaRoute(
       entry = entry,
       onDismiss = { selectedEntry = null },
       onShare = { shareEntry(context, entry) },
-      sharedTransitionScope = sharedTransitionScope,
-      animatedVisibilityScope = animatedVisibilityScope,
     )
   }
 }
@@ -570,19 +534,17 @@ private fun AgendaEntryRow(
   )
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AgendaDetailSheet(
   entry: AgendaEntry,
   onDismiss: () -> Unit,
   onShare: () -> Unit,
-  sharedTransitionScope: SharedTransitionScope?,
-  animatedVisibilityScope: AnimatedVisibilityScope?,
 ) {
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   var showHistory by rememberSaveable(entry.id) { mutableStateOf(false) }
 
-  ModalBottomSheet(
+  FluidSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
   ) {
@@ -640,29 +602,29 @@ private fun AgendaDetailSheet(
           verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
           if (entry.history.isNotEmpty()) {
-            FilledTonalButton(
+            FluidButton(
+              text = if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${entry.history.size})",
               onClick = { showHistory = !showHistory },
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Text(if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${entry.history.size})")
-            }
+              style = FluidButtonStyle.Tinted,
+              fillWidth = true,
+            )
           }
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
           ) {
-            FilledTonalButton(
+            FluidButton(
+              text = "Condividi",
               onClick = onShare,
               modifier = Modifier.weight(1f),
-            ) {
-              Text("Condividi")
-            }
-            TextButton(
+              style = FluidButtonStyle.Tinted,
+            )
+            FluidButton(
+              text = "Chiudi",
               onClick = onDismiss,
               modifier = Modifier.weight(1f),
-            ) {
-              Text("Chiudi")
-            }
+              style = FluidButtonStyle.Plain,
+            )
           }
         }
       }
@@ -679,7 +641,7 @@ private fun AgendaDetailSheet(
 @Composable
 private fun AgendaHistorySection(entry: AgendaEntry) {
   Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    ExpressiveAccentLabel("Cronologia versioni")
+    FluidSectionHeader("Cronologia versioni")
     AgendaVersionCard(
       label = "Versione attuale",
       title = entry.title,
@@ -775,7 +737,7 @@ private fun AddEventSheet(
   var showDatePicker by rememberSaveable { mutableStateOf(false) }
   var showTimePicker by rememberSaveable { mutableStateOf(false) }
 
-  ModalBottomSheet(onDismissRequest = onDismiss) {
+  FluidSheet(onDismissRequest = onDismiss) {
     LazyColumn(
       modifier = Modifier.fillMaxWidth(),
       contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
@@ -788,20 +750,20 @@ private fun AddEventSheet(
         )
       }
       item {
-        OutlinedTextField(
+        FluidTextField(
           value = title,
           onValueChange = { title = it },
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Titolo") },
+          label = "Titolo",
           singleLine = true,
         )
       }
       item {
-        OutlinedTextField(
+        FluidTextField(
           value = subject,
           onValueChange = { subject = it },
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Materia o tag") },
+          label = "Materia o tag",
           singleLine = true,
         )
       }
@@ -831,11 +793,11 @@ private fun AddEventSheet(
         )
       }
       item {
-        OutlinedTextField(
+        FluidTextField(
           value = description,
           onValueChange = { description = it },
           modifier = Modifier.fillMaxWidth(),
-          label = { Text("Dettagli") },
+          label = "Dettagli",
           minLines = 3,
         )
       }
@@ -844,15 +806,17 @@ private fun AddEventSheet(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          TextButton(onClick = onDismiss) {
-            Text("Annulla")
-          }
-          Button(
+          FluidButton(
+            text = "Annulla",
+            onClick = onDismiss,
+            style = FluidButtonStyle.Plain,
+          )
+          FluidButton(
+            text = "Salva",
             onClick = { onSave(title, description, subject, date, time) },
+            style = FluidButtonStyle.Filled,
             enabled = title.isNotBlank() && date.isNotBlank(),
-          ) {
-            Text("Salva")
-          }
+          )
         }
       }
     }
@@ -865,21 +829,23 @@ private fun AddEventSheet(
     DatePickerDialog(
       onDismissRequest = { showDatePicker = false },
       confirmButton = {
-        TextButton(
+        FluidButton(
+          text = "Seleziona",
           onClick = {
             datePickerState.selectedDateMillis?.let { millis ->
               date = millisToLocalDate(millis).toString()
             }
             showDatePicker = false
           },
-        ) {
-          Text("Seleziona")
-        }
+          style = FluidButtonStyle.Plain,
+        )
       },
       dismissButton = {
-        TextButton(onClick = { showDatePicker = false }) {
-          Text("Annulla")
-        }
+        FluidButton(
+          text = "Annulla",
+          onClick = { showDatePicker = false },
+          style = FluidButtonStyle.Plain,
+        )
       },
     ) {
       DatePicker(state = datePickerState)
@@ -893,37 +859,21 @@ private fun AddEventSheet(
       initialMinute = initialTime.minute,
       is24Hour = true,
     )
-    AlertDialog(
+    FluidAlert(
       onDismissRequest = { showTimePicker = false },
-      title = { Text("Seleziona orario") },
-      text = { TimePicker(state = timePickerState) },
-      confirmButton = {
-        TextButton(
-          onClick = {
-            time = String.format(italianLocale, "%02d:%02d", timePickerState.hour, timePickerState.minute)
-            showTimePicker = false
-          },
-        ) {
-          Text("Conferma")
-        }
-      },
-      dismissButton = {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          if (time.isNotBlank()) {
-            TextButton(
-              onClick = {
+      title = "Seleziona orario",
+      actions = listOf(
+        FluidAlertAction("Rimuovi", {
                 time = ""
                 showTimePicker = false
-              },
-            ) {
-              Text("Rimuovi")
-            }
-          }
-          TextButton(onClick = { showTimePicker = false }) {
-            Text("Annulla")
-          }
-        }
-      },
+              }),
+        FluidAlertAction("Annulla", { showTimePicker = false }),
+        FluidAlertAction("Conferma", {
+            time = String.format(italianLocale, "%02d:%02d", timePickerState.hour, timePickerState.minute)
+            showTimePicker = false
+          }, FluidAlertAction.Emphasis.Preferred),
+      ),
+      content = { TimePicker(state = timePickerState) },
     )
   }
 }
