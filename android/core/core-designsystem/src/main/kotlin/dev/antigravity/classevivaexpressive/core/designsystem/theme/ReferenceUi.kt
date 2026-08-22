@@ -2,7 +2,15 @@ package dev.antigravity.classevivaexpressive.core.designsystem.theme
 
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSpinner
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
@@ -12,21 +20,29 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.PriorityHigh
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CardDefaults
@@ -41,9 +57,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -52,12 +65,19 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidRadius
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidCapsuleShape
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContinuousCornerShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -66,6 +86,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -169,22 +190,71 @@ fun ExpressivePillTabs(
   onSelect: (String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  SingleChoiceSegmentedButtonRow(
-    modifier = modifier.fillMaxWidth(),
+  if (options.isEmpty()) return
+
+  val selectedIndex = options.indexOf(selected).coerceAtLeast(0)
+  val capsule = FluidCapsuleShape
+  BoxWithConstraints(
+    modifier = modifier
+      .fillMaxWidth()
+      .height(48.dp)
+      .clip(capsule)
+      .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+      .padding(3.dp),
   ) {
-    options.forEachIndexed { index, option ->
-      SegmentedButton(
-        shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-        selected = option == selected,
-        onClick = { onSelect(option) },
-        label = {
+    val itemWidth = maxWidth / options.size
+    val indicatorOffset by animateDpAsState(
+      targetValue = itemWidth * selectedIndex,
+      animationSpec = FluidMotion.dp(
+        dampingRatio = FluidMotion.DampingStandard,
+        stiffness = FluidMotion.ResponseSmooth,
+      ),
+      label = "pill selection position",
+    )
+
+    Box(
+      modifier = Modifier
+        .width(itemWidth)
+        .fillMaxSize()
+        .offset(x = indicatorOffset)
+        .shadow(
+          elevation = 2.dp,
+          shape = capsule,
+          ambientColor = Color.Black.copy(alpha = 0.12f),
+          spotColor = Color.Black.copy(alpha = 0.16f),
+        )
+        .background(MaterialTheme.colorScheme.surface, capsule),
+    )
+
+    Row(modifier = Modifier.fillMaxSize()) {
+      options.forEachIndexed { index, option ->
+        val isSelected = index == selectedIndex
+        Box(
+          modifier = Modifier
+            .weight(1f)
+            .fillMaxSize()
+            .clip(capsule)
+            .selectable(
+              selected = isSelected,
+              onClick = { onSelect(option) },
+              role = Role.Tab,
+            ),
+          contentAlignment = Alignment.Center,
+        ) {
           Text(
             text = option,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+            color = if (isSelected) {
+              MaterialTheme.colorScheme.onSurface
+            } else {
+              MaterialTheme.colorScheme.onSurfaceVariant
+            },
           )
-        },
-      )
+        }
+      }
     }
   }
 }
@@ -401,35 +471,279 @@ fun ExpressiveCard(
   }
 }
 
+/**
+ * Sync state as a bar control rather than as a mark on the page.
+ *
+ * A bare coloured dot next to the large title had two problems, and both are why it is now a
+ * self-contained glyph living in the navigation bar: a dot alone carries no meaning without colour
+ * vision, and anything parked beside the large title ends up underneath it the moment the title
+ * travels to the centre of the bar. Here it keeps its own place, stays visible at every scroll
+ * position, and states which of the four things is happening with a shape as well as a colour.
+ */
 @Composable
-fun SyncStatusDot(
+fun SyncStatusIndicator(
   status: SyncStatus,
   modifier: Modifier = Modifier,
 ) {
-  val tone = when (status.state) {
-    SyncState.IDLE -> if (status.lastSuccessfulSyncEpochMillis == null) ExpressiveTone.Warning else ExpressiveTone.Success
-    SyncState.SYNCING -> ExpressiveTone.Info
-    SyncState.PARTIAL -> ExpressiveTone.Warning
-    SyncState.OFFLINE,
-    SyncState.ERROR -> ExpressiveTone.Danger
+  val neverSynced = status.lastSuccessfulSyncEpochMillis == null
+  // A year the school has not opened yet is not a fault: nothing is broken, nobody can fix it, and
+  // in the weeks either side of September it is the ordinary state of the registro. Reporting it in
+  // the same colour as an expired session teaches people to ignore the colour.
+  val notStarted = status.schoolYearNotStarted
+  val tone = when {
+    notStarted -> ExpressiveTone.Info
+    status.state == SyncState.IDLE -> if (neverSynced) ExpressiveTone.Warning else ExpressiveTone.Success
+    status.state == SyncState.SYNCING -> ExpressiveTone.Info
+    status.state == SyncState.PARTIAL -> ExpressiveTone.Warning
+    else -> ExpressiveTone.Danger
   }
-  val label = when (status.state) {
-    SyncState.IDLE -> if (status.lastSuccessfulSyncEpochMillis == null) {
+  val label = when {
+    notStarted -> "Anno scolastico non ancora aperto"
+    status.state == SyncState.IDLE -> if (neverSynced) {
       "Sincronizzazione mai completata"
     } else {
       "Sincronizzazione completata"
     }
-    SyncState.SYNCING -> "Aggiornamento in corso"
-    SyncState.PARTIAL -> "Sincronizzazione parziale"
-    SyncState.OFFLINE,
-    SyncState.ERROR -> "Sincronizzazione non riuscita"
+    status.state == SyncState.SYNCING -> "Aggiornamento in corso"
+    status.state == SyncState.PARTIAL -> "Sincronizzazione parziale"
+    else -> "Sincronizzazione non riuscita"
   }
+  val colors = toneColors(tone)
+  val container by animateColorAsState(
+    targetValue = colors.container,
+    animationSpec = FluidMotion.color(),
+    label = "sync container",
+  )
+  val content by animateColorAsState(
+    targetValue = colors.content,
+    animationSpec = FluidMotion.color(),
+    label = "sync content",
+  )
+
   Box(
     modifier = modifier
-      .size(10.dp)
-      .background(toneColors(tone).content, CircleShape)
+      .size(SyncIndicatorSize)
+      .background(container, CircleShape)
       .semantics { contentDescription = label },
+    contentAlignment = Alignment.Center,
+  ) {
+    AnimatedContent(
+      targetState = if (notStarted) null else status.state,
+      transitionSpec = {
+        (fadeIn(FluidMotion.fadeIn(180)) + scaleIn(FluidMotion.standard(), initialScale = 0.6f))
+          .togetherWith(fadeOut(FluidMotion.fadeOut(120)) + scaleOut(FluidMotion.standard(), targetScale = 0.6f))
+      },
+      label = "sync glyph",
+    ) { state ->
+      when (state) {
+        null -> Icon(
+          imageVector = Icons.Rounded.Info,
+          contentDescription = null,
+          modifier = Modifier.size(14.dp),
+          tint = content,
+        )
+        SyncState.SYNCING -> FluidSpinner(size = 14.dp, color = content)
+        SyncState.OFFLINE -> Icon(
+          imageVector = Icons.Rounded.CloudOff,
+          contentDescription = null,
+          modifier = Modifier.size(13.dp),
+          tint = content,
+        )
+        SyncState.ERROR,
+        SyncState.PARTIAL -> Icon(
+          imageVector = Icons.Rounded.PriorityHigh,
+          contentDescription = null,
+          modifier = Modifier.size(13.dp),
+          tint = content,
+        )
+        SyncState.IDLE -> Box(
+          modifier = Modifier
+            .size(if (neverSynced) 7.dp else 8.dp)
+            .background(content, CircleShape),
+        )
+      }
+    }
+  }
+}
+
+private val SyncIndicatorSize = 26.dp
+
+/**
+ * The sentence [SyncStatusNotice] would show, or null when there is nothing to say.
+ *
+ * Exposed so a list can decide whether to reserve a slot at all: an item that renders nothing still
+ * takes its share of the arrangement's spacing, which is a gap at the top of the page with no
+ * explanation attached to it.
+ */
+fun SyncStatus.noticeMessage(): String? {
+  if (state == SyncState.SYNCING) return null
+  return message?.takeIf(String::isNotBlank)
+}
+
+/**
+ * The one thing the sync knows that the page cannot say for itself, said on the page.
+ *
+ * A status glyph in the bar is a reasonable place to *keep* this and a hopeless place to *deliver*
+ * it. A refresh that fails leaves an orange mark in the corner of a page that otherwise just looks
+ * empty, and nothing about a mark invites the tap that would explain it. Anything worth an
+ * exclamation mark is worth a sentence.
+ *
+ * The retry is offered only for the failures retrying can fix. A section the registro does not
+ * publish for the selected year is not a failure — nothing went wrong, and asking again will get
+ * the same answer — so it is stated and left alone.
+ */
+@Composable
+fun SyncStatusNotice(
+  status: SyncStatus,
+  modifier: Modifier = Modifier,
+  onRetry: (() -> Unit)? = null,
+) {
+  val message = status.noticeMessage() ?: return
+  val notStarted = status.schoolYearNotStarted
+  val isFailure = !notStarted && (
+    status.state == SyncState.PARTIAL ||
+      status.state == SyncState.ERROR ||
+      status.state == SyncState.OFFLINE
+    )
+  val tone = when {
+    notStarted -> ExpressiveTone.Info
+    status.state == SyncState.ERROR || status.state == SyncState.OFFLINE -> ExpressiveTone.Danger
+    status.state == SyncState.PARTIAL -> ExpressiveTone.Warning
+    else -> ExpressiveTone.Info
+  }
+  val title = when {
+    notStarted -> "Anno scolastico non ancora aperto"
+    status.state == SyncState.OFFLINE -> "Nessuna connessione"
+    isFailure -> "Aggiornamento non riuscito"
+    else -> "Dati non disponibili"
+  }
+  // The sections stay empty until the school opens the year, and no amount of retrying changes
+  // that. What the reader can do is look at the year before it, so that is what is offered.
+  val guidance = "Finché la scuola non lo apre, le sezioni legate all'anno restano vuote. " +
+    "Puoi consultare l'anno precedente dal selettore in Impostazioni."
+
+
+  ExpressiveCard(modifier = modifier, highlighted = true) {
+    Column(
+      modifier = Modifier.fillMaxWidth(),
+      verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top,
+      ) {
+        Icon(
+          imageVector = if (isFailure) Icons.Rounded.PriorityHigh else Icons.Rounded.Info,
+          contentDescription = null,
+          modifier = Modifier.size(20.dp),
+          tint = toneColors(tone).content,
+        )
+        Column(
+          modifier = Modifier.weight(1f),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+          Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = toneColors(tone).content,
+          )
+          Text(
+            text = if (notStarted) "$message $guidance" else message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+      if (isFailure && onRetry != null) {
+        FluidButton(text = "Riprova", onClick = onRetry, fillWidth = true)
+      }
+    }
+  }
+}
+
+/**
+ * The sync indicator, and the explanation behind it.
+ *
+ * A red dot that cannot be asked *why* is not a status, it is a rumour: the app already knew the
+ * failure message and which sections it applied to, and showed neither. Tapping opens what it
+ * knows, and offers the one action worth offering when something did not arrive.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SyncStatusAction(
+  status: SyncStatus,
+  modifier: Modifier = Modifier,
+  onRetry: (() -> Unit)? = null,
+) {
+  var showDetails by remember { mutableStateOf(false) }
+
+  SyncStatusIndicator(
+    status = status,
+    modifier = modifier
+      .clip(CircleShape)
+      .clickable(role = Role.Button) { showDetails = true },
   )
+
+  if (showDetails) {
+    FluidSheet(
+      onDismissRequest = { showDetails = false },
+      title = "Sincronizzazione",
+    ) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .padding(horizontal = 20.dp)
+          .padding(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+      ) {
+        Text(
+          text = status.lastSyncLabel(),
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold,
+        )
+        status.message?.takeIf(String::isNotBlank)?.let { message ->
+          InlineMessageCard(
+            message = message,
+            title = if (status.state == SyncState.OFFLINE) "Nessuna connessione" else "Dettaglio",
+            tone = if (status.state == SyncState.PARTIAL) ExpressiveTone.Warning else ExpressiveTone.Danger,
+          )
+        }
+        if (status.failedSections.isNotEmpty()) {
+          Text(
+            text = "Non aggiornate: ${status.failedSections.joinToString(", ")}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        if (status.schoolYearNotStarted) {
+          Text(
+            text = "L'anno selezionato non è ancora stato aperto dalla scuola: i dati mostrati sono quelli dell'anno precedente.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        if (status.message.isNullOrBlank() && status.failedSections.isEmpty() && status.state != SyncState.SYNCING) {
+          Text(
+            text = "Tutti i dati del registro risultano aggiornati.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        if (onRetry != null) {
+          FluidButton(
+            text = "Riprova adesso",
+            onClick = {
+              showDetails = false
+              onRetry()
+            },
+            fillWidth = true,
+          )
+        }
+      }
+    }
+  }
 }
 
 @Composable
@@ -572,7 +886,11 @@ fun RegisterListRow(
       )
       // A row inside a grouped list tints instead of scaling: shrinking one row of a stack breaks
       // the group's silhouette and is what made the previous treatment look unsettled.
-      .fluidRowPressable(onClick = onClick, onLongClick = onLongClick),
+      .fluidRowPressable(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        animateFeedback = animatePress,
+      ),
   ) {
     ListItem(
       // Rows in a group share one background. Tinting individual rows by tone turned a tidy group

@@ -12,6 +12,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -88,11 +93,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -109,6 +116,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidMotion
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidMotionPolicyProvider
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScrollToTopBus
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
@@ -134,31 +142,57 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveScreenSurface
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FluidRouteMotion
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.LocalRouteMotionSignals
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.MotionOrigin
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.RouteMotionHost
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.RouteMotionSignals
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidTouchOriginTracker
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberFluidTouchOrigin
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberRouteMotionSignals
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
 import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
 import dev.antigravity.classevivaexpressive.feature.absences.AbsencesRoute
+import dev.antigravity.classevivaexpressive.feature.agenda.AgendaDetailRoute
 import dev.antigravity.classevivaexpressive.feature.agenda.AgendaRoute
+import dev.antigravity.classevivaexpressive.feature.agenda.AgendaViewModel
+import dev.antigravity.classevivaexpressive.feature.communications.CommunicationDetailRoute
 import dev.antigravity.classevivaexpressive.feature.communications.CommunicationsRoute
+import dev.antigravity.classevivaexpressive.feature.communications.CommunicationsViewModel
+import dev.antigravity.classevivaexpressive.feature.communications.NoteDetailRoute
 import dev.antigravity.classevivaexpressive.feature.dashboard.DashboardRoute
 import dev.antigravity.classevivaexpressive.feature.dashboard.DocumentsRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.DocumentDetailRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.DocumentsViewModel
 import dev.antigravity.classevivaexpressive.feature.dashboard.HomeworkRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.HomeworkDetailRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.HomeworkViewModel
 import dev.antigravity.classevivaexpressive.feature.dashboard.MaterialsRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.MaterialDetailRoute
+import dev.antigravity.classevivaexpressive.feature.dashboard.MaterialsViewModel
 import dev.antigravity.classevivaexpressive.feature.dashboard.MeetingsRoute
 import dev.antigravity.classevivaexpressive.feature.dashboard.StudentScoreRoute
 import dev.antigravity.classevivaexpressive.feature.grades.GradesRoute
+import dev.antigravity.classevivaexpressive.feature.grades.GradeDetailRoute
+import dev.antigravity.classevivaexpressive.feature.grades.GradesViewModel
 import dev.antigravity.classevivaexpressive.feature.lessons.LessonsRoute
 import dev.antigravity.classevivaexpressive.feature.lessons.ProfessorsRoute
+import dev.antigravity.classevivaexpressive.feature.lessons.ProfessorDetailRoute
+import dev.antigravity.classevivaexpressive.feature.lessons.ProfessorsViewModel
 import dev.antigravity.classevivaexpressive.feature.settings.SettingsRoute
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlin.math.roundToInt
 
 private const val BugReportRepositoryOwner = "Casual76"
 private const val BugReportRepositoryName = "classeviva-expressive"
 private const val BugReportTemplateName = "app_bug_report.md"
 internal const val BugReportRoute = "bugReport"
 private const val BugReportSourceRoute = "more"
+private const val ConsumedAgendaRequestKey = "consumed-agenda-request"
 private const val ConsumedGradeRequestKey = "consumed-grade-request"
+private const val ConsumedHomeworkRequestKey = "consumed-homework-request"
 
 private data class TopLevelDestination(
   val baseRoute: String,
@@ -179,26 +213,6 @@ internal val topLevelRouteOrder = topLevelDestinations.map { it.baseRoute }
 internal val topLevelRoutes = topLevelRouteOrder.toSet()
 
 /**
- * Route motion.
- *
- * A hierarchical push follows the horizontal gesture that created and dismisses it. The child is an
- * opaque surface that covers the parent while the parent recedes by roughly 28% of the width, so predictive
- * back can seek the exact same geometry without ever blending two readable screens.
- *
- * The restrained parallax ratio is what
- * creates the sense of a stack with depth rather than two slides passing each other.
- *
- * Top-level peers use only a short ordered settle. Hierarchical destinations use the full travel.
- *
- * The route surfaces never change alpha or scale. This is deliberately stricter than ordinary
- * cross-fades: a paused predictive gesture must still contain one readable page at each pixel.
- */
-private fun routeSlideSpec() = FluidMotion.intOffset(
-  dampingRatio = FluidMotion.DampingStandard,
-  stiffness = FluidMotion.ResponseSmooth,
-)
-
-/**
  * The tab bar's own timing.
  *
  * Faster than the page transition on purpose. The bar is chrome: it should already be out of the way
@@ -210,46 +224,153 @@ private fun barSlideSpec() = FluidMotion.intOffset(
   stiffness = FluidMotion.ResponseSnappy,
 )
 
+/**
+ * One hierarchical movement for the whole app: the destination grows out of the point that was
+ * touched, while the page it covers recedes a little underneath it.
+ *
+ * Everything here is duration-based, and that is not a stylistic preference. The predictive-back
+ * gesture drives these transitions by *seeking* into them, and only a finite, monotonic curve can
+ * be seeked; a spring has no duration to scrub within, which is precisely why dragging back used to
+ * feel unrelated to what was on screen.
+ *
+ * All of it settles on [FluidMotion.EaseEmphasized] — decisive start, long calm settle, and no
+ * overshoot anywhere. An earlier pass used a curve that carried three percent of overshoot on the
+ * theory that it would read as springiness; on a surface the size of the display it read as the
+ * page arriving, going slightly too far, and coming back, which is the "strange bounce" it was
+ * meant to avoid. Spring belongs to things small enough to carry it.
+ */
+private fun expandSpec() = tween<Float>(
+  durationMillis = FluidMotion.DurationExpand,
+  easing = FluidMotion.EaseEmphasized,
+)
+
+private fun collapseSpec() = tween<Float>(
+  durationMillis = FluidMotion.DurationCollapse,
+  easing = FluidMotion.EaseEmphasized,
+)
+
+/** Peers travel on the same curve as everything else, only sideways and only a little. */
+private fun peerSlideSpec() = tween<IntOffset>(
+  durationMillis = FluidMotion.DurationPeer,
+  easing = FluidMotion.EaseEmphasized,
+)
+
+/** The page being covered: it gives way while the new one is still becoming opaque. */
+private fun coveredFadeOut() = tween<Float>(
+  durationMillis = FluidMotion.DurationRouteFadeOut,
+  easing = FluidMotion.EaseIn,
+)
+
+/**
+ * The page being dismissed: it stays solid while it shrinks and only disappears at the end.
+ *
+ * A detail that starts dissolving the instant the back gesture begins reads as a page falling
+ * apart. Holding its opacity while it contracts is what makes it read as *closing* — and it is the
+ * half of the gesture the finger is actually scrubbing, so it has to be the legible half.
+ */
+private fun dismissedFadeOut() = tween<Float>(
+  durationMillis = 170,
+  delayMillis = 90,
+  easing = FluidMotion.EaseIn,
+)
+
+/** How far a peer page slides, in pixels, given the width it is sliding across. */
+private fun peerSlidePx(width: Int, direction: Int): Int =
+  (width * FluidMotion.PeerSlideFraction * direction).roundToInt()
+
+/**
+ * Resolves the movement between two entries, and records for the layers about to draw whether the
+ * departing page should lose focus on its way out.
+ *
+ * The entry that is joining or leaving the stack is the one that knows how it got there: on the way
+ * forward that is the arriving destination, on the way back the one being dismissed.
+ */
+private fun RouteMotionSignals.resolveRouteMotion(
+  initialState: NavBackStackEntry,
+  targetState: NavBackStackEntry,
+  isPop: Boolean,
+): RouteMotionDecision {
+  val carrier = if (isPop) initialState else targetState
+  val decision = decideRouteMotion(
+    fromRoute = initialState.destination.route,
+    toRoute = targetState.destination.route,
+    requestedKind = carrier.savedStateHandle.readMotionKind(),
+  )
+  hierarchical = decision.kind == RouteMotionKind.Expand
+  return decision
+}
+
 private fun routeEnterTransition(
   decision: RouteMotionDecision,
+  origin: MotionOrigin,
   isPop: Boolean,
 ): EnterTransition = when (decision.kind) {
-  // Native tab switches do not move whole pages. Continuity lives in the morphing pill indicator;
-  // keeping destinations discrete removes the artificial wipe and the competing glass snapshots.
-  RouteMotionKind.TopLevelSwitch -> EnterTransition.None
+  // Peers step sideways together. A full-width wipe between two readable pages says "these are
+  // nested", which is the one thing tabs are not; no movement at all said nothing whatsoever, which
+  // is how a tab change ends up feeling like the app skipped a frame.
+  RouteMotionKind.TopLevelSwitch -> {
+    // Opaque from the first frame here too, for the same reason. It matters most under a scrubbed
+    // predictive back, where the transition can be *held* at any point: a cross-fade paused halfway
+    // is two tabs printed on top of each other, and the finger can keep it there indefinitely.
+    if (decision.direction == 0) {
+      fadeIn(tween(FluidMotion.DurationPeerFadeIn, easing = FluidMotion.EaseOut))
+    } else {
+      slideInHorizontally(peerSlideSpec()) { width -> peerSlidePx(width, decision.direction) }
+    }
+  }
 
-  // Predictive back is a horizontal gesture, so the transition uses the same spatial model: the
-  // child covers the parent from the trailing edge and uncovers it one-to-one on pop. No alpha or
-  // whole-page scale means only one readable destination exists at every pixel.
-  RouteMotionKind.Push -> if (isPop) {
-    slideInHorizontally(
-      initialOffsetX = { width -> -width * 7 / 25 },
-      animationSpec = routeSlideSpec(),
+  // No fade on either side of a hierarchical move, and that is the whole invariant: exactly one
+  // readable page at every pixel of every frame. An arriving page carries a rounded edge for as
+  // long as it is smaller than the screen, so it has no hard rectangular boundary left to disguise
+  // — and every millisecond a page spends translucent is a millisecond where two screens can be
+  // read through each other, which is what made opening something look like a cross-fade.
+  RouteMotionKind.Expand -> if (isPop) {
+    // Coming back, the page underneath is uncovered: it returns from slightly too close, which is
+    // exactly where the forward transition left it.
+    scaleIn(
+      animationSpec = collapseSpec(),
+      initialScale = FluidRouteMotion.ExpandParentScale,
+      transformOrigin = origin.toTransformOrigin(),
     )
   } else {
-    slideInHorizontally(
-      initialOffsetX = { width -> width },
-      animationSpec = routeSlideSpec(),
+    scaleIn(
+      animationSpec = expandSpec(),
+      initialScale = FluidRouteMotion.ExpandInitialScale,
+      transformOrigin = origin.toTransformOrigin(),
     )
   }
 }
 
 private fun routeExitTransition(
   decision: RouteMotionDecision,
+  origin: MotionOrigin,
   isPop: Boolean,
 ): ExitTransition = when (decision.kind) {
-  // Peer content changes atomically; the bar owns the animated relationship between destinations.
-  RouteMotionKind.TopLevelSwitch -> ExitTransition.None
+  RouteMotionKind.TopLevelSwitch -> {
+    // The one that leaves still fades, and quickly: both pages travel the same way by the same
+    // amount, so the only place the old one is ever uncovered is the narrow strip the new one has
+    // not reached yet, and that strip should resolve to the page's own background rather than to a
+    // sliver of the tab you just left.
+    val fade = fadeOut(tween(FluidMotion.DurationPeerFadeOut, easing = FluidMotion.EaseIn))
+    if (decision.direction == 0) {
+      fade
+    } else {
+      fade + slideOutHorizontally(peerSlideSpec()) { width -> peerSlidePx(width, -decision.direction) }
+    }
+  }
 
-  RouteMotionKind.Push -> if (isPop) {
-    slideOutHorizontally(
-      targetOffsetX = { width -> width },
-      animationSpec = routeSlideSpec(),
+  RouteMotionKind.Expand -> if (isPop) {
+    // The detail collapses back into the control it came out of.
+    fadeOut(dismissedFadeOut()) + scaleOut(
+      animationSpec = collapseSpec(),
+      targetScale = FluidRouteMotion.ExpandInitialScale,
+      transformOrigin = origin.toTransformOrigin(),
     )
   } else {
-    slideOutHorizontally(
-      targetOffsetX = { width -> -width * 7 / 25 },
-      animationSpec = routeSlideSpec(),
+    fadeOut(coveredFadeOut()) + scaleOut(
+      animationSpec = expandSpec(),
+      targetScale = FluidRouteMotion.ExpandParentScale,
+      transformOrigin = origin.toTransformOrigin(),
     )
   }
 }
@@ -261,6 +382,7 @@ fun MainApp(
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val notificationHostState = rememberFluidNotificationHostState()
+  val routeMotionSignals = rememberRouteMotionSignals()
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     viewModel.onAppResumed()
   }
@@ -303,7 +425,10 @@ fun MainApp(
   }
 
   ClassevivaExpressiveTheme(settings = uiState.settings) {
-    CompositionLocalProvider(LocalFluidNotificationHostState provides notificationHostState) {
+    CompositionLocalProvider(
+      LocalFluidNotificationHostState provides notificationHostState,
+      LocalRouteMotionSignals provides routeMotionSignals,
+    ) {
       ExpressiveScreenSurface(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
           when {
@@ -903,6 +1028,20 @@ internal fun pendingGradeRequest(
   ?.takeIf(String::isNotBlank)
   ?.takeUnless { it == consumedGradeId }
 
+internal fun pendingAgendaRequest(
+  requestedAgendaId: String?,
+  consumedAgendaId: String?,
+): String? = requestedAgendaId
+  ?.takeIf(String::isNotBlank)
+  ?.takeUnless { it == consumedAgendaId }
+
+internal fun pendingHomeworkRequest(
+  requestedHomeworkId: String?,
+  consumedHomeworkId: String?,
+): String? = requestedHomeworkId
+  ?.takeIf(String::isNotBlank)
+  ?.takeUnless { it == consumedHomeworkId }
+
 @Composable
 private fun AuthenticatedApp(
   isCheckingForUpdates: Boolean,
@@ -918,13 +1057,36 @@ private fun AuthenticatedApp(
   val showNavigationSuite = currentRoute in topLevelRoutes
 
   val scrollToTop = remember { FluidScrollToTopBus() }
+  val touchOrigin = rememberFluidTouchOrigin()
+  // Owned by the shell above: one navigation host, one place that says what the leaving page does.
+  val motionSignals = LocalRouteMotionSignals.current
 
+  // The destination carries both the point it was opened from and the fact that it *was* opened
+  // rather than switched to, so going back undoes the same movement however the user chose to
+  // leave — the system gesture, the chevron, or a nested pop.
   fun navigateRoute(route: String) {
+    val origin = touchOrigin.origin
     navController.navigate(route)
+    navController.currentBackStackEntry?.savedStateHandle?.writeExpandMotion(origin)
   }
 
+  /** Stepping along the bar. The bar is the gesture, so the pages only have to answer it. */
   fun navigateTopLevelRoute(targetRoute: String) {
     navController.navigateTopLevel(targetRoute)
+    navController.currentBackStackEntry?.savedStateHandle?.writePeerMotion()
+  }
+
+  /**
+   * Opening a top-level section by touching something on the page.
+   *
+   * The routes are peers but the gesture is not: tapping the average on Home is that card opening
+   * into the page behind it, and answering it with a tab bar's sideways shrug is what made the most
+   * direct route in the app look like nothing had happened.
+   */
+  fun expandToTopLevelRoute(targetRoute: String) {
+    val origin = touchOrigin.origin
+    navController.navigateTopLevel(targetRoute)
+    navController.currentBackStackEntry?.savedStateHandle?.writeExpandMotion(origin)
   }
 
   LaunchedEffect(navController, incomingIntents) {
@@ -933,69 +1095,70 @@ private fun AuthenticatedApp(
     }
   }
 
-  TopLevelNavigationSuite(
-    currentRoute = currentDestination?.hierarchy
-      ?.mapNotNull { it.route?.substringBefore("?") }
-      ?.firstOrNull { it in topLevelRoutes },
-    showNavigationSuite = showNavigationSuite,
-    onNavigateRoute = { targetRoute ->
-      navigateTopLevelRoute(targetRoute)
-    },
-    onReselectRoute = { scrollToTop.request() },
-    scrollToTop = scrollToTop,
-  ) {
-    NavHost(
+  // The policy wraps the whole shell: top-level chrome is motion too, not only route content.
+  // Keeping the provider inside the NavHost left the floating tab indicator animating at 0x.
+  FluidMotionPolicyProvider {
+    TopLevelNavigationSuite(
+      currentRoute = currentDestination?.hierarchy
+        ?.mapNotNull { it.route?.substringBefore("?") }
+        ?.firstOrNull { it in topLevelRoutes },
+      showNavigationSuite = showNavigationSuite,
+      onNavigateRoute = { targetRoute ->
+        navigateTopLevelRoute(targetRoute)
+      },
+      onReselectRoute = { scrollToTop.request() },
+      scrollToTop = scrollToTop,
+    ) {
+      NavHost(
         navController = navController,
         startDestination = "home",
-        modifier = Modifier.fillMaxSize(),
-        // One spatial model drives both ordinary navigation and predictive-back progress.
+        modifier = Modifier
+          .fillMaxSize()
+          .fluidTouchOriginTracker(touchOrigin),
+        // One spatial model drives both ordinary navigation and predictive-back progress. The
+        // origin always comes from whichever entry is *leaving the stack*: forward that is the
+        // arriving one, on a pop it is the one being dismissed.
         enterTransition = {
           routeEnterTransition(
-            decision = decideRouteMotion(
-              fromRoute = initialState.destination.route,
-              toRoute = targetState.destination.route,
-            ),
+            decision = motionSignals.resolveRouteMotion(initialState, targetState, isPop = false),
+            origin = targetState.savedStateHandle.readMotionOrigin(),
             isPop = false,
           )
         },
         exitTransition = {
           routeExitTransition(
-            decision = decideRouteMotion(
-              fromRoute = initialState.destination.route,
-              toRoute = targetState.destination.route,
-            ),
+            decision = motionSignals.resolveRouteMotion(initialState, targetState, isPop = false),
+            origin = targetState.savedStateHandle.readMotionOrigin(),
             isPop = false,
           )
         },
         popEnterTransition = {
           routeEnterTransition(
-            decision = decideRouteMotion(
-              fromRoute = initialState.destination.route,
-              toRoute = targetState.destination.route,
-            ),
+            decision = motionSignals.resolveRouteMotion(initialState, targetState, isPop = true),
+            origin = initialState.savedStateHandle.readMotionOrigin(),
             isPop = true,
           )
         },
         popExitTransition = {
           routeExitTransition(
-            decision = decideRouteMotion(
-              fromRoute = initialState.destination.route,
-              toRoute = targetState.destination.route,
-            ),
+            decision = motionSignals.resolveRouteMotion(initialState, targetState, isPop = true),
+            origin = initialState.savedStateHandle.readMotionOrigin(),
             isPop = true,
           )
         },
       ) {
-        composable("home") {
-          DashboardRoute(
-            onNavigateGrades = { navigateTopLevelRoute("grades") },
-            onNavigateAgenda = { navigateTopLevelRoute("agenda") },
-            onNavigateLessons = { navigateRoute("lessons") },
-            onNavigateCommunications = {
-              navigateTopLevelRoute("communications?tab=board")
-            },
-            onOpenGrade = { gradeId -> navigateTopLevelRoute("grades?gradeId=$gradeId") },
-          )
+        composable("home") { entry ->
+          RouteMotionHost(this@composable) {
+            DashboardRoute(
+              onNavigateGrades = { expandToTopLevelRoute("grades") },
+              onNavigateAgenda = { expandToTopLevelRoute("agenda") },
+              onNavigateLessons = { navigateRoute("lessons") },
+              onNavigateCommunications = {
+                expandToTopLevelRoute("communications?tab=board")
+              },
+              onOpenGrade = { gradeId -> expandToTopLevelRoute("grades?gradeId=$gradeId") },
+            )
+          }
         }
         composable(
           route = "agenda?agendaId={agendaId}&date={date}",
@@ -1017,10 +1180,40 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/agenda" },
           ),
         ) { entry ->
-          AgendaRoute(
-            initialAgendaId = entry.arguments?.getString("agendaId"),
-            initialDate = entry.arguments?.getString("date"),
-          )
+          val requestedEntryId = entry.arguments?.getString("agendaId")
+          val consumedEntryId by entry.savedStateHandle
+            .getStateFlow<String?>(ConsumedAgendaRequestKey, null)
+            .collectAsStateWithLifecycle()
+          val pendingEntryId = pendingAgendaRequest(requestedEntryId, consumedEntryId)
+          LaunchedEffect(pendingEntryId) {
+            val entryId = pendingEntryId ?: return@LaunchedEffect
+            entry.savedStateHandle[ConsumedAgendaRequestKey] = entryId
+            // A cold/deep-link request has no composed source element: use the normal Push policy.
+            navigateRoute(route = "agenda-detail/${Uri.encode(entryId)}")
+          }
+          RouteMotionHost(this@composable) {
+            AgendaRoute(
+              initialAgendaId = null,
+              initialDate = entry.arguments?.getString("date"),
+              onOpenEntry = { entryId ->
+                navigateRoute("agenda-detail/${Uri.encode(entryId)}")
+              },
+            )
+          }
+        }
+        composable(
+          route = "agenda-detail/{entryId}",
+          arguments = listOf(navArgument("entryId") { type = NavType.StringType }),
+        ) { entry ->
+          val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
+          val agendaViewModel: AgendaViewModel = hiltViewModel(parentEntry)
+          RouteMotionHost(this@composable) {
+            AgendaDetailRoute(
+              entryId = entry.arguments?.getString("entryId").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = agendaViewModel,
+            )
+          }
         }
         composable(
           route = "grades?gradeId={gradeId}",
@@ -1040,12 +1233,35 @@ private fun AuthenticatedApp(
           val consumedGradeId by entry.savedStateHandle
             .getStateFlow<String?>(ConsumedGradeRequestKey, null)
             .collectAsStateWithLifecycle()
-          GradesRoute(
-            initialGradeId = pendingGradeRequest(requestedGradeId, consumedGradeId),
-            onInitialGradeConsumed = { gradeId ->
-              entry.savedStateHandle[ConsumedGradeRequestKey] = gradeId
-            },
-          )
+          RouteMotionHost(this@composable) {
+            GradesRoute(
+              initialGradeId = pendingGradeRequest(requestedGradeId, consumedGradeId),
+              onInitialGradeConsumed = { gradeId ->
+                entry.savedStateHandle[ConsumedGradeRequestKey] = gradeId
+              },
+              onOpenGrade = { gradeId ->
+                navigateRoute("grade/${Uri.encode(gradeId)}")
+              },
+            )
+          }
+        }
+        composable(
+          route = "grade/{gradeId}",
+          arguments = listOf(
+            navArgument("gradeId") { type = NavType.StringType },
+          ),
+        ) { entry ->
+          val gradesBackStackEntry = remember(entry) {
+            navController.getBackStackEntry("grades?gradeId={gradeId}")
+          }
+          val gradesViewModel: GradesViewModel = hiltViewModel(gradesBackStackEntry)
+          RouteMotionHost(this@composable) {
+            GradeDetailRoute(
+              gradeId = entry.arguments?.getString("gradeId").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = gradesViewModel,
+            )
+          }
         }
         composable(
           route = "communications?tab={tab}&pubId={pubId}&evtCode={evtCode}&noteId={noteId}&categoryCode={categoryCode}",
@@ -1086,45 +1302,128 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/notes" },
           ),
         ) { entry ->
-          CommunicationsRoute(
-            initialTab = entry.arguments?.getString("tab") ?: "board",
-            initialCommunicationPubId = entry.arguments?.getString("pubId"),
-            initialCommunicationEvtCode = entry.arguments?.getString("evtCode"),
-            initialNoteId = entry.arguments?.getString("noteId"),
-            initialNoteCategoryCode = entry.arguments?.getString("categoryCode"),
-            onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
-          )
+          val requestedPubId = entry.arguments?.getString("pubId")
+          val requestedEvtCode = entry.arguments?.getString("evtCode")
+          val requestedNoteId = entry.arguments?.getString("noteId")
+          val requestedCategoryCode = entry.arguments?.getString("categoryCode")
+          val isDirectDetail = (!requestedPubId.isNullOrBlank() && !requestedEvtCode.isNullOrBlank()) ||
+            (!requestedNoteId.isNullOrBlank() && !requestedCategoryCode.isNullOrBlank())
+          RouteMotionHost(this@composable) {
+            CommunicationsRoute(
+              initialTab = entry.arguments?.getString("tab") ?: "board",
+              initialCommunicationPubId = requestedPubId,
+              initialCommunicationEvtCode = requestedEvtCode,
+              initialNoteId = requestedNoteId,
+              initialNoteCategoryCode = requestedCategoryCode,
+              onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
+              onOpenCommunication = if (isDirectDetail) null else { pubId, evtCode ->
+                navigateRoute("communication-detail/${Uri.encode(pubId)}/${Uri.encode(evtCode)}")
+              },
+              onOpenNote = if (isDirectDetail) null else { noteId, categoryCode ->
+                navigateRoute("note-detail/${Uri.encode(noteId)}/${Uri.encode(categoryCode)}")
+              },
+            )
+          }
         }
-        composable("notes") {
-          CommunicationsRoute(
-            initialTab = "notes",
-            onBack = navController::navigateUp,
-          )
+        composable("notes") { entry ->
+          RouteMotionHost(this@composable) {
+            CommunicationsRoute(
+              initialTab = "notes",
+              onBack = navController::navigateUp,
+              onOpenCommunication = { pubId, evtCode ->
+                navigateRoute("communication-detail/${Uri.encode(pubId)}/${Uri.encode(evtCode)}")
+              },
+              onOpenNote = { noteId, categoryCode ->
+                navigateRoute("note-detail/${Uri.encode(noteId)}/${Uri.encode(categoryCode)}")
+              },
+            )
+          }
         }
-        composable("more") {
-          MoreHubScreen(
-            onOpenBugReport = { navigateRoute(BugReportRoute) },
-            onOpenNotes = { navigateRoute("notes") },
-            onOpenLessons = { navigateRoute("lessons") },
-            onOpenAbsences = { navigateRoute("absences") },
-            onOpenMaterials = { navigateRoute("materials") },
-            onOpenSettings = { navigateRoute("settings") },
-            onOpenHomework = { navigateRoute("homework") },
-            onOpenDocuments = { navigateRoute("documents") },
-            onOpenProfessors = { navigateRoute("professors") },
-            onOpenMeetings = { navigateRoute("meetings") },
-          )
+        composable(
+          route = "communication-detail/{pubId}/{evtCode}",
+          arguments = listOf(
+            navArgument("pubId") { type = NavType.StringType },
+            navArgument("evtCode") { type = NavType.StringType },
+          ),
+        ) { entry ->
+          val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
+          val communicationsViewModel: CommunicationsViewModel = hiltViewModel(parentEntry)
+          RouteMotionHost(this@composable) {
+            CommunicationDetailRoute(
+              pubId = entry.arguments?.getString("pubId").orEmpty(),
+              evtCode = entry.arguments?.getString("evtCode").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = communicationsViewModel,
+            )
+          }
         }
-        composable(BugReportRoute) {
-          // Keep the route that opened the form in the diagnostics. Reading currentRoute here would
-          // report "bugReport", because this is now (correctly) its own back-stack destination.
-          BugReportScreen(
-            currentRoute = BugReportSourceRoute,
-            onBack = navController::navigateUp,
-          )
+        composable(
+          route = "note-detail/{id}/{categoryCode}",
+          arguments = listOf(
+            navArgument("id") { type = NavType.StringType },
+            navArgument("categoryCode") { type = NavType.StringType },
+          ),
+        ) { entry ->
+          val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
+          val communicationsViewModel: CommunicationsViewModel = hiltViewModel(parentEntry)
+          RouteMotionHost(this@composable) {
+            NoteDetailRoute(
+              id = entry.arguments?.getString("id").orEmpty(),
+              categoryCode = entry.arguments?.getString("categoryCode").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = communicationsViewModel,
+            )
+          }
         }
-        composable("materials") {
-          MaterialsRoute(onBack = navController::navigateUp)
+        composable("more") { entry ->
+          RouteMotionHost(this@composable) {
+            MoreHubScreen(
+              onOpenBugReport = { navigateRoute(BugReportRoute) },
+              onOpenNotes = { navigateRoute("notes") },
+              onOpenLessons = { navigateRoute("lessons") },
+              onOpenAbsences = { navigateRoute("absences") },
+              onOpenMaterials = { navigateRoute("materials") },
+              onOpenSettings = { navigateRoute("settings") },
+              onOpenHomework = { navigateRoute("homework") },
+              onOpenDocuments = { navigateRoute("documents") },
+              onOpenProfessors = { navigateRoute("professors") },
+              onOpenMeetings = { navigateRoute("meetings") },
+            )
+          }
+        }
+        composable(BugReportRoute) { entry ->
+          RouteMotionHost(this@composable) {
+            // Keep the route that opened the form in the diagnostics. Reading currentRoute here would
+            // report "bugReport", because this is now (correctly) its own back-stack destination.
+            BugReportScreen(
+              currentRoute = BugReportSourceRoute,
+              onBack = navController::navigateUp,
+            )
+          }
+        }
+        composable("materials") { entry ->
+          RouteMotionHost(this@composable) {
+            MaterialsRoute(
+              onBack = navController::navigateUp,
+              onOpenMaterial = { itemId ->
+                navigateRoute("material-detail/${Uri.encode(itemId)}")
+              },
+            )
+          }
+        }
+        composable(
+          route = "material-detail/{itemId}",
+          arguments = listOf(navArgument("itemId") { type = NavType.StringType }),
+        ) { entry ->
+          val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
+          val materialsViewModel: MaterialsViewModel = hiltViewModel(parentEntry)
+          RouteMotionHost(this@composable) {
+            MaterialDetailRoute(
+              itemId = entry.arguments?.getString("itemId").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = materialsViewModel,
+            )
+          }
         }
         composable(
           route = "homework?homeworkId={homeworkId}",
@@ -1140,21 +1439,73 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/homework" },
           ),
         ) { entry ->
-          HomeworkRoute(
-            initialHomeworkId = entry.arguments?.getString("homeworkId"),
-            onBack = navController::navigateUp,
-          )
+          val requestedHomeworkId = entry.arguments?.getString("homeworkId")
+          val consumedHomeworkId by entry.savedStateHandle
+            .getStateFlow<String?>(ConsumedHomeworkRequestKey, null)
+            .collectAsStateWithLifecycle()
+          val pendingHomeworkId = pendingHomeworkRequest(requestedHomeworkId, consumedHomeworkId)
+          LaunchedEffect(pendingHomeworkId) {
+            val homeworkId = pendingHomeworkId ?: return@LaunchedEffect
+            entry.savedStateHandle[ConsumedHomeworkRequestKey] = homeworkId
+            navigateRoute(route = "homework-detail/${Uri.encode(homeworkId)}")
+          }
+          RouteMotionHost(this@composable) {
+            HomeworkRoute(
+              initialHomeworkId = null,
+              onBack = navController::navigateUp,
+              onOpenHomework = { homeworkId ->
+                navigateRoute("homework-detail/${Uri.encode(homeworkId)}")
+              },
+            )
+          }
         }
-        composable("documents") {
-          DocumentsRoute(onBack = navController::navigateUp)
+        composable(
+          route = "homework-detail/{homeworkId}",
+          arguments = listOf(navArgument("homeworkId") { type = NavType.StringType }),
+        ) { entry ->
+          val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
+          val homeworkViewModel: HomeworkViewModel = hiltViewModel(parentEntry)
+          RouteMotionHost(this@composable) {
+            HomeworkDetailRoute(
+              homeworkId = entry.arguments?.getString("homeworkId").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = homeworkViewModel,
+            )
+          }
+        }
+        composable("documents") { entry ->
+          RouteMotionHost(this@composable) {
+            DocumentsRoute(
+              onBack = navController::navigateUp,
+              onOpenDocument = { documentId ->
+                navigateRoute("document-detail/${Uri.encode(documentId)}")
+              },
+            )
+          }
+        }
+        composable(
+          route = "document-detail/{documentId}",
+          arguments = listOf(navArgument("documentId") { type = NavType.StringType }),
+        ) { entry ->
+          val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
+          val documentsViewModel: DocumentsViewModel = hiltViewModel(parentEntry)
+          RouteMotionHost(this@composable) {
+            DocumentDetailRoute(
+              documentId = entry.arguments?.getString("documentId").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = documentsViewModel,
+            )
+          }
         }
         composable(
           route = "lessons",
           deepLinks = listOf(
             navDeepLink { uriPattern = "classevivaexpressive://open/lessons" },
           ),
-        ) {
-          LessonsRoute(onBack = navController::navigateUp)
+        ) { entry ->
+          RouteMotionHost(this@composable) {
+            LessonsRoute(onBack = navController::navigateUp)
+          }
         }
         composable(
           route = "absences?absenceId={absenceId}",
@@ -1170,35 +1521,62 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/absences" },
           ),
         ) { entry ->
-          AbsencesRoute(
-            initialAbsenceId = entry.arguments?.getString("absenceId"),
-            onBack = navController::navigateUp,
-          )
+          RouteMotionHost(this@composable) {
+            AbsencesRoute(
+              initialAbsenceId = entry.arguments?.getString("absenceId"),
+              onBack = navController::navigateUp,
+            )
+          }
         }
         composable(
           route = "meetings",
           deepLinks = listOf(
             navDeepLink { uriPattern = "classevivaexpressive://open/meetings" },
           ),
-        ) {
-          MeetingsRoute(onBack = navController::navigateUp)
+        ) { entry ->
+          RouteMotionHost(this@composable) {
+            MeetingsRoute(onBack = navController::navigateUp)
+          }
         }
-        composable("professors") {
-          ProfessorsRoute(onBack = navController::navigateUp)
+        composable("professors") { entry ->
+          RouteMotionHost(this@composable) {
+            ProfessorsRoute(
+              onBack = navController::navigateUp,
+              onOpenProfessor = { teacherName ->
+                navigateRoute("professor-detail/${Uri.encode(teacherName)}")
+              },
+            )
+          }
+        }
+        composable(
+          route = "professor-detail/{teacherName}",
+          arguments = listOf(navArgument("teacherName") { type = NavType.StringType }),
+        ) { entry ->
+          val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
+          val professorsViewModel: ProfessorsViewModel = hiltViewModel(parentEntry)
+          RouteMotionHost(this@composable) {
+            ProfessorDetailRoute(
+              teacherName = entry.arguments?.getString("teacherName").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = professorsViewModel,
+            )
+          }
         }
         composable(
           route = "settings",
           deepLinks = listOf(
             navDeepLink { uriPattern = "classevivaexpressive://open/settings" },
           ),
-        ) {
-          SettingsRoute(
-            onBack = navController::navigateUp,
-            isCheckingForUpdates = isCheckingForUpdates,
-            updateCheckMessage = updateCheckMessage,
-            onCheckForUpdates = onCheckForUpdates,
-            onClearUpdateCheckMessage = onClearUpdateCheckMessage,
-          )
+        ) { entry ->
+          RouteMotionHost(this@composable) {
+            SettingsRoute(
+              onBack = navController::navigateUp,
+              isCheckingForUpdates = isCheckingForUpdates,
+              updateCheckMessage = updateCheckMessage,
+              onCheckForUpdates = onCheckForUpdates,
+              onClearUpdateCheckMessage = onClearUpdateCheckMessage,
+            )
+          }
         }
         composable(
           route = "studentScore?payload={payload}",
@@ -1214,6 +1592,7 @@ private fun AuthenticatedApp(
           ),
         ) { entry ->
         StudentScoreRoute(initialImportPayload = entry.arguments?.getString("payload"))
+      }
       }
     }
   }

@@ -14,22 +14,66 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallSt
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearSelectionPolicy
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
+import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
+import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private const val LiveTimetableRefreshMinIntervalMillis = 60_000L
+
+/** Marks the notices that a repository is holding on to until the user has actually seen them. */
+private const val DurableNotificationPrefix = "durable:"
+
+/** Distinguishes one failure from the next one that reads the same. Never persisted, never parsed. */
+private val syncNoticeSequence = AtomicLong()
+
+private fun SyncStatus.toFailureNotification(): FluidNotification? {
+  val tone = when {
+    // A year the school has not opened yet is not a fault: nothing is broken and nobody can fix it.
+    // In the weeks either side of September it is the ordinary state of the registro, and dressing
+    // it as a failure is how a colour stops meaning anything.
+    schoolYearNotStarted -> FluidNotificationTone.Info
+    state == SyncState.OFFLINE || state == SyncState.ERROR -> FluidNotificationTone.Error
+    state == SyncState.PARTIAL -> FluidNotificationTone.Warning
+    else -> return null
+  }
+  val detail = message?.takeIf(String::isNotBlank) ?: return null
+  val title = when {
+    schoolYearNotStarted -> "Anno scolastico non ancora aperto"
+    state == SyncState.OFFLINE -> "Nessuna connessione"
+    else -> "Aggiornamento non riuscito"
+  }
+  return FluidNotification(
+    // Unique per occurrence: the same failure happening again is news again, and an id that
+    // repeated would be swallowed as a duplicate of the banner the user already dismissed.
+    id = "sync:${state.name}:${syncNoticeSequence.incrementAndGet()}",
+    title = title,
+    message = detail,
+    tone = tone,
+    durationMillis = 7_000L,
+  )
+}
 
 data class MainUiState(
   val isLoading: Boolean = true,
@@ -69,6 +113,7 @@ class MainViewModel @Inject constructor(
   private val settingsRepository: SettingsRepository,
   private val appUpdateRepository: AppUpdateRepository,
   private val schoolYearRepository: SchoolYearRepository,
+  dashboardRepository: DashboardRepository,
   @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
   private val isRestoring = MutableStateFlow(true)
@@ -125,9 +170,9 @@ class MainViewModel @Inject constructor(
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
 
   /** Durable repository events translated once into the app-wide visual notice vocabulary. */
-  val inAppNotifications = schoolYearRepository.observeFallbackEvents().map { event ->
+  private val fallbackNotifications = schoolYearRepository.observeFallbackEvents().map { event ->
     FluidNotification(
-      id = event.id,
+      id = DurableNotificationPrefix + event.id,
       title = "Anno scolastico aggiornato",
       message = "Il ${event.requested.label} non è ancora disponibile. " +
         "Per ora mostro il ${event.selected.label}.",
@@ -135,6 +180,53 @@ class MainViewModel @Inject constructor(
       durationMillis = 8_000L,
     )
   }
+
+  /**
+   * A refresh that fails is an event, and events have to be delivered.
+   *
+   * The failure was already known — the message, and which sections it applied to — and the only
+   * place it appeared was the colour of a glyph in the corner of the bar. Someone who has just
+   * pulled the page down to refresh it is looking at the page, not auditing the chrome, so the
+   * explanation goes to them rather than waiting to be found.
+   *
+   * The first status is dropped: on a cold start it describes a sync that finished before the app
+   * was open, which is history rather than news. The page itself carries that one, permanently.
+   */
+  private val syncFailureNotifications = dashboardRepository.observeDashboard()
+    .map { it.syncStatus }
+    .distinctUntilChangedBy { it.state to it.message }
+    .drop(1)
+    .mapNotNull(SyncStatus::toFailureNotification)
+
+  /**
+   * Switching to a year the registro only half publishes.
+   *
+   * Showing last year's noticeboard beside an empty Voti with nothing said about it is the app
+   * looking broken in the one situation where it is working exactly as the registro allows. Said
+   * once, at the moment the choice is made; the pages that are actually affected say it again, in
+   * place, for as long as the choice stands.
+   */
+  private val archivedYearNotifications = schoolYearRepository.observeSelectedSchoolYear()
+    .distinctUntilChanged()
+    .drop(1)
+    .mapNotNull { selected ->
+      val current = SchoolYearSelectionPolicy.current(LocalDate.now())
+      if (selected.startYear >= current.startYear) return@mapNotNull null
+      FluidNotification(
+        id = "archived-year:${selected.id}",
+        title = "Anno ${selected.label}",
+        message = "Il registro non pubblica i voti e i libri di testo degli anni passati: " +
+          "quelle sezioni restano su quanto già salvato.",
+        tone = FluidNotificationTone.Warning,
+        durationMillis = 9_000L,
+      )
+    }
+
+  val inAppNotifications: Flow<FluidNotification> = merge(
+    fallbackNotifications,
+    syncFailureNotifications,
+    archivedYearNotifications,
+  )
 
   init {
     viewModelScope.launch {
@@ -188,8 +280,15 @@ class MainViewModel @Inject constructor(
   }
 
   /** Called only after the root host has accepted the notice into its in-memory queue. */
+  /**
+   * Only the durable half of the stream has anything to acknowledge; the rest is narration of
+   * state the app can recompute at any time, and handing those ids to the store would be asking it
+   * to forget events it never recorded.
+   */
   fun acknowledgeInAppNotification(id: String) {
-    viewModelScope.launch { schoolYearRepository.acknowledgeFallbackEvent(id) }
+    if (!id.startsWith(DurableNotificationPrefix)) return
+    val eventId = id.removePrefix(DurableNotificationPrefix)
+    viewModelScope.launch { schoolYearRepository.acknowledgeFallbackEvent(eventId) }
   }
 
   fun checkUpdate(showNoUpdateMessage: Boolean = true) {

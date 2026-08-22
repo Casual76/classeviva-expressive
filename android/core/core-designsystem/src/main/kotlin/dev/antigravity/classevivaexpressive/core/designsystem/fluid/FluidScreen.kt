@@ -2,6 +2,7 @@ package dev.antigravity.classevivaexpressive.core.designsystem.fluid
 
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,8 +31,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animate
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -40,35 +47,53 @@ import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
+import androidx.compose.ui.util.lerp
 import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.sign
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.Velocity
 
 /**
@@ -83,11 +108,13 @@ import androidx.compose.ui.unit.Velocity
 @Stable
 class FluidChromeController internal constructor(
   private val bottomBarVelocityThresholdPx: Float,
+  private val densityPx: Float,
 ) {
   private val backdrops = LinkedHashMap<Any, GlassBackdropState>()
   private val _activeBackdrop = mutableStateOf<GlassBackdropState?>(null)
   private val _bottomBarOffsetPx = mutableFloatStateOf(0f)
   private var bottomBarTravelPx = 0f
+  private var pendingScrollPx = 0f
 
   val activeBackdrop: State<GlassBackdropState?> = _activeBackdrop
   val bottomBarOffsetPx: State<Float> = _bottomBarOffsetPx
@@ -113,18 +140,33 @@ class FluidChromeController internal constructor(
   }
 
   fun onBottomBarScroll(availableY: Float) {
+    if (bottomBarTravelPx <= 0f || availableY == 0f) return
+    // A gesture has to commit to a direction before the bar answers it. Without this the bar
+    // tracked every wobble of a fast, direction-changing scroll one pixel at a time, which is what
+    // made it flicker in and out instead of reading as a deliberate response.
+    if (pendingScrollPx != 0f && sign(pendingScrollPx) != sign(availableY)) pendingScrollPx = 0f
+    pendingScrollPx += availableY
+    val threshold = bottomBarCommitThresholdPx(
+      hidingTravel = pendingScrollPx < 0f,
+      density = densityPx,
+    )
+    if (abs(pendingScrollPx) < threshold) return
+    val effective = pendingScrollPx - sign(pendingScrollPx) * threshold
+    pendingScrollPx = sign(pendingScrollPx) * threshold
     _bottomBarOffsetPx.floatValue = calculateBottomBarOffset(
       currentOffsetPx = _bottomBarOffsetPx.floatValue,
-      availableY = availableY,
+      availableY = effective,
       travelPx = bottomBarTravelPx,
     )
   }
 
   fun revealBottomBar() {
+    pendingScrollPx = 0f
     _bottomBarOffsetPx.floatValue = 0f
   }
 
   suspend fun settleBottomBar(velocityY: Float) {
+    pendingScrollPx = 0f
     val start = _bottomBarOffsetPx.floatValue
     val target = calculateBottomBarSettleTarget(
       currentOffsetPx = start,
@@ -147,8 +189,11 @@ class FluidChromeController internal constructor(
 fun rememberFluidChromeController(): FluidChromeController {
   val density = LocalDensity.current.density
   val velocityThresholdPx = bottomBarVelocityThresholdPx(density)
-  return remember(velocityThresholdPx) {
-    FluidChromeController(bottomBarVelocityThresholdPx = velocityThresholdPx)
+  return remember(velocityThresholdPx, density) {
+    FluidChromeController(
+      bottomBarVelocityThresholdPx = velocityThresholdPx,
+      densityPx = density,
+    )
   }
 }
 
@@ -199,7 +244,21 @@ internal fun calculateBottomBarSettleTarget(
 internal fun bottomBarVelocityThresholdPx(density: Float): Float =
   BottomBarVelocityThresholdDpPerSecond * density.coerceAtLeast(0f)
 
+/**
+ * How far a scroll must travel in one direction before the bar answers it.
+ *
+ * Asymmetric on purpose: getting the bar out of the way is a considered response to a deliberate
+ * downward read, while getting it back is what someone does when they want to leave — so revealing
+ * commits almost immediately and hiding takes real intent.
+ */
+internal fun bottomBarCommitThresholdPx(hidingTravel: Boolean, density: Float): Float {
+  val dp = if (hidingTravel) BottomBarHideCommitDp else BottomBarRevealCommitDp
+  return dp * density.coerceAtLeast(0f)
+}
+
 private const val BottomBarVelocityThresholdDpPerSecond = 200f
+private const val BottomBarHideCommitDp = 36f
+private const val BottomBarRevealCommitDp = 10f
 
 val LocalFluidChromeController: ProvidableCompositionLocal<FluidChromeController?> =
   staticCompositionLocalOf { null }
@@ -232,9 +291,6 @@ object FluidScreenDefaults {
   /** Height of the control row of the bar, matching the 44pt UIKit navigation bar. */
   val ControlRowHeight: Dp = 44.dp
 
-  /** Travel over which the compact bar materialises once the large title reaches it. */
-  val CollapseDistance: Dp = 30.dp
-
   /** Initial travel kept optically clear, so a tiny touch does not flash the material on. */
   val ShieldDeadZone: Dp = 8.dp
 
@@ -242,10 +298,23 @@ object FluidScreenDefaults {
   val ShieldRampDistance: Dp = 64.dp
 
   /** Soft tail below the 44 dp control row; it removes the hard edge of a rectangular top bar. */
-  val GlassFadeTail: Dp = 26.dp
+  val GlassFadeTail: Dp = 34.dp
+
+  /**
+   * Room the docked title leaves on each side for bar buttons. Wider than a bar button because the
+   * compact title is now large enough that a near miss reads as a collision.
+   */
+  val CompactTitleInset: Dp = 76.dp
 
   val HorizontalPadding: Dp = 20.dp
   val ItemSpacing: Dp = 14.dp
+  val TitleTopSpacing: Dp = 4.dp
+
+  /** How far the top edge must be pulled open before releasing it starts a refresh. */
+  val RefreshTrigger: Dp = 76.dp
+
+  /** How much of that stays open while the refresh runs, holding the indicator in view. */
+  val RefreshHold: Dp = 56.dp
   val TitleBottomSpacing: Dp = 10.dp
   val ContentBottomSpacing: Dp = 28.dp
 
@@ -262,6 +331,126 @@ object FluidScreenDefaults {
 }
 
 private const val TitleItemKey = "fluid:large-title"
+
+private val RefreshIndicatorSize: Dp = 24.dp
+
+/**
+ * Geometry shared by the large title and the compact bar, expressed so that nothing it exposes
+ * changes while the list is being scrolled.
+ *
+ * The large title's anchor is *computed*, not measured: at rest the title item sits exactly at the
+ * list's top content padding, so its baseline is that padding plus the text's own first baseline.
+ * Measuring it instead would read a position that already includes the elastic edge's transform —
+ * the anchor would then move with the very translation the morph adds on top of it, and the title
+ * would travel at twice the speed of the content it belongs to.
+ *
+ * Only the compact anchor is measured, and only from an untransformed slot in the bar.
+ */
+@Stable
+private class FluidTitleMorphState(
+  val expandedLeftInRoot: Float,
+  private val expandedTopInRoot: Float,
+) {
+  var restingBaselineInRoot by mutableFloatStateOf(Float.NaN)
+    private set
+  var compactLeftInRoot by mutableFloatStateOf(Float.NaN)
+    private set
+  var compactBaselineInRoot by mutableFloatStateOf(Float.NaN)
+    private set
+
+  /** Where the baseline sits inside the compact text node; the pivot of the whole transform. */
+  var compactLocalBaseline by mutableFloatStateOf(Float.NaN)
+    private set
+  var expandedLineCount by mutableIntStateOf(1)
+    private set
+  var compactHasVisualOverflow by mutableStateOf(false)
+    private set
+
+  private var compactSlotCoordinates: LayoutCoordinates? = null
+  private var compactTextSize = IntSize.Zero
+
+  /** Distance the title travels between its two resting places. NaN until both are measured. */
+  val travelPx: Float
+    get() {
+      val resting = restingBaselineInRoot
+      val compact = compactBaselineInRoot
+      if (!resting.isFinite() || !compact.isFinite()) return Float.NaN
+      return resting - compact
+    }
+
+  val isMeasured: Boolean
+    get() = travelPx.isFinite() &&
+      expandedLeftInRoot.isFinite() &&
+      compactLeftInRoot.isFinite() &&
+      compactLocalBaseline.isFinite()
+
+  fun onExpandedTextLayout(result: TextLayoutResult) {
+    expandedLineCount = result.lineCount
+    restingBaselineInRoot = expandedTopInRoot + result.firstBaseline
+  }
+
+  fun onCompactTextLayout(result: TextLayoutResult) {
+    compactLocalBaseline = result.firstBaseline
+    compactTextSize = result.size
+    compactHasVisualOverflow = result.hasVisualOverflow
+    rebuildCompact()
+  }
+
+  fun onCompactSlotPositioned(coordinates: LayoutCoordinates) {
+    compactSlotCoordinates = coordinates
+    rebuildCompact()
+  }
+
+  private fun rebuildCompact() {
+    val coordinates = compactSlotCoordinates ?: return
+    if (!coordinates.isAttached || compactTextSize == IntSize.Zero) return
+    if (!compactLocalBaseline.isFinite()) return
+    // Measured from the untransformed slot, never from the text node itself: the text carries the
+    // morph's own graphics layer, so its position in root would include the transform being solved.
+    val slotTopLeft = coordinates.positionInRoot()
+    val slotSize = coordinates.size
+    compactLeftInRoot = slotTopLeft.x + (slotSize.width - compactTextSize.width) / 2f
+    compactBaselineInRoot =
+      slotTopLeft.y + (slotSize.height - compactTextSize.height) / 2f + compactLocalBaseline
+  }
+}
+
+/**
+ * The compact title is the large title scaled down — same family, same weight, proportionally
+ * scaled tracking — so that turning one into the other is a pure geometric transform. Two different
+ * type styles cross-fading is what read as the title "changing font" partway through the scroll.
+ *
+ * At 0.62 the docked title lands near 21sp rather than the 17sp a navigation bar conventionally
+ * uses. A bar title that is *only* legible reads as a caption for the page; this one still reads as
+ * the page's name.
+ */
+private const val CompactTitleScale = 0.62f
+
+/** How long each dynamic facet holds the bar before the next one takes over. */
+private const val TitleFacetDwellMillis = 2_400L
+
+/**
+ * How far into the title's travel the subtitle has to be gone.
+ *
+ * Late, because it is no longer running from anything: the title travels at exactly the speed of the
+ * page now, so the two can never meet. This is only tidiness — a second line arriving under a docked
+ * title, inside the soft tail of the glass, is more material than that corner can carry.
+ */
+private const val SubtitleFadeFraction = 0.72f
+
+/** A facet enters from below and the outgoing one leaves upwards: a single wheel, never a swap. */
+private const val TitleFacetShiftFraction = 0.55f
+
+@Composable
+private fun rememberCompactTitleStyle(expanded: TextStyle): TextStyle = remember(expanded) {
+  expanded.copy(
+    fontSize = expanded.fontSize.scaleBy(CompactTitleScale),
+    lineHeight = expanded.lineHeight.scaleBy(CompactTitleScale),
+    letterSpacing = expanded.letterSpacing.scaleBy(CompactTitleScale),
+  )
+}
+
+private fun TextUnit.scaleBy(factor: Float): TextUnit = if (isSpecified) this * factor else this
 
 /**
  * An edge-to-edge screen in the shape Apple gives its own: content runs the full height of the
@@ -282,8 +471,13 @@ fun FluidScreen(
   modifier: Modifier = Modifier,
   subtitle: String? = null,
   onBack: (() -> Unit)? = null,
-  titleTrailing: (@Composable () -> Unit)? = null,
   actions: @Composable RowScope.() -> Unit = {},
+  /**
+   * Short facts the bar cycles through once the title has docked — a month, a count, a state.
+   * The page's name is always the first thing shown and always what it returns to, so the bar can
+   * never be caught saying something that does not identify the screen you are on.
+   */
+  titleFacets: List<String> = emptyList(),
   listState: LazyListState = rememberLazyListState(),
   isRefreshing: Boolean = false,
   onRefresh: (() -> Unit)? = null,
@@ -299,9 +493,17 @@ fun FluidScreen(
   val chromeRegistration = remember { Any() }
   val density = LocalDensity.current
   val scope = rememberCoroutineScope()
+  val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
+  val expandedTitleStyle = MaterialTheme.typography.displayLarge
+  val compactTitleStyle = rememberCompactTitleStyle(expandedTitleStyle)
 
   val topBarHeight = FluidScreenDefaults.topBarHeight()
   val bottomPadding = FluidScreenDefaults.bottomContentPadding(extraBottomPadding)
+  val titleLeftPx = with(density) { horizontalPadding.toPx() }
+  val titleTopPx = with(density) { (topBarHeight + FluidScreenDefaults.TitleTopSpacing).toPx() }
+  val titleMorphState = remember(title, density.fontScale, titleLeftPx, titleTopPx) {
+    FluidTitleMorphState(expandedLeftInRoot = titleLeftPx, expandedTopInRoot = titleTopPx)
+  }
 
   DisposableEffect(chromeController, chromeRegistration, backdrop) {
     chromeController?.registerBackdrop(chromeRegistration, backdrop)
@@ -310,11 +512,17 @@ fun FluidScreen(
 
   LaunchedEffect(chromeController, listState) {
     if (chromeController == null) return@LaunchedEffect
+    // Whether the gesture is still running is part of the signal, not noise. The bar settles to
+    // hidden or shown from inside the fling, so a scroll that *ends* at the top — which is what the
+    // title's snap-back produces — needs a second look once the gesture is over. Watching only the
+    // position left the bar parked off-screen while the list was demonstrably at its start.
     snapshotFlow {
-      listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+      val isAtTop = listState.firstVisibleItemIndex == 0 &&
+        listState.firstVisibleItemScrollOffset == 0
+      isAtTop to listState.isScrollInProgress
     }
       .distinctUntilChanged()
-      .collect { isAtTop ->
+      .collect { (isAtTop, _) ->
         if (isAtTop) chromeController.revealBottomBar()
       }
   }
@@ -327,11 +535,35 @@ fun FluidScreen(
     }
   }
 
-  val collapseProgress = rememberCollapseProgress(
+  val scrollProgress = rememberCollapseProgress(
     listState = listState,
-    topBarHeightPx = with(density) { topBarHeight.toPx() },
-    collapseDistancePx = with(density) { FluidScreenDefaults.CollapseDistance.toPx() },
+    titleMorphState = titleMorphState,
   )
+
+  // The morph is welded to the scroll, and that is the whole of its correctness.
+  //
+  // It used to be filtered through a spring so that a fling could not cross the handoff in two
+  // frames. What that actually bought was a title moving *more slowly than the page it is part of*:
+  // the heading is the first item of the list, so anything below it — the subtitle, the first card —
+  // kept its own speed, caught up, and passed straight through it. Given a choice between a title
+  // that always takes a readable time to travel and a title that is never in the wrong place, only
+  // one of them is a title. The minimum time now comes from where it belongs: the fling snaps the
+  // scroll itself to one end of the handoff or the other, so the movement is always completed, is
+  // always animated when a gesture leaves it partway, and never rests in between.
+  val collapseProgress = scrollProgress
+  val activeFacet = rememberTitleFacet(titleFacets, collapseProgress)
+
+  // The title has two homes and no address in between. Letting a gesture stop halfway leaves the
+  // type frozen at an arbitrary size over the bar, which is the most obviously unfinished state the
+  // screen can be left in, so every fling ends by settling the scroll onto one of the two.
+  val platformFling = ScrollableDefaults.flingBehavior()
+  val flingBehavior = remember(platformFling, listState, titleMorphState, reducedMotion) {
+    FluidTitleSnapFlingBehavior(
+      delegate = platformFling,
+      animated = !reducedMotion,
+      snapDeltaPx = { titleSnapDeltaPx(listState, titleMorphState) },
+    )
+  }
 
   // The material appears as soon as anything passes under the status bar, not when the title has
   // finished leaving. Waiting for the title means a stretch of scrolling where text slides under the
@@ -356,21 +588,49 @@ fun FluidScreen(
     }
   }
 
+  val overscroll = remember(reducedMotion, listState) {
+    FluidEdgeOverscrollState(
+      reducedMotion = reducedMotion,
+      canScroll = { listState.canScrollForward || listState.canScrollBackward },
+    )
+  }
+  val refreshTriggerPx = with(density) { FluidScreenDefaults.RefreshTrigger.toPx() }
+  val refreshHoldPx = with(density) { FluidScreenDefaults.RefreshHold.toPx() }
+  // The gesture and the work it starts are separate facts: the edge only knows how far to open and
+  // what to call, and closes again when the caller says the work is done.
+  SideEffect {
+    overscroll.refreshTriggerPx = if (onRefresh != null) refreshTriggerPx else 0f
+    overscroll.refreshHoldPx = refreshHoldPx
+    overscroll.onRefresh = onRefresh
+  }
+  LaunchedEffect(overscroll, isRefreshing) {
+    if (!isRefreshing) overscroll.endRefresh()
+  }
+
   Box(
     modifier = modifier
       .fillMaxSize()
       .background(MaterialTheme.colorScheme.background),
   ) {
+    val contentTranslation: () -> Float = { overscroll.offsetPx }
+
     val body: @Composable () -> Unit = {
       LazyColumn(
         modifier = Modifier
           .fillMaxSize()
+          .nestedScroll(overscroll)
+          .onSizeChanged { overscroll.updateViewport(it.height.toFloat()) }
           // The background is painted *inside* the recorded region, not behind it. A snapshot of
           // text on transparency blurs into a faint smear that the sharp original still shows
           // through; the glass has to sample an opaque image to actually hide what is under it.
           .glassBackdropSource(backdrop)
-          .background(MaterialTheme.colorScheme.background),
+          // Opaque ground first, elastic content second. Painting the background *outside* the
+          // bouncing layer is what stops a bounce from dragging a transparent band under the bar,
+          // and keeps the recorded snapshot showing exactly what the glass is meant to be hiding.
+          .background(MaterialTheme.colorScheme.background)
+          .graphicsLayer { translationY = contentTranslation() },
         state = listState,
+        flingBehavior = flingBehavior,
         contentPadding = PaddingValues(
           start = horizontalPadding,
           end = horizontalPadding,
@@ -378,50 +638,56 @@ fun FluidScreen(
           bottom = bottomPadding,
         ),
         verticalArrangement = Arrangement.spacedBy(itemSpacing),
+        overscrollEffect = null,
       ) {
         item(key = TitleItemKey, contentType = TitleItemKey) {
-          FluidLargeTitle(title = title, subtitle = subtitle, trailing = titleTrailing)
+          FluidLargeTitle(
+            title = title,
+            subtitle = subtitle,
+            style = expandedTitleStyle,
+            collapseProgress = collapseProgress,
+            morphState = titleMorphState,
+            fontScale = density.fontScale,
+            reducedMotion = reducedMotion,
+          )
         }
         content()
       }
     }
 
+    body()
+
     if (onRefresh != null) {
-      val refreshState = rememberPullToRefreshState()
-      PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize(),
-        state = refreshState,
-        indicator = {
-          // No floating disc: iOS reveals the spinner's spokes as the finger pulls, in place, with
-          // nothing behind it. The distance fraction drives how much of the ring is drawn, so the
-          // control is literally being dragged into existence rather than sliding in from off-screen.
-          FluidSpinner(
-            modifier = Modifier
-              .align(Alignment.TopCenter)
-              .padding(top = topBarHeight + 10.dp)
-              .graphicsLayer {
-                val pulled = refreshState.distanceFraction.coerceIn(0f, 1.4f)
-                alpha = if (isRefreshing) 1f else (pulled / 0.6f).coerceIn(0f, 1f)
-                translationY = pulled * 26.dp.toPx()
-              },
-            size = 22.dp,
-            progress = if (isRefreshing) null else {
-              { refreshState.distanceFraction }
-            },
-          )
+      // The indicator lives in the space the pull opens, halfway down it, so it arrives *with* the
+      // content rather than sliding over the top of it. No floating disc: iOS reveals the spinner's
+      // spokes as the finger pulls, in place, with nothing behind it.
+      FluidSpinner(
+        modifier = Modifier
+          .align(Alignment.TopCenter)
+          .padding(top = topBarHeight)
+          .graphicsLayer {
+            val opened = overscroll.offsetPx.coerceAtLeast(0f)
+            val pull = overscroll.refreshPull
+            alpha = if (isRefreshing) 1f else smoothStep((pull / 0.55f).coerceIn(0f, 1f))
+            translationY = opened * 0.5f - RefreshIndicatorSize.toPx() * 0.5f
+          },
+        size = RefreshIndicatorSize,
+        progress = if (isRefreshing) null else {
+          { overscroll.refreshPull }
         },
-        content = { body() },
       )
-    } else {
-      body()
     }
 
     FluidTopBar(
       title = title,
       backdrop = backdrop,
       collapseProgress = collapseProgress,
+      activeFacet = activeFacet,
+      morphState = titleMorphState,
+      compactStyle = compactTitleStyle,
+      contentTranslation = contentTranslation,
+      fontScale = density.fontScale,
+      reducedMotion = reducedMotion,
       onBack = onBack,
       actions = actions,
       glassIntensity = glassIntensity,
@@ -442,40 +708,74 @@ fun FluidScreen(
 @Composable
 private fun rememberCollapseProgress(
   listState: LazyListState,
-  topBarHeightPx: Float,
-  collapseDistancePx: Float,
-): State<Float> = remember(listState, topBarHeightPx, collapseDistancePx) {
+  titleMorphState: FluidTitleMorphState,
+): State<Float> = remember(listState, titleMorphState) {
   derivedStateOf {
-    val info = listState.layoutInfo
-    val titleItem = info.visibleItemsInfo.firstOrNull { it.key == TitleItemKey }
-    // Expressed relative to the viewport's own top edge so the result does not depend on whether
-    // item offsets are reported before or after the list's content padding.
-    val titleBottom = titleItem?.let {
-      (it.offset + it.size - info.viewportStartOffset).toFloat()
+    // Before LazyColumn's first layout there is no evidence that the title has collapsed. Reporting
+    // one here made the compact title and full-strength blur flash over every entering screen.
+    if (listState.layoutInfo.visibleItemsInfo.isEmpty()) return@derivedStateOf 0f
+    if (!titleMorphState.isMeasured) {
+      return@derivedStateOf if (listState.firstVisibleItemIndex > 0) 1f else 0f
     }
-    calculateCollapseProgress(
-      hasVisibleItems = info.visibleItemsInfo.isNotEmpty(),
-      firstVisibleItemIndex = listState.firstVisibleItemIndex,
-      titleBottomPx = titleBottom,
-      topBarHeightPx = topBarHeightPx,
-      collapseDistancePx = collapseDistancePx,
+    titleCollapseProgress(
+      scrolledPx = listState.titleScrollOffsetPx(),
+      travelPx = titleMorphState.travelPx,
     )
   }
 }
 
-internal fun calculateCollapseProgress(
-  hasVisibleItems: Boolean,
-  firstVisibleItemIndex: Int,
-  titleBottomPx: Float?,
-  topBarHeightPx: Float,
-  collapseDistancePx: Float,
+/**
+ * How far the list has moved away from the top, in pixels, or [Float.POSITIVE_INFINITY] once the
+ * title item itself is no longer the anchor.
+ */
+private fun LazyListState.titleScrollOffsetPx(): Float =
+  if (firstVisibleItemIndex > 0) Float.POSITIVE_INFINITY else firstVisibleItemScrollOffset.toFloat()
+
+/**
+ * Which fact the docked bar is currently showing, or null while it is showing the page's name.
+ *
+ * Cycling only ever happens while the title is docked, and returning to the top resets it, so the
+ * expanded state of every screen is unconditionally its own title.
+ */
+@Composable
+private fun rememberTitleFacet(
+  facets: List<String>,
+  collapseProgress: State<Float>,
+): State<String?> {
+  val active = remember { mutableStateOf<String?>(null) }
+  val docked = remember(collapseProgress) {
+    derivedStateOf { collapseProgress.value >= 0.995f }
+  }
+  LaunchedEffect(facets, docked, active) {
+    if (facets.isEmpty()) {
+      active.value = null
+      return@LaunchedEffect
+    }
+    snapshotFlow { docked.value }.collectLatest { isDocked ->
+      active.value = null
+      if (!isDocked) return@collectLatest
+      var index = 0
+      while (true) {
+        delay(TitleFacetDwellMillis)
+        index = (index + 1) % (facets.size + 1)
+        active.value = facets.getOrNull(index - 1)
+      }
+    }
+  }
+  return active
+}
+
+/** How far the list still has to move for the title to be all the way to one side or the other. */
+private fun titleSnapDeltaPx(
+  listState: LazyListState,
+  morphState: FluidTitleMorphState,
 ): Float {
-  // Before LazyColumn's first layout there is no evidence that the title has collapsed. Returning
-  // one here caused the compact title and full-strength blur to flash over every entering screen.
-  if (!hasVisibleItems) return 0f
-  if (titleBottomPx == null) return if (firstVisibleItemIndex > 0) 1f else 0f
-  val distance = collapseDistancePx.coerceAtLeast(1f)
-  return ((topBarHeightPx + distance - titleBottomPx) / distance).coerceIn(0f, 1f)
+  val travel = morphState.travelPx
+  if (!travel.isFinite() || travel <= 1f) return 0f
+  if (listState.firstVisibleItemIndex != 0) return 0f
+  val scrolled = listState.firstVisibleItemScrollOffset.toFloat()
+  if (scrolled <= 0f || scrolled >= travel) return 0f
+  return titleSnapTarget(scrolled, travel) - scrolled
 }
 
 internal fun calculateGlassIntensity(
@@ -491,8 +791,17 @@ internal fun calculateGlassIntensity(
     val ramp = rampDistancePx.coerceAtLeast(1f)
     ((firstVisibleItemScrollOffset - deadZonePx) / ramp).coerceIn(0f, 1f)
   }
-  return maxOf(collapseProgress.coerceIn(0f, 1f), smoothStep(scrollProgress))
+  // The title starts moving on the first pixel of scroll, so taking its progress raw made the
+  // material begin to appear on the first pixel too. The opening of the handoff is discounted, so
+  // the blur starts a little further into the gesture and the top of the page stays clear while the
+  // page has barely moved.
+  val fromTitle = ((collapseProgress.coerceIn(0f, 1f) - GlassCollapseDeadZone) /
+    (1f - GlassCollapseDeadZone)).coerceIn(0f, 1f)
+  return maxOf(smoothStep(fromTitle), smoothStep(scrollProgress))
 }
+
+/** Fraction of the title's travel that raises no material at all. */
+internal const val GlassCollapseDeadZone = 0.16f
 
 internal fun smoothStep(value: Float): Float {
   val clamped = value.coerceIn(0f, 1f)
@@ -503,33 +812,54 @@ internal fun smoothStep(value: Float): Float {
 private fun FluidLargeTitle(
   title: String,
   subtitle: String?,
-  trailing: (@Composable () -> Unit)?,
+  style: TextStyle,
+  collapseProgress: State<Float>,
+  morphState: FluidTitleMorphState,
+  fontScale: Float,
+  reducedMotion: Boolean,
 ) {
   Column(
     modifier = Modifier
       .fillMaxWidth()
-      .padding(top = 4.dp, bottom = FluidScreenDefaults.TitleBottomSpacing),
+      .padding(
+        top = FluidScreenDefaults.TitleTopSpacing,
+        bottom = FluidScreenDefaults.TitleBottomSpacing,
+      ),
     verticalArrangement = Arrangement.spacedBy(2.dp),
   ) {
-    Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.spacedBy(10.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Text(
-        text = title,
-        modifier = Modifier.weight(1f, fill = false),
-        // 34sp Bold: the iOS navigation large title, exactly. Its negative tracking is what stops
-        // a heading this size from looking like a banner.
-        style = MaterialTheme.typography.displayLarge,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-      )
-      trailing?.invoke()
-    }
+    Text(
+      text = title,
+      modifier = Modifier
+        .fillMaxWidth()
+        .graphicsLayer {
+          val morphing = shouldMorphTitle(
+            fontScale = fontScale,
+            expandedLineCount = morphState.expandedLineCount,
+            reducedMotion = reducedMotion,
+          ) && !morphState.compactHasVisualOverflow && morphState.isMeasured
+          // While morphing, this copy only reserves the space and carries the heading semantics;
+          // the single visible title is the bar's, transformed onto this exact anchor.
+          alpha = expandedTitleAlpha(
+            progress = collapseProgress.value,
+            morphing = morphing,
+            reducedMotion = reducedMotion,
+          )
+        },
+      // 34sp Bold: the iOS navigation large title, exactly. Its negative tracking is what stops
+      // a heading this size from looking like a banner.
+      style = style,
+      maxLines = 2,
+      overflow = TextOverflow.Ellipsis,
+      onTextLayout = morphState::onExpandedTextLayout,
+    )
     subtitle?.takeIf { it.isNotBlank() }?.let {
       Text(
         text = it,
+        modifier = Modifier.graphicsLayer {
+          alpha = 1f - smoothStep(
+            (collapseProgress.value / SubtitleFadeFraction).coerceIn(0f, 1f),
+          )
+        },
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 2,
@@ -544,6 +874,12 @@ private fun FluidTopBar(
   title: String,
   backdrop: GlassBackdropState,
   collapseProgress: State<Float>,
+  activeFacet: State<String?>,
+  morphState: FluidTitleMorphState,
+  compactStyle: TextStyle,
+  contentTranslation: () -> Float,
+  fontScale: Float,
+  reducedMotion: Boolean,
   glassIntensity: State<Float>,
   onBack: (() -> Unit)?,
   actions: @Composable RowScope.() -> Unit,
@@ -552,20 +888,26 @@ private fun FluidTopBar(
   val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
   val tint = GlassDefaults.barTint()
   val interactionSource = remember { MutableInteractionSource() }
-  val titleShift = with(LocalDensity.current) { 11.dp.toPx() }
 
   Box(
     modifier = Modifier
       .fillMaxWidth()
-      .height(statusBar + FluidScreenDefaults.ControlRowHeight + FluidScreenDefaults.GlassFadeTail)
-      .glassSurface(
+      .height(statusBar + FluidScreenDefaults.ControlRowHeight + FluidScreenDefaults.GlassFadeTail),
+  ) {
+    // Clip only the sampled material. The title itself is allowed to travel below this drawing
+    // region while it is still anchored to the large heading; clipping the whole bar cut the lower
+    // half of the glyphs during the first third of the morph.
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .glassSurface(
         state = backdrop,
         tint = tint,
         edge = GlassEdge.None,
         falloff = GlassFalloff.FadeDown,
         intensity = { glassIntensity.value },
-      ),
-  ) {
+        ),
+    )
     Column(
       modifier = Modifier
         .fillMaxWidth()
@@ -587,23 +929,80 @@ private fun FluidTopBar(
         .semantics { contentDescription = "Torna all'inizio" },
       contentAlignment = Alignment.Center,
     ) {
-      Text(
-        text = title,
+      Box(
         modifier = Modifier
-          .padding(horizontal = 68.dp)
-          .graphicsLayer {
-            // The compact title only starts arriving in the back half of the collapse, so it never
-            // overlaps the large title it is replacing.
-            val appear = ((collapseProgress.value - 0.4f) / 0.6f).coerceIn(0f, 1f)
-            alpha = appear
-            translationY = (1f - appear) * titleShift
+          .fillMaxSize()
+          .padding(horizontal = FluidScreenDefaults.CompactTitleInset)
+          .onGloballyPositioned(morphState::onCompactSlotPositioned),
+        contentAlignment = Alignment.Center,
+      ) {
+        // One wheel, not two labels taking turns: the title rides up and out as the fact rides in,
+        // so the bar always looks like a single surface showing successive things.
+        val facetVisibility = animateFloatAsState(
+          targetValue = if (activeFacet.value != null) 1f else 0f,
+          animationSpec = if (reducedMotion) snap() else FluidMotion.crossFade(220),
+          label = "title facet handoff",
+        )
+        Text(
+          text = title,
+          modifier = Modifier.graphicsLayer {
+            val progress = collapseProgress.value.coerceIn(0f, 1f)
+            val morphing = shouldMorphTitle(
+              fontScale = fontScale,
+              expandedLineCount = morphState.expandedLineCount,
+              reducedMotion = reducedMotion,
+            ) && !morphState.compactHasVisualOverflow && morphState.isMeasured
+            val facetHandoff = facetVisibility.value
+            alpha = compactTitleAlpha(
+              progress = progress,
+              morphing = morphing,
+              reducedMotion = reducedMotion,
+            ) * (1f - facetHandoff)
+            val facetShiftPx = -compactStyle.fontSize.toPx() * TitleFacetShiftFraction * facetHandoff
+            if (!morphing) {
+              transformOrigin = TransformOrigin.Center
+              scaleX = 1f
+              scaleY = 1f
+              translationX = 0f
+              translationY = facetShiftPx
+              return@graphicsLayer
+            }
+
+            val travel = morphState.travelPx
+            val compactLeft = morphState.compactLeftInRoot
+            val compactBaseline = morphState.compactBaselineInRoot
+            val localBaseline = morphState.compactLocalBaseline
+
+            // Size and horizontal glide are eased; the vertical position is not. Tying the
+            // baseline directly to the scroll is what keeps the title welded to the content it
+            // belongs to — an eased vertical would visibly lag the list it is sitting in.
+            val eased = smoothStep(progress)
+            val scale = lerp(1f / CompactTitleScale, 1f, eased)
+            val desiredLeft = lerp(morphState.expandedLeftInRoot, compactLeft, eased)
+            // Never above the docked position: the title is content, and content is allowed to
+            // ride an elastic edge, but nothing is allowed to ride it into the status bar.
+            val desiredBaseline = (
+              compactBaseline + travel * (1f - progress) + contentTranslation() * (1f - eased)
+              ).coerceAtLeast(compactBaseline)
+
+            transformOrigin = TransformOrigin(0f, 0f)
+            scaleX = scale
+            scaleY = scale
+            translationX = desiredLeft - compactLeft
+            translationY = desiredBaseline - compactBaseline + localBaseline * (1f - scale) +
+              facetShiftPx
           },
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        textAlign = TextAlign.Center,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
+          style = compactStyle,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          onTextLayout = morphState::onCompactTextLayout,
+        )
+        FluidTitleFacet(
+          facet = activeFacet.value,
+          style = compactStyle,
+          reducedMotion = reducedMotion,
+        )
+      }
         Row(
           modifier = Modifier.fillMaxWidth(),
           verticalAlignment = Alignment.CenterVertically,
@@ -622,6 +1021,45 @@ private fun FluidTopBar(
           Spacer(Modifier.width(6.dp))
         }
       }
+    }
+  }
+}
+
+/** The fact currently riding in the bar, arriving from below as the previous one leaves upwards. */
+@Composable
+private fun FluidTitleFacet(
+  facet: String?,
+  style: TextStyle,
+  reducedMotion: Boolean,
+) {
+  AnimatedContent(
+    targetState = facet,
+    transitionSpec = {
+      if (reducedMotion) {
+        fadeIn(snap()).togetherWith(fadeOut(snap()))
+      } else {
+        (
+          slideInVertically { height -> (height * TitleFacetShiftFraction).toInt() } +
+            fadeIn(FluidMotion.fadeIn(200))
+          ).togetherWith(
+          slideOutVertically { height -> -(height * TitleFacetShiftFraction).toInt() } +
+            fadeOut(FluidMotion.fadeOut(150)),
+        )
+      }
+    },
+    label = "title facet",
+  ) { value ->
+    if (value == null) {
+      Spacer(Modifier.height(0.dp))
+    } else {
+      Text(
+        text = value,
+        style = style,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center,
+      )
     }
   }
 }

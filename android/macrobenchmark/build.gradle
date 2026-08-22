@@ -1,0 +1,52 @@
+plugins {
+  alias(libs.plugins.android.test)
+  alias(libs.plugins.kotlin.android)
+}
+
+android {
+  namespace "dev.antigravity.classevivaexpressive.macrobenchmark"
+  compileSdk 36
+
+  defaultConfig {
+    minSdk 28
+    targetSdk 36
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+  }
+
+  targetProjectPath = ":app"
+  experimentalProperties["android.experimental.self-instrumenting"] = true
+
+  buildTypes {
+    benchmark {
+      debuggable true
+      signingConfig signingConfigs.debug
+      matchingFallbacks = ["release"]
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+
+  sourceSets {
+    main.java.setSrcDirs(["src/main/kotlin"])
+  }
+}
+
+androidComponents {
+  beforeVariants(selector().all()) { variantBuilder ->
+    variantBuilder.enable = variantBuilder.buildType == "benchmark"
+  }
+}
+
+dependencies {
+  implementation libs.benchmark.macro.junit4
+  implementation libs.androidx.test.ext.junit
+  implementation libs.androidx.test.runner
+  implementation libs.uiautomator
+}

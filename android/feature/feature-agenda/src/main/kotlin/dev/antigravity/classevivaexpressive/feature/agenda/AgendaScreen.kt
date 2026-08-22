@@ -65,6 +65,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAc
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContainerDetailScaffold
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
@@ -77,7 +78,9 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroM
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusAction
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusNotice
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
@@ -106,8 +109,47 @@ import kotlinx.coroutines.launch
 
 private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
 private val calendarHeaderFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", italianLocale)
+private val monthOnlyFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM", italianLocale)
 private val eventDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", italianLocale)
 private val createdAtFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", italianLocale)
+
+/**
+ * Facts the docked bar cycles through on the agenda. The month is first because it is the one thing
+ * a scrolled agenda stops telling you, and the one you most need to know while you are in it.
+ */
+/** How far ahead the bar is willing to call something "in arrivo". */
+private const val AgendaLookaheadDays = 7L
+
+/**
+ * What the docked bar says about this screen once the title has left it.
+ *
+ * The week ahead, split into the two things that are asked about separately. The whole month's
+ * count and the current month's name both used to take a turn here; the month is already the
+ * heading of the calendar directly below, and a total across a month answers no question anyone has
+ * while looking at a bar.
+ */
+internal fun buildAgendaFacets(
+  items: List<AgendaItem>,
+  today: LocalDate,
+): List<String> = buildList {
+  val from = today.toString()
+  val until = today.plusDays(AgendaLookaheadDays).toString()
+  val window = items.filter { it.date in from..until }
+  val assessments = window.count { it.category == AgendaCategory.ASSESSMENT }
+  if (assessments > 0) {
+    add(if (assessments == 1) "1 verifica" else "$assessments verifiche")
+  }
+  val tomorrow = today.plusDays(1).toString()
+  val dueTomorrow = items.count { it.date == tomorrow && it.category == AgendaCategory.HOMEWORK }
+  if (dueTomorrow > 0) {
+    add(if (dueTomorrow == 1) "1 compito domani" else "$dueTomorrow compiti domani")
+  }
+  val rest = window.size - assessments
+  if (rest > 0) add(if (rest == 1) "1 impegno" else "$rest impegni")
+}
+
+internal fun agendaMonthLabel(date: LocalDate): String =
+  monthOnlyFormatter.format(date).replaceFirstChar { it.titlecase(italianLocale) }
 
 data class AgendaUiState(
   val items: List<AgendaItem> = emptyList(),
@@ -184,6 +226,7 @@ class AgendaViewModel @Inject constructor(
 fun AgendaRoute(
   initialAgendaId: String? = null,
   initialDate: String? = null,
+  onOpenEntry: ((String) -> Unit)? = null,
   modifier: Modifier = Modifier,
   viewModel: AgendaViewModel = hiltViewModel(),
 ) {
@@ -199,42 +242,7 @@ fun AgendaRoute(
 
   val selectedMonth = remember(selectedMonthText) { YearMonth.parse(selectedMonthText) }
   val selectedDate = remember(selectedDateText) { LocalDate.parse(selectedDateText) }
-  val entries = remember(state.items, state.customEvents) {
-    buildList {
-      addAll(state.items.map {
-        AgendaEntry(
-          id = it.id,
-          title = it.title,
-          subtitle = it.subtitle,
-          detail = it.detail,
-          subject = it.subject,
-          teacher = it.teacher,
-          date = it.date.toLocalDateOrNull(),
-          time = it.time,
-          category = it.category,
-          sharePayload = it.sharePayload,
-          createdAt = it.createdAt,
-          history = it.history,
-        )
-      })
-      addAll(state.customEvents.map {
-        AgendaEntry(
-          id = it.id,
-          title = it.title,
-          subtitle = it.subject,
-          detail = it.description,
-          subject = it.subject,
-          teacher = null,
-          date = it.date.toLocalDateOrNull(),
-          time = it.time,
-          category = AgendaCategory.CUSTOM,
-          sharePayload = listOfNotNull(it.title, it.subject, it.description).joinToString("\n"),
-          createdAt = it.createdAt,
-          history = emptyList(),
-        )
-      })
-    }.filter { it.date != null }.sortedWith(compareBy<AgendaEntry> { it.date }.thenBy { it.time ?: "" })
-  }
+  val entries = remember(state.items, state.customEvents) { state.toAgendaEntries() }
 
   val entriesByDate = remember(entries) {
     entries.mapNotNull { entry -> entry.date?.let { it to entry } }
@@ -266,14 +274,18 @@ fun AgendaRoute(
     }
   }
 
+  val facetToday = remember { LocalDate.now() }
+  val titleFacets = remember(state.items, facetToday) {
+    buildAgendaFacets(state.items, facetToday)
+  }
+
   FluidScreen(
     modifier = modifier,
     title = "Agenda",
     subtitle = state.syncStatus.lastSyncLabel(),
-    titleTrailing = {
-      SyncStatusDot(status = state.syncStatus)
-    },
+    titleFacets = titleFacets,
     actions = {
+      SyncStatusAction(status = state.syncStatus, onRetry = viewModel::refresh)
       FluidBarAction(
         icon = Icons.Rounded.Refresh,
         contentDescription = "Aggiorna",
@@ -284,6 +296,13 @@ fun AgendaRoute(
     onRefresh = viewModel::refresh,
     itemSpacing = 12.dp,
   ) {
+    // Whatever the sync could not deliver, said where the missing data would have been. Reserved
+    // only when there is something to say, so an ordinary page keeps its first item at the top.
+    if (state.syncStatus.noticeMessage() != null) {
+      item {
+        SyncStatusNotice(status = state.syncStatus, onRetry = viewModel::refresh)
+      }
+    }
     item {
       val monthEntryCount = monthEntriesByDate.values.sumOf(List<AgendaEntry>::size)
       FeatureHero(
@@ -340,7 +359,9 @@ fun AgendaRoute(
       items(selectedDayEntries, key = { it.id }) { entry ->
         AgendaEntryRow(
           entry = entry,
-          onClick = { selectedEntry = entry },
+          onClick = {
+            if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
+          },
           onLongClick = { shareEntry(context, entry) },
         )
       }
@@ -529,8 +550,8 @@ private fun CalendarDot(color: Color) {
 @Composable
 private fun AgendaEntryRow(
   entry: AgendaEntry,
-  onClick: () -> Unit,
-  onLongClick: () -> Unit,
+  onClick: (() -> Unit)?,
+  onLongClick: (() -> Unit)?,
   modifier: Modifier = Modifier,
 ) {
   RegisterListRow(
@@ -560,7 +581,7 @@ private fun AgendaEntryRow(
     onClick = onClick,
     onLongClick = onLongClick,
     modifier = modifier,
-    animatePress = true,
+    animatePress = onClick != null || onLongClick != null,
   )
 }
 
@@ -923,6 +944,42 @@ private data class AgendaEntry(
   val history: List<AgendaItemVersion>,
 )
 
+private fun AgendaUiState.toAgendaEntries(): List<AgendaEntry> = buildList {
+  addAll(items.map {
+    AgendaEntry(
+      id = it.id,
+      title = it.title,
+      subtitle = it.subtitle,
+      detail = it.detail,
+      subject = it.subject,
+      teacher = it.teacher,
+      date = it.date.toLocalDateOrNull(),
+      time = it.time,
+      category = it.category,
+      sharePayload = it.sharePayload,
+      createdAt = it.createdAt,
+      history = it.history,
+    )
+  })
+  addAll(customEvents.map {
+    AgendaEntry(
+      id = it.id,
+      title = it.title,
+      subtitle = it.subject,
+      detail = it.description,
+      subject = it.subject,
+      teacher = null,
+      date = it.date.toLocalDateOrNull(),
+      time = it.time,
+      category = AgendaCategory.CUSTOM,
+      sharePayload = listOfNotNull(it.title, it.subject, it.description).joinToString("\n"),
+      createdAt = it.createdAt,
+      history = emptyList(),
+    )
+  })
+}.filter { it.date != null }
+  .sortedWith(compareBy<AgendaEntry> { it.date }.thenBy { it.time ?: "" })
+
 private fun buildCalendarCells(month: YearMonth): List<LocalDate> {
   val firstDay = month.atDay(1)
   val leading = (firstDay.dayOfWeek.value + 6) % 7
@@ -949,6 +1006,89 @@ private fun categoryLabel(category: AgendaCategory): String {
     AgendaCategory.EVENT -> "Evento"
     AgendaCategory.CUSTOM -> "Personalizzato"
   }
+}
+
+@Composable
+fun AgendaDetailRoute(
+  entryId: String,
+  onBack: () -> Unit,
+  modifier: Modifier = Modifier,
+  viewModel: AgendaViewModel = hiltViewModel(),
+) {
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val context = LocalContext.current
+  val entry = remember(state.items, state.customEvents, entryId) {
+    state.toAgendaEntries().firstOrNull { it.id == entryId }
+  }
+  var showHistory by rememberSaveable(entryId) { mutableStateOf(false) }
+
+  if (entry == null) {
+    FluidScreen(
+      title = "Dettaglio agenda",
+      modifier = modifier,
+      onBack = onBack,
+    ) {
+      item(key = "agenda-detail-missing") {
+        EmptyState(
+          title = "Voce non disponibile",
+          detail = "L'elemento potrebbe essere stato rimosso o non ancora sincronizzato.",
+        )
+      }
+    }
+    return
+  }
+
+  ContainerDetailScaffold(
+    title = "Dettaglio agenda",
+    modifier = modifier,
+    onBack = onBack,
+    hero = {
+      AgendaEntryRow(
+        entry = entry,
+        onClick = null,
+        onLongClick = null,
+        modifier = Modifier.fillMaxWidth(),
+      )
+    },
+    secondary = {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        InfoLine(label = "Data evento", value = entry.eventDateLabel())
+        entry.createdAtLabel()?.let { InfoLine(label = "Aggiunto", value = it) }
+        entry.modifiedAtLabel()?.let { InfoLine(label = "Modificato", value = it) }
+        entry.subject?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Materia", value = it) }
+        entry.teacher?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Docente", value = it) }
+      }
+      HorizontalDivider()
+      ExpressiveCard(highlighted = true) {
+        Text(
+          text = "Dettagli",
+          style = MaterialTheme.typography.labelLarge,
+          color = MaterialTheme.colorScheme.primary,
+          fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+          text = entry.detail?.takeIf(String::isNotBlank)
+            ?: "Nessuna descrizione completa disponibile.",
+          style = MaterialTheme.typography.bodyLarge,
+        )
+      }
+      if (entry.history.isNotEmpty()) {
+        FluidButton(
+          text = if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${entry.history.size})",
+          onClick = { showHistory = !showHistory },
+          style = FluidButtonStyle.Tinted,
+          fillWidth = true,
+        )
+      }
+      if (showHistory) AgendaHistorySection(entry)
+      FluidButton(
+        text = "Condividi",
+        onClick = { shareEntry(context, entry) },
+        style = FluidButtonStyle.Tinted,
+        fillWidth = true,
+      )
+    },
+  )
 }
 
 private fun categoryIcon(category: AgendaCategory): ImageVector {

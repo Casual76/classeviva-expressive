@@ -28,26 +28,56 @@ internal object SyncStatusFactory {
     )
   }
 
+  /**
+   * @param failures each section that failed, mapped to the reason it gave. The network layer
+   *   already writes a specific sentence for every failure it can name; listing only the sections
+   *   threw that away and left the report as a list of things that did not work with no way to tell
+   *   an expired session from a dropped connection — or to know which of the two to go and fix.
+   * @param unavailableSections sections the registro simply does not publish for the selected year.
+   *   Not failures — nothing went wrong and retrying cannot help — but the difference between "no
+   *   data" and "no data *available*" is the whole reason a screen can look broken when it is not.
+   */
   fun completed(
-    errors: List<String>,
+    failures: Map<String, String>,
     previous: SyncStatus,
     completedAtEpochMillis: Long,
+    unavailableSections: List<String> = emptyList(),
   ): SyncStatus {
-    val failedSections = errors.distinct()
-    return if (failedSections.isEmpty()) {
-      SyncStatus(
+    val unavailableNote = unavailableSections.distinct()
+      .takeIf { it.isNotEmpty() }
+      ?.let { sections ->
+        "Il registro non pubblica ${sections.joinToString { it.syncSectionLabel() }} " +
+          "per l'anno scolastico selezionato."
+      }
+    if (failures.isEmpty()) {
+      return SyncStatus(
         state = SyncState.IDLE,
         lastSuccessfulSyncEpochMillis = completedAtEpochMillis,
-        message = null,
-      )
-    } else {
-      SyncStatus(
-        state = SyncState.PARTIAL,
-        lastSuccessfulSyncEpochMillis = previous.lastSuccessfulSyncEpochMillis ?: completedAtEpochMillis,
-        message = "Aggiornamento incompleto: ${failedSections.joinToString { it.syncSectionLabel() }}",
-        failedSections = failedSections,
+        message = unavailableNote,
       )
     }
+    // Grouped by reason rather than listed by section: when one thing goes wrong it usually takes
+    // several sections down with it, and five copies of the same sentence is not five facts.
+    val failureNote = failures.entries
+      .groupBy({ it.value }, { it.key })
+      .entries
+      .joinToString(" ") { (reason, sections) -> failureSentence(reason, sections) }
+    return SyncStatus(
+      state = SyncState.PARTIAL,
+      lastSuccessfulSyncEpochMillis = previous.lastSuccessfulSyncEpochMillis ?: completedAtEpochMillis,
+      message = listOfNotNull(failureNote, unavailableNote).joinToString(" "),
+      failedSections = failures.keys.toList(),
+    )
+  }
+}
+
+private fun failureSentence(reason: String, sections: List<String>): String {
+  val listed = sections.joinToString { it.syncSectionLabel() }
+  val trimmed = reason.trim().trimEnd('.')
+  return if (trimmed.isEmpty() || trimmed == GenericSyncFailure.trimEnd('.')) {
+    "Aggiornamento non riuscito: $listed."
+  } else {
+    "$trimmed: $listed."
   }
 }
 

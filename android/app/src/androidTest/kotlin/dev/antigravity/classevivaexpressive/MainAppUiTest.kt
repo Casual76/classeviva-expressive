@@ -19,7 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -32,11 +34,13 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -49,6 +53,8 @@ import androidx.navigation.navDeepLink
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaExpressiveTheme
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveScreenSurface
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionAnchor
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionIndex
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import org.junit.Assert.assertEquals
@@ -266,6 +272,43 @@ class MainAppUiTest {
     }
   }
 
+  @Test
+  fun sectionIndex_rtlFontScale2_exposesAdjustableProgress() {
+    val sections = (0 until 5).map { index ->
+      FluidSectionAnchor(
+        key = "section-$index",
+        label = "Sezione ${index + 1}",
+        itemIndex = index * 10,
+      )
+    }
+    var selectedKey = sections.first().key
+
+    composeRule.setContent {
+      val systemDensity = LocalDensity.current
+      CompositionLocalProvider(
+        LocalDensity provides Density(systemDensity.density, 2f),
+        LocalLayoutDirection provides LayoutDirection.Rtl,
+      ) {
+        ClassevivaExpressiveTheme(settings = AppSettings(dynamicColorEnabled = false)) {
+          Box(modifier = Modifier.fillMaxSize()) {
+            FluidSectionIndex(
+              sections = sections,
+              activeSectionKey = selectedKey,
+              onSelectSection = { anchor, _ -> selectedKey = anchor.key },
+            )
+          }
+        }
+      }
+    }
+
+    composeRule.onNodeWithContentDescription("Indice sezioni")
+      .assertIsDisplayed()
+      .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+        assertTrue(setProgress(3f))
+      }
+    composeRule.runOnIdle { assertEquals("section-3", selectedKey) }
+  }
+
   private fun withSystemAnimatorScale(scale: Float, block: () -> Unit) {
     val instrumentation = InstrumentationRegistry.getInstrumentation()
     val resolver = instrumentation.targetContext.contentResolver
@@ -405,6 +448,7 @@ private fun BugReportNavigationTestGraph(
       )
     }
   }
+
 }
 
 @Composable

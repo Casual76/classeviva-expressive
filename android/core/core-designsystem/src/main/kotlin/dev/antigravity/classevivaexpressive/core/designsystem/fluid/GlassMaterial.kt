@@ -86,6 +86,46 @@ class GlassBackdropState internal constructor(
   /** True once the source has recorded a frame; before that there is nothing to sample. */
   internal var hasSnapshot by mutableStateOf(false)
 
+  /**
+   * Frames of recording still owed to a surface that asked to sample this backdrop.
+   *
+   * Recording the body into three full-screen layers, two of them blurred, is the most expensive
+   * thing a screen does per frame, and it was being paid unconditionally — including by the screen
+   * a route transition is *leaving*, whose backdrop nothing is sampling any more. Recording only
+   * while something actually reads the snapshot is what gives the transition back its frame budget.
+   */
+  private var recordingCredit = 0
+
+  /**
+   * The observable half of the same fact, and the reason the gate works at all.
+   *
+   * A pane of glass draws *after* the body it samples, so a request can only ever be honoured by a
+   * later frame — and on a screen at rest there is no later frame unless something invalidates the
+   * source. The source reads this during its draw, which subscribes it, so switching the glass on
+   * schedules exactly the redraw needed to produce the first snapshot.
+   */
+  internal var isSampled by mutableStateOf(false)
+    private set
+
+  /** Called by a pane of glass that is about to draw, before it samples anything. */
+  internal fun requestSample() {
+    recordingCredit = SampleCreditFrames
+    if (!isSampled) isSampled = true
+  }
+
+  /**
+   * Whether this frame has to be recorded. Credit outlives a single frame so that a surface which
+   * samples *after* the source has drawn still finds a snapshot no more than one frame stale.
+   */
+  internal fun consumeRecordingCredit(): Boolean {
+    if (recordingCredit <= 0) {
+      if (isSampled) isSampled = false
+      return false
+    }
+    recordingCredit--
+    return true
+  }
+
   internal val blurSupported: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
@@ -101,6 +141,15 @@ class GlassBackdropState internal constructor(
 }
 
 internal fun nextGlassFrameTick(current: Int): Int = if (current == Int.MAX_VALUE) 0 else current + 1
+
+/**
+ * How many frames one sample request keeps the source recording.
+ *
+ * Two, not one: a pane of glass draws after the body it samples, so a request made this frame can
+ * only be honoured by the next one, and a single frame of credit would leave the material flickering
+ * between a fresh and a frozen snapshot every time it is on.
+ */
+private const val SampleCreditFrames = 2
 
 /** Restrained blur; 8 dp is still about 22 physical pixels on the 120 Hz QA phone. */
 val DefaultGlassBlurRadius: Dp = 8.dp
@@ -141,6 +190,15 @@ fun Modifier.glassBackdropSource(state: GlassBackdropState): Modifier = this
       state.softLayer.colorFilter = saturate
     }
     onDrawWithContent {
+      // Subscribes this draw node to the demand flag, so a pane of glass switching on invalidates
+      // the source even when the content itself is perfectly still.
+      state.isSampled
+      if (!state.consumeRecordingCredit()) {
+        // Nothing is sampling this backdrop, so there is nothing to snapshot for. Draw the content
+        // straight to the canvas and skip three full-screen layer recordings and two blurs.
+        drawContent()
+        return@onDrawWithContent
+      }
       state.sourceLayer.record { this@onDrawWithContent.drawContent() }
       drawLayer(state.sourceLayer)
       if (state.blurSupported) {
@@ -260,6 +318,8 @@ fun Modifier.glassSurface(
       onDrawBehind {
         val amount = intensity().coerceIn(0f, 1f)
         if (amount <= 0.001f) return@onDrawBehind
+        // Claimed before sampling, so the source keeps recording for as long as this pane is on.
+        state.requestSample()
 
         if (state.blurSupported && state.hasSnapshot) {
           // Reading the tick keeps this node invalidated in step with the source's redraws.
@@ -325,12 +385,68 @@ private fun DrawScope.drawFadingGlass(
   tint: GlassTint,
   amount: Float,
 ) {
-  // The soft snapshot replaces sharp pixels instead of alpha-blending two readable contours. Only
-  // the heavy radius and tint grow with scroll intensity; this restores a progressive glass ramp
-  // without reintroducing the noisy text trail of the older implementation.
-  maskedLayer(state.softLayer, dx, dy, 1f, SoftStops)
-  maskedLayer(state.heavyLayer, dx, dy, amount, HeavyStops)
-  drawRect(brush = verticalFade(tint.overlay.copy(alpha = tint.overlay.alpha * amount)))
+  // Never fade a blurred glyph over its sharp copy: that creates two readable contours. The soft
+  // snapshot stays opaque where present, while its *coverage* grows down from the status bar. This
+  // is a genuinely progressive reveal instead of the previous binary soft layer that appeared at
+  // full height on the first non-zero scroll frame.
+  val coverage = calculateProgressiveGlassCoverage(amount)
+  if (coverage <= 0.001f) return
+  maskedLayer(
+    layer = state.softLayer,
+    dx = dx,
+    dy = dy,
+    amount = 1f,
+    stops = progressiveMaskStops(coverage, holdFraction = 0.72f),
+  )
+
+  // The heavier radius joins only after the soft material has established an opaque replacement.
+  // It may therefore change alpha without exposing sharp text underneath it.
+  val heavyAmount = smoothStep(((amount - 0.42f) / 0.58f).coerceIn(0f, 1f))
+  if (heavyAmount > 0.001f) {
+    maskedLayer(
+      layer = state.heavyLayer,
+      dx = dx,
+      dy = dy,
+      amount = heavyAmount,
+      stops = progressiveMaskStops(coverage * 0.86f, holdFraction = 0.60f),
+    )
+  }
+  drawRect(
+    brush = progressiveVerticalFade(
+      color = tint.overlay.copy(alpha = tint.overlay.alpha * amount),
+      coverage = coverage,
+    ),
+  )
+}
+
+internal fun calculateProgressiveGlassCoverage(amount: Float): Float = smoothStep(amount)
+
+private fun progressiveMaskStops(
+  coverage: Float,
+  holdFraction: Float,
+): Array<Pair<Float, Color>> {
+  val end = coverage.coerceIn(0.001f, 1f)
+  val hold = end * holdFraction.coerceIn(0f, 1f)
+  return arrayOf(
+    0f to Color.White,
+    hold to Color.White,
+    end to Color.Transparent,
+    1f to Color.Transparent,
+  )
+}
+
+private fun DrawScope.progressiveVerticalFade(color: Color, coverage: Float): Brush {
+  val end = coverage.coerceIn(0.001f, 1f)
+  return Brush.verticalGradient(
+    colorStops = arrayOf(
+      0f to color,
+      (end * 0.55f) to color,
+      end to color.copy(alpha = 0f),
+      1f to color.copy(alpha = 0f),
+    ),
+    startY = 0f,
+    endY = size.height,
+  )
 }
 
 private fun DrawScope.maskedLayer(
@@ -360,20 +476,4 @@ private fun DrawScope.verticalFade(color: Color): Brush = Brush.verticalGradient
   ),
   startY = 0f,
   endY = size.height,
-)
-
-// Full strength for the top half, gone by four fifths: the heavy blur hands over to the light one
-// well before the bar ends.
-private val HeavyStops = arrayOf(
-  0f to Color.White,
-  0.50f to Color.White,
-  0.82f to Color.Transparent,
-)
-
-// The light blur reaches further down and is what actually touches the sharp content, so its own
-// fade-out is the last thing to go.
-private val SoftStops = arrayOf(
-  0f to Color.White,
-  0.72f to Color.White,
-  1f to Color.Transparent,
 )

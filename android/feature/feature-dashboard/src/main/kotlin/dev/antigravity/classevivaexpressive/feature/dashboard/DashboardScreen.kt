@@ -27,9 +27,13 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroM
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusAction
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusNotice
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardStat
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import javax.inject.Inject
@@ -41,6 +45,7 @@ import kotlinx.coroutines.launch
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import java.time.LocalDate
 
 data class DashboardUiState(
   val snapshot: DashboardSnapshot = DashboardSnapshot(),
@@ -110,6 +115,43 @@ class DashboardViewModel @Inject constructor(
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
+/**
+ * What the home screen's docked bar cycles through: the three numbers the page is built around,
+ * and the overall average when there is one. A zero is never offered — nothing changes about a
+ * screen by telling you it has nothing.
+ */
+/** How far ahead the home bar is willing to call something "in arrivo". */
+private const val DashboardLookaheadDays = 7L
+
+/**
+ * What the docked bar says about this screen once the title has left it.
+ *
+ * Everything on Home that is waiting for the student, said in the order it would be dealt with, and
+ * nothing else. It used to read out the dashboard's own stat tiles, which are already on the page a
+ * few hundred pixels below — repeating them in the bar spent the cycle on things the eye was
+ * already looking at.
+ */
+internal fun buildDashboardFacets(
+  snapshot: DashboardSnapshot,
+  today: LocalDate,
+): List<String> = buildList {
+  val unseenGrades = snapshot.unseenGrades.size
+  if (unseenGrades > 0) {
+    add(if (unseenGrades == 1) "1 voto nuovo" else "$unseenGrades voti nuovi")
+  }
+  val unread = snapshot.unreadCommunications.size
+  if (unread > 0) add(if (unread == 1) "1 da leggere" else "$unread da leggere")
+  val until = today.plusDays(DashboardLookaheadDays).toString()
+  val assessments = snapshot.upcomingItems.count {
+    it.category == AgendaCategory.ASSESSMENT && it.date in today.toString()..until
+  }
+  if (assessments > 0) {
+    add(if (assessments == 1) "1 verifica" else "$assessments verifiche")
+  }
+  val average = snapshot.averageLabel
+  if (average.isNotBlank() && average != "--") add("Media $average")
+}
+
 @Composable
 fun DashboardRoute(
   onNavigateGrades: () -> Unit,
@@ -129,12 +171,18 @@ fun DashboardRoute(
 
   val firstName = snapshot.profile.name.takeIf { it.isNotBlank() }?.split(" ")?.firstOrNull()?.replaceFirstChar { it.titlecase() } ?: "Studente"
   val titleText = snapshot.headline.ifBlank { "Ciao, $firstName" }
+  val facetToday = remember { LocalDate.now() }
+  val titleFacets = remember(snapshot, facetToday) {
+    buildDashboardFacets(snapshot, facetToday)
+  }
+
   FluidScreen(
     modifier = modifier,
     title = titleText,
     subtitle = snapshot.syncStatus.lastSyncLabel(),
-    titleTrailing = { SyncStatusDot(status = snapshot.syncStatus) },
+    titleFacets = titleFacets,
     actions = {
+      SyncStatusAction(status = snapshot.syncStatus, onRetry = viewModel::refresh)
       FluidBarAction(
         icon = Icons.Rounded.Refresh,
         contentDescription = "Aggiorna",
@@ -145,6 +193,13 @@ fun DashboardRoute(
     onRefresh = viewModel::refresh,
     itemSpacing = 18.dp,
   ) {
+    // Whatever the sync could not deliver, said where the missing data would have been. Reserved
+    // only when there is something to say, so an ordinary page keeps its first item at the top.
+    if (snapshot.syncStatus.noticeMessage() != null) {
+      item {
+        SyncStatusNotice(status = snapshot.syncStatus, onRetry = viewModel::refresh)
+      }
+    }
     item {
       FeatureHero(
         identity = FeatureIdentity.Overview,

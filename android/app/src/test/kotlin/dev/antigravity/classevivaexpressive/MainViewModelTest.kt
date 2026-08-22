@@ -4,17 +4,23 @@ import android.content.Context
 import android.os.SystemClock
 import app.cash.turbine.test
 import dev.antigravity.classevivaexpressive.core.data.sync.SyncWorkScheduler
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationTone
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearFallbackEvent
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearSelectionPolicy
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
+import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
+import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import io.mockk.every
 import io.mockk.mockk
@@ -33,6 +39,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import java.time.LocalDate
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -70,6 +77,7 @@ class MainViewModelTest {
       ),
       appUpdateRepository = appUpdateRepository,
       schoolYearRepository = FakeSchoolYearRepository(),
+      dashboardRepository = FakeDashboardRepository(),
       context = mockk<Context>(relaxed = true),
     )
     testScheduler.advanceUntilIdle()
@@ -95,6 +103,7 @@ class MainViewModelTest {
       settingsRepository = settingsRepository,
       appUpdateRepository = RecordingAppUpdateRepository(update = null),
       schoolYearRepository = FakeSchoolYearRepository(),
+      dashboardRepository = FakeDashboardRepository(),
       context = mockk<Context>(relaxed = true),
     )
     testScheduler.advanceUntilIdle()
@@ -115,6 +124,7 @@ class MainViewModelTest {
       settingsRepository = settingsRepository,
       appUpdateRepository = RecordingAppUpdateRepository(update = null),
       schoolYearRepository = FakeSchoolYearRepository(),
+      dashboardRepository = FakeDashboardRepository(),
       context = mockk<Context>(relaxed = true),
     )
     testScheduler.advanceUntilIdle()
@@ -135,6 +145,7 @@ class MainViewModelTest {
       settingsRepository = FakeSettingsRepository(AppSettings()),
       appUpdateRepository = RecordingAppUpdateRepository(update = null),
       schoolYearRepository = schoolYears,
+      dashboardRepository = FakeDashboardRepository(),
       context = mockk<Context>(relaxed = true),
     )
     val event = SchoolYearFallbackEvent(
@@ -147,13 +158,124 @@ class MainViewModelTest {
       schoolYears.emitFallback(event)
       val notice = awaitItem()
 
-      assertEquals(event.id, notice.id)
+      assertEquals(true, notice.id.endsWith(event.id))
       assertEquals(true, notice.message.contains(event.requested.label))
       assertEquals(true, notice.message.contains(event.selected.label))
 
       viewModel.acknowledgeInAppNotification(notice.id)
       testScheduler.advanceUntilIdle()
       assertEquals(listOf(event.id), schoolYears.acknowledgedIds)
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
+  /**
+   * A refresh that fails has to say so where the user is looking. Before this the whole report was
+   * the colour of a glyph in the corner of the bar.
+   */
+  @Test
+  fun failedSync_isAnnouncedWithItsOwnMessage() = runTest {
+    val dashboard = FakeDashboardRepository()
+    val viewModel = MainViewModel(
+      authRepository = FakeAuthRepository(),
+      settingsRepository = FakeSettingsRepository(AppSettings()),
+      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      schoolYearRepository = FakeSchoolYearRepository(),
+      dashboardRepository = dashboard,
+      context = mockk<Context>(relaxed = true),
+    )
+
+    viewModel.inAppNotifications.test {
+      dashboard.publish(
+        SyncStatus(
+          state = SyncState.PARTIAL,
+          message = "Aggiornamento incompleto: bacheca",
+          failedSections = listOf("communications"),
+        ),
+      )
+
+      val notice = awaitItem()
+      assertEquals("Aggiornamento incompleto: bacheca", notice.message)
+      assertEquals(FluidNotificationTone.Warning, notice.tone)
+
+      // Nothing durable is behind it, so acknowledging must not ask the store to forget an event
+      // it never recorded.
+      viewModel.acknowledgeInAppNotification(notice.id)
+      testScheduler.advanceUntilIdle()
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
+  /** A successful sync is not news, and neither is the status the app happened to start with. */
+  @Test
+  fun successfulSync_saysNothing() = runTest {
+    val dashboard = FakeDashboardRepository()
+    val viewModel = MainViewModel(
+      authRepository = FakeAuthRepository(),
+      settingsRepository = FakeSettingsRepository(AppSettings()),
+      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      schoolYearRepository = FakeSchoolYearRepository(),
+      dashboardRepository = dashboard,
+      context = mockk<Context>(relaxed = true),
+    )
+
+    viewModel.inAppNotifications.test {
+      dashboard.publish(SyncStatus(state = SyncState.SYNCING, message = "Sincronizzazione in corso"))
+      dashboard.publish(
+        SyncStatus(state = SyncState.IDLE, lastSuccessfulSyncEpochMillis = 1_000L),
+      )
+      testScheduler.advanceUntilIdle()
+
+      expectNoEvents()
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
+  /**
+   * Showing last year's noticeboard beside an empty Voti with nothing said about it is the app
+   * looking broken in the one situation where it is doing exactly what the registro allows.
+   */
+  @Test
+  fun choosingAnArchivedYear_saysWhatWillBeMissing() = runTest {
+    val schoolYears = FakeSchoolYearRepository()
+    val viewModel = MainViewModel(
+      authRepository = FakeAuthRepository(),
+      settingsRepository = FakeSettingsRepository(AppSettings()),
+      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      schoolYearRepository = schoolYears,
+      dashboardRepository = FakeDashboardRepository(),
+      context = mockk<Context>(relaxed = true),
+    )
+    val archived = SchoolYearRef.previousOf(SchoolYearSelectionPolicy.current(LocalDate.now()))
+
+    viewModel.inAppNotifications.test {
+      schoolYears.select(archived)
+
+      val notice = awaitItem()
+      assertEquals(true, notice.title.contains(archived.label))
+      assertEquals(true, notice.message.contains("voti"))
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
+  @Test
+  fun choosingTheCurrentYearAgain_saysNothing() = runTest {
+    val current = SchoolYearSelectionPolicy.current(LocalDate.now())
+    val schoolYears = FakeSchoolYearRepository(SchoolYearRef.previousOf(current))
+    val viewModel = MainViewModel(
+      authRepository = FakeAuthRepository(),
+      settingsRepository = FakeSettingsRepository(AppSettings()),
+      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      schoolYearRepository = schoolYears,
+      dashboardRepository = FakeDashboardRepository(),
+      context = mockk<Context>(relaxed = true),
+    )
+
+    viewModel.inAppNotifications.test {
+      schoolYears.select(current)
+      testScheduler.advanceUntilIdle()
+
+      expectNoEvents()
       cancelAndIgnoreRemainingEvents()
     }
   }
@@ -229,16 +351,22 @@ private class FakeSettingsRepository(
   }
 }
 
-private class FakeSchoolYearRepository : SchoolYearRepository {
+private class FakeSchoolYearRepository(
+  initialYear: SchoolYearRef = SchoolYearSelectionPolicy.current(LocalDate.now()),
+) : SchoolYearRepository {
   private val fallbacks = MutableSharedFlow<SchoolYearFallbackEvent>(extraBufferCapacity = 1)
+  private val selected = MutableStateFlow(initialYear)
   val acknowledgedIds = mutableListOf<String>()
 
   suspend fun emitFallback(event: SchoolYearFallbackEvent) {
     fallbacks.emit(event)
   }
 
-  override fun observeSelectedSchoolYear(): Flow<SchoolYearRef> =
-    flowOf(SchoolYearRef(2025, 2026))
+  fun select(year: SchoolYearRef) {
+    selected.value = year
+  }
+
+  override fun observeSelectedSchoolYear(): Flow<SchoolYearRef> = selected
 
   override fun observeAvailableSchoolYears(): Flow<List<SchoolYearRef>> =
     flowOf(listOf(SchoolYearRef(2025, 2026)))
@@ -252,6 +380,19 @@ private class FakeSchoolYearRepository : SchoolYearRepository {
   override suspend fun acknowledgeFallbackEvent(id: String) {
     acknowledgedIds += id
   }
+}
+
+private class FakeDashboardRepository : DashboardRepository {
+  private val snapshots = MutableStateFlow(DashboardSnapshot())
+
+  fun publish(status: SyncStatus) {
+    snapshots.value = snapshots.value.copy(syncStatus = status)
+  }
+
+  override fun observeDashboard(): Flow<DashboardSnapshot> = snapshots
+
+  override suspend fun refreshDashboard(force: Boolean): Result<DashboardSnapshot> =
+    Result.success(snapshots.value)
 }
 
 private class RecordingAppUpdateRepository(

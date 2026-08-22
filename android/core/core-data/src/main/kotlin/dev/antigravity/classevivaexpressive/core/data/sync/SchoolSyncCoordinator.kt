@@ -730,6 +730,10 @@ class SchoolSyncCoordinator @Inject constructor(
     val yearStart = schoolYearStart(selectedYear)
     val yearEnd = schoolYearEnd(selectedYear)
     val isCurrentYear = selectedYear.id == currentYear.id
+    // A *future* year still has to be asked for: the registro's refusal is precisely how the app
+    // discovers the school has not opened it yet, and that refusal drives the automatic fallback.
+    // Only a past year is knowably unanswerable, because the endpoint has no year to ask about.
+    val isPastYear = selectedYear.startYear < currentYear.startYear
     val selectedSections = sections ?: allSections()
     val dateWindow = syncDateWindow(selectedYear, mode, LocalDate.now())
     val now = System.currentTimeMillis()
@@ -754,14 +758,23 @@ class SchoolSyncCoordinator @Inject constructor(
     }
 
     val errors = SyncErrors()
+    val unavailableForYear = mutableListOf<String>()
 
     if (refreshProfile && selectedSections.contains(ProfileSection)) {
       syncGlobal(operation, ProfileSection, errors) { restClient.getProfile() }
     }
 
     if (selectedSections.contains(GradesSection)) {
-      syncGrades(selectedYear, errors, operation) {
-        filterGradesForYear(restClient.getGrades(), selectedYear)
+      if (!isPastYear) {
+        syncGrades(selectedYear, errors, operation) {
+          filterGradesForYear(restClient.getGrades(), selectedYear)
+        }
+      } else {
+        // The REST endpoint takes no year: it always answers for the year the session was opened
+        // in. Filtering that answer into a past year can therefore only ever yield an empty list,
+        // and writing that emptiness into the database is what made switching year look like it
+        // had silently lost the grades. Leave whatever is cached alone and say why.
+        unavailableForYear += GradesSection
       }
     }
     if (selectedSections.contains(PeriodsSection)) {
@@ -867,6 +880,7 @@ class SchoolSyncCoordinator @Inject constructor(
         syncYearScoped(operation, SchoolbooksSection, selectedYear, errors) { restClient.getSchoolbooks() }
       } else {
         clearYearScoped(operation, SchoolbooksSection, selectedYear, emptyList<SchoolbookCourse>())
+        if (isPastYear) unavailableForYear += SchoolbooksSection
       }
     }
 
@@ -900,9 +914,10 @@ class SchoolSyncCoordinator @Inject constructor(
     recordSyncResults(operation, selectedYear, selectedSections, errors, completedAt)
     val hasSuccessfulSection = selectedSections.any { section -> section !in errors }
     val next = SyncStatusFactory.completed(
-      errors = errors.sections,
+      failures = errors.reasons,
       previous = previousStatus,
       completedAtEpochMillis = completedAt,
+      unavailableSections = unavailableForYear,
     ).copy(schoolYearNotStarted = errors.schoolYearNotStarted)
     val visibleStatus = next.visibleStatusFor(
       publishForegroundStatus = publishForegroundStatus,

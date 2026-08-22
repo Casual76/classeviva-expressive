@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContainerDetailScaffold
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidLoadingBlock
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
@@ -323,6 +325,12 @@ fun MeetingsRoute(
     onRefresh = viewModel::refresh,
     itemSpacing = 12.dp,
   ) {
+    item {
+      ExpressiveHeroCard(
+        title = "Colloqui",
+        subtitle = "${state.slots.count { it.available }} disponibilità · ${state.bookings.size} prenotazioni",
+      )
+    }
     state.lastMessage?.let { message ->
       item {
         InlineMessageCard(
@@ -488,6 +496,7 @@ private fun Context.openResource(
 @Composable
 fun MaterialsRoute(
   onBack: (() -> Unit)? = null,
+  onOpenMaterial: ((String) -> Unit)? = null,
   viewModel: MaterialsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -514,6 +523,12 @@ fun MaterialsRoute(
     onRefresh = viewModel::refresh,
     itemSpacing = 12.dp,
   ) {
+    item {
+      ExpressiveHeroCard(
+        title = "Didattica",
+        subtitle = if (items.isEmpty()) "Materiali in sincronizzazione" else "${items.size} contenuti disponibili",
+      )
+    }
     // Loading, error and empty all live inside the scroll rather than replacing it, so the title
     // stays put and pull-to-refresh keeps working while the screen has nothing to show.
     when {
@@ -551,7 +566,9 @@ fun MaterialsRoute(
             eyebrow = item.folderName,
             meta = item.sharedAt,
             tone = ExpressiveTone.Info,
-            onClick = { selectedItem = item },
+            onClick = {
+              if (onOpenMaterial != null) onOpenMaterial(item.id) else selectedItem = item
+            },
             badge = {
               StatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = ExpressiveTone.Info)
             },
@@ -644,6 +661,124 @@ fun MaterialsRoute(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MaterialDetailRoute(
+  itemId: String,
+  onBack: () -> Unit,
+  modifier: Modifier = Modifier,
+  viewModel: MaterialsViewModel = hiltViewModel(),
+) {
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val item = remember(state.items, itemId) { state.items.firstOrNull { it.id == itemId } }
+  val context = LocalContext.current
+  var showActions by rememberSaveable(itemId) { mutableStateOf(false) }
+  var assetPreviewText by remember { mutableStateOf<String?>(null) }
+  var assetErrorMessage by rememberSaveable { mutableStateOf<String?>(null) }
+  var isDownloading by rememberSaveable { mutableStateOf(false) }
+  var downloadMessage by rememberSaveable { mutableStateOf<String?>(null) }
+
+  if (item == null) {
+    FluidScreen(title = "Dettaglio materiale", modifier = modifier, onBack = onBack) {
+      item(key = "material-detail-missing") {
+        EmptyState(
+          title = "Materiale non disponibile",
+          detail = "Il contenuto potrebbe essere stato rimosso o non ancora sincronizzato.",
+        )
+      }
+    }
+    return
+  }
+
+  ContainerDetailScaffold(
+    title = "Dettaglio materiale",
+    modifier = modifier,
+    onBack = onBack,
+    hero = {
+      RegisterListRow(
+        title = item.title,
+        subtitle = item.teacherName,
+        eyebrow = item.folderName,
+        meta = item.sharedAt,
+        tone = ExpressiveTone.Info,
+        badge = { StatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = ExpressiveTone.Info) },
+        animatePress = false,
+      )
+    },
+    secondary = {
+      Text(
+        text = "Condiviso da ${item.teacherName} in ${item.folderName}",
+        style = MaterialTheme.typography.bodyMedium,
+      )
+      FluidButton(
+        text = if (item.isLinkMaterial()) "Apri risorsa" else "Apri o scarica",
+        onClick = { showActions = true },
+        style = FluidButtonStyle.Tinted,
+        fillWidth = true,
+      )
+    },
+  )
+
+  if (showActions) {
+    FluidSheet(onDismissRequest = { showActions = false }) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        Text(text = item.title, style = MaterialTheme.typography.headlineSmall)
+        assetPreviewText?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        downloadMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        assetErrorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        FluidButton(
+          text = if (item.isLinkMaterial()) "Vai al link" else "Apri file",
+          onClick = {
+            assetErrorMessage = null
+            viewModel.openAsset(
+              item,
+              onAsset = { asset ->
+                assetPreviewText = asset.textPreview
+                if (asset.textPreview == null && !context.openResource(asset.contentUri, asset.externalUrl, asset.mimeType)) {
+                  assetErrorMessage = "Nessun contenuto o link disponibile per questo materiale."
+                }
+              },
+              onError = { assetErrorMessage = it },
+            )
+          },
+          style = FluidButtonStyle.Filled,
+          fillWidth = true,
+          leading = { Icon(if (item.isLinkMaterial()) Icons.Rounded.Link else Icons.Rounded.Download, null) },
+        )
+        if (!item.isLinkMaterial()) {
+          FluidButton(
+            text = if (isDownloading) "Download in corso" else "Salva per uso offline",
+            onClick = {
+              isDownloading = true
+              downloadMessage = null
+              viewModel.queueDownload(
+                item,
+                onSuccess = { asset ->
+                  isDownloading = false
+                  downloadMessage = "File disponibile offline."
+                  context.openResource(asset.contentUri, asset.externalUrl, asset.mimeType)
+                },
+                onError = {
+                  isDownloading = false
+                  assetErrorMessage = it
+                },
+              )
+            },
+            style = FluidButtonStyle.Tinted,
+            enabled = !isDownloading,
+            loading = isDownloading,
+            fillWidth = true,
+            leading = { Icon(Icons.Rounded.Download, null) },
+          )
+        }
+      }
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HOMEWORK (COMPITI)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -708,6 +843,7 @@ class HomeworkViewModel @Inject constructor(
 fun HomeworkRoute(
   initialHomeworkId: String? = null,
   onBack: (() -> Unit)? = null,
+  onOpenHomework: ((String) -> Unit)? = null,
   viewModel: HomeworkViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -733,6 +869,12 @@ fun HomeworkRoute(
     onRefresh = viewModel::refresh,
     itemSpacing = 12.dp,
   ) {
+    item {
+      ExpressiveHeroCard(
+        title = "Compiti",
+        subtitle = if (state.homeworks.isEmpty()) "Nessuna attività assegnata" else "${state.homeworks.size} attività assegnate",
+      )
+    }
     if (state.homeworks.isEmpty()) {
       if (state.isRefreshing) {
         item { FluidLoadingBlock() }
@@ -752,7 +894,9 @@ fun HomeworkRoute(
           eyebrow = "COMPITO",
           meta = item.homeworkMeta(),
           tone = ExpressiveTone.Warning,
-          onClick = { viewModel.selectHomework(item) },
+          onClick = {
+            if (onOpenHomework != null) onOpenHomework(item.id) else viewModel.selectHomework(item)
+          },
           badge = {
             if (item.history.isNotEmpty()) {
               StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
@@ -764,7 +908,7 @@ fun HomeworkRoute(
     }
   }
 
-  state.selectedHomework?.let { hw ->
+  if (onOpenHomework == null) state.selectedHomework?.let { hw ->
     FluidSheet(onDismissRequest = viewModel::dismiss) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -822,6 +966,71 @@ fun HomeworkRoute(
       }
     }
   }
+}
+
+@Composable
+fun HomeworkDetailRoute(
+  homeworkId: String,
+  onBack: () -> Unit,
+  modifier: Modifier = Modifier,
+  viewModel: HomeworkViewModel = hiltViewModel(),
+) {
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val homework = remember(state.homeworks, homeworkId) {
+    state.homeworks.firstOrNull { it.id == homeworkId }
+  }
+
+  LaunchedEffect(homeworkId, homework) {
+    if (homework != null && state.selectedHomework?.id != homeworkId) viewModel.selectHomework(homework)
+  }
+  DisposableEffect(viewModel, homeworkId) {
+    onDispose { viewModel.dismiss() }
+  }
+
+  if (homework == null) {
+    FluidScreen(title = "Dettaglio compito", modifier = modifier, onBack = onBack) {
+      item(key = "homework-detail-missing") {
+        EmptyState(
+          title = "Compito non disponibile",
+          detail = "Il compito potrebbe essere stato rimosso o non ancora sincronizzato.",
+        )
+      }
+    }
+    return
+  }
+
+  val detail = state.selectedDetail?.takeIf { it.homework.id == homeworkId }
+  ContainerDetailScaffold(
+    title = "Dettaglio compito",
+    modifier = modifier,
+    onBack = onBack,
+    hero = {
+      RegisterListRow(
+        title = homework.subject,
+        subtitle = homework.description,
+        eyebrow = "COMPITO",
+        meta = homework.homeworkMeta(),
+        tone = ExpressiveTone.Warning,
+        badge = {
+          if (homework.history.isNotEmpty()) StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
+          StatusBadge("COMPITO", tone = ExpressiveTone.Warning)
+        },
+        animatePress = false,
+      )
+    },
+    secondary = {
+      if (state.isLoadingDetail) FluidIndeterminateBar(Modifier.fillMaxWidth())
+      Text(
+        text = detail?.fullText?.takeIf(String::isNotBlank) ?: homework.description,
+        style = MaterialTheme.typography.bodyLarge,
+      )
+      detail?.assignedDate?.let { Text("Aggiunto: ${it.homeworkCreatedAtLabel()}") }
+      homework.modifiedAtLabel()?.let { Text("Modificato: $it") }
+      detail?.teacher?.takeIf(String::isNotBlank)?.let { Text("Docente: $it") }
+      homework.notes?.takeIf(String::isNotBlank)?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      homework.dueDate.takeIf(String::isNotBlank)?.let { Text("Scadenza: $it") }
+    },
+  )
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -989,6 +1198,7 @@ class DocumentsViewModel @Inject constructor(
 @Composable
 fun DocumentsRoute(
   onBack: (() -> Unit)? = null,
+  onOpenDocument: ((String) -> Unit)? = null,
   viewModel: DocumentsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -1020,6 +1230,12 @@ fun DocumentsRoute(
     onRefresh = viewModel::refresh,
     itemSpacing = 12.dp,
   ) {
+    item {
+      ExpressiveHeroCard(
+        title = "Archivio scolastico",
+        subtitle = "${state.documents.size} documenti · ${state.schoolbookCourses.size} corsi con libri",
+      )
+    }
     if (state.initialLoading && state.documents.isEmpty() && state.schoolbookCourses.isEmpty()) {
       item {
         Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
@@ -1067,7 +1283,9 @@ fun DocumentsRoute(
             title = doc.title,
             subtitle = doc.detail,
             tone = ExpressiveTone.Info,
-            onClick = { viewModel.openDocument(doc) },
+            onClick = {
+              if (onOpenDocument != null) onOpenDocument(doc.id) else viewModel.openDocument(doc)
+            },
             badge = { StatusBadge("DOCUMENTO", tone = ExpressiveTone.Info) },
             animatePress = true,
           )
@@ -1111,7 +1329,7 @@ fun DocumentsRoute(
     }
   }
 
-  state.selectedDocument?.let { doc ->
+  if (onOpenDocument == null) state.selectedDocument?.let { doc ->
     FluidSheet(onDismissRequest = viewModel::dismissDocument) {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -1183,6 +1401,118 @@ fun DocumentsRoute(
             )
           }
         }
+      }
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DocumentDetailRoute(
+  documentId: String,
+  onBack: () -> Unit,
+  modifier: Modifier = Modifier,
+  viewModel: DocumentsViewModel = hiltViewModel(),
+) {
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val document = remember(state.documents, documentId) {
+    state.documents.firstOrNull { it.id == documentId }
+  }
+  val context = LocalContext.current
+  var showActions by rememberSaveable(documentId) { mutableStateOf(false) }
+
+  DisposableEffect(viewModel, documentId) {
+    onDispose { viewModel.dismissDocument() }
+  }
+
+  if (document == null) {
+    FluidScreen(title = "Dettaglio documento", modifier = modifier, onBack = onBack) {
+      item(key = "document-detail-missing") {
+        EmptyState(
+          title = "Documento non disponibile",
+          detail = "Il documento potrebbe essere stato rimosso o non ancora sincronizzato.",
+        )
+      }
+    }
+    return
+  }
+
+  ContainerDetailScaffold(
+    title = "Dettaglio documento",
+    modifier = modifier,
+    onBack = onBack,
+    hero = {
+      RegisterListRow(
+        title = document.title,
+        subtitle = document.detail,
+        tone = ExpressiveTone.Info,
+        badge = { StatusBadge("DOCUMENTO", tone = ExpressiveTone.Info) },
+        animatePress = false,
+      )
+    },
+    secondary = {
+      if (document.detail.isNotBlank()) Text(document.detail, style = MaterialTheme.typography.bodyLarge)
+      FluidButton(
+        text = "Apri o scarica",
+        onClick = {
+          showActions = true
+          if (state.selectedDocument?.id != documentId) viewModel.openDocument(document)
+        },
+        style = FluidButtonStyle.Tinted,
+        fillWidth = true,
+      )
+    },
+  )
+
+  if (showActions) {
+    FluidSheet(
+      onDismissRequest = {
+        showActions = false
+        viewModel.dismissDocument()
+      },
+    ) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+      ) {
+        Text(document.title, style = MaterialTheme.typography.headlineSmall)
+        when {
+          state.isOpeningDocument -> ExpressiveLoading()
+          state.selectedAsset != null -> {
+            val asset = state.selectedAsset
+            asset?.textPreview?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            if (asset != null && (!asset.contentUri.isNullOrBlank() || !asset.externalUrl.isNullOrBlank())) {
+              FluidButton(
+                text = "Apri documento",
+                onClick = { context.openResource(asset.contentUri, asset.externalUrl, asset.mimeType) },
+                style = FluidButtonStyle.Filled,
+                fillWidth = true,
+                leading = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, null) },
+              )
+            }
+            if (asset?.fileName != null) {
+              FluidButton(
+                text = if (state.isDownloadingDocument) "Download in corso" else "Salva per uso offline",
+                onClick = { viewModel.queueDownload(document) },
+                style = FluidButtonStyle.Tinted,
+                enabled = !state.isDownloadingDocument,
+                loading = state.isDownloadingDocument,
+                fillWidth = true,
+                leading = { Icon(Icons.Rounded.Download, null) },
+              )
+            }
+          }
+          state.lastError != null -> {
+            Text(state.lastError.orEmpty(), color = MaterialTheme.colorScheme.error)
+            FluidButton(
+              text = "Riprova",
+              onClick = { viewModel.openDocument(document) },
+              style = FluidButtonStyle.Filled,
+              fillWidth = true,
+            )
+          }
+        }
+        state.downloadMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
       }
     }
   }

@@ -1,50 +1,10 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.fluid
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FluidChromeMotionTest {
-
-  @Test
-  fun collapseProgress_isClearBeforeFirstLayout() {
-    assertEquals(
-      0f,
-      calculateCollapseProgress(
-        hasVisibleItems = false,
-        firstVisibleItemIndex = 0,
-        titleBottomPx = null,
-        topBarHeightPx = 100f,
-        collapseDistancePx = 30f,
-      ),
-      0f,
-    )
-  }
-
-  @Test
-  fun collapseProgress_isCollapsedOnlyAfterTitleActuallyLeaves() {
-    assertEquals(
-      0f,
-      calculateCollapseProgress(
-        hasVisibleItems = true,
-        firstVisibleItemIndex = 0,
-        titleBottomPx = null,
-        topBarHeightPx = 100f,
-        collapseDistancePx = 30f,
-      ),
-      0f,
-    )
-    assertEquals(
-      1f,
-      calculateCollapseProgress(
-        hasVisibleItems = true,
-        firstVisibleItemIndex = 1,
-        titleBottomPx = null,
-        topBarHeightPx = 100f,
-        collapseDistancePx = 30f,
-      ),
-      0f,
-    )
-  }
 
   @Test
   fun glassIntensity_usesDeadZoneAndSmoothLongRamp() {
@@ -59,18 +19,37 @@ class FluidChromeMotionTest {
   }
 
   @Test
-  fun glassIntensity_neverFallsBelowTitleCollapse() {
-    assertEquals(
-      0.7f,
+  fun glassIntensity_ignoresTheOpeningOfTheTitleTravel() {
+    fun atCollapse(progress: Float) = calculateGlassIntensity(
+      firstVisibleItemIndex = 0,
+      firstVisibleItemScrollOffset = 8,
+      collapseProgress = progress,
+      deadZonePx = 8f,
+      rampDistancePx = 64f,
+    )
+
+    // The title starts moving on the first pixel of scroll. Material that started with it appeared
+    // on the first pixel too, which is a blurred band over a page that has barely moved.
+    assertEquals(0f, atCollapse(0f), 0f)
+    assertEquals(0f, atCollapse(GlassCollapseDeadZone), 0f)
+    assertTrue(atCollapse(GlassCollapseDeadZone + 0.05f) > 0f)
+    // Docked is still fully materialised: the discount delays the start, it does not cap the end.
+    assertEquals(1f, atCollapse(1f), 0f)
+  }
+
+  @Test
+  fun glassIntensity_risesMonotonicallyWithTheTitleHandoff() {
+    val values = (0..20).map { step ->
       calculateGlassIntensity(
         firstVisibleItemIndex = 0,
-        firstVisibleItemScrollOffset = 8,
-        collapseProgress = 0.7f,
+        firstVisibleItemScrollOffset = 0,
+        collapseProgress = step / 20f,
         deadZonePx = 8f,
         rampDistancePx = 64f,
-      ),
-      0f,
-    )
+      )
+    }
+
+    assertTrue(values.zipWithNext().all { (before, after) -> after >= before })
   }
 
   @Test

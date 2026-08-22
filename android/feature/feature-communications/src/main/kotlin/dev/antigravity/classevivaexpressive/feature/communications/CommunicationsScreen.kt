@@ -7,11 +7,15 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.gestures.stopScroll
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.Campaign
@@ -25,13 +29,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -44,11 +53,15 @@ import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAc
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContainerDetailScaffold
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotification
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationTone
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionAnchor
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionIndex
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionSelectionMotion
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.LocalFluidNotificationHostState
@@ -61,7 +74,9 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroM
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusAction
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusNotice
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
@@ -117,6 +132,34 @@ data class CommunicationsUiState(
   val attachmentDialog: AttachmentDownloadDialogState? = null,
   val syncStatus: SyncStatus = SyncStatus(),
 )
+
+/**
+ * What the docked bar says about this screen once the title has gone.
+ *
+ * Only facts that change: a count that is zero says nothing worth cycling to, so it is left out
+ * rather than shown as a reassuring "0".
+ */
+/**
+ * What the docked bar says about this screen once the title has left it.
+ *
+ * Only things that ask for attention. A running total — how many notices exist in the board — is
+ * true, is never actionable, and pushed the one number that *is* actionable out of view for as long
+ * as it held the bar. If nothing here needs attention the bar has nothing to add, and says the name
+ * of the page instead.
+ */
+internal fun buildCommunicationsFacets(
+  communications: List<Communication>,
+  notes: List<Note>,
+): List<String> = buildList {
+  val unread = communications.count { !it.read }
+  if (unread > 0) add(if (unread == 1) "1 da leggere" else "$unread da leggere")
+  // A notice asking to be signed, answered or joined is outstanding whether or not it has been
+  // opened, so it is counted separately from the unread ones rather than folded into them.
+  val pending = communications.count { it.needsAck || it.needsReply || it.needsJoin || it.needsFile }
+  if (pending > 0) add(if (pending == 1) "1 da confermare" else "$pending da confermare")
+  val unreadNotes = notes.count { !it.read }
+  if (unreadNotes > 0) add(if (unreadNotes == 1) "1 nota nuova" else "$unreadNotes note nuove")
+}
 
 data class AttachmentDownloadDialogState(
   val fileName: String,
@@ -450,6 +493,8 @@ fun CommunicationsRoute(
   initialNoteCategoryCode: String? = null,
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
+  onOpenCommunication: ((pubId: String, evtCode: String) -> Unit)? = null,
+  onOpenNote: ((id: String, categoryCode: String) -> Unit)? = null,
   viewModel: CommunicationsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -458,23 +503,38 @@ fun CommunicationsRoute(
   var selectedFilter by rememberSaveable { mutableStateOf(FILTER_ALL) }
   var pendingUploadDetail by remember { mutableStateOf<CommunicationDetail?>(null) }
   val notificationHostState = LocalFluidNotificationHostState.current
-
-  LaunchedEffect(initialTab) {
-    selectedTab = tabFromRoute(initialTab)
+  val launchRequest = remember(
+    initialTab,
+    initialCommunicationPubId,
+    initialCommunicationEvtCode,
+    initialNoteId,
+    initialNoteCategoryCode,
+  ) {
+    communicationsLaunchRequest(
+      initialTab = initialTab,
+      communicationPubId = initialCommunicationPubId,
+      communicationEvtCode = initialCommunicationEvtCode,
+      noteId = initialNoteId,
+      noteCategoryCode = initialNoteCategoryCode,
+    )
   }
+  var launchRequestConsumed by rememberSaveable(launchRequest.stableKey) { mutableStateOf(false) }
 
-  LaunchedEffect(initialCommunicationPubId, initialCommunicationEvtCode) {
-    if (!initialCommunicationPubId.isNullOrBlank() && !initialCommunicationEvtCode.isNullOrBlank()) {
-      selectedTab = TAB_BOARD
-      viewModel.openCommunication(initialCommunicationPubId, initialCommunicationEvtCode)
+  // Route and deep-link arguments are launch intents, not durable UI state. Persisting the consumed
+  // bit prevents an already-dismissed detail from reopening after configuration/process restore.
+  LaunchedEffect(launchRequest.stableKey, launchRequestConsumed) {
+    if (launchRequestConsumed) return@LaunchedEffect
+    selectedTab = launchRequest.tab
+    when (launchRequest) {
+      is CommunicationsLaunchRequest.Communication -> {
+        viewModel.openCommunication(launchRequest.pubId, launchRequest.evtCode)
+      }
+      is CommunicationsLaunchRequest.Note -> {
+        viewModel.openNote(launchRequest.id, launchRequest.categoryCode)
+      }
+      is CommunicationsLaunchRequest.Tab -> Unit
     }
-  }
-
-  LaunchedEffect(initialNoteId, initialNoteCategoryCode) {
-    if (!initialNoteId.isNullOrBlank() && !initialNoteCategoryCode.isNullOrBlank()) {
-      selectedTab = TAB_NOTES
-      viewModel.openNote(initialNoteId, initialNoteCategoryCode)
-    }
+    launchRequestConsumed = true
   }
 
   LaunchedEffect(state.lastMessage) {
@@ -536,17 +596,46 @@ fun CommunicationsRoute(
     }
   }
   val totalUnreadCount = remember(state.communications) { state.communications.count { !it.read } }
+  val boardSections = remember(filteredCommunications) {
+    archiveMonthSections(filteredCommunications, Communication::date)
+  }
+  val noteSections = remember(state.notes) {
+    archiveMonthSections(state.notes, Note::date)
+  }
+  val listState = rememberLazyListState()
+  val listScope = rememberCoroutineScope()
+  val railSettleOffsetPx = with(LocalDensity.current) { 10.dp.roundToPx() }
+  val sectionAnchors = remember(selectedTab, boardSections, noteSections, selectedFilter) {
+    if (selectedTab == TAB_BOARD) {
+      communicationSectionAnchors(
+        sections = boardSections,
+        includeMarkAllReadAction = filteredCommunications.any { !it.read },
+        includeUnreadAnchor = selectedFilter == FILTER_ALL,
+      )
+    } else {
+      noteSectionAnchors(noteSections)
+    }
+  }
+  val activeSectionKey by remember(listState, sectionAnchors) {
+    derivedStateOf {
+      sectionAnchors.lastOrNull { it.itemIndex <= listState.firstVisibleItemIndex }?.key
+        ?: sectionAnchors.firstOrNull()?.key
+    }
+  }
 
+  val titleFacets = remember(state.communications, state.notes) {
+    buildCommunicationsFacets(state.communications, state.notes)
+  }
 
-  FluidScreen(
-    modifier = modifier,
+  Box(modifier = modifier) {
+    FluidScreen(
+    modifier = Modifier.fillMaxWidth(),
     title = "Comunicazioni",
     subtitle = state.syncStatus.lastSyncLabel(),
+    titleFacets = titleFacets,
     onBack = onBack,
-    titleTrailing = {
-      SyncStatusDot(status = state.syncStatus)
-    },
     actions = {
+      SyncStatusAction(status = state.syncStatus, onRetry = viewModel::refresh)
       FluidBarAction(
         icon = Icons.Rounded.Refresh,
         contentDescription = "Aggiorna",
@@ -556,7 +645,15 @@ fun CommunicationsRoute(
     isRefreshing = state.isRefreshing,
     onRefresh = viewModel::refresh,
     itemSpacing = 18.dp,
+    listState = listState,
   ) {
+    // Whatever the sync could not deliver, said where the missing data would have been. Reserved
+    // only when there is something to say, so an ordinary page keeps its first item at the top.
+    if (state.syncStatus.noticeMessage() != null) {
+      item {
+        SyncStatusNotice(status = state.syncStatus, onRetry = viewModel::refresh)
+      }
+    }
     item {
       FeatureHero(
         identity = FeatureIdentity.Communications,
@@ -607,23 +704,43 @@ fun CommunicationsRoute(
           )
         }
       } else {
-        items(filteredCommunications, key = { it.id }) { communication ->
-          RegisterListRow(
-            title = communication.title,
-            subtitle = communication.sender.ifBlank { "Bacheca scuola" },
-            eyebrow = communication.date.toReadableDate(),
-            meta = communication.contentPreview.takeIf { it.isNotBlank() },
-            tone = communicationTone(communication),
-            leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
-            badge = {
-              StatusBadge(
-                label = communicationBadgeLabel(communication),
-                tone = communicationTone(communication),
-              )
-            },
-            onClick = { viewModel.openCommunication(communication.pubId, communication.evtCode) },
-            animatePress = true,
-          )
+        boardSections.forEach { section ->
+          item(
+            key = "communication-month:${section.key}",
+            contentType = "archive-month-header",
+          ) {
+            FluidSectionHeader(section.label)
+          }
+          items(
+            items = section.items,
+            key = { "communication:${it.id}" },
+            contentType = { "communication-row" },
+          ) { communication ->
+            RegisterListRow(
+              modifier = Modifier
+                .animateItem(),
+              title = communication.title,
+              subtitle = communication.sender.ifBlank { "Bacheca scuola" },
+              eyebrow = communication.date.toReadableDate(),
+              meta = communication.contentPreview.takeIf { it.isNotBlank() },
+              tone = communicationTone(communication),
+              leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
+              badge = {
+                StatusBadge(
+                  label = communicationBadgeLabel(communication),
+                  tone = communicationTone(communication),
+                )
+              },
+              onClick = {
+                if (onOpenCommunication != null) {
+                  onOpenCommunication(communication.pubId, communication.evtCode)
+                } else {
+                  viewModel.openCommunication(communication.pubId, communication.evtCode)
+                }
+              },
+              animatePress = true,
+            )
+          }
         }
       }
     } else {
@@ -635,29 +752,72 @@ fun CommunicationsRoute(
           )
         }
       } else {
-        items(state.notes, key = { it.id }) { note ->
-          RegisterListRow(
-            title = note.title.ifBlank { note.author.uppercase(italianLocale) },
-            subtitle = note.categoryLabel,
-            eyebrow = note.date.toReadableDate(),
-            meta = note.contentPreview.takeIf { it.isNotBlank() },
-            tone = noteTone(note),
-            leading = { Icon(Icons.Rounded.Gavel, contentDescription = null) },
-            badge = {
-              StatusBadge(
-                label = if (note.read) "LETTA" else "NOTA",
-                tone = noteTone(note),
-              )
-            },
-            onClick = { viewModel.openNote(note.id, note.categoryCode) },
-            animatePress = true,
-          )
+        noteSections.forEach { section ->
+          item(
+            key = "note-month:${section.key}",
+            contentType = "archive-month-header",
+          ) {
+            FluidSectionHeader(section.label)
+          }
+          items(
+            items = section.items,
+            key = { "note:${it.id}" },
+            contentType = { "note-row" },
+          ) { note ->
+            RegisterListRow(
+              modifier = Modifier
+                .animateItem(),
+              title = note.title.ifBlank { note.author.uppercase(italianLocale) },
+              subtitle = note.categoryLabel,
+              eyebrow = note.date.toReadableDate(),
+              meta = note.contentPreview.takeIf { it.isNotBlank() },
+              tone = noteTone(note),
+              leading = { Icon(Icons.Rounded.Gavel, contentDescription = null) },
+              badge = {
+                StatusBadge(
+                  label = if (note.read) "LETTA" else "NOTA",
+                  tone = noteTone(note),
+                )
+              },
+              onClick = {
+                if (onOpenNote != null) {
+                  onOpenNote(note.id, note.categoryCode)
+                } else {
+                  viewModel.openNote(note.id, note.categoryCode)
+                }
+              },
+              animatePress = true,
+            )
+          }
         }
       }
     }
   }
 
-  state.selectedCommunication?.let { detail ->
+    FluidSectionIndex(
+      sections = sectionAnchors,
+      activeSectionKey = activeSectionKey,
+      visible = sectionAnchors.size >= 3 && (listState.canScrollBackward || listState.canScrollForward),
+      modifier = Modifier.align(Alignment.CenterEnd),
+      onSelectSection = { anchor, motion ->
+        listScope.launch {
+          listState.stopScroll()
+          val currentIndex = listState.firstVisibleItemIndex
+          val nearby = kotlin.math.abs(anchor.itemIndex - currentIndex) <= 8
+          if (motion == FluidSectionSelectionMotion.Animated && nearby) {
+            listState.animateScrollToItem(anchor.itemIndex)
+          } else {
+            listState.scrollToItem(anchor.itemIndex, railSettleOffsetPx)
+            if (motion == FluidSectionSelectionMotion.Animated) {
+              listState.animateScrollToItem(anchor.itemIndex)
+            }
+          }
+        }
+      },
+    )
+  }
+
+  if (onOpenCommunication == null) state.selectedCommunication?.let { detail ->
     var replyDraft by rememberSaveable(detail.communication.id, detail.replyText) {
       mutableStateOf(detail.replyText.orEmpty())
     }
@@ -809,7 +969,7 @@ fun CommunicationsRoute(
     }
   }
 
-  state.selectedNote?.let { detail ->
+  if (onOpenNote == null) state.selectedNote?.let { detail ->
     FluidSheet(
       onDismissRequest = viewModel::dismissDetail,
     ) {
@@ -844,6 +1004,266 @@ fun CommunicationsRoute(
     )
   }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CommunicationDetailRoute(
+  pubId: String,
+  evtCode: String,
+  onBack: () -> Unit,
+  modifier: Modifier = Modifier,
+  viewModel: CommunicationsViewModel = hiltViewModel(),
+) {
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val context = androidx.compose.ui.platform.LocalContext.current
+  val base = remember(state.communications, pubId, evtCode) {
+    state.communications.firstOrNull { it.pubId == pubId && it.evtCode == evtCode }
+  }
+  val detail = state.selectedCommunication
+    ?.takeIf { it.communication.pubId == pubId && it.communication.evtCode == evtCode }
+  val communication = detail?.communication ?: base
+  var showActions by rememberSaveable(pubId, evtCode) { mutableStateOf(false) }
+  var pendingUploadDetail by remember { mutableStateOf<CommunicationDetail?>(null) }
+
+  LaunchedEffect(pubId, evtCode) {
+    viewModel.openCommunication(pubId, evtCode)
+  }
+  DisposableEffect(viewModel, pubId, evtCode) {
+    onDispose { viewModel.dismissDetail() }
+  }
+  LaunchedEffect(state.pendingOpenUri) {
+    val uri = state.pendingOpenUri ?: return@LaunchedEffect
+    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    runCatching { context.startActivity(Intent.createChooser(intent, "Apri allegato")) }
+      .onSuccess { viewModel.clearPendingUri() }
+      .onFailure(viewModel::reportAttachmentOpenFailure)
+  }
+
+  val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val selected = pendingUploadDetail ?: return@rememberLauncherForActivityResult
+    pendingUploadDetail = null
+    uri?.let { readPickedDocument(context, it) }?.let { picked ->
+      viewModel.upload(selected, picked.fileName, picked.mimeType, picked.bytes)
+    }
+  }
+
+  if (communication == null) {
+    FluidScreen(
+      title = "Dettaglio comunicazione",
+      modifier = modifier,
+      onBack = onBack,
+    ) {
+      item(key = "communication-detail-missing") {
+        EmptyState(
+          title = "Comunicazione non disponibile",
+          detail = "Il messaggio potrebbe essere stato rimosso o non ancora sincronizzato.",
+        )
+      }
+    }
+    return
+  }
+
+  ContainerDetailScaffold(
+    title = "Dettaglio comunicazione",
+    modifier = modifier,
+    onBack = onBack,
+    hero = {
+      RegisterListRow(
+        title = communication.title,
+        subtitle = communication.sender.ifBlank { "Bacheca scuola" },
+        eyebrow = communication.date.toReadableDate(),
+        meta = communication.contentPreview.takeIf(String::isNotBlank),
+        tone = communicationTone(communication),
+        leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
+        badge = {
+          StatusBadge(
+            label = communicationBadgeLabel(communication),
+            tone = communicationTone(communication),
+          )
+        },
+        animatePress = false,
+      )
+    },
+    secondary = {
+      val rendered = remember(detail?.content, communication.title, communication.contentPreview) {
+        renderCommunicationContent(detail?.content ?: communication.contentPreview, communication.title)
+      }
+      Text(
+        text = rendered.ifBlank { "Nessun contenuto fornito dal registro per questa comunicazione." },
+        style = MaterialTheme.typography.bodyLarge,
+        color = if (rendered.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
+        else MaterialTheme.colorScheme.onSurface,
+      )
+      if (detail == null) {
+        ExpressiveLoading()
+      }
+      if (communication.noticeboardAttachments.isNotEmpty()) {
+        FluidSectionHeader("Allegati")
+        communication.noticeboardAttachments.forEach { attachment ->
+          val hasUrl = !attachment.url.isNullOrBlank()
+          RegisterListRow(
+            title = attachment.name,
+            subtitle = attachment.mimeType ?: "Allegato",
+            meta = if (hasUrl) "Apri con download autenticato e cache locale" else "Non disponibile in API",
+            tone = ExpressiveTone.Neutral,
+            leading = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
+            onClick = if (hasUrl) {
+              {
+                viewModel.openAttachment(
+                  RemoteAttachment(
+                    id = attachment.id,
+                    name = attachment.name,
+                    url = attachment.url,
+                    mimeType = attachment.mimeType,
+                    portalOnly = attachment.portalOnly,
+                  ),
+                  context,
+                )
+              }
+            } else null,
+          )
+        }
+      }
+      if (detail != null && detail.hasTransactionalActions()) {
+        FluidButton(
+          text = "Azioni comunicazione",
+          onClick = { showActions = true },
+          style = FluidButtonStyle.Tinted,
+          fillWidth = true,
+        )
+      }
+    },
+  )
+
+  if (showActions && detail != null) {
+    var replyDraft by rememberSaveable(detail.communication.id, detail.replyText) {
+      mutableStateOf(detail.replyText.orEmpty())
+    }
+    FluidSheet(onDismissRequest = { showActions = false }) {
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+      ) {
+        Text("Azioni comunicazione", style = MaterialTheme.typography.headlineSmall)
+        if (!detail.communication.read) {
+          FluidButton(
+            text = "Segna come letta",
+            onClick = { viewModel.markCommunicationRead(detail.communication.id) },
+            style = FluidButtonStyle.Tinted,
+            fillWidth = true,
+          )
+        }
+        val canReply = shouldShowReplyComposer(detail)
+        if (canReply) {
+          FluidTextField(
+            value = replyDraft,
+            onValueChange = { replyDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = if (detail.replyText != null) "Risposta inviata" else "Scrivi una risposta",
+            readOnly = detail.replyText != null,
+            minLines = 3,
+          )
+        }
+        if (state.isSubmittingAction) {
+          ExpressiveLoading()
+        } else {
+          CommunicationActions(
+            detail = detail,
+            canReply = canReply,
+            replyDraft = replyDraft,
+            onAcknowledge = { viewModel.acknowledge(detail) },
+            onReply = { viewModel.reply(detail, replyDraft) },
+            onJoin = { viewModel.join(detail) },
+            onUpload = {
+              pendingUploadDetail = detail
+              uploadLauncher.launch(arrayOf("*/*"))
+            },
+          )
+        }
+        FluidButton(
+          text = "Chiudi",
+          onClick = { showActions = false },
+          style = FluidButtonStyle.Plain,
+          fillWidth = true,
+        )
+      }
+    }
+  }
+
+  state.attachmentDialog?.let { dialog ->
+    AttachmentDownloadDialog(dialog, viewModel::dismissAttachmentDialog)
+  }
+}
+
+@Composable
+fun NoteDetailRoute(
+  id: String,
+  categoryCode: String,
+  onBack: () -> Unit,
+  modifier: Modifier = Modifier,
+  viewModel: CommunicationsViewModel = hiltViewModel(),
+) {
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val base = remember(state.notes, id, categoryCode) {
+    state.notes.firstOrNull { it.id == id && it.categoryCode == categoryCode }
+  }
+  val detail = state.selectedNote
+    ?.takeIf { it.note.id == id && it.note.categoryCode == categoryCode }
+  val note = detail?.note ?: base
+
+  LaunchedEffect(id, categoryCode) { viewModel.openNote(id, categoryCode) }
+  DisposableEffect(viewModel, id, categoryCode) {
+    onDispose { viewModel.dismissDetail() }
+  }
+
+  if (note == null) {
+    FluidScreen(title = "Dettaglio nota", modifier = modifier, onBack = onBack) {
+      item(key = "note-detail-missing") {
+        EmptyState(
+          title = "Nota non disponibile",
+          detail = "La nota potrebbe essere stata rimossa o non ancora sincronizzata.",
+        )
+      }
+    }
+    return
+  }
+
+  ContainerDetailScaffold(
+    title = "Dettaglio nota",
+    modifier = modifier,
+    onBack = onBack,
+    hero = {
+      RegisterListRow(
+        title = note.title.ifBlank { note.author.uppercase(italianLocale) },
+        subtitle = note.categoryLabel,
+        eyebrow = note.date.toReadableDate(),
+        meta = note.contentPreview.takeIf(String::isNotBlank),
+        tone = noteTone(note),
+        leading = { Icon(Icons.Rounded.Gavel, contentDescription = null) },
+        badge = { StatusBadge(if (note.read) "LETTA" else "NOTA", tone = noteTone(note)) },
+        animatePress = false,
+      )
+    },
+    secondary = {
+      if (detail == null) ExpressiveLoading()
+      Text(
+        text = detail?.content?.takeIf(String::isNotBlank)
+          ?: note.contentPreview.takeIf(String::isNotBlank)
+          ?: "Nessun dettaglio disponibile.",
+        style = MaterialTheme.typography.bodyLarge,
+      )
+    },
+  )
+}
+
+private fun CommunicationDetail.hasTransactionalActions(): Boolean =
+  !communication.read ||
+    shouldShowAcknowledgeAction(this) ||
+    shouldShowReplyComposer(this) ||
+    shouldShowJoinAction(this) ||
+    shouldShowUploadAction(this)
 
 @Composable
 private fun AttachmentDownloadDialog(
@@ -1062,6 +1482,47 @@ private fun String.toReadableDate(): String {
 }
 
 private fun tabFromRoute(value: String): String = if (value.equals("notes", ignoreCase = true)) TAB_NOTES else TAB_BOARD
+
+internal sealed interface CommunicationsLaunchRequest {
+  val tab: String
+  val stableKey: String
+
+  data class Tab(override val tab: String) : CommunicationsLaunchRequest {
+    override val stableKey: String = "tab:$tab"
+  }
+
+  data class Communication(
+    val pubId: String,
+    val evtCode: String,
+  ) : CommunicationsLaunchRequest {
+    override val tab: String = TAB_BOARD
+    override val stableKey: String = "communication:$pubId:$evtCode"
+  }
+
+  data class Note(
+    val id: String,
+    val categoryCode: String,
+  ) : CommunicationsLaunchRequest {
+    override val tab: String = TAB_NOTES
+    override val stableKey: String = "note:$id:$categoryCode"
+  }
+}
+
+internal fun communicationsLaunchRequest(
+  initialTab: String,
+  communicationPubId: String?,
+  communicationEvtCode: String?,
+  noteId: String?,
+  noteCategoryCode: String?,
+): CommunicationsLaunchRequest = when {
+  !communicationPubId.isNullOrBlank() && !communicationEvtCode.isNullOrBlank() -> {
+    CommunicationsLaunchRequest.Communication(communicationPubId, communicationEvtCode)
+  }
+  !noteId.isNullOrBlank() && !noteCategoryCode.isNullOrBlank() -> {
+    CommunicationsLaunchRequest.Note(noteId, noteCategoryCode)
+  }
+  else -> CommunicationsLaunchRequest.Tab(tabFromRoute(initialTab))
+}
 
 internal fun renderCommunicationContent(rawContent: String?, title: String): String {
   val raw = rawContent?.trim().orEmpty()

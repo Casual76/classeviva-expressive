@@ -55,3 +55,6 @@ crash.log
 .cursor/
 .codex/
 agent-transcripts/
+
+# Device QA captures: screenshots and UI dumps of a real student's registro
+artifacts/

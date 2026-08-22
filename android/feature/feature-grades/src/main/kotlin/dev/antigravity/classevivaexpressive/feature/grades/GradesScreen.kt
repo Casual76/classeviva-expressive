@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.feature.grades
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -43,10 +45,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContainerDetailScaffold
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContinuousCornerShape
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidChip
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidRadius
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
@@ -63,7 +68,9 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusDot
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusAction
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusNotice
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
@@ -105,6 +112,24 @@ data class GradesUiState(
   val isRefreshing: Boolean = false,
   val syncStatus: SyncStatus = SyncStatus(),
 )
+
+/** Facts the docked bar cycles through on the grades screen. Empty values are simply not offered. */
+/**
+ * What the docked bar says about this screen once the title has left it.
+ *
+ * New marks first, then the two numbers a student actually acts on. How many marks exist in total
+ * is not one of them, and it used to hold the bar for as long as the average did.
+ */
+internal fun buildGradesFacets(grades: List<Grade>, seenGradeIds: Set<String>): List<String> = buildList {
+  val unseen = grades.count { it.id !in seenGradeIds }
+  if (unseen > 0) add(if (unseen == 1) "1 voto nuovo" else "$unseen voti nuovi")
+  val numeric = grades.mapNotNull { it.numericValue }
+  if (numeric.isNotEmpty()) add("Media ${"%.2f".format(numeric.average())}")
+  val insufficient = numeric.count { it < 6.0 }
+  if (insufficient > 0) {
+    add(if (insufficient == 1) "1 insufficienza" else "$insufficient insufficienze")
+  }
+}
 
 private data class GradesContentState(
   val grades: List<Grade>,
@@ -238,6 +263,7 @@ class GradesViewModel @Inject constructor(
 fun GradesRoute(
   initialGradeId: String? = null,
   onInitialGradeConsumed: (String) -> Unit = {},
+  onOpenGrade: ((String) -> Unit)? = null,
   modifier: Modifier = Modifier,
   viewModel: GradesViewModel = hiltViewModel(),
 ) {
@@ -287,6 +313,9 @@ fun GradesRoute(
   val periodUnseen = remember(filteredGrades, state.seenGradeIds) {
     filteredGrades.filterNot { state.seenGradeIds.contains(it.id) }
   }
+  val openGrade: (String) -> Unit = { gradeId ->
+    if (onOpenGrade != null) onOpenGrade(gradeId) else viewModel.openGrade(gradeId)
+  }
 
   LaunchedEffect(initialGradeId, state.grades) {
     val gradeId = initialGradeRequestToOpen(
@@ -299,14 +328,17 @@ fun GradesRoute(
     viewModel.openGrade(gradeId)
   }
 
+  val titleFacets = remember(state.grades, state.seenGradeIds) {
+    buildGradesFacets(state.grades, state.seenGradeIds)
+  }
+
   FluidScreen(
     modifier = modifier,
     title = "Voti",
     subtitle = state.syncStatus.lastSyncLabel(),
-    titleTrailing = {
-      SyncStatusDot(status = state.syncStatus)
-    },
+    titleFacets = titleFacets,
     actions = {
+      SyncStatusAction(status = state.syncStatus, onRetry = viewModel::refresh)
       FluidBarAction(
         icon = Icons.Rounded.Refresh,
         contentDescription = "Aggiorna",
@@ -329,6 +361,13 @@ fun GradesRoute(
     onRefresh = viewModel::refresh,
     itemSpacing = 18.dp,
   ) {
+    // Whatever the sync could not deliver, said where the missing data would have been. Reserved
+    // only when there is something to say, so an ordinary page keeps its first item at the top.
+    if (state.syncStatus.noticeMessage() != null) {
+      item {
+        SyncStatusNotice(status = state.syncStatus, onRetry = viewModel::refresh)
+      }
+    }
     item {
       FeatureHero(
         identity = FeatureIdentity.Grades,
@@ -434,7 +473,10 @@ fun GradesRoute(
             }
 
             RegisterListRow(
-              modifier = Modifier,
+              modifier = Modifier
+                .animateItem()
+                .clip(ContinuousCornerShape(FluidRadius.Group))
+                .background(MaterialTheme.colorScheme.surfaceContainerLow),
               title = grade.subject,
               subtitle = grade.type.ifBlank { "Valutazione" },
               eyebrow = readableDate,
@@ -450,7 +492,7 @@ fun GradesRoute(
                 }
                 GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
               },
-              onClick = { viewModel.openGrade(grade.id) },
+              onClick = { openGrade(grade.id) },
               animatePress = true,
             )
           }
@@ -511,7 +553,7 @@ fun GradesRoute(
       subject = subject,
       grades = filteredGrades.filter { it.subject == subject },
       onDismiss = { detailSubject = null },
-      onOpenGrade = { viewModel.openGrade(it) },
+      onOpenGrade = openGrade,
       onSetGoal = { goalDialogSubject = subject }
     )
   }
@@ -577,6 +619,75 @@ fun GradesRoute(
       }
     }
   }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun GradeDetailRoute(
+  gradeId: String,
+  onBack: () -> Unit,
+  modifier: Modifier = Modifier,
+  viewModel: GradesViewModel = hiltViewModel(),
+) {
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val grade = remember(state.grades, gradeId) { state.grades.firstOrNull { it.id == gradeId } }
+  var showHistory by rememberSaveable(gradeId) { mutableStateOf(false) }
+
+  LaunchedEffect(gradeId) {
+    viewModel.markGradesSeen(listOf(gradeId))
+  }
+
+  if (grade == null) {
+    FluidScreen(
+      title = "Dettaglio voto",
+      modifier = modifier,
+      onBack = onBack,
+    ) {
+      item(key = "grade-detail-missing") {
+        EmptyState(
+          title = "Voto non disponibile",
+          detail = "La valutazione potrebbe essere stata rimossa o non ancora sincronizzata.",
+        )
+      }
+    }
+    return
+  }
+
+  ContainerDetailScaffold(
+    title = "Dettaglio voto",
+    modifier = modifier,
+    onBack = onBack,
+    hero = {
+      Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
+      RegisterListRow(
+        title = grade.valueLabel,
+        subtitle = grade.type.ifBlank { "Valutazione" },
+        eyebrow = grade.date.toReadableDate(),
+        meta = listOfNotNull(grade.description, grade.notes, grade.teacher).joinToString(" / "),
+        tone = gradeTone(grade.numericValue),
+        badge = {
+          if (grade.history.isNotEmpty()) {
+            StatusBadge(label = "MODIFICATO", tone = ExpressiveTone.Info)
+          }
+          GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
+        },
+        animatePress = false,
+      )
+    },
+    secondary = {
+      if (grade.history.isNotEmpty()) {
+        FluidButton(
+          text = if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${grade.history.size})",
+          onClick = { showHistory = !showHistory },
+          style = FluidButtonStyle.Tinted,
+          fillWidth = true,
+        )
+      }
+      if (showHistory) {
+        GradeHistorySection(grade = grade)
+      }
+    },
+  )
 }
 
 @Composable

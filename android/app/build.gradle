@@ -25,8 +25,8 @@ android {
     applicationId configuredApplicationId
     minSdk 26
     targetSdk 36
-    versionCode 2026082202
-    versionName "7.0.0"
+    versionCode 2026082301
+    versionName "7.1.0"
     testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
   }
@@ -51,6 +51,12 @@ android {
       }
       minifyEnabled false
       proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+    }
+    benchmark {
+      initWith release
+      signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+      matchingFallbacks = ["release"]
+      debuggable false
     }
   }
 
@@ -112,6 +118,7 @@ dependencies {
   implementation libs.work.runtime
   implementation libs.webkit
   implementation libs.coil.compose
+  implementation libs.profileinstaller
 
   ksp libs.hilt.compiler
   ksp libs.androidx.hilt.compiler

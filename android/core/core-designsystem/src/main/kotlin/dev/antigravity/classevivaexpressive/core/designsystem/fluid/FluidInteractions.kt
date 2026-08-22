@@ -96,6 +96,7 @@ fun Modifier.fluidRowPressable(
   onClick: (() -> Unit)? = null,
   onLongClick: (() -> Unit)? = null,
   enabled: Boolean = true,
+  animateFeedback: Boolean = true,
   shape: Shape? = null,
   highlightColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f),
 ): Modifier {
@@ -105,7 +106,7 @@ fun Modifier.fluidRowPressable(
   val pressed by interactionSource.collectIsPressedAsState()
   val haptics = LocalHapticFeedback.current
   val highlight by animateFloatAsState(
-    targetValue = if (pressed) 1f else 0f,
+    targetValue = if (pressed && animateFeedback) 1f else 0f,
     // Appearing instantly and fading out unhurriedly is what stops a quick tap from looking like a
     // flicker: the highlight is always visible for at least the length of the fade.
     animationSpec = if (pressed) FluidMotion.instant() else FluidMotion.fadeOut(260),

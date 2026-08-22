@@ -1,9 +1,11 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.fluid
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,16 +67,24 @@ object FluidTabBarDefaults {
   val ContentInset = Height + BottomMargin
 }
 
-private fun indicatorLeadingSpec() = spring<Float>(
-  dampingRatio = 0.90f,
-  stiffness = FluidMotion.ResponseSnappy,
-  visibilityThreshold = 0.5f,
+@Immutable
+internal data class TabIndicatorTiming(
+  val leadingDurationMillis: Int,
+  val trailingDurationMillis: Int,
 )
 
-private fun indicatorTrailingSpec() = spring<Float>(
-  dampingRatio = FluidMotion.DampingStandard,
-  stiffness = FluidMotion.ResponseStandard,
-  visibilityThreshold = 0.5f,
+internal fun tabIndicatorTiming(reducedMotion: Boolean): TabIndicatorTiming =
+  if (reducedMotion) {
+    TabIndicatorTiming(leadingDurationMillis = 0, trailingDurationMillis = 0)
+  } else {
+    // A finite asymmetric settle preserves the elastic-looking stretch without keeping the whole
+    // window (including the backdrop blur) active for the long tail of a spring.
+    TabIndicatorTiming(leadingDurationMillis = 190, trailingDurationMillis = 250)
+  }
+
+private fun indicatorSpec(durationMillis: Int) = tween<Float>(
+  durationMillis = durationMillis,
+  easing = FastOutSlowInEasing,
 )
 
 /**
@@ -97,6 +107,8 @@ fun FluidTabBar(
   val tint = GlassDefaults.floatingTint()
   val selectedIndex = items.indexOfFirst { it.route == selectedRoute }
   val underglowColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+  val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
+  val indicatorTiming = tabIndicatorTiming(reducedMotion)
   val density = LocalDensity.current
   var rowWidthPx by remember { mutableFloatStateOf(0f) }
   val underglowStart = remember { Animatable(0f) }
@@ -107,11 +119,11 @@ fun FluidTabBar(
   val underglowVerticalInsetPx = with(density) { 5.dp.toPx() }
   val underglowRadiusPx = with(density) { 24.dp.toPx() }
 
-  LaunchedEffect(selectedIndex, itemWidthPx) {
+  LaunchedEffect(selectedIndex, itemWidthPx, reducedMotion) {
     if (selectedIndex < 0 || itemWidthPx <= 0f) return@LaunchedEffect
     val targetStart = selectedIndex * itemWidthPx + underglowHorizontalInsetPx
     val targetEnd = (selectedIndex + 1) * itemWidthPx - underglowHorizontalInsetPx
-    if (!underglowPlaced) {
+    if (!underglowPlaced || reducedMotion) {
       underglowStart.snapTo(targetStart)
       underglowEnd.snapTo(targetEnd)
       underglowPlaced = true
@@ -122,11 +134,31 @@ fun FluidTabBar(
       // continuity without wiping two full pages across one another.
       coroutineScope {
         if (movingForward) {
-          launch { underglowEnd.animateTo(targetEnd, indicatorLeadingSpec()) }
-          launch { underglowStart.animateTo(targetStart, indicatorTrailingSpec()) }
+          launch {
+            underglowEnd.animateTo(
+              targetEnd,
+              indicatorSpec(indicatorTiming.leadingDurationMillis),
+            )
+          }
+          launch {
+            underglowStart.animateTo(
+              targetStart,
+              indicatorSpec(indicatorTiming.trailingDurationMillis),
+            )
+          }
         } else {
-          launch { underglowStart.animateTo(targetStart, indicatorLeadingSpec()) }
-          launch { underglowEnd.animateTo(targetEnd, indicatorTrailingSpec()) }
+          launch {
+            underglowStart.animateTo(
+              targetStart,
+              indicatorSpec(indicatorTiming.leadingDurationMillis),
+            )
+          }
+          launch {
+            underglowEnd.animateTo(
+              targetEnd,
+              indicatorSpec(indicatorTiming.trailingDurationMillis),
+            )
+          }
         }
       }
     }
@@ -182,27 +214,27 @@ private fun FluidTabItemContent(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  // Colour is the only thing here that has to recompose; the icon's settle is read inside the
+  // graphics layer, so it plays on the render thread without touching composition. Snapping the
+  // whole tab to its new state — which is what this used to do — was the reason selecting a tab
+  // registered as nothing happening at all.
+  val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
   val contentColor by animateColorAsState(
     targetValue = if (selected) {
       MaterialTheme.colorScheme.primary
     } else {
       MaterialTheme.colorScheme.onSurfaceVariant
     },
-    animationSpec = FluidMotion.color(),
-    label = "fluid tab colour",
+    animationSpec = if (reducedMotion) snap() else FluidMotion.color(200),
+    label = "tab tint",
   )
 
   val density = LocalDensity.current
   val selectedLiftPx = with(density) { -1.5.dp.toPx() }
-  val iconScale by animateFloatAsState(
-    targetValue = if (selected) 1f else 0.96f,
-    animationSpec = FluidMotion.standard(),
-    label = "fluid tab scale",
-  )
-  val lift by animateFloatAsState(
-    targetValue = if (selected) selectedLiftPx else 0f,
-    animationSpec = FluidMotion.standard(),
-    label = "fluid tab lift",
+  val settle by animateFloatAsState(
+    targetValue = if (selected) 1f else 0f,
+    animationSpec = if (reducedMotion) snap() else FluidMotion.expressive(),
+    label = "tab settle",
   )
 
   Box(
@@ -227,9 +259,10 @@ private fun FluidTabItemContent(
         modifier = Modifier
           .size(24.dp)
           .graphicsLayer {
-            scaleX = iconScale
-            scaleY = iconScale
-            translationY = lift
+            val scale = 0.94f + 0.06f * settle
+            scaleX = scale
+            scaleY = scale
+            translationY = selectedLiftPx * settle
           },
       )
       Text(
@@ -258,22 +291,24 @@ fun FluidTabRail(
   val tint = GlassDefaults.floatingTint()
   val pillColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
   val density = LocalDensity.current
+  val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
+  val indicatorTiming = tabIndicatorTiming(reducedMotion)
 
   var columnHeightPx by remember { mutableFloatStateOf(0f) }
   val pillTop = remember { Animatable(0f) }
   var pillPlaced by remember { mutableStateOf(false) }
   val itemHeightPx = if (items.isEmpty()) 0f else columnHeightPx / items.size
 
-  LaunchedEffect(selectedIndex, itemHeightPx) {
+  LaunchedEffect(selectedIndex, itemHeightPx, reducedMotion) {
     if (itemHeightPx <= 0f || selectedIndex < 0) return@LaunchedEffect
     val target = selectedIndex * itemHeightPx
-    if (!pillPlaced) {
+    if (!pillPlaced || reducedMotion) {
       pillTop.snapTo(target)
       pillPlaced = true
     } else {
       pillTop.animateTo(
         target,
-        FluidMotion.standard(),
+        indicatorSpec(indicatorTiming.trailingDurationMillis),
       )
     }
   }

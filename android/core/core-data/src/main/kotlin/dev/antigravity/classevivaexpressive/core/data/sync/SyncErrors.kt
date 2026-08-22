@@ -19,23 +19,26 @@ import java.net.UnknownHostException
  */
 internal class SyncErrors {
 
-  private val reasons = LinkedHashMap<String, String>()
+  private val recorded = LinkedHashMap<String, String>()
 
   /** True once any section failed because the school year is not open yet. */
   var schoolYearNotStarted: Boolean = false
     private set
 
   /** Sections that failed, in the order they failed. */
-  val sections: List<String> get() = reasons.keys.toList()
+  val sections: List<String> get() = recorded.keys.toList()
 
-  fun isEmpty(): Boolean = reasons.isEmpty()
+  /** Each failed section with the reason it gave, in the order they failed. */
+  val reasons: Map<String, String> get() = LinkedHashMap(recorded)
 
-  operator fun contains(section: String): Boolean = reasons.containsKey(section)
+  fun isEmpty(): Boolean = recorded.isEmpty()
 
-  fun reasonFor(section: String): String? = reasons[section]
+  operator fun contains(section: String): Boolean = recorded.containsKey(section)
+
+  fun reasonFor(section: String): String? = recorded[section]
 
   fun record(section: String, cause: Throwable?) {
-    reasons[section] = describeSyncFailure(cause)
+    recorded[section] = describeSyncFailure(cause)
     if (cause.isSchoolYearNotStarted()) schoolYearNotStarted = true
   }
 

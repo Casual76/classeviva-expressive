@@ -24,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
+import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContainerDetailScaffold
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidLoadingBlock
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
 import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
@@ -398,6 +399,7 @@ private fun DayOfWeek.shortLabel(): String = when (this) {
 @Composable
 fun ProfessorsRoute(
   onBack: (() -> Unit)? = null,
+  onOpenProfessor: ((String) -> Unit)? = null,
   viewModel: ProfessorsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -470,7 +472,9 @@ fun ProfessorsRoute(
           },
           tone = presenceTone,
           leading = { Icon(Icons.Rounded.Person, contentDescription = null) },
-          onClick = { viewModel.selectProfessor(prof) },
+          onClick = {
+            if (onOpenProfessor != null) onOpenProfessor(prof.teacherName) else viewModel.selectProfessor(prof)
+          },
           badge = { StatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
           animatePress = true,
         )
@@ -478,9 +482,110 @@ fun ProfessorsRoute(
     }
   }
 
-  state.selectedProfessor?.let { prof ->
+  if (onOpenProfessor == null) state.selectedProfessor?.let { prof ->
     ProfessorDetailSheet(prof = prof, onDismiss = viewModel::dismissProfessor)
   }
+}
+
+@Composable
+fun ProfessorDetailRoute(
+  teacherName: String,
+  onBack: () -> Unit,
+  modifier: Modifier = Modifier,
+  viewModel: ProfessorsViewModel = hiltViewModel(),
+) {
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val professor = state.professors.firstOrNull { it.teacherName == teacherName }
+
+  if (professor == null) {
+    FluidScreen(title = "Dettaglio professore", modifier = modifier, onBack = onBack) {
+      item(key = "professor-detail-missing") {
+        EmptyState(
+          title = "Professore non disponibile",
+          detail = "Il profilo potrebbe non essere ancora stato ricostruito dai dati sincronizzati.",
+        )
+      }
+    }
+    return
+  }
+
+  val presenceTone = when {
+    professor.presenceRate >= 0.85f -> ExpressiveTone.Success
+    professor.presenceRate >= 0.65f -> ExpressiveTone.Warning
+    else -> ExpressiveTone.Danger
+  }
+  val strictnessTone = when (professor.strictnessLabel) {
+    "Molto esigente" -> ExpressiveTone.Danger
+    "Esigente" -> ExpressiveTone.Warning
+    "Equilibrato" -> ExpressiveTone.Info
+    else -> ExpressiveTone.Success
+  }
+
+  ContainerDetailScaffold(
+    title = "Dettaglio professore",
+    modifier = modifier,
+    onBack = onBack,
+    hero = {
+      RegisterListRow(
+        title = professor.teacherName,
+        subtitle = professor.subjects.joinToString(", ").ifBlank { "Materia non specificata" },
+        eyebrow = "Presenza ${(professor.presenceRate * 100).toInt()}%",
+        meta = if (professor.gradeCount > 0) "${professor.gradeCount} voti" else "Nessun voto assegnato",
+        tone = presenceTone,
+        leading = { Icon(Icons.Rounded.Person, contentDescription = null) },
+        badge = { StatusBadge(professor.strictnessLabel.uppercase(), tone = strictnessTone) },
+        animatePress = false,
+      )
+    },
+    secondary = {
+      FluidSectionHeader("Presenza")
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        MetricTile("Presenti", professor.actualDays.toString(), "Lezioni firmate.", Modifier.weight(1f), ExpressiveTone.Success)
+        MetricTile("Attesi", professor.expectedDays.toString(), "Giornate tipiche.", Modifier.weight(1f), ExpressiveTone.Info)
+        MetricTile("Tasso", "${(professor.presenceRate * 100).toInt()}%", "Presenze / attesi.", Modifier.weight(1f), presenceTone)
+      }
+      if (professor.absenceDays.isNotEmpty()) {
+        FluidSectionHeader("Probabili assenze recenti")
+        professor.absenceDays.takeLast(5).forEach { date ->
+          RegisterListRow(
+            title = date,
+            subtitle = "Giorno tipico senza lezione registrata.",
+            tone = ExpressiveTone.Warning,
+            badge = { StatusBadge("ASSENTE", tone = ExpressiveTone.Warning) },
+          )
+        }
+      }
+      FluidSectionHeader("Indice di rigore — ${professor.strictnessScore}/100")
+      RegisterListRow(
+        title = professor.strictnessLabel,
+        subtitle = "Punteggio basato su densità valutativa, scritti, peso e copertura degli argomenti.",
+        tone = strictnessTone,
+        badge = { StatusBadge(professor.strictnessScore.toString(), tone = strictnessTone) },
+      )
+      if (professor.gradeCount > 0) {
+        FluidSectionHeader("Voti")
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          MetricTile("Totale", professor.gradeCount.toString(), "Valutazioni.", Modifier.weight(1f))
+          professor.averageGrade?.let { average ->
+            MetricTile("Media", "%.1f".format(average), "Sul tuo profilo.", Modifier.weight(1f), presenceTone)
+          }
+        }
+      }
+      FluidSectionHeader("Dossier")
+      RegisterListRow(
+        title = professor.funNickname,
+        subtitle = "${professor.longestPresenceStreakWeeks} settimane consecutive · ${professor.subjects.size} materie monitorate.",
+        tone = ExpressiveTone.Success,
+        badge = { StatusBadge("PROFILO", tone = ExpressiveTone.Success) },
+      )
+    },
+  )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
