@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The picker preview and the placeholder shown while the first data arrives are plain RemoteViews,
+  not Glance, so they cannot ask the app for its palette. These are the brand default of the same
+  scheme the widget resolves at runtime; a user who has picked another accent sees it as soon as the
+  widget is placed.
+-->
+<resources>
+  <color name="widget_background">#EFF1F5</color>
+  <color name="widget_card">#F7FAFB</color>
+  <color name="widget_on_surface">#121214</color>
+  <color name="widget_on_surface_variant">#68686E</color>
+  <color name="widget_accent_container">#D2EAE3</color>
+  <color name="widget_on_accent_container">#121214</color>
+  <color name="widget_hairline">#1A121214</color>
+  <color name="widget_content_assessment">#D70015</color>
+  <color name="widget_tile_assessment">#29D70015</color>
+  <color name="widget_content_homework">#E65100</color>
+  <color name="widget_tile_homework">#29E65100</color>
+  <color name="widget_secondary_container">#D5E7E7</color>
+</resources>

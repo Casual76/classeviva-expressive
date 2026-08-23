@@ -174,6 +174,24 @@ private data class SurfacePalette(
 )
 
 /**
+ * The app palette, resolved outside a composition.
+ *
+ * The home-screen widget paints with the same colours as the app but has no `MaterialTheme` to read
+ * them from: Glance hands its content to the launcher, which resolves light and dark itself at
+ * apply time. Both schemes therefore have to be built up front, which is why [isDark] is a
+ * parameter here rather than a call to `isSystemInDarkTheme`.
+ */
+fun classevivaColorScheme(
+  settings: AppSettings,
+  isDark: Boolean,
+  dynamicScheme: ColorScheme? = null,
+): ColorScheme = resolveClassevivaColorScheme(
+  settings = settings,
+  isDark = isDark,
+  dynamicScheme = dynamicScheme,
+)
+
+/**
  * Resolves the app palette without Android dependencies, so every colour source can be verified in
  * a local unit test. Dynamic colour contributes all three Material accent families (including their
  * content/container pairs); only the large neutral surfaces are rebuilt to retain the quiet app

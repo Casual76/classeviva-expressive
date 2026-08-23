@@ -7,7 +7,7 @@
   android:minResizeHeight="80dp"
   android:minResizeWidth="160dp"
   android:minWidth="180dp"
-  android:previewLayout="@layout/school_overview_widget_loading"
+  android:previewLayout="@layout/school_overview_widget_preview"
   android:resizeMode="horizontal|vertical"
   android:targetCellHeight="2"
   android:targetCellWidth="4"

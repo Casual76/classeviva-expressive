@@ -2,4 +2,17 @@
   <string name="school_overview_widget_title">Classeviva Oggi</string>
   <string name="school_overview_widget_description">Compiti, verifiche, comunicazioni e voti da controllare.</string>
   <string name="school_overview_widget_loading">Aggiornamento...</string>
+  <string name="school_overview_widget_grades">Voti</string>
+  <string name="school_overview_widget_board">Bacheca</string>
+
+  <!-- Shown only in the launcher's widget picker, never with real data behind it. -->
+  <string name="school_overview_widget_preview_sync">Aggiornato 07:45</string>
+  <string name="school_overview_widget_preview_homework">Esercizi di matematica</string>
+  <string name="school_overview_widget_preview_homework_subject">Matematica</string>
+  <string name="school_overview_widget_preview_tomorrow">Domani</string>
+  <string name="school_overview_widget_preview_assessment">Verifica di storia</string>
+  <string name="school_overview_widget_preview_assessment_subject">Storia</string>
+  <string name="school_overview_widget_preview_date">12/09</string>
+  <string name="school_overview_widget_preview_grade_count">3</string>
+  <string name="school_overview_widget_preview_board_count">2</string>
 </resources>

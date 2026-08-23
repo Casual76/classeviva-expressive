@@ -4,12 +4,15 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.Image
+import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -31,19 +34,22 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
+import androidx.glance.semantics.contentDescription
+import androidx.glance.semantics.semantics
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
-import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
+import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import kotlinx.coroutines.flow.first
@@ -55,9 +61,10 @@ class SchoolOverviewWidget : GlanceAppWidget() {
     setOf(
       DpSize(180.dp, 110.dp),
       DpSize(180.dp, 180.dp),
-      DpSize(300.dp, 110.dp),
-      DpSize(300.dp, 180.dp),
+      DpSize(260.dp, 110.dp),
+      DpSize(260.dp, 180.dp),
       DpSize(300.dp, 240.dp),
+      DpSize(300.dp, 300.dp),
     ),
   )
 
@@ -68,6 +75,10 @@ class SchoolOverviewWidget : GlanceAppWidget() {
       context.applicationContext,
       SchoolWidgetEntryPoint::class.java,
     )
+    // The widget is painted before anyone can react to something going wrong, so a failure to read
+    // the settings falls back to the defaults rather than leaving the home screen with a blank cell.
+    val settings = runCatching { entryPoint.settingsRepository().observeSettings().first() }
+      .getOrDefault(AppSettings())
     val hasSession = entryPoint.authRepository().session.value != null
     val snapshot = if (hasSession) {
       runCatching { entryPoint.dashboardRepository().observeDashboard().first() }
@@ -87,11 +98,13 @@ class SchoolOverviewWidget : GlanceAppWidget() {
       preferences = preferences,
       hasSession = hasSession,
     )
+    val palette = widgetPalette(context, settings)
 
     provideContent {
       SchoolOverviewWidgetContent(
         context = context,
         model = model,
+        palette = palette,
       )
     }
   }
@@ -102,58 +115,88 @@ class SchoolOverviewWidget : GlanceAppWidget() {
 interface SchoolWidgetEntryPoint {
   fun dashboardRepository(): DashboardRepository
   fun authRepository(): AuthRepository
+  fun settingsRepository(): SettingsRepository
 }
 
+/**
+ * The overview, in the shape the app gives a grouped list: a quiet background, one rounded card
+ * holding the rows, hairlines inset to where the text starts, and the category carried on the icon
+ * tile rather than on the row behind it.
+ */
 @Composable
 private fun SchoolOverviewWidgetContent(
   context: Context,
   model: SchoolWidgetModel,
+  palette: WidgetPalette,
 ) {
-  val size = LocalSize.current
-  val compact = size.width < 240.dp || size.height < 150.dp
-  val expanded = size.height >= 220.dp && size.width >= 280.dp
-  val medium = !compact
-  val itemLimit = when {
-    expanded -> 4
-    medium -> 2
-    else -> 1
-  }
+  val counters = model.counters(palette)
+  val layout = resolveWidgetLayout(size = LocalSize.current, hasCounters = counters.isNotEmpty())
 
   Box(
     modifier = GlanceModifier
       .fillMaxSize()
-      .background(SurfaceColor)
-      .cornerRadius(22.dp)
+      .background(palette.background)
+      .cornerRadius(WidgetShape.Container)
       .clickable(launchAction(context, WidgetDeepLinks.home()))
-      .padding(if (compact) 12.dp else 14.dp),
+      .padding(layout.padding),
   ) {
     Column(
       modifier = GlanceModifier.fillMaxSize(),
       verticalAlignment = Alignment.Top,
     ) {
-      HeaderRow(context = context, model = model, compact = compact)
-      Spacer(GlanceModifier.height(if (compact) 8.dp else 10.dp))
+      Header(model = model, palette = palette, layout = layout)
+      Spacer(GlanceModifier.height(WidgetMetrics.Gap))
       when (model.status) {
-        WidgetStatus.LOGGED_OUT,
-        WidgetStatus.EMPTY,
-        -> EmptyState(model)
-        WidgetStatus.CONTENT -> ContentState(
-          context = context,
-          model = model,
-          compact = compact,
-          expanded = expanded,
-          itemLimit = itemLimit,
+        WidgetStatus.LOGGED_OUT -> MessageCard(
+          icon = R.drawable.ic_widget_alert,
+          tone = palette.grades,
+          message = model.emptyMessage,
+          detail = model.lastRefreshError.takeIf { it.isNotBlank() && !layout.compact },
+          palette = palette,
+          layout = layout,
         )
+        WidgetStatus.EMPTY -> MessageCard(
+          icon = R.drawable.ic_widget_event,
+          tone = palette.event,
+          message = model.emptyMessage,
+          detail = model.lastRefreshError.takeIf { it.isNotBlank() && !layout.compact },
+          palette = palette,
+          layout = layout,
+        )
+        WidgetStatus.CONTENT -> {
+          val rows = model.upcoming.take(layout.rowLimit)
+          if (rows.isEmpty()) {
+            MessageCard(
+              icon = R.drawable.ic_widget_event,
+              tone = palette.event,
+              message = "Nessun impegno in arrivo",
+              detail = null,
+              palette = palette,
+              layout = layout,
+            )
+          } else {
+            UpcomingGroup(
+              context = context,
+              items = rows,
+              palette = palette,
+              layout = layout,
+            )
+          }
+          if (layout.showCounters) {
+            Spacer(GlanceModifier.height(WidgetMetrics.Gap))
+            CounterRow(context = context, counters = counters, layout = layout)
+          }
+        }
       }
     }
   }
 }
 
 @Composable
-private fun HeaderRow(
-  context: Context,
+private fun Header(
   model: SchoolWidgetModel,
-  compact: Boolean,
+  palette: WidgetPalette,
+  layout: WidgetLayout,
 ) {
   Row(
     modifier = GlanceModifier.fillMaxWidth(),
@@ -162,127 +205,80 @@ private fun HeaderRow(
     Column(modifier = GlanceModifier.defaultWeight()) {
       Text(
         text = model.header,
-        style = TextStyle(
-          color = ColorProvider(OnSurfaceColor),
-          fontSize = if (compact) 15.sp else 17.sp,
-          fontWeight = FontWeight.Bold,
+        style = widgetTextStyle(
+          color = palette.onSurface,
+          size = if (layout.compact) 15.sp else 17.sp,
+          weight = FontWeight.Bold,
         ),
         maxLines = 1,
       )
-      Text(
-        text = model.syncLabel,
-        style = TextStyle(
-          color = ColorProvider(if (model.syncWarning) WarningColor else MutedColor),
-          fontSize = 11.sp,
-        ),
-        maxLines = 1,
-      )
+      if (layout.showSyncLine) {
+        Text(
+          text = model.syncLabel,
+          style = widgetTextStyle(
+            color = if (model.syncWarning) palette.attention else palette.onSurfaceVariant,
+            size = 12.sp,
+          ),
+          maxLines = 1,
+        )
+      }
     }
-    Spacer(GlanceModifier.width(8.dp))
-    Chip(
-      label = if (compact) "Sync" else "Aggiorna",
-      compact = compact,
-      modifier = GlanceModifier.clickable(actionRunCallback<RefreshWidgetAction>()),
-    )
+    Spacer(GlanceModifier.width(10.dp))
+    RefreshButton(palette = palette, layout = layout)
   }
 }
 
+/**
+ * The refresh affordance is a tinted circle rather than the labelled chip it used to be.
+ *
+ * A widget has one primary action — open the app — and the chip competed with it for both space and
+ * attention; a bar-button-sized glyph reads as secondary, which is what it is.
+ */
 @Composable
-private fun EmptyState(model: SchoolWidgetModel) {
-  Column(
-    modifier = GlanceModifier.fillMaxWidth(),
-    verticalAlignment = Alignment.CenterVertically,
+private fun RefreshButton(
+  palette: WidgetPalette,
+  layout: WidgetLayout,
+) {
+  val diameter = if (layout.compact) 30.dp else 36.dp
+  Box(
+    modifier = GlanceModifier
+      .size(diameter)
+      .background(palette.accentContainer)
+      // Half the diameter, not the diameter: an outline radius larger than the shorter side is
+      // undefined territory for the host's outline provider rather than "more round".
+      .cornerRadius(diameter / 2)
+      .semantics { contentDescription = "Aggiorna" }
+      .clickable(actionRunCallback<RefreshWidgetAction>()),
+    contentAlignment = Alignment.Center,
   ) {
-    Text(
-      text = model.emptyMessage,
-      style = TextStyle(
-        color = ColorProvider(OnSurfaceColor),
-        fontSize = 13.sp,
-        fontWeight = FontWeight.Medium,
-      ),
-      maxLines = 2,
+    Image(
+      provider = ImageProvider(R.drawable.ic_widget_refresh),
+      contentDescription = null,
+      modifier = GlanceModifier.size(if (layout.compact) 15.dp else 18.dp),
+      colorFilter = ColorFilter.tint(palette.onAccentContainer),
     )
-    if (model.lastRefreshError.isNotBlank()) {
-      Spacer(GlanceModifier.height(6.dp))
-      Text(
-        text = "Ultimo refresh non riuscito",
-        style = TextStyle(color = ColorProvider(WarningColor), fontSize = 11.sp),
-        maxLines = 1,
-      )
-    }
   }
 }
 
 @Composable
-private fun ContentState(
+private fun UpcomingGroup(
   context: Context,
-  model: SchoolWidgetModel,
-  compact: Boolean,
-  expanded: Boolean,
-  itemLimit: Int,
+  items: List<WidgetUpcomingItem>,
+  palette: WidgetPalette,
+  layout: WidgetLayout,
 ) {
-  if (compact) {
-    CompactCounters(context = context, model = model)
-    return
-  }
-
-  Column(modifier = GlanceModifier.fillMaxWidth()) {
-    model.upcoming.take(itemLimit).forEach { item ->
-      UpcomingRow(context = context, item = item)
-      Spacer(GlanceModifier.height(6.dp))
+  Column(
+    modifier = GlanceModifier
+      .fillMaxWidth()
+      .background(palette.card)
+      .cornerRadius(WidgetShape.Group),
+  ) {
+    items.forEachIndexed { index, item ->
+      if (index > 0) {
+        Hairline(palette = palette, layout = layout)
+      }
+      UpcomingRow(context = context, item = item, palette = palette, layout = layout)
     }
-    if (model.upcoming.isEmpty()) {
-      Text(
-        text = "Nessun impegno in arrivo",
-        style = TextStyle(color = ColorProvider(MutedColor), fontSize = 13.sp),
-        maxLines = 1,
-      )
-      Spacer(GlanceModifier.height(8.dp))
-    }
-    CounterRow(context = context, model = model, compact = false)
-    if (expanded) {
-      SecondaryLists(context = context, model = model)
-    }
-  }
-}
-
-@Composable
-private fun CompactCounters(
-  context: Context,
-  model: SchoolWidgetModel,
-) {
-  val next = model.upcoming.firstOrNull()
-  if (next != null) {
-    UpcomingRow(context = context, item = next)
-    Spacer(GlanceModifier.height(8.dp))
-  }
-  CounterRow(context = context, model = model, compact = true)
-}
-
-@Composable
-private fun CounterRow(
-  context: Context,
-  model: SchoolWidgetModel,
-  compact: Boolean,
-) {
-  Row(modifier = GlanceModifier.fillMaxWidth()) {
-    MetricChip(
-      label = "Voti",
-      value = model.unseenGradeCount.toString(),
-      compact = compact,
-      modifier = GlanceModifier
-        .defaultWeight()
-        .clickable(launchAction(context, WidgetDeepLinks.grades())),
-    )
-    Spacer(GlanceModifier.width(6.dp))
-    MetricChip(
-      label = "Bacheca",
-      value = model.unreadCommunicationCount.toString(),
-      compact = compact,
-      modifier = GlanceModifier
-        .defaultWeight()
-        .clickable(launchAction(context, WidgetDeepLinks.communications())),
-    )
   }
 }
 
@@ -290,182 +286,250 @@ private fun CounterRow(
 private fun UpcomingRow(
   context: Context,
   item: WidgetUpcomingItem,
+  palette: WidgetPalette,
+  layout: WidgetLayout,
+) {
+  val tone = palette.toneFor(item.type)
+  Row(
+    modifier = GlanceModifier
+      .fillMaxWidth()
+      .clickable(launchAction(context, item.deepLink))
+      .padding(
+        horizontal = if (layout.compact) 10.dp else 12.dp,
+        vertical = if (layout.compact) 7.dp else 9.dp,
+      ),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    IconTile(icon = item.type.iconRes(), tone = tone, compact = layout.compact)
+    Spacer(GlanceModifier.width(if (layout.compact) 8.dp else 10.dp))
+    Column(modifier = GlanceModifier.defaultWeight()) {
+      Text(
+        text = item.title,
+        style = widgetTextStyle(
+          color = palette.onSurface,
+          size = if (layout.compact) 13.sp else 15.sp,
+          weight = FontWeight.Medium,
+        ),
+        maxLines = 1,
+      )
+      if (!layout.compact && item.subtitle.isNotBlank()) {
+        Text(
+          text = item.subtitle,
+          style = widgetTextStyle(color = palette.onSurfaceVariant, size = 12.sp),
+          maxLines = 1,
+        )
+      }
+    }
+    Spacer(GlanceModifier.width(8.dp))
+    Text(
+      text = item.dateLabel,
+      style = widgetTextStyle(
+        color = tone.content,
+        size = if (layout.compact) 11.sp else 12.sp,
+        weight = FontWeight.Bold,
+      ),
+      maxLines = 1,
+    )
+  }
+}
+
+/**
+ * The separator between two rows, inset to where the row's text starts.
+ *
+ * Glance modifiers are a set of properties rather than an ordered chain, so a padding and a
+ * background declared on the same element would still paint edge to edge: the inset has to come
+ * from a wrapper.
+ */
+@Composable
+private fun Hairline(
+  palette: WidgetPalette,
+  layout: WidgetLayout,
+) {
+  val inset = if (layout.compact) 42.dp else 52.dp
+  Box(modifier = GlanceModifier.fillMaxWidth().padding(start = inset)) {
+    Box(
+      modifier = GlanceModifier
+        .fillMaxWidth()
+        .height(1.dp)
+        .background(palette.hairline),
+    ) {}
+  }
+}
+
+@Composable
+private fun IconTile(
+  icon: Int,
+  tone: WidgetTone,
+  compact: Boolean,
+) {
+  val tile = if (compact) 24.dp else 30.dp
+  Box(
+    modifier = GlanceModifier
+      .size(tile)
+      .background(tone.container)
+      .cornerRadius(WidgetShape.Tile),
+    contentAlignment = Alignment.Center,
+  ) {
+    Image(
+      provider = ImageProvider(icon),
+      contentDescription = null,
+      modifier = GlanceModifier.size(if (compact) 14.dp else 17.dp),
+      colorFilter = ColorFilter.tint(tone.content),
+    )
+  }
+}
+
+@Composable
+private fun MessageCard(
+  icon: Int,
+  tone: WidgetTone,
+  message: String,
+  detail: String?,
+  palette: WidgetPalette,
+  layout: WidgetLayout,
 ) {
   Row(
     modifier = GlanceModifier
       .fillMaxWidth()
-      .background(ContainerColor)
-      .cornerRadius(16.dp)
-      .clickable(launchAction(context, item.deepLink))
-      .padding(horizontal = 10.dp, vertical = 8.dp),
+      .background(palette.card)
+      .cornerRadius(WidgetShape.Group)
+      .padding(horizontal = 12.dp, vertical = 11.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    TypeDot(item.type)
-    Spacer(GlanceModifier.width(8.dp))
+    IconTile(icon = icon, tone = tone, compact = layout.compact)
+    Spacer(GlanceModifier.width(10.dp))
     Column(modifier = GlanceModifier.defaultWeight()) {
       Text(
-        text = item.title,
-        style = TextStyle(
-          color = ColorProvider(OnSurfaceColor),
-          fontSize = 13.sp,
-          fontWeight = FontWeight.Medium,
+        text = message,
+        style = widgetTextStyle(
+          color = palette.onSurface,
+          size = 13.sp,
+          weight = FontWeight.Medium,
         ),
-        maxLines = 1,
+        maxLines = 2,
       )
-      Text(
-        text = item.subtitle,
-        style = TextStyle(color = ColorProvider(MutedColor), fontSize = 11.sp),
-        maxLines = 1,
-      )
+      if (detail != null) {
+        Text(
+          text = detail,
+          style = widgetTextStyle(color = palette.attention, size = 11.sp),
+          maxLines = 1,
+        )
+      }
     }
-    Text(
-      text = item.dateLabel,
-      style = TextStyle(
-        color = ColorProvider(PrimaryColor),
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        textAlign = TextAlign.End,
-      ),
-      maxLines = 1,
-    )
   }
 }
 
 @Composable
-private fun SecondaryLists(
+private fun CounterRow(
   context: Context,
-  model: SchoolWidgetModel,
+  counters: List<WidgetCounter>,
+  layout: WidgetLayout,
 ) {
-  val grade = model.unseenGrades.firstOrNull()
-  val communication = model.unreadCommunications.firstOrNull()
-  if (grade == null && communication == null) return
-
-  Spacer(GlanceModifier.height(8.dp))
   Row(modifier = GlanceModifier.fillMaxWidth()) {
-    if (grade != null) {
-      SmallInfoBox(
-        title = grade.valueLabel,
-        subtitle = grade.subject,
+    counters.forEachIndexed { index, counter ->
+      if (index > 0) {
+        Spacer(GlanceModifier.width(8.dp))
+      }
+      CounterPill(
+        counter = counter,
+        compact = layout.compact,
         modifier = GlanceModifier
           .defaultWeight()
-          .clickable(launchAction(context, grade.deepLink)),
-      )
-    }
-    if (grade != null && communication != null) {
-      Spacer(GlanceModifier.width(6.dp))
-    }
-    if (communication != null) {
-      SmallInfoBox(
-        title = communication.title,
-        subtitle = communication.sender,
-        modifier = GlanceModifier
-          .defaultWeight()
-          .clickable(launchAction(context, communication.deepLink)),
+          .clickable(launchAction(context, counter.deepLink)),
       )
     }
   }
 }
 
 @Composable
-private fun SmallInfoBox(
-  title: String,
-  subtitle: String,
-  modifier: GlanceModifier,
-) {
-  Column(
-    modifier = modifier
-      .background(ContainerColor)
-      .cornerRadius(14.dp)
-      .padding(8.dp),
-  ) {
-    Text(
-      text = title,
-      style = TextStyle(
-        color = ColorProvider(OnSurfaceColor),
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Medium,
-      ),
-      maxLines = 1,
-    )
-    Text(
-      text = subtitle,
-      style = TextStyle(color = ColorProvider(MutedColor), fontSize = 10.sp),
-      maxLines = 1,
-    )
-  }
-}
-
-@Composable
-private fun TypeDot(type: WidgetUpcomingType) {
-  val color = when (type) {
-    WidgetUpcomingType.HOMEWORK -> PrimaryColor
-    WidgetUpcomingType.ASSESSMENT -> WarningColor
-    WidgetUpcomingType.EVENT -> SecondaryColor
-  }
-  Box(
-    modifier = GlanceModifier
-      .size(10.dp)
-      .background(color)
-      .cornerRadius(8.dp),
-  ) {}
-}
-
-@Composable
-private fun Chip(
-  label: String,
-  compact: Boolean,
-  modifier: GlanceModifier,
-) {
-  Box(
-    modifier = modifier
-      .background(PrimaryContainerColor)
-      .cornerRadius(18.dp)
-      .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = 6.dp),
-    contentAlignment = Alignment.Center,
-  ) {
-    Text(
-      text = label,
-      style = TextStyle(
-        color = ColorProvider(PrimaryColor),
-        fontSize = if (compact) 13.sp else 12.sp,
-        fontWeight = FontWeight.Bold,
-        textAlign = TextAlign.Center,
-      ),
-      maxLines = 1,
-    )
-  }
-}
-
-@Composable
-private fun MetricChip(
-  label: String,
-  value: String,
+private fun CounterPill(
+  counter: WidgetCounter,
   compact: Boolean,
   modifier: GlanceModifier,
 ) {
   Row(
     modifier = modifier
-      .background(PrimaryContainerColor)
-      .cornerRadius(16.dp)
-      .padding(horizontal = 9.dp, vertical = if (compact) 7.dp else 8.dp),
+      .background(counter.tone.container)
+      .cornerRadius(WidgetShape.Pill)
+      .padding(horizontal = 12.dp, vertical = if (compact) 7.dp else 9.dp),
     verticalAlignment = Alignment.CenterVertically,
   ) {
     Text(
-      text = value,
-      style = TextStyle(
-        color = ColorProvider(PrimaryColor),
-        fontSize = if (compact) 16.sp else 18.sp,
-        fontWeight = FontWeight.Bold,
+      text = counter.value.toString(),
+      style = widgetTextStyle(
+        color = counter.tone.content,
+        size = if (compact) 15.sp else 17.sp,
+        weight = FontWeight.Bold,
       ),
       maxLines = 1,
     )
     Spacer(GlanceModifier.width(6.dp))
     Text(
-      text = label,
-      style = TextStyle(color = ColorProvider(OnSurfaceColor), fontSize = 11.sp),
+      text = counter.label,
+      style = widgetTextStyle(color = counter.tone.content, size = 12.sp),
       maxLines = 1,
     )
   }
+}
+
+private data class WidgetCounter(
+  val label: String,
+  val value: Int,
+  val tone: WidgetTone,
+  val deepLink: String,
+)
+
+/**
+ * A counter is drawn only when it has something to report: an empty "0 Voti" pill spends a whole
+ * row of a small widget saying nothing, and the layout budget gives that space back to the list.
+ */
+private fun SchoolWidgetModel.counters(palette: WidgetPalette): List<WidgetCounter> = buildList {
+  if (status != WidgetStatus.CONTENT) return@buildList
+  if (unseenGradeCount > 0) {
+    add(
+      WidgetCounter(
+        label = "Voti",
+        value = unseenGradeCount,
+        tone = palette.grades,
+        deepLink = WidgetDeepLinks.grades(),
+      ),
+    )
+  }
+  if (unreadCommunicationCount > 0) {
+    add(
+      WidgetCounter(
+        label = "Bacheca",
+        value = unreadCommunicationCount,
+        tone = palette.board,
+        deepLink = WidgetDeepLinks.communications(),
+      ),
+    )
+  }
+}
+
+private fun WidgetUpcomingType.iconRes(): Int = when (this) {
+  WidgetUpcomingType.HOMEWORK -> R.drawable.ic_widget_homework
+  WidgetUpcomingType.ASSESSMENT -> R.drawable.ic_widget_assessment
+  WidgetUpcomingType.EVENT -> R.drawable.ic_widget_event
+}
+
+private fun widgetTextStyle(
+  color: ColorProvider,
+  size: TextUnit,
+  weight: FontWeight = FontWeight.Normal,
+): TextStyle = TextStyle(color = color, fontSize = size, fontWeight = weight)
+
+/**
+ * The radii, in the app's ladder.
+ *
+ * Glance can only ask the host for a rounded outline, and only from Android 12 on; below that the
+ * corners stay square and the colours carry the identity on their own.
+ */
+private object WidgetShape {
+  val Container = 24.dp
+  val Group = 20.dp
+  val Tile = 9.dp
+  val Pill = 18.dp
 }
 
 private fun launchAction(context: Context, uri: String) = actionStartActivity(
@@ -475,12 +539,3 @@ private fun launchAction(context: Context, uri: String) = actionStartActivity(
     addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
   } ?: Intent(Intent.ACTION_VIEW, Uri.parse(uri)),
 )
-
-private val SurfaceColor = Color(0xFFF8F7F2)
-private val ContainerColor = Color(0xFFFFFFFF)
-private val PrimaryColor = Color(0xFF176B63)
-private val PrimaryContainerColor = Color(0xFFDCECE8)
-private val SecondaryColor = Color(0xFF625B71)
-private val WarningColor = Color(0xFF9A5B00)
-private val OnSurfaceColor = Color(0xFF161D1A)
-private val MutedColor = Color(0xFF5F6B66)

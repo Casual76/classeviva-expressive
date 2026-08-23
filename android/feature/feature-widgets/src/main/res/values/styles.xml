@@ -1,6 +1,12 @@
 <resources>
+  <!--
+    The configuration screen is part of the widget, so it opens on the app's own background instead
+    of the platform's white. The window background matters even though Compose paints over it: it is
+    what the launcher cross-fades to while the activity starts, and a white flash before a dark
+    screen is the most visible seam an app can have.
+  -->
   <style name="Theme.ClassevivaExpressive.WidgetConfiguration" parent="android:style/Theme.Material.Light.NoActionBar">
+    <item name="android:windowBackground">@color/widget_background</item>
     <item name="android:windowLightStatusBar">true</item>
-    <item name="android:colorAccent">@android:color/holo_blue_light</item>
   </style>
 </resources>

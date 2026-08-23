@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="widget_background">#0D0F11</color>
+  <color name="widget_card">#1D2123</color>
+  <color name="widget_on_surface">#F2F2F5</color>
+  <color name="widget_on_surface_variant">#AAAAB2</color>
+  <color name="widget_accent_container">#225546</color>
+  <color name="widget_on_accent_container">#FDFDFF</color>
+  <color name="widget_hairline">#1AF2F2F5</color>
+  <color name="widget_content_assessment">#FF6961</color>
+  <color name="widget_tile_assessment">#29FF6961</color>
+  <color name="widget_content_homework">#FFB74D</color>
+  <color name="widget_tile_homework">#29FFB74D</color>
+  <color name="widget_secondary_container">#264746</color>
+</resources>
