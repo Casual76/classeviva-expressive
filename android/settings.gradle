@@ -32,3 +32,21 @@ include ":feature:feature-absences"
 include ":feature:feature-settings"
 include ":feature:feature-widgets"
 include ":macrobenchmark"
+
+// --- fluid-engine (inizio) ---
+def engineDir = file('engine')
+if (engineDir.exists()) {
+  [
+   'engine-foundation',
+   'engine-ui',
+   'engine-storage',
+   'engine-net',
+   'engine-config',
+   'engine-update',
+   'engine-widget'
+  ].each { name ->
+    include ":$name"
+    project(":$name").projectDir = new File(engineDir, name)
+  }
+}
+// --- fluid-engine (fine) ---

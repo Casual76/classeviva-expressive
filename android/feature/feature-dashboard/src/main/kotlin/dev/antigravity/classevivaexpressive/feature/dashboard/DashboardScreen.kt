@@ -20,17 +20,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusAction
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusNotice
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardStat
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
@@ -42,10 +34,19 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
 import java.time.LocalDate
+import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
+import dev.antigravity.fluidengine.ui.theme.FluidSyncAction
+import dev.antigravity.fluidengine.ui.theme.FluidSyncNotice
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.toFluid
 
 data class DashboardUiState(
   val snapshot: DashboardSnapshot = DashboardSnapshot(),
@@ -55,9 +56,9 @@ data class DashboardUiState(
 internal data class DashboardLessonPresentation(
   val subtitle: String,
   val timeRangeLabel: String,
-  val tone: ExpressiveTone,
+  val tone: FluidTone,
   val badgeLabel: String,
-  val badgeTone: ExpressiveTone,
+  val badgeTone: FluidTone,
 )
 
 internal fun Lesson.toDashboardPresentation(): DashboardLessonPresentation {
@@ -76,9 +77,9 @@ internal fun Lesson.toDashboardPresentation(): DashboardLessonPresentation {
       else -> "Argomento non disponibile"
     },
     timeRangeLabel = timeRangeLabel,
-    tone = if (isSigned || topicText.isNotBlank()) ExpressiveTone.Success else ExpressiveTone.Neutral,
+    tone = if (isSigned || topicText.isNotBlank()) FluidTone.Success else FluidTone.Neutral,
     badgeLabel = if (isSigned) "FIRMATA" else "${durationMinutes} min",
-    badgeTone = if (isSigned) ExpressiveTone.Success else ExpressiveTone.Info,
+    badgeTone = if (isSigned) FluidTone.Success else FluidTone.Info,
   )
 }
 
@@ -182,7 +183,7 @@ fun DashboardRoute(
     subtitle = snapshot.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
     actions = {
-      SyncStatusAction(status = snapshot.syncStatus, onRetry = viewModel::refresh)
+      FluidSyncAction(status = snapshot.syncStatus.toFluid(), onRetry = viewModel::refresh)
       FluidBarAction(
         icon = Icons.Rounded.Refresh,
         contentDescription = "Aggiorna",
@@ -197,7 +198,7 @@ fun DashboardRoute(
     // only when there is something to say, so an ordinary page keeps its first item at the top.
     if (snapshot.syncStatus.noticeMessage() != null) {
       item {
-        SyncStatusNotice(status = snapshot.syncStatus, onRetry = viewModel::refresh)
+        FluidSyncNotice(status = snapshot.syncStatus.toFluid(), onRetry = viewModel::refresh)
       }
     }
     item {
@@ -238,7 +239,7 @@ fun DashboardRoute(
       item { FluidSectionHeader("Lezioni di oggi") }
       items(snapshot.todayLessons, key = { it.id }) { lesson ->
         val presentation = remember(lesson) { lesson.toDashboardPresentation() }
-        RegisterListRow(
+        FluidListRow(
           title = lesson.subject,
           subtitle = presentation.subtitle,
           eyebrow = presentation.timeRangeLabel,
@@ -248,7 +249,7 @@ fun DashboardRoute(
           tone = presentation.tone,
           leading = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
           badge = {
-            StatusBadge(
+            FluidStatusBadge(
               label = presentation.badgeLabel,
               tone = presentation.badgeTone,
             )
@@ -259,7 +260,7 @@ fun DashboardRoute(
     item { FluidSectionHeader("Voti recenti") }
     if (recentGrades.isEmpty()) {
       item {
-        EmptyState(
+        FluidEmptyState(
           title = "Nessun voto disponibile",
           detail = "I voti recenti appariranno qui dopo la prossima sincronizzazione.",
         )
@@ -268,18 +269,18 @@ fun DashboardRoute(
       items(recentGrades, key = { it.id }) { grade ->
         val isUnseen = unseenGradeIds.contains(grade.id)
 
-        RegisterListRow(
+        FluidListRow(
           title = grade.subject,
           subtitle = grade.type.ifBlank { "Valutazione" },
           eyebrow = grade.date,
           meta = grade.description ?: grade.notes,
-          tone = if (isUnseen) ExpressiveTone.Primary else ExpressiveTone.Neutral,
+          tone = if (isUnseen) FluidTone.Primary else FluidTone.Neutral,
           leading = { Icon(Icons.Rounded.Grade, contentDescription = null) },
           onClick = { onOpenGrade(grade.id) },
           badge = {
-            StatusBadge(
+            FluidStatusBadge(
               label = grade.valueLabel,
-              tone = if (isUnseen) ExpressiveTone.Primary else ExpressiveTone.Neutral,
+              tone = if (isUnseen) FluidTone.Primary else FluidTone.Neutral,
             )
           },
           animatePress = true
@@ -289,22 +290,22 @@ fun DashboardRoute(
     item { FluidSectionHeader("In arrivo") }
     if (upcomingItems.isEmpty()) {
       item {
-        EmptyState(
+        FluidEmptyState(
           title = "Nessun elemento imminente",
           detail = "I prossimi compiti, verifiche o eventi appariranno qui.",
         )
       }
     } else {
       items(upcomingItems, key = { it.id }) { item ->
-        RegisterListRow(
+        FluidListRow(
           title = item.title,
           subtitle = item.subtitle,
           eyebrow = item.date,
           meta = item.detail,
-          tone = ExpressiveTone.Success,
+          tone = FluidTone.Success,
           leading = { Icon(Icons.Rounded.Event, contentDescription = null) },
           onClick = onNavigateAgenda,
-          badge = { StatusBadge("AGENDA", tone = ExpressiveTone.Success) },
+          badge = { FluidStatusBadge("AGENDA", tone = FluidTone.Success) },
           animatePress = true
         )
       }
@@ -312,22 +313,22 @@ fun DashboardRoute(
     item { FluidSectionHeader("Bacheca") }
     if (unreadCommunications.isEmpty()) {
       item {
-        EmptyState(
+        FluidEmptyState(
           title = "Nessuna comunicazione urgente",
           detail = "I nuovi avvisi della scuola appariranno qui.",
         )
       }
     } else {
       items(unreadCommunications, key = { it.id }) { communication ->
-        RegisterListRow(
+        FluidListRow(
           title = communication.title,
           subtitle = communication.sender,
           eyebrow = communication.date,
           meta = communication.contentPreview,
-          tone = ExpressiveTone.Warning,
+          tone = FluidTone.Warning,
           leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
           onClick = onNavigateCommunications,
-          badge = { StatusBadge("NUOVA", tone = ExpressiveTone.Warning) },
+          badge = { FluidStatusBadge("NUOVA", tone = FluidTone.Warning) },
           animatePress = true
         )
       }

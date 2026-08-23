@@ -73,25 +73,6 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChan
 import dev.antigravity.classevivaexpressive.core.data.notifications.LiveTimetableChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.NotesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidChip
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidColorDot
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidMotion
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSegmentedControl
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSwitch
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListDivider
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListGroup
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.classevivaBrandAccent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveAccentPresets
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
@@ -121,6 +102,25 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidChip
+import dev.antigravity.fluidengine.ui.fluid.FluidColorDot
+import dev.antigravity.fluidengine.ui.fluid.FluidMotion
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
+import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
+import dev.antigravity.fluidengine.ui.theme.FluidCard
+import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
+import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidLoading
+import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
+import dev.antigravity.fluidengine.ui.theme.FluidTone
 
 private enum class SettingsSection(val title: String, val subtitle: String) {
   Account("Account", "Profilo, anno scolastico e sessione"),
@@ -496,7 +496,7 @@ fun SettingsRoute(
     ) {
       if (section == null) {
         item {
-          ExpressiveHeroCard(
+          FluidHeroCard(
             title = state.session?.profile?.name?.ifBlank { "Studente" } ?: "Profilo locale",
             subtitle = listOfNotNull(
               state.session?.profile?.schoolClass?.takeIf(String::isNotBlank),
@@ -505,27 +505,27 @@ fun SettingsRoute(
           )
         }
         item {
-          ExpressiveListGroup {
+          FluidListGroup {
             val destinations = SettingsSection.entries.filterNot { it == SettingsSection.Diagnostics }
             destinations.forEachIndexed { index, destination ->
-              RegisterListRow(
+              FluidListRow(
                 title = destination.title,
                 subtitle = destination.subtitle,
                 tone = if (destination == SettingsSection.Notifications &&
                   state.settings.notificationsEnabled &&
                   (!state.runtimeState.permissionGranted || !state.runtimeState.appNotificationsEnabled)
-                ) ExpressiveTone.Warning else ExpressiveTone.Neutral,
+                ) FluidTone.Warning else FluidTone.Neutral,
                 onClick = { sectionName = destination.name },
                 badge = {
                   if (destination == SettingsSection.Notifications) {
-                    StatusBadge(
+                    FluidStatusBadge(
                       if (state.settings.notificationsEnabled) "ON" else "OFF",
-                      tone = if (state.settings.notificationsEnabled) ExpressiveTone.Success else ExpressiveTone.Neutral,
+                      tone = if (state.settings.notificationsEnabled) FluidTone.Success else FluidTone.Neutral,
                     )
                   }
                 },
               )
-              if (index != destinations.lastIndex) ExpressiveListDivider()
+              if (index != destinations.lastIndex) FluidListDivider()
             }
           }
         }
@@ -533,7 +533,7 @@ fun SettingsRoute(
 
       if (section == SettingsSection.Account) {
         item {
-          ExpressiveHeroCard(
+          FluidHeroCard(
             title = state.session?.profile?.name?.ifBlank { "Studente" } ?: "Nessuna sessione",
             subtitle = listOfNotNull(
               state.session?.username,
@@ -645,18 +645,18 @@ fun SettingsRoute(
           (!state.runtimeState.permissionGranted || !state.runtimeState.appNotificationsEnabled)
         ) {
           item {
-            InlineMessageCard(
+            FluidInlineMessage(
               title = "Serve il tuo intervento",
               message = "Android sta bloccando almeno una parte delle notifiche. Apri Diagnostica avanzata per correggere lo stato.",
-              tone = ExpressiveTone.Warning,
+              tone = FluidTone.Warning,
             )
           }
         }
         item {
-          RegisterListRow(
+          FluidListRow(
             title = SettingsSection.Diagnostics.title,
             subtitle = SettingsSection.Diagnostics.subtitle,
-            tone = ExpressiveTone.Info,
+            tone = FluidTone.Info,
             onClick = { sectionName = SettingsSection.Diagnostics.name },
           )
         }
@@ -664,7 +664,7 @@ fun SettingsRoute(
 
       if (section == SettingsSection.Data) {
         item {
-          ExpressiveHeroCard(
+          FluidHeroCard(
             title = "I tuoi dati restano sotto il tuo controllo",
             subtitle = "Il backup viene creato solo quando scegli esplicitamente dove salvarlo.",
           )
@@ -759,7 +759,7 @@ fun SettingsRoute(
 
       state.lastMessage?.let { message ->
         item {
-          InlineMessageCard(message = message, title = "Impostazioni", onDismiss = viewModel::clearMessage)
+          FluidInlineMessage(message = message, title = "Impostazioni", onDismiss = viewModel::clearMessage)
         }
       }
     }
@@ -793,7 +793,7 @@ private fun AppUpdateSettingsCard(
   onCheckForUpdates: () -> Unit,
   onClearMessage: () -> Unit,
 ) {
-  ExpressiveCard {
+  FluidCard {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       Icon(Icons.Rounded.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
       Text("Aggiornamenti app", style = MaterialTheme.typography.titleMedium)
@@ -849,7 +849,7 @@ private fun RuntimeStateCard(
   onOpenNotificationSettings: () -> Unit,
 ) {
   val isError = notificationsEnabled && (!runtimeState.permissionGranted || !runtimeState.appNotificationsEnabled)
-  ExpressiveCard(
+  FluidCard(
     highlighted = isError,
   ) {
     Text(
@@ -861,21 +861,21 @@ private fun RuntimeStateCard(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      StatusBadge(
+      FluidStatusBadge(
         label = if (notificationsEnabled) "APP ON" else "APP OFF",
-        tone = if (notificationsEnabled) ExpressiveTone.Success else ExpressiveTone.Warning,
+        tone = if (notificationsEnabled) FluidTone.Success else FluidTone.Warning,
       )
-      StatusBadge(
+      FluidStatusBadge(
         label = if (runtimeState.permissionGranted) "PERMESSO OK" else "PERMESSO KO",
-        tone = if (runtimeState.permissionGranted) ExpressiveTone.Success else ExpressiveTone.Warning,
+        tone = if (runtimeState.permissionGranted) FluidTone.Success else FluidTone.Warning,
       )
-      StatusBadge(
+      FluidStatusBadge(
         label = if (runtimeState.appNotificationsEnabled) "OS ON" else "OS OFF",
-        tone = if (runtimeState.appNotificationsEnabled) ExpressiveTone.Success else ExpressiveTone.Warning,
+        tone = if (runtimeState.appNotificationsEnabled) FluidTone.Success else FluidTone.Warning,
       )
-      StatusBadge(
+      FluidStatusBadge(
         label = if (periodicSyncEnabled) "SYNC ON" else "SYNC OFF",
-        tone = if (periodicSyncEnabled) ExpressiveTone.Success else ExpressiveTone.Warning,
+        tone = if (periodicSyncEnabled) FluidTone.Success else FluidTone.Warning,
       )
     }
     Text(
@@ -934,7 +934,7 @@ private fun SettingToggleRow(
   icon: @Composable (() -> Unit)? = null,
   badge: @Composable (() -> Unit)? = null,
 ) {
-  ExpressiveCard(
+  FluidCard(
     modifier = Modifier
       .semantics(mergeDescendants = true) {}
       .toggleable(
@@ -1112,17 +1112,17 @@ private fun Context.startSettingsActivity(intent: Intent) {
 @Composable
 private fun CapabilityRow(capability: FeatureCapability) {
   val tone = when {
-    !capability.enabled -> ExpressiveTone.Warning
-    capability.mode == FeatureCapabilityMode.DIRECT_PORTAL -> ExpressiveTone.Info
-    capability.mode == FeatureCapabilityMode.GATEWAY -> ExpressiveTone.Warning
-    capability.mode == FeatureCapabilityMode.TENANT_OPTIONAL -> ExpressiveTone.Neutral
-    else -> ExpressiveTone.Success
+    !capability.enabled -> FluidTone.Warning
+    capability.mode == FeatureCapabilityMode.DIRECT_PORTAL -> FluidTone.Info
+    capability.mode == FeatureCapabilityMode.GATEWAY -> FluidTone.Warning
+    capability.mode == FeatureCapabilityMode.TENANT_OPTIONAL -> FluidTone.Neutral
+    else -> FluidTone.Success
   }
-  RegisterListRow(
+  FluidListRow(
     title = capability.feature.name.replace('_', ' '),
     subtitle = capability.detail ?: "Nessun dettaglio disponibile.",
     eyebrow = capability.label.ifBlank { "Capability" },
     tone = tone,
-    badge = { StatusBadge(capability.mode.name.replace('_', ' '), tone = tone) },
+    badge = { FluidStatusBadge(capability.mode.name.replace('_', ' '), tone = tone) },
   )
 }

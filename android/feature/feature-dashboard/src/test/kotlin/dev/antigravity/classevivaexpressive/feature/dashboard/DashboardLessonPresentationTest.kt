@@ -1,9 +1,9 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import dev.antigravity.fluidengine.ui.theme.FluidTone
 
 class DashboardLessonPresentationTest {
   @Test
@@ -22,9 +22,9 @@ class DashboardLessonPresentationTest {
     val presentation = lesson.toDashboardPresentation()
 
     assertEquals("Lezione firmata senza argomento", presentation.subtitle)
-    assertEquals(ExpressiveTone.Success, presentation.tone)
+    assertEquals(FluidTone.Success, presentation.tone)
     assertEquals("FIRMATA", presentation.badgeLabel)
-    assertEquals(ExpressiveTone.Success, presentation.badgeTone)
+    assertEquals(FluidTone.Success, presentation.badgeTone)
   }
 
   @Test
@@ -40,9 +40,9 @@ class DashboardLessonPresentationTest {
     val presentation = lesson.toDashboardPresentation()
 
     assertEquals("Argomento non disponibile", presentation.subtitle)
-    assertEquals(ExpressiveTone.Neutral, presentation.tone)
+    assertEquals(FluidTone.Neutral, presentation.tone)
     assertEquals("60 min", presentation.badgeLabel)
-    assertEquals(ExpressiveTone.Info, presentation.badgeTone)
+    assertEquals(FluidTone.Info, presentation.badgeTone)
   }
 
   @Test
@@ -60,8 +60,8 @@ class DashboardLessonPresentationTest {
     val presentation = lesson.toDashboardPresentation()
 
     assertEquals("Argomento non disponibile", presentation.subtitle)
-    assertEquals(ExpressiveTone.Neutral, presentation.tone)
+    assertEquals(FluidTone.Neutral, presentation.tone)
     assertEquals("60 min", presentation.badgeLabel)
-    assertEquals(ExpressiveTone.Info, presentation.badgeTone)
+    assertEquals(FluidTone.Info, presentation.badgeTone)
   }
 }

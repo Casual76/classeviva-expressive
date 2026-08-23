@@ -1,7 +1,7 @@
 package dev.antigravity.classevivaexpressive
 
 import androidx.lifecycle.SavedStateHandle
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MotionOrigin
+import dev.antigravity.fluidengine.ui.theme.MotionOrigin
 
 /**
  * How one destination gives way to the next.

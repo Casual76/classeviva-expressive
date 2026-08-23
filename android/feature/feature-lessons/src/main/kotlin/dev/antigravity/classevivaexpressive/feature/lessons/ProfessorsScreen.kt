@@ -23,20 +23,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContainerDetailScaffold
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidLoadingBlock
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
@@ -53,6 +42,17 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
+import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidSheet
+import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
+import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
+import dev.antigravity.fluidengine.ui.theme.FluidTone
 
 data class ProfessorsUiState(
   val professors: List<ProfessorStats> = emptyList(),
@@ -424,7 +424,7 @@ fun ProfessorsRoute(
         if (state.isRefreshing) {
           FluidLoadingBlock()
         } else {
-          EmptyState(
+          FluidEmptyState(
             title = "Nessun docente rilevato",
             detail = "Le statistiche appariranno dopo che lezioni e voti saranno sincronizzati.",
           )
@@ -451,17 +451,17 @@ fun ProfessorsRoute(
       item { FluidSectionHeader("Docenti") }
       items(state.professors, key = { it.teacherName }) { prof ->
         val presenceTone = when {
-          prof.presenceRate >= 0.85f -> ExpressiveTone.Success
-          prof.presenceRate >= 0.65f -> ExpressiveTone.Warning
-          else -> ExpressiveTone.Danger
+          prof.presenceRate >= 0.85f -> FluidTone.Success
+          prof.presenceRate >= 0.65f -> FluidTone.Warning
+          else -> FluidTone.Danger
         }
         val strictnessTone = when (prof.strictnessLabel) {
-          "Molto esigente" -> ExpressiveTone.Danger
-          "Esigente" -> ExpressiveTone.Warning
-          "Equilibrato" -> ExpressiveTone.Info
-          else -> ExpressiveTone.Success
+          "Molto esigente" -> FluidTone.Danger
+          "Esigente" -> FluidTone.Warning
+          "Equilibrato" -> FluidTone.Info
+          else -> FluidTone.Success
         }
-        RegisterListRow(
+        FluidListRow(
           title = prof.teacherName,
           subtitle = prof.subjects.joinToString(", ").ifBlank { "Materia non specificata" },
           eyebrow = "Presenza ${(prof.presenceRate * 100).toInt()}%",
@@ -475,7 +475,7 @@ fun ProfessorsRoute(
           onClick = {
             if (onOpenProfessor != null) onOpenProfessor(prof.teacherName) else viewModel.selectProfessor(prof)
           },
-          badge = { StatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
+          badge = { FluidStatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
           animatePress = true,
         )
       }
@@ -500,7 +500,7 @@ fun ProfessorDetailRoute(
   if (professor == null) {
     FluidScreen(title = "Dettaglio professore", modifier = modifier, onBack = onBack) {
       item(key = "professor-detail-missing") {
-        EmptyState(
+        FluidEmptyState(
           title = "Professore non disponibile",
           detail = "Il profilo potrebbe non essere ancora stato ricostruito dai dati sincronizzati.",
         )
@@ -510,30 +510,30 @@ fun ProfessorDetailRoute(
   }
 
   val presenceTone = when {
-    professor.presenceRate >= 0.85f -> ExpressiveTone.Success
-    professor.presenceRate >= 0.65f -> ExpressiveTone.Warning
-    else -> ExpressiveTone.Danger
+    professor.presenceRate >= 0.85f -> FluidTone.Success
+    professor.presenceRate >= 0.65f -> FluidTone.Warning
+    else -> FluidTone.Danger
   }
   val strictnessTone = when (professor.strictnessLabel) {
-    "Molto esigente" -> ExpressiveTone.Danger
-    "Esigente" -> ExpressiveTone.Warning
-    "Equilibrato" -> ExpressiveTone.Info
-    else -> ExpressiveTone.Success
+    "Molto esigente" -> FluidTone.Danger
+    "Esigente" -> FluidTone.Warning
+    "Equilibrato" -> FluidTone.Info
+    else -> FluidTone.Success
   }
 
-  ContainerDetailScaffold(
+  FluidContainerScaffold(
     title = "Dettaglio professore",
     modifier = modifier,
     onBack = onBack,
     hero = {
-      RegisterListRow(
+      FluidListRow(
         title = professor.teacherName,
         subtitle = professor.subjects.joinToString(", ").ifBlank { "Materia non specificata" },
         eyebrow = "Presenza ${(professor.presenceRate * 100).toInt()}%",
         meta = if (professor.gradeCount > 0) "${professor.gradeCount} voti" else "Nessun voto assegnato",
         tone = presenceTone,
         leading = { Icon(Icons.Rounded.Person, contentDescription = null) },
-        badge = { StatusBadge(professor.strictnessLabel.uppercase(), tone = strictnessTone) },
+        badge = { FluidStatusBadge(professor.strictnessLabel.uppercase(), tone = strictnessTone) },
         animatePress = false,
       )
     },
@@ -543,27 +543,27 @@ fun ProfessorDetailRoute(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        MetricTile("Presenti", professor.actualDays.toString(), "Lezioni firmate.", Modifier.weight(1f), ExpressiveTone.Success)
-        MetricTile("Attesi", professor.expectedDays.toString(), "Giornate tipiche.", Modifier.weight(1f), ExpressiveTone.Info)
-        MetricTile("Tasso", "${(professor.presenceRate * 100).toInt()}%", "Presenze / attesi.", Modifier.weight(1f), presenceTone)
+        FluidMetricTile("Presenti", professor.actualDays.toString(), "Lezioni firmate.", Modifier.weight(1f), FluidTone.Success)
+        FluidMetricTile("Attesi", professor.expectedDays.toString(), "Giornate tipiche.", Modifier.weight(1f), FluidTone.Info)
+        FluidMetricTile("Tasso", "${(professor.presenceRate * 100).toInt()}%", "Presenze / attesi.", Modifier.weight(1f), presenceTone)
       }
       if (professor.absenceDays.isNotEmpty()) {
         FluidSectionHeader("Probabili assenze recenti")
         professor.absenceDays.takeLast(5).forEach { date ->
-          RegisterListRow(
+          FluidListRow(
             title = date,
             subtitle = "Giorno tipico senza lezione registrata.",
-            tone = ExpressiveTone.Warning,
-            badge = { StatusBadge("ASSENTE", tone = ExpressiveTone.Warning) },
+            tone = FluidTone.Warning,
+            badge = { FluidStatusBadge("ASSENTE", tone = FluidTone.Warning) },
           )
         }
       }
       FluidSectionHeader("Indice di rigore — ${professor.strictnessScore}/100")
-      RegisterListRow(
+      FluidListRow(
         title = professor.strictnessLabel,
         subtitle = "Punteggio basato su densità valutativa, scritti, peso e copertura degli argomenti.",
         tone = strictnessTone,
-        badge = { StatusBadge(professor.strictnessScore.toString(), tone = strictnessTone) },
+        badge = { FluidStatusBadge(professor.strictnessScore.toString(), tone = strictnessTone) },
       )
       if (professor.gradeCount > 0) {
         FluidSectionHeader("Voti")
@@ -571,18 +571,18 @@ fun ProfessorDetailRoute(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          MetricTile("Totale", professor.gradeCount.toString(), "Valutazioni.", Modifier.weight(1f))
+          FluidMetricTile("Totale", professor.gradeCount.toString(), "Valutazioni.", Modifier.weight(1f))
           professor.averageGrade?.let { average ->
-            MetricTile("Media", "%.1f".format(average), "Sul tuo profilo.", Modifier.weight(1f), presenceTone)
+            FluidMetricTile("Media", "%.1f".format(average), "Sul tuo profilo.", Modifier.weight(1f), presenceTone)
           }
         }
       }
       FluidSectionHeader("Dossier")
-      RegisterListRow(
+      FluidListRow(
         title = professor.funNickname,
         subtitle = "${professor.longestPresenceStreakWeeks} settimane consecutive · ${professor.subjects.size} materie monitorate.",
-        tone = ExpressiveTone.Success,
-        badge = { StatusBadge("PROFILO", tone = ExpressiveTone.Success) },
+        tone = FluidTone.Success,
+        badge = { FluidStatusBadge("PROFILO", tone = FluidTone.Success) },
       )
     },
   )
@@ -595,10 +595,10 @@ private fun ProfessorDetailSheet(
   onDismiss: () -> Unit,
 ) {
   val strictnessTone = when (prof.strictnessLabel) {
-    "Molto esigente" -> ExpressiveTone.Danger
-    "Esigente" -> ExpressiveTone.Warning
-    "Equilibrato" -> ExpressiveTone.Info
-    else -> ExpressiveTone.Success
+    "Molto esigente" -> FluidTone.Danger
+    "Esigente" -> FluidTone.Warning
+    "Equilibrato" -> FluidTone.Info
+    else -> FluidTone.Success
   }
 
   FluidSheet(onDismissRequest = onDismiss) {
@@ -625,29 +625,29 @@ private fun ProfessorDetailSheet(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-          MetricTile(
+          FluidMetricTile(
             label = "Giorni presenti",
             value = "${prof.actualDays}",
             detail = "Lezioni firmate.",
             modifier = Modifier.weight(1f),
-            tone = ExpressiveTone.Success,
+            tone = FluidTone.Success,
           )
-          MetricTile(
+          FluidMetricTile(
             label = "Giorni attesi",
             value = "${prof.expectedDays}",
             detail = "Dalle sue giornate tipiche.",
             modifier = Modifier.weight(1f),
-            tone = ExpressiveTone.Info,
+            tone = FluidTone.Info,
           )
-          MetricTile(
+          FluidMetricTile(
             label = "Tasso",
             value = "${(prof.presenceRate * 100).toInt()}%",
             detail = "Presenze / attesi.",
             modifier = Modifier.weight(1f),
             tone = when {
-              prof.presenceRate >= 0.85f -> ExpressiveTone.Success
-              prof.presenceRate >= 0.65f -> ExpressiveTone.Warning
-              else -> ExpressiveTone.Danger
+              prof.presenceRate >= 0.85f -> FluidTone.Success
+              prof.presenceRate >= 0.65f -> FluidTone.Warning
+              else -> FluidTone.Danger
             },
           )
         }
@@ -655,11 +655,11 @@ private fun ProfessorDetailSheet(
       if (prof.absenceDays.isNotEmpty()) {
         item { FluidSectionHeader("Probabili assenze recenti") }
         items(prof.absenceDays.takeLast(5), key = { "abs_$it" }) { date ->
-          RegisterListRow(
+          FluidListRow(
             title = date,
             subtitle = "Giorno tipico senza lezione registrata.",
-            tone = ExpressiveTone.Warning,
-            badge = { StatusBadge("ASSENTE", tone = ExpressiveTone.Warning) },
+            tone = FluidTone.Warning,
+            badge = { FluidStatusBadge("ASSENTE", tone = FluidTone.Warning) },
           )
         }
       }
@@ -667,11 +667,11 @@ private fun ProfessorDetailSheet(
       // ── Indice di rigore ──────────────────────────────────────────────
       item { FluidSectionHeader("Indice di rigore — ${prof.strictnessScore}/100") }
       item {
-        RegisterListRow(
+        FluidListRow(
           title = prof.strictnessLabel,
           subtitle = "Punteggio calcolato su 4 indicatori oggettivi di classe.",
           tone = strictnessTone,
-          badge = { StatusBadge("${prof.strictnessScore}", tone = strictnessTone) },
+          badge = { FluidStatusBadge("${prof.strictnessScore}", tone = strictnessTone) },
         )
       }
       item {
@@ -679,33 +679,33 @@ private fun ProfessorDetailSheet(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          MetricTile(
+          FluidMetricTile(
             label = "Voti/lezione",
             value = "%.2f".format(prof.evaluationDensity),
             detail = "Densita valutativa.",
             modifier = Modifier.weight(1f),
-            tone = ExpressiveTone.Info,
+            tone = FluidTone.Info,
           )
-          MetricTile(
+          FluidMetricTile(
             label = "Scritti",
             value = "${(prof.writtenExamRatio * 100).toInt()}%",
             detail = "Esami scritti.",
             modifier = Modifier.weight(1f),
-            tone = ExpressiveTone.Info,
+            tone = FluidTone.Info,
           )
-          MetricTile(
+          FluidMetricTile(
             label = "Peso medio",
             value = "%.1f".format(prof.avgGradeWeight),
             detail = "Importanza voti.",
             modifier = Modifier.weight(1f),
-            tone = ExpressiveTone.Info,
+            tone = FluidTone.Info,
           )
-          MetricTile(
+          FluidMetricTile(
             label = "Argomenti",
             value = "${(prof.topicCoverageRate * 100).toInt()}%",
             detail = "Lezioni firmate.",
             modifier = Modifier.weight(1f),
-            tone = ExpressiveTone.Info,
+            tone = FluidTone.Info,
           )
         }
       }
@@ -718,32 +718,32 @@ private fun ProfessorDetailSheet(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
           ) {
-            MetricTile(
+            FluidMetricTile(
               label = "Totale voti",
               value = "${prof.gradeCount}",
               detail = "Valutazioni assegnate.",
               modifier = Modifier.weight(1f),
             )
             prof.averageGrade?.let { avg ->
-              MetricTile(
+              FluidMetricTile(
                 label = "La tua media",
                 value = "%.1f".format(avg),
                 detail = "Dipende dallo studente.",
                 modifier = Modifier.weight(1f),
                 tone = when {
-                  avg >= 7.5 -> ExpressiveTone.Success
-                  avg >= 6.0 -> ExpressiveTone.Warning
-                  else -> ExpressiveTone.Danger
+                  avg >= 7.5 -> FluidTone.Success
+                  avg >= 6.0 -> FluidTone.Warning
+                  else -> FluidTone.Danger
                 },
               )
             }
             prof.mostFrequentGradeType?.let { type ->
-              MetricTile(
+              FluidMetricTile(
                 label = "Tipo prevalente",
                 value = type,
                 detail = "Tipologia più comune.",
                 modifier = Modifier.weight(1f),
-                tone = ExpressiveTone.Info,
+                tone = FluidTone.Info,
               )
             }
           }
@@ -753,7 +753,7 @@ private fun ProfessorDetailSheet(
       // ── Dossier Segreto 🔥 ─────────────────────────────────────────────
       item { FluidSectionHeader("Dossier Segreto 🕵️") }
       item {
-        RegisterListRow(
+        FluidListRow(
           title = prof.funNickname,
           subtitle = buildString {
             append("Classificazione segreta basata su ")
@@ -761,8 +761,8 @@ private fun ProfessorDetailSheet(
             append("${prof.gradeCount} valutazioni e ")
             append("${prof.subjects.size} materie monitorate.")
           },
-          tone = ExpressiveTone.Success,
-          badge = { StatusBadge("TOP SECRET", tone = ExpressiveTone.Success) },
+          tone = FluidTone.Success,
+          badge = { FluidStatusBadge("TOP SECRET", tone = FluidTone.Success) },
         )
       }
       item {
@@ -781,11 +781,11 @@ private fun ProfessorDetailSheet(
           prof.topicCoverageRate < 0.3f -> "L'argomento? Misterioso come il triangolo delle Bermuda."
           else -> "Un prof nella media, ma in fondo, chi vuole essere nella media?"
         }
-        RegisterListRow(
+        FluidListRow(
           title = "Profilo Psicologico",
           subtitle = roast,
-          tone = ExpressiveTone.Warning,
-          badge = { StatusBadge("ROAST", tone = ExpressiveTone.Warning) },
+          tone = FluidTone.Warning,
+          badge = { FluidStatusBadge("ROAST", tone = FluidTone.Warning) },
         )
       }
       item {
@@ -793,26 +793,26 @@ private fun ProfessorDetailSheet(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-          MetricTile(
+          FluidMetricTile(
             label = "Streak 🔥",
             value = "${prof.longestPresenceStreakWeeks}",
             detail = "Settimane consecutive.",
             modifier = Modifier.weight(1f),
-            tone = if (prof.longestPresenceStreakWeeks >= 8) ExpressiveTone.Success else ExpressiveTone.Info,
+            tone = if (prof.longestPresenceStreakWeeks >= 8) FluidTone.Success else FluidTone.Info,
           )
-          MetricTile(
+          FluidMetricTile(
             label = "Giorno top",
             value = prof.favoriteDayOfWeek?.let { DayOfWeek.of(it).shortLabel() } ?: "N/D",
             detail = "Giorno con più firme.",
             modifier = Modifier.weight(1f),
-            tone = ExpressiveTone.Info,
+            tone = FluidTone.Info,
           )
-          MetricTile(
+          FluidMetricTile(
             label = "Materie",
             value = "${prof.subjects.size}",
             detail = prof.subjects.joinToString(", ").take(30),
             modifier = Modifier.weight(1f),
-            tone = if (prof.subjects.size > 1) ExpressiveTone.Warning else ExpressiveTone.Info,
+            tone = if (prof.subjects.size > 1) FluidTone.Warning else FluidTone.Info,
           )
         }
       }
@@ -826,16 +826,16 @@ private fun ProfessorDetailSheet(
           else -> "💤 INESISTENTE"
         }
         val dangerTone = when {
-          prof.strictnessScore > 70 -> ExpressiveTone.Danger
-          prof.strictnessScore > 50 -> ExpressiveTone.Warning
-          else -> ExpressiveTone.Success
+          prof.strictnessScore > 70 -> FluidTone.Danger
+          prof.strictnessScore > 50 -> FluidTone.Warning
+          else -> FluidTone.Success
         }
-        RegisterListRow(
+        FluidListRow(
           title = "Livello di Pericolo",
           subtitle = "Indice di probabilità di essere interrogati/verificati a sorpresa.",
           eyebrow = dangerLevel,
           tone = dangerTone,
-          badge = { StatusBadge(dangerLevel.takeLast(dangerLevel.length - 2).trim(), tone = dangerTone) },
+          badge = { FluidStatusBadge(dangerLevel.takeLast(dangerLevel.length - 2).trim(), tone = dangerTone) },
         )
       }
     }

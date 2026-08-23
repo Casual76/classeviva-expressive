@@ -48,36 +48,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlert
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContainerDetailScaffold
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotification
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationTone
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionAnchor
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionIndex
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionSelectionMotion
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.LocalFluidNotificationHostState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusAction
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusNotice
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
@@ -96,6 +69,34 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import dev.antigravity.fluidengine.ui.fluid.FluidAlert
+import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
+import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
+import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
+import dev.antigravity.fluidengine.ui.fluid.FluidNotification
+import dev.antigravity.fluidengine.ui.fluid.FluidNotificationTone
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionAnchor
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionIndex
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionSelectionMotion
+import dev.antigravity.fluidengine.ui.fluid.FluidSheet
+import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidNotificationHostState
+import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidLoading
+import dev.antigravity.fluidengine.ui.theme.FluidPillTabs
+import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
+import dev.antigravity.fluidengine.ui.theme.FluidSyncAction
+import dev.antigravity.fluidengine.ui.theme.FluidSyncNotice
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.toFluid
 
 private const val TAB_BOARD = "Comunicazioni"
 private const val TAB_NOTES = "Note"
@@ -635,7 +636,7 @@ fun CommunicationsRoute(
     titleFacets = titleFacets,
     onBack = onBack,
     actions = {
-      SyncStatusAction(status = state.syncStatus, onRetry = viewModel::refresh)
+      FluidSyncAction(status = state.syncStatus.toFluid(), onRetry = viewModel::refresh)
       FluidBarAction(
         icon = Icons.Rounded.Refresh,
         contentDescription = "Aggiorna",
@@ -651,7 +652,7 @@ fun CommunicationsRoute(
     // only when there is something to say, so an ordinary page keeps its first item at the top.
     if (state.syncStatus.noticeMessage() != null) {
       item {
-        SyncStatusNotice(status = state.syncStatus, onRetry = viewModel::refresh)
+        FluidSyncNotice(status = state.syncStatus.toFluid(), onRetry = viewModel::refresh)
       }
     }
     item {
@@ -673,7 +674,7 @@ fun CommunicationsRoute(
       )
     }
     item {
-      ExpressivePillTabs(
+      FluidPillTabs(
         options = listOf(TAB_BOARD, TAB_NOTES),
         selected = selectedTab,
         onSelect = { selectedTab = it },
@@ -682,7 +683,7 @@ fun CommunicationsRoute(
     if (selectedTab == TAB_BOARD) {
       val unreadCount = filteredCommunications.count { !it.read }
       item {
-        ExpressivePillTabs(
+        FluidPillTabs(
           options = listOf(FILTER_ALL, FILTER_UNREAD),
           selected = selectedFilter,
           onSelect = { selectedFilter = it },
@@ -690,7 +691,7 @@ fun CommunicationsRoute(
       }
       if (unreadCount > 0) {
           item {
-              dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction(
+              dev.antigravity.fluidengine.ui.theme.FluidQuickAction(
                   label = "Segna tutte come lette",
                   onClick = viewModel::markAllAsRead
               )
@@ -698,7 +699,7 @@ fun CommunicationsRoute(
       }
       if (filteredCommunications.isEmpty()) {
         item {
-          EmptyState(
+          FluidEmptyState(
             title = "Nessuna comunicazione visibile",
             detail = "Nuove circolari e messaggi compariranno qui con stato di lettura, allegati e azioni richieste.",
           )
@@ -716,7 +717,7 @@ fun CommunicationsRoute(
             key = { "communication:${it.id}" },
             contentType = { "communication-row" },
           ) { communication ->
-            RegisterListRow(
+            FluidListRow(
               modifier = Modifier
                 .animateItem(),
               title = communication.title,
@@ -726,7 +727,7 @@ fun CommunicationsRoute(
               tone = communicationTone(communication),
               leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
               badge = {
-                StatusBadge(
+                FluidStatusBadge(
                   label = communicationBadgeLabel(communication),
                   tone = communicationTone(communication),
                 )
@@ -746,7 +747,7 @@ fun CommunicationsRoute(
     } else {
       if (state.notes.isEmpty()) {
         item {
-          EmptyState(
+          FluidEmptyState(
             title = "Nessuna nota disponibile",
             detail = "Note disciplinari, annotazioni e richiami compariranno qui in forma sintetica e chiara.",
           )
@@ -764,7 +765,7 @@ fun CommunicationsRoute(
             key = { "note:${it.id}" },
             contentType = { "note-row" },
           ) { note ->
-            RegisterListRow(
+            FluidListRow(
               modifier = Modifier
                 .animateItem(),
               title = note.title.ifBlank { note.author.uppercase(italianLocale) },
@@ -774,7 +775,7 @@ fun CommunicationsRoute(
               tone = noteTone(note),
               leading = { Icon(Icons.Rounded.Gavel, contentDescription = null) },
               badge = {
-                StatusBadge(
+                FluidStatusBadge(
                   label = if (note.read) "LETTA" else "NOTA",
                   tone = noteTone(note),
                 )
@@ -854,7 +855,7 @@ fun CommunicationsRoute(
               style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
             )
             if (!detail.communication.category.isNullOrBlank()) {
-              StatusBadge(label = detail.communication.category!!, tone = ExpressiveTone.Info)
+              FluidStatusBadge(label = detail.communication.category!!, tone = FluidTone.Info)
             }
             if (!detail.communication.read) {
               FluidButton(
@@ -904,7 +905,7 @@ fun CommunicationsRoute(
             // usava DownloadManager che spesso falliva perche' non riceveva
             // l'header Z-Auth-Token aggiornato.
             val hasUrl = !attachment.url.isNullOrBlank()
-            RegisterListRow(
+            FluidListRow(
               title = attachment.name,
               subtitle = attachment.mimeType ?: "Allegato",
               meta = when {
@@ -912,11 +913,11 @@ fun CommunicationsRoute(
                 attachment.portalOnly -> "Tocca per aprire. Se manca, lo scarico e lo tengo per 30 giorni"
                 else -> "Tocca per aprire. Se è già in memoria non riscarico nulla"
               },
-              tone = ExpressiveTone.Neutral,
+              tone = FluidTone.Neutral,
               badge = {
                 Icon(Icons.Rounded.AttachFile, contentDescription = null)
                 if (hasUrl) {
-                  StatusBadge("CACHE 30G", tone = ExpressiveTone.Info)
+                  FluidStatusBadge("CACHE 30G", tone = FluidTone.Info)
                 }
               },
               onClick = if (hasUrl) {
@@ -941,7 +942,7 @@ fun CommunicationsRoute(
         }
         item {
           if (state.isSubmittingAction) {
-            ExpressiveLoading()
+            FluidLoading()
           } else {
             CommunicationActions(
               detail = detail,
@@ -1056,7 +1057,7 @@ fun CommunicationDetailRoute(
       onBack = onBack,
     ) {
       item(key = "communication-detail-missing") {
-        EmptyState(
+        FluidEmptyState(
           title = "Comunicazione non disponibile",
           detail = "Il messaggio potrebbe essere stato rimosso o non ancora sincronizzato.",
         )
@@ -1065,12 +1066,12 @@ fun CommunicationDetailRoute(
     return
   }
 
-  ContainerDetailScaffold(
+  FluidContainerScaffold(
     title = "Dettaglio comunicazione",
     modifier = modifier,
     onBack = onBack,
     hero = {
-      RegisterListRow(
+      FluidListRow(
         title = communication.title,
         subtitle = communication.sender.ifBlank { "Bacheca scuola" },
         eyebrow = communication.date.toReadableDate(),
@@ -1078,7 +1079,7 @@ fun CommunicationDetailRoute(
         tone = communicationTone(communication),
         leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
         badge = {
-          StatusBadge(
+          FluidStatusBadge(
             label = communicationBadgeLabel(communication),
             tone = communicationTone(communication),
           )
@@ -1097,17 +1098,17 @@ fun CommunicationDetailRoute(
         else MaterialTheme.colorScheme.onSurface,
       )
       if (detail == null) {
-        ExpressiveLoading()
+        FluidLoading()
       }
       if (communication.noticeboardAttachments.isNotEmpty()) {
         FluidSectionHeader("Allegati")
         communication.noticeboardAttachments.forEach { attachment ->
           val hasUrl = !attachment.url.isNullOrBlank()
-          RegisterListRow(
+          FluidListRow(
             title = attachment.name,
             subtitle = attachment.mimeType ?: "Allegato",
             meta = if (hasUrl) "Apri con download autenticato e cache locale" else "Non disponibile in API",
-            tone = ExpressiveTone.Neutral,
+            tone = FluidTone.Neutral,
             leading = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
             onClick = if (hasUrl) {
               {
@@ -1167,7 +1168,7 @@ fun CommunicationDetailRoute(
           )
         }
         if (state.isSubmittingAction) {
-          ExpressiveLoading()
+          FluidLoading()
         } else {
           CommunicationActions(
             detail = detail,
@@ -1221,7 +1222,7 @@ fun NoteDetailRoute(
   if (note == null) {
     FluidScreen(title = "Dettaglio nota", modifier = modifier, onBack = onBack) {
       item(key = "note-detail-missing") {
-        EmptyState(
+        FluidEmptyState(
           title = "Nota non disponibile",
           detail = "La nota potrebbe essere stata rimossa o non ancora sincronizzata.",
         )
@@ -1230,24 +1231,24 @@ fun NoteDetailRoute(
     return
   }
 
-  ContainerDetailScaffold(
+  FluidContainerScaffold(
     title = "Dettaglio nota",
     modifier = modifier,
     onBack = onBack,
     hero = {
-      RegisterListRow(
+      FluidListRow(
         title = note.title.ifBlank { note.author.uppercase(italianLocale) },
         subtitle = note.categoryLabel,
         eyebrow = note.date.toReadableDate(),
         meta = note.contentPreview.takeIf(String::isNotBlank),
         tone = noteTone(note),
         leading = { Icon(Icons.Rounded.Gavel, contentDescription = null) },
-        badge = { StatusBadge(if (note.read) "LETTA" else "NOTA", tone = noteTone(note)) },
+        badge = { FluidStatusBadge(if (note.read) "LETTA" else "NOTA", tone = noteTone(note)) },
         animatePress = false,
       )
     },
     secondary = {
-      if (detail == null) ExpressiveLoading()
+      if (detail == null) FluidLoading()
       Text(
         text = detail?.content?.takeIf(String::isNotBlank)
           ?: note.contentPreview.takeIf(String::isNotBlank)
@@ -1433,11 +1434,11 @@ private fun detectsUploadIntent(detail: CommunicationDetail): Boolean {
   )
 }
 
-internal fun communicationTone(communication: Communication): ExpressiveTone {
+internal fun communicationTone(communication: Communication): FluidTone {
   return when {
-    !communication.read -> ExpressiveTone.Danger
-    communication.actions.isNotEmpty() -> ExpressiveTone.Warning
-    else -> ExpressiveTone.Neutral
+    !communication.read -> FluidTone.Danger
+    communication.actions.isNotEmpty() -> FluidTone.Warning
+    else -> FluidTone.Neutral
   }
 }
 
@@ -1449,12 +1450,12 @@ internal fun communicationBadgeLabel(communication: Communication): String {
   }
 }
 
-private fun noteTone(note: Note): ExpressiveTone {
+private fun noteTone(note: Note): FluidTone {
   val normalized = note.severity.uppercase(italianLocale)
   return when {
-    normalized.contains("HIGH") || normalized.contains("GRAVE") || normalized.contains("CRIT") -> ExpressiveTone.Danger
-    normalized.contains("MED") || normalized.contains("WARN") -> ExpressiveTone.Warning
-    else -> ExpressiveTone.Neutral
+    normalized.contains("HIGH") || normalized.contains("GRAVE") || normalized.contains("CRIT") -> FluidTone.Danger
+    normalized.contains("MED") || normalized.contains("WARN") -> FluidTone.Warning
+    else -> FluidTone.Neutral
   }
 }
 

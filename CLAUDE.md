@@ -40,7 +40,9 @@ app  →  feature-*  →  core-data  →  core-domain (pure Kotlin)
 - **`core-data`**: Repository implementations, WorkManager sync scheduler (`SyncWorkScheduler`).
 - **`core-database`**: Room DAOs and entities.
 - **`core-datastore`**: DataStore preferences and encrypted settings.
-- **`core-designsystem`**: Shared Material 3 Compose components, theme (supports System/Light/Dark/AMOLED + brand/dynamic/custom color).
+- **`core-designsystem`**: the app's own thin layer on top of the **Fluid Engine** (`android/engine`, a git submodule pinned to a tag). It re-exports `:engine-ui` as `api`, so feature modules get the whole design system without changing their build files, and holds only what is ClasseViva's: the brand accent and `ClassevivaExpressiveTheme`, `GradePill` (which knows what a passing grade is), `FeatureIdentity` (which maps the app's seven sections onto the engine's tone/motif ring), and the bridge from the domain `SyncStatus` to the engine's.
+
+  **The components themselves live in the engine, not here.** Adding one that is generic means adding it to `android/engine` and cutting a release — see `android/engine/ADOZIONE.md` and the `fluid-engine` skill. Never edit files under `android/engine/` without committing them in the engine repo: they vanish at the next update.
 - **`feature-*`**: 7 feature modules — `dashboard`, `grades`, `agenda`, `lessons`, `communications`, `absences`, `settings` — each owns its Screen composable and ViewModel. Secondary screens (materials, documents, notes, schoolbooks, meetings, …) are hosted inside the `feature-*` modules above and reached from `MoreHubScreen`.
 
 All Kotlin sources sit under the package root `dev.antigravity.classevivaexpressive`.
@@ -76,5 +78,9 @@ Some Classeviva REST responses include embedded HTML. `NetworkParsers` uses JSou
 ## Notes
 
 - `minSdk 26` (Android 8.0), `compileSdk`/`targetSdk 36`.
-- Signing config is read from `android/keystore.properties` (git-ignored).
+- Signing config is read from `android/keystore.properties` (git-ignored). The keystore is
+  `C:\VibeCoded Projects\pampa.jks`, alias `pampa` — the same key for every app.
+- The engine is a submodule: a fresh clone needs `git submodule update --init` before it builds.
+- `android/engine.properties` records which engine version this app is pinned to;
+  `engine/tools/engine-doctor.ps1 -AppRoot .` checks that everything agrees.
 - Parallel builds and build cache are enabled in `gradle.properties`.

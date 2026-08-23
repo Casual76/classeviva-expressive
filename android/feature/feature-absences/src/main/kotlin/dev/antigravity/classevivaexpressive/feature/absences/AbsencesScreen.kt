@@ -25,23 +25,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlert
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsencesRepository
@@ -54,6 +40,20 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import dev.antigravity.fluidengine.ui.fluid.FluidAlert
+import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
+import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
+import dev.antigravity.fluidengine.ui.theme.FluidTone
 
 private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
 
@@ -206,7 +206,7 @@ fun AbsencesRoute(
     item { FluidSectionHeader("Da giustificare") }
     if (pending.isEmpty()) {
       item {
-        EmptyState(
+        FluidEmptyState(
           title = "Nessuna giustificazione in sospeso",
           detail = "Assenze, ritardi e uscite risultano già allineati con lo stato corrente.",
         )
@@ -222,7 +222,7 @@ fun AbsencesRoute(
     item { FluidSectionHeader("Storico") }
     if (history.isEmpty()) {
       item {
-        EmptyState(
+        FluidEmptyState(
           title = "Nessuna registrazione disponibile",
           detail = "Quando le API ufficiali sincronizzano presenze e uscite, qui trovi una cronologia leggibile.",
         )
@@ -237,7 +237,7 @@ fun AbsencesRoute(
     }
     if (!state.lastMessage.isNullOrBlank()) {
       item {
-        InlineMessageCard(
+        FluidInlineMessage(
           message = state.lastMessage.orEmpty(),
           title = "Assenze",
           onDismiss = viewModel::clearMessage,
@@ -273,7 +273,7 @@ private fun AbsenceRow(
   absence: AbsenceRecord,
   onJustify: (() -> Unit)?,
 ) {
-  RegisterListRow(
+  FluidListRow(
     title = absence.date.toReadableDate(),
     subtitle = absenceLabel(absence.type),
     eyebrow = if (absence.justified) "Giustificata" else "Da controllare",
@@ -300,7 +300,7 @@ private fun AbsenceRow(
       )
     },
     badge = {
-      StatusBadge(
+      FluidStatusBadge(
         label = badgeLabel(absence.type),
         tone = absenceTone(absence),
       )
@@ -334,11 +334,11 @@ internal fun hoursLabel(type: AbsenceType, hour: Int): String {
   }
 }
 
-internal fun absenceTone(absence: AbsenceRecord): ExpressiveTone {
+internal fun absenceTone(absence: AbsenceRecord): FluidTone {
   return when {
-    absence.justified -> ExpressiveTone.Neutral
-    absence.type == AbsenceType.ABSENCE -> ExpressiveTone.Danger
-    else -> ExpressiveTone.Warning
+    absence.justified -> FluidTone.Neutral
+    absence.type == AbsenceType.ABSENCE -> FluidTone.Danger
+    else -> FluidTone.Warning
   }
 }
 

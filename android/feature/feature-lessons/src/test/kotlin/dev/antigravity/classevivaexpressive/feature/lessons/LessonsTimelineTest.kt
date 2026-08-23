@@ -1,6 +1,5 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionAnchor
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
 import java.time.DayOfWeek
@@ -8,6 +7,7 @@ import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionAnchor
 
 class LessonsTimelineTest {
 

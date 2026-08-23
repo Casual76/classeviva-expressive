@@ -59,29 +59,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlert
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreenDefaults
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionAnchor
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionIndex
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionSelectionMotion
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidMotion
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.activeFluidSectionForItemIndex
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
@@ -103,6 +83,26 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import dev.antigravity.fluidengine.ui.fluid.FluidAlert
+import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
+import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidMotion
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionAnchor
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionIndex
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionSelectionMotion
+import dev.antigravity.fluidengine.ui.fluid.FluidSheet
+import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.fluid.activeFluidSectionForItemIndex
+import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidPillTabs
+import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
+import dev.antigravity.fluidengine.ui.theme.FluidTone
 
 private const val TAB_TIMETABLE = "Orario"
 private const val TAB_HISTORY = "Lezioni svolte"
@@ -507,17 +507,17 @@ fun LessonsRoute(
     ) {
       if (!state.lastMessage.isNullOrBlank()) {
         item(key = "lessons:message", contentType = LessonsContentType.Message) {
-          InlineMessageCard(
+          FluidInlineMessage(
             message = state.lastMessage.orEmpty(),
             title = "Aggiornamento orario",
-            tone = ExpressiveTone.Warning,
+            tone = FluidTone.Warning,
             onDismiss = viewModel::clearMessage,
           )
         }
       }
 
       item(key = "lessons:mode", contentType = LessonsContentType.ModeSelector) {
-        ExpressivePillTabs(
+        FluidPillTabs(
           options = lessonTabs,
           selected = selectedTab,
           onSelect = { selectedTab = it },
@@ -558,12 +558,12 @@ fun LessonsRoute(
       when (selectedTab) {
         TAB_TIMETABLE -> {
           item(key = "lessons:template:selector", contentType = LessonsContentType.DaySelector) {
-            ExpressivePillTabs(
+            FluidPillTabs(
               options = templateDayLabels,
               selected = templateDayOptions.firstOrNull { it.key == selectedTemplateDayKey }?.label
                 ?: templateDayOptions.first().label,
               onSelect = { label ->
-                val key = templateDayOptions.firstOrNull { it.label == label }?.key ?: return@ExpressivePillTabs
+                val key = templateDayOptions.firstOrNull { it.label == label }?.key ?: return@FluidPillTabs
                 templateAnchors.firstOrNull { it.key == key }?.let {
                   selectTemplateSection(it, FluidSectionSelectionMotion.Animated)
                 }
@@ -639,12 +639,12 @@ fun LessonsRoute(
             )
           }
           item(key = "lessons:history:selector", contentType = LessonsContentType.DaySelector) {
-            ExpressivePillTabs(
+            FluidPillTabs(
               options = historyDayLabels,
               selected = historyDayOptions.firstOrNull { it.key == selectedHistoryDayKey }?.label
                 ?: historyDayOptions.first().label,
               onSelect = { label ->
-                val key = historyDayOptions.firstOrNull { it.label == label }?.key ?: return@ExpressivePillTabs
+                val key = historyDayOptions.firstOrNull { it.label == label }?.key ?: return@FluidPillTabs
                 historyAnchors.firstOrNull { it.key == key }?.let {
                   selectHistorySection(it, FluidSectionSelectionMotion.Animated)
                 }
@@ -852,11 +852,11 @@ private fun TimelineEmptyDay(
   message: String,
   modifier: Modifier = Modifier,
 ) {
-  RegisterListRow(
+  FluidListRow(
     title = "Giornata libera",
     subtitle = message,
     eyebrow = "Nessuna attività",
-    tone = ExpressiveTone.Neutral,
+    tone = FluidTone.Neutral,
     modifier = modifier,
   )
 }
@@ -878,7 +878,7 @@ private fun TimetableBlockRow(
     .mapNotNull { it.room?.trim()?.takeIf(String::isNotBlank) }
     .firstOrNull()
   val isOfficial = timetable.isOfficial
-  RegisterListRow(
+  FluidListRow(
     title = block.displaySubject,
     subtitle = primary.teacher ?: "Docente non specificato",
     eyebrow = block.timeRangeLabel(),
@@ -893,24 +893,24 @@ private fun TimetableBlockRow(
       },
     ).joinToString(" / "),
     tone = when {
-      isConfirmed -> ExpressiveTone.Success
-      isOverridden -> ExpressiveTone.Info
-      isOfficial -> ExpressiveTone.Success
-      primary.confidence >= 0.8f -> ExpressiveTone.Success
-      primary.confidence >= 0.6f -> ExpressiveTone.Info
-      else -> ExpressiveTone.Warning
+      isConfirmed -> FluidTone.Success
+      isOverridden -> FluidTone.Info
+      isOfficial -> FluidTone.Success
+      primary.confidence >= 0.8f -> FluidTone.Success
+      primary.confidence >= 0.6f -> FluidTone.Info
+      else -> FluidTone.Warning
     },
     leading = { Icon(Icons.Rounded.School, contentDescription = null) },
     onClick = onConfirm,
     onLongClick = onEdit,
     badge = {
       when {
-        isConfirmed -> StatusBadge("CONFERMATO", tone = ExpressiveTone.Success)
-        isOverridden -> StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
-        isOfficial -> StatusBadge("IMPORT", tone = ExpressiveTone.Success)
-        block.isMulti -> StatusBadge("BLOCCO ${block.allSlots.size}H", tone = ExpressiveTone.Info)
-        primary.confidence >= 0.75f -> StatusBadge("STABILE", tone = ExpressiveTone.Success)
-        else -> StatusBadge("DINAMICO", tone = ExpressiveTone.Warning)
+        isConfirmed -> FluidStatusBadge("CONFERMATO", tone = FluidTone.Success)
+        isOverridden -> FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
+        isOfficial -> FluidStatusBadge("IMPORT", tone = FluidTone.Success)
+        block.isMulti -> FluidStatusBadge("BLOCCO ${block.allSlots.size}H", tone = FluidTone.Info)
+        primary.confidence >= 0.75f -> FluidStatusBadge("STABILE", tone = FluidTone.Success)
+        else -> FluidStatusBadge("DINAMICO", tone = FluidTone.Warning)
       }
     },
     animatePress = true,
@@ -923,7 +923,7 @@ private fun HistoryLessonRow(
   lesson: Lesson,
   modifier: Modifier = Modifier,
 ) {
-  RegisterListRow(
+  FluidListRow(
     title = lesson.subject,
     subtitle = lesson.topic?.takeIf(String::isNotBlank)
       ?: if (lesson.isSigned) "Argomento non inserito" else "Lezione non firmata",
@@ -933,15 +933,15 @@ private fun HistoryLessonRow(
       lesson.room?.takeIf(String::isNotBlank),
     ).joinToString(" / ").ifBlank { null },
     tone = if (lesson.isSigned || !lesson.topic.isNullOrBlank()) {
-      ExpressiveTone.Success
+      FluidTone.Success
     } else {
-      ExpressiveTone.Neutral
+      FluidTone.Neutral
     },
     leading = { Icon(Icons.Rounded.HistoryEdu, contentDescription = null) },
     badge = {
-      StatusBadge(
+      FluidStatusBadge(
         label = if (lesson.isSigned) "FIRMATA" else "NON FIRMATA",
-        tone = if (lesson.isSigned) ExpressiveTone.Success else ExpressiveTone.Neutral,
+        tone = if (lesson.isSigned) FluidTone.Success else FluidTone.Neutral,
       )
     },
     modifier = modifier,
@@ -1142,17 +1142,17 @@ private fun SlotConfirmationSheet(
               style = MaterialTheme.typography.headlineSmall,
               fontWeight = FontWeight.SemiBold,
             )
-            RegisterListRow(
+            FluidListRow(
               title = slot.subject,
               subtitle = slot.teacher ?: "Docente non specificato",
               eyebrow = slot.timeRangeLabel(),
               meta = slot.room?.takeIf(String::isNotBlank),
-              tone = if (slot.confirmed) ExpressiveTone.Success else ExpressiveTone.Info,
+              tone = if (slot.confirmed) FluidTone.Success else FluidTone.Info,
               leading = { Icon(Icons.Rounded.School, contentDescription = null) },
               badge = {
-                StatusBadge(
+                FluidStatusBadge(
                   label = if (slot.confirmed) "CONFERMATO" else "DA VERIFICARE",
-                  tone = if (slot.confirmed) ExpressiveTone.Success else ExpressiveTone.Info,
+                  tone = if (slot.confirmed) FluidTone.Success else FluidTone.Info,
                 )
               },
             )
@@ -1277,22 +1277,22 @@ private fun EditSlotSheet(
         label = "Aula (opzionale)",
         singleLine = true,
       )
-      RegisterListRow(
+      FluidListRow(
         title = "Ora inizio",
         subtitle = startTime.ifBlank { "Non impostata" },
         eyebrow = "Orario",
-        tone = ExpressiveTone.Info,
+        tone = FluidTone.Info,
         onClick = { editingField = "start" },
-        badge = { StatusBadge("MODIFICA", tone = ExpressiveTone.Info) },
+        badge = { FluidStatusBadge("MODIFICA", tone = FluidTone.Info) },
         animatePress = true,
       )
-      RegisterListRow(
+      FluidListRow(
         title = "Ora fine",
         subtitle = endTime.ifBlank { "Non impostata" },
         eyebrow = "Orario",
-        tone = ExpressiveTone.Info,
+        tone = FluidTone.Info,
         onClick = { editingField = "end" },
-        badge = { StatusBadge("MODIFICA", tone = ExpressiveTone.Info) },
+        badge = { FluidStatusBadge("MODIFICA", tone = FluidTone.Info) },
         animatePress = true,
       )
       Row(

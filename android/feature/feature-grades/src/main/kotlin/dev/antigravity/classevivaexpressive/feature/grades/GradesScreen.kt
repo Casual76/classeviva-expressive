@@ -44,35 +44,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContainerDetailScaffold
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContinuousCornerShape
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidChip
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidRadius
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveEditorialCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveMiniChart
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradePill
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.QuickAction
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusAction
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusNotice
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary
@@ -95,6 +71,31 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
+import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidChip
+import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
+import dev.antigravity.fluidengine.ui.fluid.FluidRadius
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidSheet
+import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.theme.FluidEditorialCard
+import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
+import dev.antigravity.fluidengine.ui.theme.FluidMiniChart
+import dev.antigravity.fluidengine.ui.theme.FluidPillTabs
+import dev.antigravity.fluidengine.ui.theme.FluidQuickAction
+import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
+import dev.antigravity.fluidengine.ui.theme.FluidSyncAction
+import dev.antigravity.fluidengine.ui.theme.FluidSyncNotice
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.toFluid
 
 private const val TAB_RECENT = "Ultimi"
 private const val TAB_SUBJECTS = "Per materia"
@@ -338,7 +339,7 @@ fun GradesRoute(
     subtitle = state.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
     actions = {
-      SyncStatusAction(status = state.syncStatus, onRetry = viewModel::refresh)
+      FluidSyncAction(status = state.syncStatus.toFluid(), onRetry = viewModel::refresh)
       FluidBarAction(
         icon = Icons.Rounded.Refresh,
         contentDescription = "Aggiorna",
@@ -365,7 +366,7 @@ fun GradesRoute(
     // only when there is something to say, so an ordinary page keeps its first item at the top.
     if (state.syncStatus.noticeMessage() != null) {
       item {
-        SyncStatusNotice(status = state.syncStatus, onRetry = viewModel::refresh)
+        FluidSyncNotice(status = state.syncStatus.toFluid(), onRetry = viewModel::refresh)
       }
     }
     item {
@@ -390,7 +391,7 @@ fun GradesRoute(
     
     if (chartPoints.isNotEmpty()) {
       item {
-        ExpressiveEditorialCard {
+        FluidEditorialCard {
           Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
               Text(
                 text = "ANDAMENTO",
@@ -408,7 +409,7 @@ fun GradesRoute(
               }
           }
           Box(modifier = Modifier.fillMaxWidth()) {
-              ExpressiveMiniChart(
+              FluidMiniChart(
                 points = chartPoints.takeLast(15),
                 color = MaterialTheme.colorScheme.primary,
                 threshold = 6f,
@@ -436,7 +437,7 @@ fun GradesRoute(
     }
     
     item {
-      ExpressivePillTabs(
+      FluidPillTabs(
         options = listOf(TAB_RECENT, TAB_SUBJECTS),
         selected = selectedTab,
         onSelect = { selectedTab = it },
@@ -445,7 +446,7 @@ fun GradesRoute(
     
     if (periodUnseen.isNotEmpty()) {
       item {
-        QuickAction(
+        FluidQuickAction(
           label = "Segna tutto come già visto",
           onClick = { viewModel.markGradesSeen(periodUnseen.map(Grade::id)) },
         )
@@ -456,7 +457,7 @@ fun GradesRoute(
       TAB_RECENT -> {
         if (filteredGrades.isEmpty()) {
           item {
-            EmptyState(
+            FluidEmptyState(
               title = "Nessun voto in questo periodo",
               detail = "Seleziona un altro periodo oppure attendi la sincronizzazione dei dati.",
             )
@@ -472,7 +473,7 @@ fun GradesRoute(
               ).joinToString(" / ").ifBlank { null }
             }
 
-            RegisterListRow(
+            FluidListRow(
               modifier = Modifier
                 .animateItem()
                 .clip(ContinuousCornerShape(FluidRadius.Group))
@@ -485,10 +486,10 @@ fun GradesRoute(
               leading = { Icon(Icons.Rounded.Grade, contentDescription = null) },
               badge = {
                 if (unseen) {
-                  StatusBadge(label = "NUOVO", tone = ExpressiveTone.Primary)
+                  FluidStatusBadge(label = "NUOVO", tone = FluidTone.Primary)
                 }
                 if (grade.history.isNotEmpty()) {
-                  StatusBadge(label = "MODIFICATO", tone = ExpressiveTone.Info)
+                  FluidStatusBadge(label = "MODIFICATO", tone = FluidTone.Info)
                 }
                 GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
               },
@@ -502,14 +503,14 @@ fun GradesRoute(
       TAB_SUBJECTS -> {
         if (subjectRows.isEmpty()) {
           item {
-            EmptyState(
+            FluidEmptyState(
               title = "Mancano voti numerici",
               detail = "Le medie per materia vengono calcolate solo in presenza di valutazioni con valore decimale.",
             )
           }
         } else {
           items(subjectRows, key = { it.subject }) { row ->
-            RegisterListRow(
+            FluidListRow(
               modifier = Modifier,
               title = row.subject,
               subtitle = row.detail,
@@ -519,9 +520,9 @@ fun GradesRoute(
               leading = { Icon(Icons.AutoMirrored.Rounded.ShowChart, contentDescription = null) },
               badge = {
                 row.target?.let {
-                  StatusBadge(
+                  FluidStatusBadge(
                     label = "TARGET ${it.format1()}",
-                    tone = ExpressiveTone.Primary,
+                    tone = FluidTone.Primary,
                   )
                 }
                 GradePill(
@@ -586,7 +587,7 @@ fun GradesRoute(
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
         Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
-        RegisterListRow(
+        FluidListRow(
           title = grade.valueLabel,
           subtitle = grade.type.ifBlank { "Valutazione" },
           eyebrow = grade.date.toReadableDate(),
@@ -594,7 +595,7 @@ fun GradesRoute(
           tone = gradeTone(grade.numericValue),
           badge = {
             if (grade.history.isNotEmpty()) {
-              StatusBadge(label = "MODIFICATO", tone = ExpressiveTone.Info)
+              FluidStatusBadge(label = "MODIFICATO", tone = FluidTone.Info)
             }
             GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
           }
@@ -644,7 +645,7 @@ fun GradeDetailRoute(
       onBack = onBack,
     ) {
       item(key = "grade-detail-missing") {
-        EmptyState(
+        FluidEmptyState(
           title = "Voto non disponibile",
           detail = "La valutazione potrebbe essere stata rimossa o non ancora sincronizzata.",
         )
@@ -653,13 +654,13 @@ fun GradeDetailRoute(
     return
   }
 
-  ContainerDetailScaffold(
+  FluidContainerScaffold(
     title = "Dettaglio voto",
     modifier = modifier,
     onBack = onBack,
     hero = {
       Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
-      RegisterListRow(
+      FluidListRow(
         title = grade.valueLabel,
         subtitle = grade.type.ifBlank { "Valutazione" },
         eyebrow = grade.date.toReadableDate(),
@@ -667,7 +668,7 @@ fun GradeDetailRoute(
         tone = gradeTone(grade.numericValue),
         badge = {
           if (grade.history.isNotEmpty()) {
-            StatusBadge(label = "MODIFICATO", tone = ExpressiveTone.Info)
+            FluidStatusBadge(label = "MODIFICATO", tone = FluidTone.Info)
           }
           GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
         },
@@ -733,7 +734,7 @@ private fun GradeVersionRow(
   teacher: String?,
   recordedAt: String?,
 ) {
-  RegisterListRow(
+  FluidListRow(
     title = valueLabel,
     subtitle = type.ifBlank { "Valutazione" },
     eyebrow = "$label / ${date.toReadableDate()}",
@@ -779,14 +780,14 @@ private fun SubjectDetailSheet(
       }
       item {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          MetricTile(label = "Scritto", value = writtenAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(writtenAvg))
-          MetricTile(label = "Orale", value = oralAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(oralAvg))
-          MetricTile(label = "Pratico", value = practicalAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(practicalAvg))
+          FluidMetricTile(label = "Scritto", value = writtenAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(writtenAvg))
+          FluidMetricTile(label = "Orale", value = oralAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(oralAvg))
+          FluidMetricTile(label = "Pratico", value = practicalAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(practicalAvg))
         }
       }
       item { FluidSectionHeader("Tutti i voti") }
       items(grades.sortedByDescending { it.date }) { grade ->
-          RegisterListRow(
+          FluidListRow(
             title = grade.valueLabel,
             subtitle = grade.type,
             eyebrow = grade.date.toReadableDate(),

@@ -1,12 +1,12 @@
 package dev.antigravity.classevivaexpressive.feature.communications
 
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionAnchor
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.Note
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionAnchor
 
 internal data class ArchiveMonthSection<T>(
   val key: String,

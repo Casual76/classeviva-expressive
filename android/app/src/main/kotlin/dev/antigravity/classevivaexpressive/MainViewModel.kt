@@ -7,8 +7,6 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.antigravity.classevivaexpressive.core.data.sync.SyncWorkScheduler
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotification
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationTone
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateRepository
@@ -39,6 +37,8 @@ import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import dev.antigravity.fluidengine.ui.fluid.FluidNotification
+import dev.antigravity.fluidengine.ui.fluid.FluidNotificationTone
 
 private const val LiveTimetableRefreshMinIntervalMillis = 60_000L
 

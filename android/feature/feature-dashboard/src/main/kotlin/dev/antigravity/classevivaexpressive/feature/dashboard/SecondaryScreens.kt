@@ -38,24 +38,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContainerDetailScaffold
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidLoadingBlock
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressivePillTabs
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.InlineMessageCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MetricTile
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentsRepository
@@ -87,6 +69,24 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
+import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
+import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidSheet
+import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
+import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidLoading
+import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
+import dev.antigravity.fluidengine.ui.theme.FluidPillTabs
+import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
+import dev.antigravity.fluidengine.ui.theme.FluidTone
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MATERIALS
@@ -326,14 +326,14 @@ fun MeetingsRoute(
     itemSpacing = 12.dp,
   ) {
     item {
-      ExpressiveHeroCard(
+      FluidHeroCard(
         title = "Colloqui",
         subtitle = "${state.slots.count { it.available }} disponibilità · ${state.bookings.size} prenotazioni",
       )
     }
     state.lastMessage?.let { message ->
       item {
-        InlineMessageCard(
+        FluidInlineMessage(
           message = message,
           title = "Colloqui",
           onDismiss = viewModel::clearMessage,
@@ -344,14 +344,14 @@ fun MeetingsRoute(
     if (state.bookings.isNotEmpty()) {
       item { FluidSectionHeader("Prenotati") }
       items(state.bookings, key = { it.id }) { booking ->
-        RegisterListRow(
+        FluidListRow(
           title = booking.teacher.name,
           subtitle = booking.slot.meetingSlotLabel(),
           eyebrow = booking.teacher.subject ?: "Colloquio",
           meta = booking.bookingPosition?.let { "Posizione: $it" } ?: booking.status,
-          tone = ExpressiveTone.Success,
+          tone = FluidTone.Success,
           onClick = { viewModel.selectBooking(booking) },
-          badge = { StatusBadge("PRENOTATO", tone = ExpressiveTone.Success) },
+          badge = { FluidStatusBadge("PRENOTATO", tone = FluidTone.Success) },
           animatePress = true,
         )
       }
@@ -362,14 +362,14 @@ fun MeetingsRoute(
       item { FluidSectionHeader("Disponibili") }
       items(availableSlots, key = { it.id }) { slot ->
         val teacher = teachersById[slot.teacherId]
-        RegisterListRow(
+        FluidListRow(
           title = teacher?.name ?: "Docente",
           subtitle = slot.meetingSlotLabel(),
           eyebrow = teacher?.subject ?: "Disponibile",
           meta = slot.location,
-          tone = ExpressiveTone.Info,
+          tone = FluidTone.Info,
           onClick = { viewModel.selectSlot(slot) },
-          badge = { StatusBadge("PRENOTA", tone = ExpressiveTone.Info) },
+          badge = { FluidStatusBadge("PRENOTA", tone = FluidTone.Info) },
           animatePress = true,
         )
       }
@@ -377,7 +377,7 @@ fun MeetingsRoute(
 
     if (state.bookings.isEmpty() && availableSlots.isEmpty() && !state.isRefreshing) {
       item {
-        EmptyState(
+        FluidEmptyState(
           title = "Nessun colloquio disponibile",
           detail = "Le prenotazioni e le disponibilita compariranno qui dopo la sincronizzazione o quando il portale le espone.",
         )
@@ -524,7 +524,7 @@ fun MaterialsRoute(
     itemSpacing = 12.dp,
   ) {
     item {
-      ExpressiveHeroCard(
+      FluidHeroCard(
         title = "Didattica",
         subtitle = if (items.isEmpty()) "Materiali in sincronizzazione" else "${items.size} contenuti disponibili",
       )
@@ -535,15 +535,15 @@ fun MaterialsRoute(
       state.initialLoading && items.isEmpty() -> item { FluidLoadingBlock() }
 
       items.isEmpty() && state.refreshError != null -> item {
-        InlineMessageCard(
+        FluidInlineMessage(
           title = "Didattica non disponibile",
           message = state.refreshError.orEmpty(),
-          tone = ExpressiveTone.Warning,
+          tone = FluidTone.Warning,
         )
       }
 
       items.isEmpty() -> item {
-        EmptyState(
+        FluidEmptyState(
           title = "Nessun materiale",
           detail = "Non ci sono ancora file o link condivisi dai tuoi professori.",
         )
@@ -552,25 +552,25 @@ fun MaterialsRoute(
       else -> {
         if (state.isStale && state.refreshError != null) {
           item {
-            InlineMessageCard(
+            FluidInlineMessage(
               title = "Contenuti non aggiornati",
               message = "Mostro l'ultima copia disponibile. ${state.refreshError}",
-              tone = ExpressiveTone.Warning,
+              tone = FluidTone.Warning,
             )
           }
         }
         items(items, key = { it.id }) { item ->
-          RegisterListRow(
+          FluidListRow(
             title = item.title,
             subtitle = item.teacherName,
             eyebrow = item.folderName,
             meta = item.sharedAt,
-            tone = ExpressiveTone.Info,
+            tone = FluidTone.Info,
             onClick = {
               if (onOpenMaterial != null) onOpenMaterial(item.id) else selectedItem = item
             },
             badge = {
-              StatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = ExpressiveTone.Info)
+              FluidStatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = FluidTone.Info)
             },
           )
         }
@@ -681,7 +681,7 @@ fun MaterialDetailRoute(
   if (item == null) {
     FluidScreen(title = "Dettaglio materiale", modifier = modifier, onBack = onBack) {
       item(key = "material-detail-missing") {
-        EmptyState(
+        FluidEmptyState(
           title = "Materiale non disponibile",
           detail = "Il contenuto potrebbe essere stato rimosso o non ancora sincronizzato.",
         )
@@ -690,18 +690,18 @@ fun MaterialDetailRoute(
     return
   }
 
-  ContainerDetailScaffold(
+  FluidContainerScaffold(
     title = "Dettaglio materiale",
     modifier = modifier,
     onBack = onBack,
     hero = {
-      RegisterListRow(
+      FluidListRow(
         title = item.title,
         subtitle = item.teacherName,
         eyebrow = item.folderName,
         meta = item.sharedAt,
-        tone = ExpressiveTone.Info,
-        badge = { StatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = ExpressiveTone.Info) },
+        tone = FluidTone.Info,
+        badge = { FluidStatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = FluidTone.Info) },
         animatePress = false,
       )
     },
@@ -870,7 +870,7 @@ fun HomeworkRoute(
     itemSpacing = 12.dp,
   ) {
     item {
-      ExpressiveHeroCard(
+      FluidHeroCard(
         title = "Compiti",
         subtitle = if (state.homeworks.isEmpty()) "Nessuna attività assegnata" else "${state.homeworks.size} attività assegnate",
       )
@@ -880,7 +880,7 @@ fun HomeworkRoute(
         item { FluidLoadingBlock() }
       } else {
         item {
-          EmptyState(
+          FluidEmptyState(
             title = "Nessun compito",
             detail = "Non ci sono compiti assegnati al momento.",
           )
@@ -888,20 +888,20 @@ fun HomeworkRoute(
       }
     } else {
       items(state.homeworks, key = { it.id }) { item ->
-        RegisterListRow(
+        FluidListRow(
           title = item.subject,
           subtitle = item.description,
           eyebrow = "COMPITO",
           meta = item.homeworkMeta(),
-          tone = ExpressiveTone.Warning,
+          tone = FluidTone.Warning,
           onClick = {
             if (onOpenHomework != null) onOpenHomework(item.id) else viewModel.selectHomework(item)
           },
           badge = {
             if (item.history.isNotEmpty()) {
-              StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
+              FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
             }
-            StatusBadge("COMPITO", tone = ExpressiveTone.Warning)
+            FluidStatusBadge("COMPITO", tone = FluidTone.Warning)
           },
         )
       }
@@ -954,7 +954,7 @@ fun HomeworkRoute(
           }
         }
         if (hw.history.isNotEmpty()) {
-          StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
+          FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
         }
         if (hw.dueDate.isNotBlank()) {
           Text(
@@ -990,7 +990,7 @@ fun HomeworkDetailRoute(
   if (homework == null) {
     FluidScreen(title = "Dettaglio compito", modifier = modifier, onBack = onBack) {
       item(key = "homework-detail-missing") {
-        EmptyState(
+        FluidEmptyState(
           title = "Compito non disponibile",
           detail = "Il compito potrebbe essere stato rimosso o non ancora sincronizzato.",
         )
@@ -1000,20 +1000,20 @@ fun HomeworkDetailRoute(
   }
 
   val detail = state.selectedDetail?.takeIf { it.homework.id == homeworkId }
-  ContainerDetailScaffold(
+  FluidContainerScaffold(
     title = "Dettaglio compito",
     modifier = modifier,
     onBack = onBack,
     hero = {
-      RegisterListRow(
+      FluidListRow(
         title = homework.subject,
         subtitle = homework.description,
         eyebrow = "COMPITO",
         meta = homework.homeworkMeta(),
-        tone = ExpressiveTone.Warning,
+        tone = FluidTone.Warning,
         badge = {
-          if (homework.history.isNotEmpty()) StatusBadge("MODIFICATO", tone = ExpressiveTone.Info)
-          StatusBadge("COMPITO", tone = ExpressiveTone.Warning)
+          if (homework.history.isNotEmpty()) FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
+          FluidStatusBadge("COMPITO", tone = FluidTone.Warning)
         },
         animatePress = false,
       )
@@ -1231,7 +1231,7 @@ fun DocumentsRoute(
     itemSpacing = 12.dp,
   ) {
     item {
-      ExpressiveHeroCard(
+      FluidHeroCard(
         title = "Archivio scolastico",
         subtitle = "${state.documents.size} documenti · ${state.schoolbookCourses.size} corsi con libri",
       )
@@ -1239,12 +1239,12 @@ fun DocumentsRoute(
     if (state.initialLoading && state.documents.isEmpty() && state.schoolbookCourses.isEmpty()) {
       item {
         Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-          ExpressiveLoading()
+          FluidLoading()
         }
       }
     }
     item {
-      ExpressivePillTabs(
+      FluidPillTabs(
         options = listOf("Documenti", "Libri"),
         selected = selectedTab,
         onSelect = { selectedTab = it },
@@ -1253,18 +1253,18 @@ fun DocumentsRoute(
 
     if (selectedContentIsStale && selectedRefreshError != null) {
       item {
-        InlineMessageCard(
+        FluidInlineMessage(
           title = if (selectedTab == "Documenti") "Documenti non aggiornati" else "Libri non aggiornati",
           message = "Mostro l'ultima copia disponibile. $selectedRefreshError",
-          tone = ExpressiveTone.Warning,
+          tone = FluidTone.Warning,
         )
       }
     } else if (selectedRefreshError != null) {
       item {
-        InlineMessageCard(
+        FluidInlineMessage(
           title = if (selectedTab == "Documenti") "Documenti non disponibili" else "Libri non disponibili",
           message = selectedRefreshError,
-          tone = ExpressiveTone.Warning,
+          tone = FluidTone.Warning,
         )
       }
     }
@@ -1272,21 +1272,21 @@ fun DocumentsRoute(
     if (selectedTab == "Documenti") {
       if (state.documents.isEmpty() && !state.initialLoading && state.documentsRefreshError == null) {
         item {
-          EmptyState(
+          FluidEmptyState(
             title = "Nessun documento",
             detail = "Non ci sono ancora documenti disponibili.",
           )
         }
       } else {
         items(state.documents, key = { it.id }) { doc ->
-          RegisterListRow(
+          FluidListRow(
             title = doc.title,
             subtitle = doc.detail,
-            tone = ExpressiveTone.Info,
+            tone = FluidTone.Info,
             onClick = {
               if (onOpenDocument != null) onOpenDocument(doc.id) else viewModel.openDocument(doc)
             },
-            badge = { StatusBadge("DOCUMENTO", tone = ExpressiveTone.Info) },
+            badge = { FluidStatusBadge("DOCUMENTO", tone = FluidTone.Info) },
             animatePress = true,
           )
         }
@@ -1294,7 +1294,7 @@ fun DocumentsRoute(
     } else {
       if (state.schoolbookCourses.isEmpty() && !state.initialLoading && state.schoolbooksRefreshError == null) {
         item {
-          EmptyState(
+          FluidEmptyState(
             title = "Nessun libro",
             detail = "Non ci sono libri scolastici disponibili per quest'anno.",
           )
@@ -1306,22 +1306,22 @@ fun DocumentsRoute(
           }
           items(course.books, key = { it.id }) { book ->
             val bookTone = when {
-              book.alreadyOwned -> ExpressiveTone.Success
-              book.toBuy -> ExpressiveTone.Warning
-              else -> ExpressiveTone.Neutral
+              book.alreadyOwned -> FluidTone.Success
+              book.toBuy -> FluidTone.Warning
+              else -> FluidTone.Neutral
             }
             val bookBadge = when {
               book.alreadyOwned -> "POSSEDUTO"
               book.toBuy -> "DA ACQUISTARE"
               else -> "INFO"
             }
-            RegisterListRow(
+            FluidListRow(
               title = book.title,
               subtitle = book.author ?: "—",
               eyebrow = book.subject,
               meta = "ISBN: ${book.isbn}",
               tone = bookTone,
-              badge = { StatusBadge(bookBadge, tone = bookTone) },
+              badge = { FluidStatusBadge(bookBadge, tone = bookTone) },
             )
           }
         }
@@ -1343,7 +1343,7 @@ fun DocumentsRoute(
         when {
           state.isOpeningDocument -> {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-              ExpressiveLoading()
+              FluidLoading()
             }
           }
           state.selectedAsset != null -> {
@@ -1428,7 +1428,7 @@ fun DocumentDetailRoute(
   if (document == null) {
     FluidScreen(title = "Dettaglio documento", modifier = modifier, onBack = onBack) {
       item(key = "document-detail-missing") {
-        EmptyState(
+        FluidEmptyState(
           title = "Documento non disponibile",
           detail = "Il documento potrebbe essere stato rimosso o non ancora sincronizzato.",
         )
@@ -1437,16 +1437,16 @@ fun DocumentDetailRoute(
     return
   }
 
-  ContainerDetailScaffold(
+  FluidContainerScaffold(
     title = "Dettaglio documento",
     modifier = modifier,
     onBack = onBack,
     hero = {
-      RegisterListRow(
+      FluidListRow(
         title = document.title,
         subtitle = document.detail,
-        tone = ExpressiveTone.Info,
-        badge = { StatusBadge("DOCUMENTO", tone = ExpressiveTone.Info) },
+        tone = FluidTone.Info,
+        badge = { FluidStatusBadge("DOCUMENTO", tone = FluidTone.Info) },
         animatePress = false,
       )
     },
@@ -1477,7 +1477,7 @@ fun DocumentDetailRoute(
       ) {
         Text(document.title, style = MaterialTheme.typography.headlineSmall)
         when {
-          state.isOpeningDocument -> ExpressiveLoading()
+          state.isOpeningDocument -> FluidLoading()
           state.selectedAsset != null -> {
             val asset = state.selectedAsset
             asset?.textPreview?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -1611,7 +1611,7 @@ fun StudentScoreRoute(
   ) {
     state.currentScore?.let { score ->
       item {
-        ExpressiveHeroCard(
+        FluidHeroCard(
           title = "${score.score.roundToInt()}/100",
           subtitle = score.label,
         )
@@ -1619,7 +1619,7 @@ fun StudentScoreRoute(
       if (score.components.isNotEmpty()) {
         item { FluidSectionHeader("Componenti") }
         items(score.components, key = { it.title }) { component ->
-          MetricTile(
+          FluidMetricTile(
             label = component.title,
             value = "%.1f / %.0f".format(component.value, component.maxValue),
             detail = "Peso ${(component.weight * 100).roundToInt()}%",
@@ -1627,7 +1627,7 @@ fun StudentScoreRoute(
         }
       }
     } ?: item {
-      EmptyState(
+      FluidEmptyState(
         title = "Punteggio non disponibile",
         detail = "Il punteggio verrà calcolato dopo il primo aggiornamento dei dati.",
       )
@@ -1680,21 +1680,21 @@ fun StudentScoreRoute(
         } catch (_: Exception) {
           "—"
         }
-        RegisterListRow(
+        FluidListRow(
           title = "${snap.score.roundToInt()}/100",
           subtitle = snap.label,
           meta = dateLabel,
-          tone = ExpressiveTone.Neutral,
+          tone = FluidTone.Neutral,
         )
       }
     }
 
     state.lastMessage?.let { msg ->
       item {
-        InlineMessageCard(
+        FluidInlineMessage(
           message = msg,
           title = "Media studente",
-          tone = ExpressiveTone.Warning,
+          tone = FluidTone.Warning,
           onDismiss = viewModel::clearMessage,
         )
       }
@@ -1708,24 +1708,24 @@ fun StudentScoreRoute(
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
         Text("Confronto punteggio", style = MaterialTheme.typography.headlineSmall)
-        MetricTile(
+        FluidMetricTile(
           label = "Punteggio corrente",
           value = "${comparison.current.score.roundToInt()}/100",
           detail = comparison.current.label,
-          tone = ExpressiveTone.Info,
+          tone = FluidTone.Info,
         )
-        MetricTile(
+        FluidMetricTile(
           label = "Punteggio importato",
           value = "${comparison.imported.score.roundToInt()}/100",
           detail = comparison.imported.label,
-          tone = ExpressiveTone.Neutral,
+          tone = FluidTone.Neutral,
         )
         val diffTone = when {
-          comparison.difference > 0 -> ExpressiveTone.Success
-          comparison.difference < 0 -> ExpressiveTone.Danger
-          else -> ExpressiveTone.Neutral
+          comparison.difference > 0 -> FluidTone.Success
+          comparison.difference < 0 -> FluidTone.Danger
+          else -> FluidTone.Neutral
         }
-        MetricTile(
+        FluidMetricTile(
           label = "Differenza",
           value = "${if (comparison.difference >= 0) "+" else ""}${"%.1f".format(comparison.difference)}",
           detail = if (comparison.difference > 0) "In miglioramento" else if (comparison.difference < 0) "In peggioramento" else "Invariato",

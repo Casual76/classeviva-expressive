@@ -33,20 +33,20 @@ import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.EntryPointAccessors
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidMotionPolicyProvider
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionFootnote
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSegmentedControl
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSwitch
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaExpressiveTheme
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListDivider
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListGroup
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import kotlinx.coroutines.launch
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidMotionPolicyProvider
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
+import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
+import dev.antigravity.fluidengine.ui.theme.FluidCard
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 
 class WidgetConfigurationActivity : ComponentActivity() {
   private val appWidgetId: Int
@@ -135,7 +135,7 @@ private fun WidgetConfigurationScreen(
   ) {
     item { FluidSectionHeader(title = "Periodo") }
     item {
-      ExpressiveCard {
+      FluidCard {
         SegmentedSetting(
           label = "Compiti",
           options = listOf(1, 3, 7),
@@ -155,7 +155,7 @@ private fun WidgetConfigurationScreen(
 
     item { FluidSectionHeader(title = "Sezioni") }
     item {
-      ExpressiveListGroup {
+      FluidListGroup {
         val toggles = listOf(
           Triple("Compiti", preferences.showHomework) { value: Boolean ->
             onPreferencesChange(preferences.copy(showHomework = value))
@@ -175,7 +175,7 @@ private fun WidgetConfigurationScreen(
         )
         toggles.forEachIndexed { index, (label, checked, onChange) ->
           if (index > 0) {
-            ExpressiveListDivider()
+            FluidListDivider()
           }
           ToggleRow(label = label, checked = checked, onCheckedChange = onChange)
         }
@@ -184,7 +184,7 @@ private fun WidgetConfigurationScreen(
 
     item { FluidSectionHeader(title = "Privacy") }
     item {
-      ExpressiveCard {
+      FluidCard {
         FluidSegmentedControl(
           options = WidgetPrivacyMode.entries.toList(),
           selected = preferences.privacyMode,

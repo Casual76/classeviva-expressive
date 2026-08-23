@@ -1,8 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.communications
 
 import app.cash.turbine.test
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityState
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
@@ -33,6 +31,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import dev.antigravity.fluidengine.ui.fluid.FluidNotificationTone
+import dev.antigravity.fluidengine.ui.theme.FluidTone
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CommunicationsViewModelTest {
@@ -294,7 +294,7 @@ class CommunicationsViewModelTest {
     )
 
     assertEquals("NUOVA", communicationBadgeLabel(communication))
-    assertEquals(ExpressiveTone.Danger, communicationTone(communication))
+    assertEquals(FluidTone.Danger, communicationTone(communication))
   }
 
   @Test

@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.SystemClock
 import app.cash.turbine.test
 import dev.antigravity.classevivaexpressive.core.data.sync.SyncWorkScheduler
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationTone
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateRepository
@@ -45,6 +44,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Before
 import org.junit.Test
+import dev.antigravity.fluidengine.ui.fluid.FluidNotificationTone
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelTest {

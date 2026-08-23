@@ -16,13 +16,13 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidChip
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidColorDot
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaExpressiveTheme
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import dev.antigravity.fluidengine.ui.fluid.FluidChip
+import dev.antigravity.fluidengine.ui.fluid.FluidColorDot
 
 @RunWith(AndroidJUnit4::class)
 class FluidColorDotUiTest {

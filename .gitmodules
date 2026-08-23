@@ -1,0 +1,3 @@
+[submodule "android/engine"]
+	path = android/engine
+	url = https://github.com/Casual76/fluid-engine.git

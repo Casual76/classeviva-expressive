@@ -52,9 +52,6 @@ import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaExpressiveTheme
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveScreenSurface
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionAnchor
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionIndex
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import org.junit.Assert.assertEquals
@@ -62,6 +59,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionAnchor
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionIndex
+import dev.antigravity.fluidengine.ui.theme.FluidScreenSurface
 
 class MainAppUiTest {
 
@@ -74,7 +74,7 @@ class MainAppUiTest {
 
     composeRule.setContent {
       ClassevivaExpressiveTheme(settings = AppSettings()) {
-        ExpressiveScreenSurface {
+        FluidScreenSurface {
           LoginScreen(
             isLoading = false,
             error = null,
@@ -198,7 +198,7 @@ class MainAppUiTest {
     val restorationTester = StateRestorationTester(composeRule)
     restorationTester.setContent {
       ClassevivaExpressiveTheme(settings = AppSettings(dynamicColorEnabled = false)) {
-        ExpressiveScreenSurface {
+        FluidScreenSurface {
           BugReportNavigationTestGraph(onController = { navController = it })
         }
       }
@@ -230,7 +230,7 @@ class MainAppUiTest {
   fun bugReport_keepsTheOpeningRouteInEditableDiagnostics() {
     composeRule.setContent {
       ClassevivaExpressiveTheme(settings = AppSettings(dynamicColorEnabled = false)) {
-        ExpressiveScreenSurface {
+        FluidScreenSurface {
           BugReportNavigationTestGraph(onController = {})
         }
       }
@@ -356,7 +356,7 @@ private fun NavigationTestHarness(
           .requiredHeight(height)
           .testTag(themeTag),
       ) {
-        ExpressiveScreenSurface {
+        FluidScreenSurface {
           Box(
             modifier = Modifier
               .fillMaxSize()

@@ -1,10 +1,10 @@
 package dev.antigravity.classevivaexpressive.feature.absences
 
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import dev.antigravity.fluidengine.ui.theme.FluidTone
 
 class AbsencesLogicTest {
 
@@ -61,7 +61,7 @@ class AbsencesLogicTest {
       type = AbsenceType.ABSENCE,
       justified = true,
     )
-    assertEquals(ExpressiveTone.Neutral, absenceTone(absence))
+    assertEquals(FluidTone.Neutral, absenceTone(absence))
   }
 
   @Test
@@ -72,7 +72,7 @@ class AbsencesLogicTest {
       type = AbsenceType.ABSENCE,
       justified = false,
     )
-    assertEquals(ExpressiveTone.Danger, absenceTone(absence))
+    assertEquals(FluidTone.Danger, absenceTone(absence))
   }
 
   @Test
@@ -83,7 +83,7 @@ class AbsencesLogicTest {
       type = AbsenceType.LATE,
       justified = false,
     )
-    assertEquals(ExpressiveTone.Warning, absenceTone(absence))
+    assertEquals(FluidTone.Warning, absenceTone(absence))
   }
 
   @Test
@@ -94,6 +94,6 @@ class AbsencesLogicTest {
       type = AbsenceType.EXIT,
       justified = false,
     )
-    assertEquals(ExpressiveTone.Warning, absenceTone(absence))
+    assertEquals(FluidTone.Warning, absenceTone(absence))
   }
 }

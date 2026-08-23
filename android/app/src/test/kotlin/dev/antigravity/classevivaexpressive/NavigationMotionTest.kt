@@ -1,9 +1,9 @@
 package dev.antigravity.classevivaexpressive
 
 import androidx.lifecycle.SavedStateHandle
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MotionOrigin
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import dev.antigravity.fluidengine.ui.theme.MotionOrigin
 
 class NavigationMotionTest {
 

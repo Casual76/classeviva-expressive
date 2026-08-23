@@ -110,46 +110,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlert
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidIndeterminateBar
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidMotion
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidMotionPolicyProvider
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScrollToTopBus
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabBar
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabBarDefaults
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabItem
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTabRail
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationHost
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidNotificationDelivery
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.LocalFluidNotificationHostState
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ProvideFluidChrome
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberFluidChromeController
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberFluidChromeScrollConnection
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberFluidNotificationHostState
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.rememberGlassBackdrop
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaExpressiveTheme
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveHeroCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListDivider
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveListGroup
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveLoading
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveScreenSurface
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.FluidRouteMotion
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.LocalRouteMotionSignals
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.MotionOrigin
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RouteMotionHost
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RouteMotionSignals
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidTouchOriginTracker
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberFluidTouchOrigin
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberRouteMotionSignals
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
 import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
@@ -184,6 +145,45 @@ import dev.antigravity.classevivaexpressive.feature.settings.SettingsRoute
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlin.math.roundToInt
+import dev.antigravity.fluidengine.ui.fluid.FluidAlert
+import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
+import dev.antigravity.fluidengine.ui.fluid.FluidMotion
+import dev.antigravity.fluidengine.ui.fluid.FluidMotionPolicyProvider
+import dev.antigravity.fluidengine.ui.fluid.FluidNotificationDelivery
+import dev.antigravity.fluidengine.ui.fluid.FluidNotificationHost
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidScrollToTopBus
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidTabBar
+import dev.antigravity.fluidengine.ui.fluid.FluidTabBarDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidTabItem
+import dev.antigravity.fluidengine.ui.fluid.FluidTabRail
+import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidNotificationHostState
+import dev.antigravity.fluidengine.ui.fluid.ProvideFluidChrome
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidChromeController
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidChromeScrollConnection
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidNotificationHostState
+import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
+import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidLoading
+import dev.antigravity.fluidengine.ui.theme.FluidRouteMotion
+import dev.antigravity.fluidengine.ui.theme.FluidRouteMotionHost
+import dev.antigravity.fluidengine.ui.theme.FluidScreenSurface
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.antigravity.fluidengine.ui.theme.LocalRouteMotionSignals
+import dev.antigravity.fluidengine.ui.theme.MotionOrigin
+import dev.antigravity.fluidengine.ui.theme.RouteMotionSignals
+import dev.antigravity.fluidengine.ui.theme.fluidTouchOriginTracker
+import dev.antigravity.fluidengine.ui.theme.rememberFluidTouchOrigin
+import dev.antigravity.fluidengine.ui.theme.rememberRouteMotionSignals
 
 private const val BugReportRepositoryOwner = "Casual76"
 private const val BugReportRepositoryName = "classeviva-expressive"
@@ -429,7 +429,7 @@ fun MainApp(
       LocalFluidNotificationHostState provides notificationHostState,
       LocalRouteMotionSignals provides routeMotionSignals,
     ) {
-      ExpressiveScreenSurface(modifier = Modifier.fillMaxSize()) {
+      FluidScreenSurface(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
           when {
             uiState.isLoading -> LoadingScreen()
@@ -569,7 +569,7 @@ private fun LoadingScreen() {
     modifier = Modifier.fillMaxSize(),
     contentAlignment = Alignment.Center,
   ) {
-    ExpressiveLoading()
+    FluidLoading()
   }
 }
 
@@ -602,7 +602,7 @@ internal fun LoginScreen(
     verticalArrangement = Arrangement.spacedBy(20.dp),
   ) {
     item {
-      ExpressiveHeroCard(
+      FluidHeroCard(
         title = "Classeviva Expressive",
         subtitle = "Material 3 ufficiale per registro, agenda, voti e bacheca, tutta in Kotlin e Compose.",
         trailing = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
@@ -668,7 +668,7 @@ internal fun LoginScreen(
           enabled = username.isNotBlank() && password.isNotBlank() && !isLoading,
         ) {
           if (isLoading) {
-            ExpressiveLoading(
+            FluidLoading(
               modifier = Modifier.size(18.dp),
               color = MaterialTheme.colorScheme.onPrimary,
             )
@@ -679,7 +679,7 @@ internal fun LoginScreen(
       }
     }
     item {
-      EmptyState(
+      FluidEmptyState(
         title = "Autofill Compose",
         detail = "I campi credenziali espongono i content type ufficiali di Compose per username, email e password.",
       )
@@ -965,7 +965,7 @@ private fun buildMinimalBugReportBody(
 @Composable
 private fun LoginScreenPreview() {
   ClassevivaExpressiveTheme(settings = AppSettings()) {
-    ExpressiveScreenSurface {
+    FluidScreenSurface {
       LoginScreen(
         isLoading = false,
         error = null,
@@ -981,7 +981,7 @@ private fun LoginScreenPreview() {
 @Composable
 private fun TopLevelNavigationSuitePreview() {
   ClassevivaExpressiveTheme(settings = AppSettings()) {
-    ExpressiveScreenSurface {
+    FluidScreenSurface {
       TopLevelNavigationSuite(
         currentRoute = "more",
         showNavigationSuite = true,
@@ -1148,7 +1148,7 @@ private fun AuthenticatedApp(
         },
       ) {
         composable("home") { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             DashboardRoute(
               onNavigateGrades = { expandToTopLevelRoute("grades") },
               onNavigateAgenda = { expandToTopLevelRoute("agenda") },
@@ -1191,7 +1191,7 @@ private fun AuthenticatedApp(
             // A cold/deep-link request has no composed source element: use the normal Push policy.
             navigateRoute(route = "agenda-detail/${Uri.encode(entryId)}")
           }
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             AgendaRoute(
               initialAgendaId = null,
               initialDate = entry.arguments?.getString("date"),
@@ -1207,7 +1207,7 @@ private fun AuthenticatedApp(
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val agendaViewModel: AgendaViewModel = hiltViewModel(parentEntry)
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             AgendaDetailRoute(
               entryId = entry.arguments?.getString("entryId").orEmpty(),
               onBack = { navController.popBackStack() },
@@ -1233,7 +1233,7 @@ private fun AuthenticatedApp(
           val consumedGradeId by entry.savedStateHandle
             .getStateFlow<String?>(ConsumedGradeRequestKey, null)
             .collectAsStateWithLifecycle()
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             GradesRoute(
               initialGradeId = pendingGradeRequest(requestedGradeId, consumedGradeId),
               onInitialGradeConsumed = { gradeId ->
@@ -1255,7 +1255,7 @@ private fun AuthenticatedApp(
             navController.getBackStackEntry("grades?gradeId={gradeId}")
           }
           val gradesViewModel: GradesViewModel = hiltViewModel(gradesBackStackEntry)
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             GradeDetailRoute(
               gradeId = entry.arguments?.getString("gradeId").orEmpty(),
               onBack = { navController.popBackStack() },
@@ -1308,7 +1308,7 @@ private fun AuthenticatedApp(
           val requestedCategoryCode = entry.arguments?.getString("categoryCode")
           val isDirectDetail = (!requestedPubId.isNullOrBlank() && !requestedEvtCode.isNullOrBlank()) ||
             (!requestedNoteId.isNullOrBlank() && !requestedCategoryCode.isNullOrBlank())
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             CommunicationsRoute(
               initialTab = entry.arguments?.getString("tab") ?: "board",
               initialCommunicationPubId = requestedPubId,
@@ -1326,7 +1326,7 @@ private fun AuthenticatedApp(
           }
         }
         composable("notes") { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             CommunicationsRoute(
               initialTab = "notes",
               onBack = navController::navigateUp,
@@ -1348,7 +1348,7 @@ private fun AuthenticatedApp(
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val communicationsViewModel: CommunicationsViewModel = hiltViewModel(parentEntry)
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             CommunicationDetailRoute(
               pubId = entry.arguments?.getString("pubId").orEmpty(),
               evtCode = entry.arguments?.getString("evtCode").orEmpty(),
@@ -1366,7 +1366,7 @@ private fun AuthenticatedApp(
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val communicationsViewModel: CommunicationsViewModel = hiltViewModel(parentEntry)
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             NoteDetailRoute(
               id = entry.arguments?.getString("id").orEmpty(),
               categoryCode = entry.arguments?.getString("categoryCode").orEmpty(),
@@ -1376,7 +1376,7 @@ private fun AuthenticatedApp(
           }
         }
         composable("more") { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             MoreHubScreen(
               onOpenBugReport = { navigateRoute(BugReportRoute) },
               onOpenNotes = { navigateRoute("notes") },
@@ -1392,7 +1392,7 @@ private fun AuthenticatedApp(
           }
         }
         composable(BugReportRoute) { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             // Keep the route that opened the form in the diagnostics. Reading currentRoute here would
             // report "bugReport", because this is now (correctly) its own back-stack destination.
             BugReportScreen(
@@ -1402,7 +1402,7 @@ private fun AuthenticatedApp(
           }
         }
         composable("materials") { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             MaterialsRoute(
               onBack = navController::navigateUp,
               onOpenMaterial = { itemId ->
@@ -1417,7 +1417,7 @@ private fun AuthenticatedApp(
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val materialsViewModel: MaterialsViewModel = hiltViewModel(parentEntry)
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             MaterialDetailRoute(
               itemId = entry.arguments?.getString("itemId").orEmpty(),
               onBack = { navController.popBackStack() },
@@ -1449,7 +1449,7 @@ private fun AuthenticatedApp(
             entry.savedStateHandle[ConsumedHomeworkRequestKey] = homeworkId
             navigateRoute(route = "homework-detail/${Uri.encode(homeworkId)}")
           }
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             HomeworkRoute(
               initialHomeworkId = null,
               onBack = navController::navigateUp,
@@ -1465,7 +1465,7 @@ private fun AuthenticatedApp(
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val homeworkViewModel: HomeworkViewModel = hiltViewModel(parentEntry)
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             HomeworkDetailRoute(
               homeworkId = entry.arguments?.getString("homeworkId").orEmpty(),
               onBack = { navController.popBackStack() },
@@ -1474,7 +1474,7 @@ private fun AuthenticatedApp(
           }
         }
         composable("documents") { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             DocumentsRoute(
               onBack = navController::navigateUp,
               onOpenDocument = { documentId ->
@@ -1489,7 +1489,7 @@ private fun AuthenticatedApp(
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val documentsViewModel: DocumentsViewModel = hiltViewModel(parentEntry)
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             DocumentDetailRoute(
               documentId = entry.arguments?.getString("documentId").orEmpty(),
               onBack = { navController.popBackStack() },
@@ -1503,7 +1503,7 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/lessons" },
           ),
         ) { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             LessonsRoute(onBack = navController::navigateUp)
           }
         }
@@ -1521,7 +1521,7 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/absences" },
           ),
         ) { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             AbsencesRoute(
               initialAbsenceId = entry.arguments?.getString("absenceId"),
               onBack = navController::navigateUp,
@@ -1534,12 +1534,12 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/meetings" },
           ),
         ) { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             MeetingsRoute(onBack = navController::navigateUp)
           }
         }
         composable("professors") { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             ProfessorsRoute(
               onBack = navController::navigateUp,
               onOpenProfessor = { teacherName ->
@@ -1554,7 +1554,7 @@ private fun AuthenticatedApp(
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val professorsViewModel: ProfessorsViewModel = hiltViewModel(parentEntry)
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             ProfessorDetailRoute(
               teacherName = entry.arguments?.getString("teacherName").orEmpty(),
               onBack = { navController.popBackStack() },
@@ -1568,7 +1568,7 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/settings" },
           ),
         ) { entry ->
-          RouteMotionHost(this@composable) {
+          FluidRouteMotionHost(this@composable) {
             SettingsRoute(
               onBack = navController::navigateUp,
               isCheckingForUpdates = isCheckingForUpdates,
@@ -1602,7 +1602,7 @@ private data class MoreHubAction(
   val title: String,
   val subtitle: String,
   val eyebrow: String,
-  val tone: ExpressiveTone,
+  val tone: FluidTone,
   val icon: ImageVector,
   val onClick: () -> Unit,
 )
@@ -1621,16 +1621,16 @@ private fun MoreHubScreen(
   onOpenMeetings: () -> Unit,
 ) {
   val registerActions = listOf(
-    MoreHubAction("Orario", "Lezioni di oggi e della settimana.", "Lezioni", ExpressiveTone.Info, Icons.Rounded.Schedule, onOpenLessons),
-    MoreHubAction("Compiti", "Attività assegnate e scadenze.", "Agenda", ExpressiveTone.Warning, Icons.AutoMirrored.Rounded.Assignment, onOpenHomework),
-    MoreHubAction("Didattica", "File, link e cartelle dei docenti.", "Materiali", ExpressiveTone.Info, Icons.Rounded.FolderCopy, onOpenMaterials),
-    MoreHubAction("Documenti e libri", "Pagelle, documenti e testi adottati.", "Archivio", ExpressiveTone.Info, Icons.AutoMirrored.Rounded.LibraryBooks, onOpenDocuments),
+    MoreHubAction("Orario", "Lezioni di oggi e della settimana.", "Lezioni", FluidTone.Info, Icons.Rounded.Schedule, onOpenLessons),
+    MoreHubAction("Compiti", "Attività assegnate e scadenze.", "Agenda", FluidTone.Warning, Icons.AutoMirrored.Rounded.Assignment, onOpenHomework),
+    MoreHubAction("Didattica", "File, link e cartelle dei docenti.", "Materiali", FluidTone.Info, Icons.Rounded.FolderCopy, onOpenMaterials),
+    MoreHubAction("Documenti e libri", "Pagelle, documenti e testi adottati.", "Archivio", FluidTone.Info, Icons.AutoMirrored.Rounded.LibraryBooks, onOpenDocuments),
   )
   val peopleActions = listOf(
-    MoreHubAction("Note disciplinari", "Note e sanzioni del registro.", "Comunicazioni", ExpressiveTone.Danger, Icons.Rounded.Report, onOpenNotes),
-    MoreHubAction("Assenze", "Assenze, ritardi e uscite.", "Presenze", ExpressiveTone.Warning, Icons.Rounded.EventBusy, onOpenAbsences),
-    MoreHubAction("Colloqui", "Disponibilità e prenotazioni.", "Docenti", ExpressiveTone.Info, Icons.Rounded.Forum, onOpenMeetings),
-    MoreHubAction("Professori", "Contatti e andamento per docente.", "Docenti", ExpressiveTone.Neutral, Icons.Rounded.CoPresent, onOpenProfessors),
+    MoreHubAction("Note disciplinari", "Note e sanzioni del registro.", "Comunicazioni", FluidTone.Danger, Icons.Rounded.Report, onOpenNotes),
+    MoreHubAction("Assenze", "Assenze, ritardi e uscite.", "Presenze", FluidTone.Warning, Icons.Rounded.EventBusy, onOpenAbsences),
+    MoreHubAction("Colloqui", "Disponibilità e prenotazioni.", "Docenti", FluidTone.Info, Icons.Rounded.Forum, onOpenMeetings),
+    MoreHubAction("Professori", "Contatti e andamento per docente.", "Docenti", FluidTone.Neutral, Icons.Rounded.CoPresent, onOpenProfessors),
   )
 
   FluidScreen(
@@ -1643,17 +1643,17 @@ private fun MoreHubScreen(
     item { MoreHubActionGroup(peopleActions) }
     item { FluidSectionHeader("App") }
     item {
-      ExpressiveListGroup {
-        RegisterListRow(
+      FluidListGroup {
+        FluidListRow(
           title = "Segnala un problema",
           subtitle = "Issue GitHub pubblica con diagnostica minima modificabile.",
           eyebrow = "Feedback",
-          tone = ExpressiveTone.Info,
+          tone = FluidTone.Info,
           leading = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
           onClick = onOpenBugReport,
         )
-        ExpressiveListDivider()
-        RegisterListRow(
+        FluidListDivider()
+        FluidListRow(
           title = "Impostazioni",
           subtitle = "Account, aspetto, notifiche, dati e aggiornamenti.",
           eyebrow = "Profilo",
@@ -1667,9 +1667,9 @@ private fun MoreHubScreen(
 
 @Composable
 private fun MoreHubActionGroup(actions: List<MoreHubAction>) {
-  ExpressiveListGroup {
+  FluidListGroup {
     actions.forEachIndexed { index, action ->
-      RegisterListRow(
+      FluidListRow(
         title = action.title,
         subtitle = action.subtitle,
         eyebrow = action.eyebrow,
@@ -1677,7 +1677,7 @@ private fun MoreHubActionGroup(actions: List<MoreHubAction>) {
         leading = { Icon(action.icon, contentDescription = null) },
         onClick = action.onClick,
       )
-      if (index != actions.lastIndex) ExpressiveListDivider()
+      if (index != actions.lastIndex) FluidListDivider()
     }
   }
 }

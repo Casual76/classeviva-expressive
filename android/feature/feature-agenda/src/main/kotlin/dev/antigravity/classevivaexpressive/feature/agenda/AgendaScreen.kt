@@ -60,28 +60,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlert
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidAlertAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidBarAction
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButton
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidButtonStyle
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.ContainerDetailScaffold
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidScreen
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSectionHeader
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidSheet
-import dev.antigravity.classevivaexpressive.core.designsystem.fluid.FluidTextField
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.EmptyState
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveCard
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.ExpressiveTone
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.RegisterListRow
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.StatusBadge
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusAction
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SyncStatusNotice
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
@@ -106,6 +87,26 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import dev.antigravity.fluidengine.ui.fluid.FluidAlert
+import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
+import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
+import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidSheet
+import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.theme.FluidCard
+import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
+import dev.antigravity.fluidengine.ui.theme.FluidSyncAction
+import dev.antigravity.fluidengine.ui.theme.FluidSyncNotice
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.lastSyncLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.noticeMessage
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.toFluid
 
 private val italianLocale: Locale = Locale.forLanguageTag("it-IT")
 private val calendarHeaderFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", italianLocale)
@@ -285,7 +286,7 @@ fun AgendaRoute(
     subtitle = state.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
     actions = {
-      SyncStatusAction(status = state.syncStatus, onRetry = viewModel::refresh)
+      FluidSyncAction(status = state.syncStatus.toFluid(), onRetry = viewModel::refresh)
       FluidBarAction(
         icon = Icons.Rounded.Refresh,
         contentDescription = "Aggiorna",
@@ -300,7 +301,7 @@ fun AgendaRoute(
     // only when there is something to say, so an ordinary page keeps its first item at the top.
     if (state.syncStatus.noticeMessage() != null) {
       item {
-        SyncStatusNotice(status = state.syncStatus, onRetry = viewModel::refresh)
+        FluidSyncNotice(status = state.syncStatus.toFluid(), onRetry = viewModel::refresh)
       }
     }
     item {
@@ -350,7 +351,7 @@ fun AgendaRoute(
 
     if (selectedDayEntries.isEmpty()) {
       item {
-        EmptyState(
+        FluidEmptyState(
           title = "Nulla di pianificato",
           detail = "Non ci sono compiti, verifiche o eventi per questa data.",
         )
@@ -554,7 +555,7 @@ private fun AgendaEntryRow(
   onLongClick: (() -> Unit)?,
   modifier: Modifier = Modifier,
 ) {
-  RegisterListRow(
+  FluidListRow(
     title = entry.title,
     subtitle = entry.subject ?: entry.subtitle,
     eyebrow = entry.time ?: categoryLabel(entry.category),
@@ -568,12 +569,12 @@ private fun AgendaEntryRow(
     leading = { Icon(categoryIcon(entry.category), contentDescription = null) },
     badge = {
       if (entry.history.isNotEmpty()) {
-        StatusBadge(
+        FluidStatusBadge(
           label = "MODIFICATO",
-          tone = ExpressiveTone.Info,
+          tone = FluidTone.Info,
         )
       }
-      StatusBadge(
+      FluidStatusBadge(
         label = categoryLabel(entry.category),
         tone = categoryTone(entry.category),
       )
@@ -605,13 +606,13 @@ private fun AgendaDetailSheet(
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       item {
-        RegisterListRow(
+        FluidListRow(
           title = entry.title,
           subtitle = entry.subject ?: entry.subtitle.ifBlank { "Agenda" },
           eyebrow = categoryLabel(entry.category),
           meta = entry.eventDateLabel(),
           tone = categoryTone(entry.category),
-          badge = { StatusBadge(categoryLabel(entry.category), tone = categoryTone(entry.category)) },
+          badge = { FluidStatusBadge(categoryLabel(entry.category), tone = categoryTone(entry.category)) },
         )
       }
       item {
@@ -633,7 +634,7 @@ private fun AgendaDetailSheet(
       }
       item { HorizontalDivider() }
       item {
-        ExpressiveCard(highlighted = true) {
+        FluidCard(highlighted = true) {
           Text(
             text = "Dettagli",
             style = MaterialTheme.typography.labelLarge,
@@ -729,7 +730,7 @@ private fun AgendaVersionCard(
   recordedAt: String?,
   category: AgendaCategory,
 ) {
-  ExpressiveCard(highlighted = label == "Versione attuale") {
+  FluidCard(highlighted = label == "Versione attuale") {
     Text(
       text = label,
       style = MaterialTheme.typography.labelLarge,
@@ -751,7 +752,7 @@ private fun AgendaVersionCard(
     recordedAt?.let { InfoLine(label = if (label == "Versione attuale") "Ultima modifica" else "Rilevata", value = it) }
     teacher?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Docente", value = it) }
     detail?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Dettagli", value = it) }
-    StatusBadge(categoryLabel(category), tone = categoryTone(category))
+    FluidStatusBadge(categoryLabel(category), tone = categoryTone(category))
   }
 }
 
@@ -819,27 +820,27 @@ private fun AddEventSheet(
         )
       }
       item {
-        RegisterListRow(
+        FluidListRow(
           title = "Data",
           subtitle = date.toLocalDateOrNull()
             ?.format(eventDateFormatter)
             ?.replaceFirstChar { it.uppercase() }
             ?: date,
           eyebrow = "DatePicker",
-          tone = ExpressiveTone.Primary,
+          tone = FluidTone.Primary,
           onClick = { showDatePicker = true },
-          badge = { StatusBadge("SELEZIONA", tone = ExpressiveTone.Primary) },
+          badge = { FluidStatusBadge("SELEZIONA", tone = FluidTone.Primary) },
           animatePress = true,
         )
       }
       item {
-        RegisterListRow(
+        FluidListRow(
           title = "Ora",
           subtitle = if (time.isBlank()) "Opzionale" else time,
           eyebrow = "TimePicker",
-          tone = ExpressiveTone.Info,
+          tone = FluidTone.Info,
           onClick = { showTimePicker = true },
-          badge = { StatusBadge(if (time.isBlank()) "OPZIONALE" else "IMPOSTATA", tone = ExpressiveTone.Info) },
+          badge = { FluidStatusBadge(if (time.isBlank()) "OPZIONALE" else "IMPOSTATA", tone = FluidTone.Info) },
           animatePress = true,
         )
       }
@@ -987,14 +988,14 @@ private fun buildCalendarCells(month: YearMonth): List<LocalDate> {
   return (0 until 42).map { start.plusDays(it.toLong()) }
 }
 
-private fun categoryTone(category: AgendaCategory): ExpressiveTone {
+private fun categoryTone(category: AgendaCategory): FluidTone {
   return when (category) {
-    AgendaCategory.HOMEWORK -> ExpressiveTone.Warning
-    AgendaCategory.ASSESSMENT -> ExpressiveTone.Danger
-    AgendaCategory.LESSON -> ExpressiveTone.Neutral
+    AgendaCategory.HOMEWORK -> FluidTone.Warning
+    AgendaCategory.ASSESSMENT -> FluidTone.Danger
+    AgendaCategory.LESSON -> FluidTone.Neutral
     AgendaCategory.EVENT,
     AgendaCategory.CUSTOM,
-    -> ExpressiveTone.Success
+    -> FluidTone.Success
   }
 }
 
@@ -1029,7 +1030,7 @@ fun AgendaDetailRoute(
       onBack = onBack,
     ) {
       item(key = "agenda-detail-missing") {
-        EmptyState(
+        FluidEmptyState(
           title = "Voce non disponibile",
           detail = "L'elemento potrebbe essere stato rimosso o non ancora sincronizzato.",
         )
@@ -1038,7 +1039,7 @@ fun AgendaDetailRoute(
     return
   }
 
-  ContainerDetailScaffold(
+  FluidContainerScaffold(
     title = "Dettaglio agenda",
     modifier = modifier,
     onBack = onBack,
@@ -1059,7 +1060,7 @@ fun AgendaDetailRoute(
         entry.teacher?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Docente", value = it) }
       }
       HorizontalDivider()
-      ExpressiveCard(highlighted = true) {
+      FluidCard(highlighted = true) {
         Text(
           text = "Dettagli",
           style = MaterialTheme.typography.labelLarge,
