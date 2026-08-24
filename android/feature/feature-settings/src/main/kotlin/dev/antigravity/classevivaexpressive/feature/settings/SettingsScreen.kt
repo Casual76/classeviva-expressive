@@ -111,6 +111,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
+import dev.antigravity.fluidengine.ui.fluid.fluidLicensesSection
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
@@ -702,6 +703,11 @@ fun SettingsRoute(
           item { FluidSectionHeader(title = "Funzionalità disponibili") }
           items(state.capabilities, key = { it.feature.name }) { capability -> CapabilityRow(capability) }
         }
+        // Le opere di terze parti che il Fluid Engine porta dentro l'APK. L'Apache-2.0 del vetro e
+        // la OFL di Inter chiedono che l'avviso viaggi con la distribuzione: un file di licenza in
+        // un repository non e' la distribuzione. L'elenco vive nell'engine, quindi non puo' restare
+        // indietro qui mentre e' aggiornato altrove.
+        fluidLicensesSection()
       }
 
       if (section == SettingsSection.Diagnostics) {
