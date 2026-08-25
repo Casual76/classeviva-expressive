@@ -370,7 +370,9 @@ fun AgendaRoute(
         var rowBounds by remember { mutableStateOf<Rect?>(null) }
         AgendaEntryRow(
           entry = entry,
-          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
+          modifier = Modifier.fluidExpandOrigin(
+            open = { selectedEntry?.id == entry.id },
+          ) { rowBounds = it },
           onClick = {
             detailOrigin = rowBounds
             if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry

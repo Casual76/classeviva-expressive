@@ -606,10 +606,25 @@ fun CommunicationsRoute(
 
   LaunchedEffect(state.pendingOpenUri) {
     val uri = state.pendingOpenUri ?: return@LaunchedEffect
-    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+    // Aprire, non condividere.
+    //
+    // Erano due errori sovrapposti. Senza tipo MIME esplicito il sistema deve indovinarlo dal
+    // provider, e quando non ci riesce offre *tutto* — compresi i bersagli di condivisione. E il
+    // chooser, anche su ACTION_VIEW, e' il foglio che su Android si e' imparato a leggere come
+    // "condividi con": si tocca un PDF e si finisce a scegliere a chi mandarlo.
+    //
+    // Col tipo dichiarato e senza chooser, l'allegato si apre e basta, nel lettore predefinito. Il
+    // chooser resta come ripiego per l'unico caso in cui serve davvero: nessuna app registrata per
+    // quel tipo.
+    val resolvedType = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+      ?: "*/*"
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+      setDataAndType(uri, resolvedType)
       addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     runCatching {
+      context.startActivity(intent)
+    }.recoverCatching {
       context.startActivity(Intent.createChooser(intent, "Apri allegato"))
     }.onSuccess {
       viewModel.clearPendingUri()
@@ -799,7 +814,16 @@ fun CommunicationsRoute(
           ) { communication ->
             var rowBounds by remember { mutableStateOf<Rect?>(null) }
             FluidListRow(
-              modifier = Modifier.fluidExpandOrigin { rowBounds = it },
+              // La riga smette di disegnarsi mentre il suo dettaglio e' aperto: il pannello che ne
+              // esce e' vetro, e la riga si vedeva attraverso — due bordi uno dentro l'altro e il
+              // titolo leggibile due volte.
+              modifier = Modifier.fluidExpandOrigin(
+                open = {
+                  state.selectedCommunication?.communication?.let {
+                    it.pubId == communication.pubId && it.evtCode == communication.evtCode
+                  } == true
+                },
+              ) { rowBounds = it },
               title = communication.title,
               subtitle = communication.sender.ifBlank { "Bacheca scuola" },
               eyebrow = communication.date.toReadableDate(),
@@ -918,7 +942,9 @@ fun CommunicationsRoute(
           ) { note ->
             var rowBounds by remember { mutableStateOf<Rect?>(null) }
             FluidListRow(
-              modifier = Modifier.fluidExpandOrigin { rowBounds = it },
+              modifier = Modifier.fluidExpandOrigin(
+                open = { state.selectedNote?.note?.id == note.id },
+              ) { rowBounds = it },
               title = note.title.ifBlank { note.author.uppercase(italianLocale) },
               subtitle = note.categoryLabel,
               eyebrow = note.date.toReadableDate(),
@@ -1103,15 +1129,23 @@ private fun CommunicationDetailContent(
       // Da v5.6.0: sempre il path auth-aware (RestClient con refresh automatico del token). Il
       // vecchio downloadAttachment usava DownloadManager, che spesso falliva perche' non riceveva
       // l'header Z-Auth-Token aggiornato.
-      detail.communication.noticeboardAttachments.forEach { attachment ->
+      // Dentro un contenitore, come ogni altra lista dell'app.
+      //
+      // Erano righe sciolte appoggiate al pannello: nessuno spessore, nessun bordo, nessuna
+      // superficie — cioe' niente che dicesse che erano oggetti, tantomeno oggetti da toccare. E la
+      // graffetta stava a destra insieme alla freccia e al badge, che e' il posto dove si mettono
+      // gli *stati*, non l'identita' di una cosa: davanti, come tessera, dice cos'e' la riga.
+      FluidListGroup(glass = true) {
+        detail.communication.noticeboardAttachments.forEachIndexed { index, attachment ->
+        if (index > 0) FluidListDivider()
         val hasUrl = !attachment.url.isNullOrBlank()
         FluidListRow(
           title = attachment.name,
           // Una riga sola: dentro un pop-up ogni riga di spiegazione spinge il contenuto vero
           // fuori dallo schermo, e "come funziona la cache" non e' una cosa da leggere ogni volta.
           subtitle = if (hasUrl) "Tocca per aprire" else "Non disponibile in API",
-          tone = FluidTone.Neutral,
-          badge = {
+          tone = if (hasUrl) FluidTone.Info else FluidTone.Neutral,
+          leading = {
             Icon(Icons.Rounded.AttachFile, contentDescription = null)
           },
           onClick = if (hasUrl) {
@@ -1132,6 +1166,7 @@ private fun CommunicationDetailContent(
           },
           animatePress = true,
         )
+        }
       }
     }
     if (isSubmittingAction) {
