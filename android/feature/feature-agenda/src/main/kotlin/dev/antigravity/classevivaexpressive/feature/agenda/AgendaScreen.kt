@@ -63,6 +63,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
@@ -100,6 +101,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSheet
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidSyncAction
@@ -359,7 +362,7 @@ fun AgendaRoute(
         )
       }
     } else {
-      items(selectedDayEntries, key = { it.id }) { entry ->
+      fluidGlassGroups(selectedDayEntries) { entry ->
         AgendaEntryRow(
           entry = entry,
           onClick = {
@@ -528,11 +531,15 @@ private fun CalendarDayCell(
       verticalAlignment = Alignment.CenterVertically,
     ) {
       val categories = entries.map { it.category }.distinct()
+      // Dalla palette, non da due esadecimali. Il verde 2E8B57 e l'arancio FF9800 erano gli unici
+      // colori dell'app che non sapevano niente ne' del tema scuro, ne' di Material You, ne'
+      // dell'accento scelto in impostazioni: tre puntini che restavano identici mentre tutto il
+      // resto della pagina cambiava.
       if (categories.contains(AgendaCategory.EVENT) || categories.contains(AgendaCategory.CUSTOM)) {
-        CalendarDot(color = Color(0xFF2E8B57))
+        CalendarDot(color = MaterialTheme.colorScheme.tertiary)
       }
       if (categories.contains(AgendaCategory.HOMEWORK)) {
-        CalendarDot(color = Color(0xFFFF9800))
+        CalendarDot(color = MaterialTheme.colorScheme.secondary)
       }
       if (categories.contains(AgendaCategory.ASSESSMENT)) {
         CalendarDot(color = MaterialTheme.colorScheme.error)

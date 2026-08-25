@@ -23,6 +23,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardStat
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
@@ -40,6 +41,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidSyncAction
@@ -239,7 +242,7 @@ fun DashboardRoute(
 
     if (snapshot.todayLessons.isNotEmpty()) {
       item { FluidSectionHeader("Lezioni di oggi") }
-      items(snapshot.todayLessons, key = { it.id }) { lesson ->
+      fluidGlassGroups(snapshot.todayLessons) { lesson ->
         val presentation = remember(lesson) { lesson.toDashboardPresentation() }
         FluidListRow(
           title = lesson.subject,
@@ -268,7 +271,7 @@ fun DashboardRoute(
         )
       }
     } else {
-      items(recentGrades, key = { it.id }) { grade ->
+      fluidGlassGroups(recentGrades) { grade ->
         val isUnseen = unseenGradeIds.contains(grade.id)
 
         FluidListRow(
@@ -298,7 +301,7 @@ fun DashboardRoute(
         )
       }
     } else {
-      items(upcomingItems, key = { it.id }) { item ->
+      fluidGlassGroups(upcomingItems) { item ->
         FluidListRow(
           title = item.title,
           subtitle = item.subtitle,
@@ -321,7 +324,7 @@ fun DashboardRoute(
         )
       }
     } else {
-      items(unreadCommunications, key = { it.id }) { communication ->
+      fluidGlassGroups(unreadCommunications) { communication ->
         FluidListRow(
           title = communication.title,
           subtitle = communication.sender,

@@ -52,6 +52,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
@@ -88,6 +89,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSheet
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidNotificationHostState
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
 import dev.antigravity.fluidengine.ui.theme.FluidPillTabs
@@ -739,14 +742,22 @@ fun CommunicationsRoute(
           ) {
             FluidSectionHeader(section.label)
           }
-          items(
+          // Un mese e' un pannello, non venti pannelli.
+          //
+          // Le righe erano `items()` separate e senza sfondo: testo appoggiato sulla pagina, che
+          // sopra un fondale colorato non e' piu' una lista ma un elenco che galleggia. Il vetro
+          // pero' va sul contenitore — venti superfici di vetro alte 80 dp costano venti
+          // registrazioni di layer per un effetto che nessuno distingue da una — quindi il gruppo
+          // e' un item solo e il mese intero ci sta dentro.
+          //
+          // Il prezzo e' `animateItem()`, che funziona solo su un item diretto della lista: le
+          // righe non si riordinano piu' con un'animazione propria. Nessuna di queste liste
+          // riordina niente mentre la guardi; arrivano gia' ordinate dal database.
+          fluidGlassGroups(
             items = section.items,
-            key = { "communication:${it.id}" },
-            contentType = { "communication-row" },
+            key = "communication-month-group:${section.key}",
           ) { communication ->
             FluidListRow(
-              modifier = Modifier
-                .animateItem(),
               title = communication.title,
               subtitle = communication.sender.ifBlank { "Bacheca scuola" },
               eyebrow = communication.date.toReadableDate(),
@@ -769,6 +780,7 @@ fun CommunicationsRoute(
               animatePress = true,
             )
           }
+
         }
       }
     } else {
@@ -787,14 +799,11 @@ fun CommunicationsRoute(
           ) {
             FluidSectionHeader(section.label)
           }
-          items(
+          fluidGlassGroups(
             items = section.items,
-            key = { "note:${it.id}" },
-            contentType = { "note-row" },
+            key = "note-month-group:${section.key}",
           ) { note ->
             FluidListRow(
-              modifier = Modifier
-                .animateItem(),
               title = note.title.ifBlank { note.author.uppercase(italianLocale) },
               subtitle = note.categoryLabel,
               eyebrow = note.date.toReadableDate(),
@@ -817,6 +826,7 @@ fun CommunicationsRoute(
               animatePress = true,
             )
           }
+
         }
       }
     }

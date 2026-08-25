@@ -506,7 +506,7 @@ fun SettingsRoute(
           )
         }
         item {
-          FluidListGroup {
+          FluidListGroup(glass = true) {
             val destinations = SettingsSection.entries.filterNot { it == SettingsSection.Diagnostics }
             destinations.forEachIndexed { index, destination ->
               FluidListRow(
@@ -654,12 +654,14 @@ fun SettingsRoute(
           }
         }
         item {
-          FluidListRow(
-            title = SettingsSection.Diagnostics.title,
-            subtitle = SettingsSection.Diagnostics.subtitle,
-            tone = FluidTone.Info,
-            onClick = { sectionName = SettingsSection.Diagnostics.name },
-          )
+          FluidListGroup(glass = true) {
+            FluidListRow(
+              title = SettingsSection.Diagnostics.title,
+              subtitle = SettingsSection.Diagnostics.subtitle,
+              tone = FluidTone.Info,
+              onClick = { sectionName = SettingsSection.Diagnostics.name },
+            )
+          }
         }
       }
 

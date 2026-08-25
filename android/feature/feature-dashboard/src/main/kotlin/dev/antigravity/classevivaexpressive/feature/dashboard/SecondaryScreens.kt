@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -81,6 +82,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSheet
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
 import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
@@ -343,7 +346,7 @@ fun MeetingsRoute(
 
     if (state.bookings.isNotEmpty()) {
       item { FluidSectionHeader("Prenotati") }
-      items(state.bookings, key = { it.id }) { booking ->
+      fluidGlassGroups(state.bookings) { booking ->
         FluidListRow(
           title = booking.teacher.name,
           subtitle = booking.slot.meetingSlotLabel(),
@@ -360,7 +363,7 @@ fun MeetingsRoute(
     val availableSlots = state.slots.filter { it.available }
     if (availableSlots.isNotEmpty()) {
       item { FluidSectionHeader("Disponibili") }
-      items(availableSlots, key = { it.id }) { slot ->
+      fluidGlassGroups(availableSlots) { slot ->
         val teacher = teachersById[slot.teacherId]
         FluidListRow(
           title = teacher?.name ?: "Docente",
@@ -559,7 +562,7 @@ fun MaterialsRoute(
             )
           }
         }
-        items(items, key = { it.id }) { item ->
+        fluidGlassGroups(items) { item ->
           FluidListRow(
             title = item.title,
             subtitle = item.teacherName,
@@ -887,7 +890,7 @@ fun HomeworkRoute(
         }
       }
     } else {
-      items(state.homeworks, key = { it.id }) { item ->
+      fluidGlassGroups(state.homeworks) { item ->
         FluidListRow(
           title = item.subject,
           subtitle = item.description,
@@ -1278,7 +1281,7 @@ fun DocumentsRoute(
           )
         }
       } else {
-        items(state.documents, key = { it.id }) { doc ->
+        fluidGlassGroups(state.documents) { doc ->
           FluidListRow(
             title = doc.title,
             subtitle = doc.detail,
@@ -1304,7 +1307,7 @@ fun DocumentsRoute(
           item(key = "header_${course.id}") {
             FluidSectionHeader(course.title)
           }
-          items(course.books, key = { it.id }) { book ->
+          fluidGlassGroups(course.books) { book ->
             val bookTone = when {
               book.alreadyOwned -> FluidTone.Success
               book.toBuy -> FluidTone.Warning
@@ -1669,10 +1672,7 @@ fun StudentScoreRoute(
 
     if (state.snapshots.size > 1) {
       item { FluidSectionHeader("Storico") }
-      items(
-        state.snapshots.sortedByDescending { it.computedAtEpochMillis },
-        key = { it.computedAtEpochMillis },
-      ) { snap ->
+      fluidGlassGroups(state.snapshots.sortedByDescending { it.computedAtEpochMillis }) { snap ->
         val dateLabel = try {
           val instant = Instant.ofEpochMilli(snap.computedAtEpochMillis)
           DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")

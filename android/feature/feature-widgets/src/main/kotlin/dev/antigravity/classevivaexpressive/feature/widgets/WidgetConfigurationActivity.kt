@@ -155,7 +155,7 @@ private fun WidgetConfigurationScreen(
 
     item { FluidSectionHeader(title = "Sezioni") }
     item {
-      FluidListGroup {
+      FluidListGroup(glass = true) {
         val toggles = listOf(
           Triple("Compiti", preferences.showHomework) { value: Boolean ->
             onPreferencesChange(preferences.copy(showHomework = value))

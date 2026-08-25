@@ -1643,7 +1643,7 @@ private fun MoreHubScreen(
     item { MoreHubActionGroup(peopleActions) }
     item { FluidSectionHeader("App") }
     item {
-      FluidListGroup {
+      FluidListGroup(glass = true) {
         FluidListRow(
           title = "Segnala un problema",
           subtitle = "Issue GitHub pubblica con diagnostica minima modificabile.",
@@ -1667,7 +1667,7 @@ private fun MoreHubScreen(
 
 @Composable
 private fun MoreHubActionGroup(actions: List<MoreHubAction>) {
-  FluidListGroup {
+  FluidListGroup(glass = true) {
     actions.forEachIndexed { index, action ->
       FluidListRow(
         title = action.title,

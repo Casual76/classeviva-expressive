@@ -26,6 +26,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
@@ -50,6 +51,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSheet
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
@@ -451,7 +454,7 @@ fun ProfessorsRoute(
         )
       }
       item { FluidSectionHeader("Docenti") }
-      items(state.professors, key = { it.teacherName }) { prof ->
+      fluidGlassGroups(state.professors) { prof ->
         val presenceTone = when {
           prof.presenceRate >= 0.85f -> FluidTone.Success
           prof.presenceRate >= 0.65f -> FluidTone.Warning
@@ -659,7 +662,7 @@ private fun ProfessorDetailSheet(
       }
       if (prof.absenceDays.isNotEmpty()) {
         item { FluidSectionHeader("Probabili assenze recenti") }
-        items(prof.absenceDays.takeLast(5), key = { "abs_$it" }) { date ->
+        fluidGlassGroups(prof.absenceDays.takeLast(5)) { date ->
           FluidListRow(
             title = date,
             subtitle = "Giorno tipico senza lezione registrata.",

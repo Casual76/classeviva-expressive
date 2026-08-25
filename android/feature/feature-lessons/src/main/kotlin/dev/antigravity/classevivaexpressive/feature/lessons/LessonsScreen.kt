@@ -62,6 +62,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
@@ -100,6 +101,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSheet
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.fluid.activeFluidSectionForItemIndex
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidPillTabs
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
@@ -692,14 +695,11 @@ fun LessonsRoute(
                 )
               }
             } else {
-              items(
-                items = section.lessons,
-                key = Lesson::id,
-                contentType = { LessonsContentType.HistoryRow },
-              ) { lesson ->
+              fluidGlassGroups(section.lessons) { lesson ->
+                // Senza `animateItem()`: la riga non e' piu' un item della lista, il pannello si'.
                 HistoryLessonRow(
                   lesson = lesson,
-                  modifier = historyMotionModifier.animateItem(),
+                  modifier = historyMotionModifier,
                 )
               }
             }

@@ -47,6 +47,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradePill
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone
@@ -85,6 +86,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSheet
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEditorialCard
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
 import dev.antigravity.fluidengine.ui.theme.FluidMiniChart
@@ -465,7 +468,7 @@ fun GradesRoute(
             )
           }
         } else {
-          items(recentGrades, key = { it.id }) { grade ->
+          fluidGlassGroups(recentGrades) { grade ->
             val unseen = !state.seenGradeIds.contains(grade.id)
             val readableDate = remember(grade.date) { grade.date.toReadableDate() }
             val meta = remember(grade.description, grade.notes, grade.teacher) {
@@ -476,10 +479,11 @@ fun GradesRoute(
             }
 
             FluidListRow(
-              modifier = Modifier
-                .animateItem()
-                .clip(ContinuousCornerShape(FluidRadius.Group))
-                .background(MaterialTheme.colorScheme.surfaceContainerLow),
+              // Lo sfondo per riga era l'unico posto dell'app che forzava un colore di
+              // superficie a mano, ed era il modo di dire "questa lista ha bisogno di un
+              // contenitore" senza avercelo. Ora il contenitore c'e' e la riga torna a essere
+              // una riga: dodici sfondi dentro un pannello sono dodici rettangoli sopra il
+              // vetro, che e' esattamente cio' che il vetro non deve avere davanti.
               title = grade.subject,
               subtitle = grade.type.ifBlank { "Valutazione" },
               eyebrow = readableDate,
@@ -511,9 +515,8 @@ fun GradesRoute(
             )
           }
         } else {
-          items(subjectRows, key = { it.subject }) { row ->
+          fluidGlassGroups(subjectRows) { row ->
             FluidListRow(
-              modifier = Modifier,
               title = row.subject,
               subtitle = row.detail,
               eyebrow = if (row.average != null && row.average < 6.0) "Materia a rischio" else "Per materia",
@@ -788,7 +791,7 @@ private fun SubjectDetailSheet(
         }
       }
       item { FluidSectionHeader("Tutti i voti") }
-      items(grades.sortedByDescending { it.date }) { grade ->
+      fluidGlassGroups(grades.sortedByDescending { it.date }) { grade ->
           FluidListRow(
             title = grade.valueLabel,
             subtitle = grade.type,

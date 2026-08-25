@@ -28,6 +28,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType
@@ -52,6 +53,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
@@ -217,7 +220,7 @@ fun AbsencesRoute(
         )
       }
     } else {
-      items(pending, key = { it.id }) { absence ->
+      fluidGlassGroups(pending) { absence ->
         AbsenceRow(
           absence = absence,
           onJustify = { viewModel.requestJustification(absence) },
@@ -233,7 +236,7 @@ fun AbsencesRoute(
         )
       }
     } else {
-      items(history.take(20), key = { it.id }) { absence ->
+      fluidGlassGroups(history.take(20)) { absence ->
         AbsenceRow(
           absence = absence,
           onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
