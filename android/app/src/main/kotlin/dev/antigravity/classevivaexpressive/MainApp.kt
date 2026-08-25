@@ -117,10 +117,8 @@ import dev.antigravity.classevivaexpressive.feature.absences.AbsencesRoute
 import dev.antigravity.classevivaexpressive.feature.agenda.AgendaDetailRoute
 import dev.antigravity.classevivaexpressive.feature.agenda.AgendaRoute
 import dev.antigravity.classevivaexpressive.feature.agenda.AgendaViewModel
-import dev.antigravity.classevivaexpressive.feature.communications.CommunicationDetailRoute
 import dev.antigravity.classevivaexpressive.feature.communications.CommunicationsRoute
 import dev.antigravity.classevivaexpressive.feature.communications.CommunicationsViewModel
-import dev.antigravity.classevivaexpressive.feature.communications.NoteDetailRoute
 import dev.antigravity.classevivaexpressive.feature.dashboard.DashboardRoute
 import dev.antigravity.classevivaexpressive.feature.dashboard.DocumentsRoute
 import dev.antigravity.classevivaexpressive.feature.dashboard.DocumentDetailRoute
@@ -152,6 +150,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidChromeController
 import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidMotionPolicyProvider
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalHost
 import dev.antigravity.fluidengine.ui.fluid.FluidNotificationDelivery
 import dev.antigravity.fluidengine.ui.fluid.FluidNotificationHost
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
@@ -162,10 +161,13 @@ import dev.antigravity.fluidengine.ui.fluid.FluidTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidTabItem
 import dev.antigravity.fluidengine.ui.fluid.FluidTabRail
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidNotificationHostState
 import dev.antigravity.fluidengine.ui.fluid.ProvideFluidChrome
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassModalObscured
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidChromeController
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidChromeScrollConnection
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidNotificationHostState
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -382,6 +384,7 @@ fun MainApp(
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val notificationHostState = rememberFluidNotificationHostState()
+  val glassModalHostState = rememberFluidGlassModalHostState()
   val routeMotionSignals = rememberRouteMotionSignals()
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     viewModel.onAppResumed()
@@ -428,27 +431,39 @@ fun MainApp(
     val chromeController = rememberFluidChromeController()
     CompositionLocalProvider(
       LocalFluidNotificationHostState provides notificationHostState,
+      LocalFluidGlassModalHostState provides glassModalHostState,
       LocalRouteMotionSignals provides routeMotionSignals,
     ) {
       FluidScreenSurface(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
-          when {
-            uiState.isLoading -> LoadingScreen()
-            uiState.session == null -> LoginScreen(
-              isLoading = uiState.isAuthenticating,
-              error = uiState.authError,
-              onClearError = viewModel::clearAuthError,
-              onLogin = viewModel::login,
-            )
-            else -> AuthenticatedApp(
-              chromeController = chromeController,
-              isCheckingForUpdates = uiState.isCheckingUpdate,
-              updateCheckMessage = uiState.updateCheckMessage,
-              onCheckForUpdates = { viewModel.checkUpdate() },
-              onClearUpdateCheckMessage = viewModel::clearUpdateCheckMessage,
-              incomingIntents = incomingIntents,
-            )
+          // The page under an open glass modal stays visible — that is the point of the material —
+          // so it has to be taken away from accessibility by hand, or TalkBack walks through the
+          // scrim into content the eye can plainly see is behind something.
+          Box(modifier = Modifier.fillMaxSize().fluidGlassModalObscured()) {
+            when {
+              uiState.isLoading -> LoadingScreen()
+              uiState.session == null -> LoginScreen(
+                isLoading = uiState.isAuthenticating,
+                error = uiState.authError,
+                onClearError = viewModel::clearAuthError,
+                onLogin = viewModel::login,
+              )
+              else -> AuthenticatedApp(
+                chromeController = chromeController,
+                isCheckingForUpdates = uiState.isCheckingUpdate,
+                updateCheckMessage = uiState.updateCheckMessage,
+                onCheckForUpdates = { viewModel.checkUpdate() },
+                onClearUpdateCheckMessage = viewModel::clearUpdateCheckMessage,
+                incomingIntents = incomingIntents,
+              )
+            }
           }
+          // Above the tab bar — the reason the modal lives in-root at all — and below the
+          // notifications, which outrank everything.
+          FluidGlassModalHost(
+            state = glassModalHostState,
+            backdrop = chromeController.activeBackdrop.value,
+          )
           FluidNotificationHost(
             state = notificationHostState,
             backdrop = chromeController.activeBackdrop.value,
@@ -1302,26 +1317,17 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/notes" },
           ),
         ) { entry ->
-          val requestedPubId = entry.arguments?.getString("pubId")
-          val requestedEvtCode = entry.arguments?.getString("evtCode")
-          val requestedNoteId = entry.arguments?.getString("noteId")
-          val requestedCategoryCode = entry.arguments?.getString("categoryCode")
-          val isDirectDetail = (!requestedPubId.isNullOrBlank() && !requestedEvtCode.isNullOrBlank()) ||
-            (!requestedNoteId.isNullOrBlank() && !requestedCategoryCode.isNullOrBlank())
+          // Il dettaglio non e' piu' una rotta: e' il pop-up di vetro dichiarato dentro
+          // CommunicationsRoute e disegnato alla radice. I deep link continuano ad arrivare qui
+          // con gli stessi argomenti, che ora aprono la tab e poi il modale.
           FluidRouteMotionHost(this@composable) {
             CommunicationsRoute(
               initialTab = entry.arguments?.getString("tab") ?: "board",
-              initialCommunicationPubId = requestedPubId,
-              initialCommunicationEvtCode = requestedEvtCode,
-              initialNoteId = requestedNoteId,
-              initialNoteCategoryCode = requestedCategoryCode,
+              initialCommunicationPubId = entry.arguments?.getString("pubId"),
+              initialCommunicationEvtCode = entry.arguments?.getString("evtCode"),
+              initialNoteId = entry.arguments?.getString("noteId"),
+              initialNoteCategoryCode = entry.arguments?.getString("categoryCode"),
               onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
-              onOpenCommunication = if (isDirectDetail) null else { pubId, evtCode ->
-                navigateRoute("communication-detail/${Uri.encode(pubId)}/${Uri.encode(evtCode)}")
-              },
-              onOpenNote = if (isDirectDetail) null else { noteId, categoryCode ->
-                navigateRoute("note-detail/${Uri.encode(noteId)}/${Uri.encode(categoryCode)}")
-              },
             )
           }
         }
@@ -1330,48 +1336,6 @@ private fun AuthenticatedApp(
             CommunicationsRoute(
               initialTab = "notes",
               onBack = navController::navigateUp,
-              onOpenCommunication = { pubId, evtCode ->
-                navigateRoute("communication-detail/${Uri.encode(pubId)}/${Uri.encode(evtCode)}")
-              },
-              onOpenNote = { noteId, categoryCode ->
-                navigateRoute("note-detail/${Uri.encode(noteId)}/${Uri.encode(categoryCode)}")
-              },
-            )
-          }
-        }
-        composable(
-          route = "communication-detail/{pubId}/{evtCode}",
-          arguments = listOf(
-            navArgument("pubId") { type = NavType.StringType },
-            navArgument("evtCode") { type = NavType.StringType },
-          ),
-        ) { entry ->
-          val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
-          val communicationsViewModel: CommunicationsViewModel = hiltViewModel(parentEntry)
-          FluidRouteMotionHost(this@composable) {
-            CommunicationDetailRoute(
-              pubId = entry.arguments?.getString("pubId").orEmpty(),
-              evtCode = entry.arguments?.getString("evtCode").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = communicationsViewModel,
-            )
-          }
-        }
-        composable(
-          route = "note-detail/{id}/{categoryCode}",
-          arguments = listOf(
-            navArgument("id") { type = NavType.StringType },
-            navArgument("categoryCode") { type = NavType.StringType },
-          ),
-        ) { entry ->
-          val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
-          val communicationsViewModel: CommunicationsViewModel = hiltViewModel(parentEntry)
-          FluidRouteMotionHost(this@composable) {
-            NoteDetailRoute(
-              id = entry.arguments?.getString("id").orEmpty(),
-              categoryCode = entry.arguments?.getString("categoryCode").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = communicationsViewModel,
             )
           }
         }

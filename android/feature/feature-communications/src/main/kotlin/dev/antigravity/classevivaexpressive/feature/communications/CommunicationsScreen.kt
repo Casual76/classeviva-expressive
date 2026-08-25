@@ -10,12 +10,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.Campaign
@@ -27,7 +26,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -40,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -76,7 +75,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
 import dev.antigravity.fluidengine.ui.fluid.FluidNotification
 import dev.antigravity.fluidengine.ui.fluid.FluidNotificationTone
@@ -85,9 +84,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSectionAnchor
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionIndex
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionSelectionMotion
-import dev.antigravity.fluidengine.ui.fluid.FluidSheet
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidNotificationHostState
+import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -498,8 +497,6 @@ fun CommunicationsRoute(
   initialNoteCategoryCode: String? = null,
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
-  onOpenCommunication: ((pubId: String, evtCode: String) -> Unit)? = null,
-  onOpenNote: ((id: String, categoryCode: String) -> Unit)? = null,
   viewModel: CommunicationsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -507,6 +504,9 @@ fun CommunicationsRoute(
   var selectedTab by rememberSaveable { mutableStateOf(tabFromRoute(initialTab)) }
   var selectedFilter by rememberSaveable { mutableStateOf(FILTER_ALL) }
   var pendingUploadDetail by remember { mutableStateOf<CommunicationDetail?>(null) }
+  // Il rettangolo della riga toccata, in coordinate radice: e' da li' che il pop-up si espande.
+  // Un deep link non passa da nessuna riga e lo lascia null, e il modale apre dal centro.
+  var detailOrigin by remember { mutableStateOf<Rect?>(null) }
   val notificationHostState = LocalFluidNotificationHostState.current
   val launchRequest = remember(
     initialTab,
@@ -757,7 +757,9 @@ fun CommunicationsRoute(
             items = section.items,
             key = "communication-month-group:${section.key}",
           ) { communication ->
+            var rowBounds by remember { mutableStateOf<Rect?>(null) }
             FluidListRow(
+              modifier = Modifier.fluidExpandOrigin { rowBounds = it },
               title = communication.title,
               subtitle = communication.sender.ifBlank { "Bacheca scuola" },
               eyebrow = communication.date.toReadableDate(),
@@ -771,11 +773,8 @@ fun CommunicationsRoute(
                 )
               },
               onClick = {
-                if (onOpenCommunication != null) {
-                  onOpenCommunication(communication.pubId, communication.evtCode)
-                } else {
-                  viewModel.openCommunication(communication.pubId, communication.evtCode)
-                }
+                detailOrigin = rowBounds
+                viewModel.openCommunication(communication.pubId, communication.evtCode)
               },
               animatePress = true,
             )
@@ -803,7 +802,9 @@ fun CommunicationsRoute(
             items = section.items,
             key = "note-month-group:${section.key}",
           ) { note ->
+            var rowBounds by remember { mutableStateOf<Rect?>(null) }
             FluidListRow(
+              modifier = Modifier.fluidExpandOrigin { rowBounds = it },
               title = note.title.ifBlank { note.author.uppercase(italianLocale) },
               subtitle = note.categoryLabel,
               eyebrow = note.date.toReadableDate(),
@@ -817,11 +818,8 @@ fun CommunicationsRoute(
                 )
               },
               onClick = {
-                if (onOpenNote != null) {
-                  onOpenNote(note.id, note.categoryCode)
-                } else {
-                  viewModel.openNote(note.id, note.categoryCode)
-                }
+                detailOrigin = rowBounds
+                viewModel.openNote(note.id, note.categoryCode)
               },
               animatePress = true,
             )
@@ -833,182 +831,60 @@ fun CommunicationsRoute(
   }
   }
 
-  if (onOpenCommunication == null) state.selectedCommunication?.let { detail ->
-    var replyDraft by rememberSaveable(detail.communication.id, detail.replyText) {
-      mutableStateOf(detail.replyText.orEmpty())
-    }
-    val commSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    FluidSheet(
-      onDismissRequest = viewModel::dismissDetail,
-      sheetState = commSheetState,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
-        item {
-          Text(
-            text = detail.communication.title,
-            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
-          )
-        }
-        item {
-          val formattedDate = runCatching {
-            val parsed = LocalDate.parse(detail.communication.date)
-            parsed.format(DateTimeFormatter.ofPattern("d MMMM yyyy", italianLocale))
-          }.getOrDefault(detail.communication.date)
-          androidx.compose.foundation.layout.Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-          ) {
-            Text(
-              text = detail.communication.sender,
-              style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
-            )
-            Text(
-              text = formattedDate,
-              style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-            )
-            if (!detail.communication.category.isNullOrBlank()) {
-              FluidStatusBadge(label = detail.communication.category!!, tone = FluidTone.Info)
-            }
-            if (!detail.communication.read) {
-              FluidButton(
-                text = "Segna come letta",
-                onClick = {
-                  viewModel.markCommunicationRead(detail.communication.id)
-                },
-                style = FluidButtonStyle.Tinted,
-                fillWidth = true,
-              )
-            }
-          }
-        }
-        item {
-          val rendered = remember(detail.content, detail.communication.title) {
-            renderCommunicationContent(detail.content, detail.communication.title)
-          }
-          if (rendered.isBlank()) {
-            Text(
-              text = "Nessun contenuto fornito dal registro per questa comunicazione.",
-              style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-              color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-          } else {
-            Text(text = rendered)
-          }
-        }
-        val canReply = shouldShowReplyComposer(detail)
-        if (canReply) {
-          item { FluidSectionHeader("Risposta") }
-          item {
-            FluidTextField(
-              value = replyDraft,
-              onValueChange = { replyDraft = it },
-              modifier = Modifier.fillMaxWidth(),
-              label = if (detail.replyText != null) "Risposta inviata" else "Scrivi una risposta",
-              readOnly = detail.replyText != null,
-              minLines = 3,
-            )
-          }
-        }
-        if (detail.communication.noticeboardAttachments.isNotEmpty()) {
-          item { FluidSectionHeader("Allegati") }
-          items(detail.communication.noticeboardAttachments, key = { it.id }) { attachment ->
-            // Da v5.6.0: usiamo SEMPRE il path auth-aware (RestClient con
-            // refresh automatico del token). Il vecchio downloadAttachment
-            // usava DownloadManager che spesso falliva perche' non riceveva
-            // l'header Z-Auth-Token aggiornato.
-            val hasUrl = !attachment.url.isNullOrBlank()
-            FluidListRow(
-              title = attachment.name,
-              subtitle = attachment.mimeType ?: "Allegato",
-              meta = when {
-                !hasUrl -> "Allegato non disponibile in API"
-                attachment.portalOnly -> "Tocca per aprire. Se manca, lo scarico e lo tengo per 30 giorni"
-                else -> "Tocca per aprire. Se è già in memoria non riscarico nulla"
-              },
-              tone = FluidTone.Neutral,
-              badge = {
-                Icon(Icons.Rounded.AttachFile, contentDescription = null)
-                if (hasUrl) {
-                  FluidStatusBadge("CACHE 30G", tone = FluidTone.Info)
-                }
-              },
-              onClick = if (hasUrl) {
-                {
-                  viewModel.openAttachment(
-                    RemoteAttachment(
-                      id = attachment.id,
-                      name = attachment.name,
-                      url = attachment.url,
-                      mimeType = attachment.mimeType,
-                      portalOnly = attachment.portalOnly,
-                    ),
-                    context,
-                  )
-                }
-              } else {
-                null
-              },
-              animatePress = true,
-            )
-          }
-        }
-        item {
-          if (state.isSubmittingAction) {
-            FluidLoading()
-          } else {
-            CommunicationActions(
-              detail = detail,
-              canReply = canReply,
-              replyDraft = replyDraft,
-              onAcknowledge = { viewModel.acknowledge(detail) },
-              onReply = { viewModel.reply(detail, replyDraft) },
-              onJoin = { viewModel.join(detail) },
-              onUpload = {
-                pendingUploadDetail = detail
-                uploadLauncher.launch(arrayOf("*/*"))
-              },
-            )
-          }
-        }
-        item {
-          FluidButton(
-            text = "Chiudi",
-            onClick = viewModel::dismissDetail,
-            style = FluidButtonStyle.Filled,
-            fillWidth = true,
-          )
-        }
-      }
+  // Il dettaglio esisteva tre volte — una rotta, uno sheet inline, un terzo sheet per le azioni.
+  // Ora e' questo portale e basta: dichiarato qui, accanto allo stato che legge, e disegnato alla
+  // radice dell'app sopra la tab bar, dove il vetro campiona davvero la pagina.
+  //
+  // Il contenuto cattura il valore, non lo stato: l'ospite rigioca l'ultima lambda buona durante
+  // l'uscita, e una lambda che leggesse `state.selectedCommunication` troverebbe null a meta'
+  // dell'animazione di chiusura.
+  val selectedCommunication = state.selectedCommunication
+  FluidGlassModalPortal(
+    visible = selectedCommunication != null,
+    onDismissRequest = viewModel::dismissDetail,
+    origin = { detailOrigin },
+    paneTitle = "Dettaglio comunicazione",
+  ) {
+    if (selectedCommunication != null) {
+      CommunicationDetailContent(
+        detail = selectedCommunication,
+        isSubmittingAction = state.isSubmittingAction,
+        viewModel = viewModel,
+        context = context,
+        onUpload = { detail ->
+          pendingUploadDetail = detail
+          uploadLauncher.launch(arrayOf("*/*"))
+        },
+      )
     }
   }
 
-  if (onOpenNote == null) state.selectedNote?.let { detail ->
-    FluidSheet(
-      onDismissRequest = viewModel::dismissDetail,
-    ) {
-      LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
+  val selectedNote = state.selectedNote
+  FluidGlassModalPortal(
+    visible = selectedNote != null,
+    onDismissRequest = viewModel::dismissDetail,
+    origin = { detailOrigin },
+    paneTitle = "Dettaglio nota",
+  ) {
+    if (selectedNote != null) {
+      Column(
+        modifier = Modifier
+          .fillMaxWidth()
+          .verticalScroll(rememberScrollState())
+          .padding(horizontal = 24.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        item {
-          Text(
-            text = detail.note.title.ifBlank { detail.note.categoryLabel },
-            style = androidx.compose.material3.MaterialTheme.typography.headlineSmall,
-          )
-        }
-        item { Text(detail.content) }
-        item {
-          FluidButton(
-            text = "Chiudi",
-            onClick = viewModel::dismissDetail,
-            style = FluidButtonStyle.Filled,
-            fillWidth = true,
-          )
-        }
+        Text(
+          text = selectedNote.note.title.ifBlank { selectedNote.note.categoryLabel },
+          style = MaterialTheme.typography.headlineSmall,
+        )
+        Text(selectedNote.content)
+        FluidButton(
+          text = "Chiudi",
+          onClick = viewModel::dismissDetail,
+          style = FluidButtonStyle.Filled,
+          fillWidth = true,
+        )
       }
     }
   }
@@ -1021,257 +897,148 @@ fun CommunicationsRoute(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Il corpo del dettaglio di una circolare: contenuto, allegati e azioni, in un posto solo.
+ *
+ * Prima esisteva tre volte — una rotta, uno sheet inline e un terzo sheet annidato per le azioni —
+ * e le tre copie divergevano gia'. Le euristiche ([shouldShowAcknowledgeAction] e sorelle) restano
+ * identiche: decidevano cosa mostrare in uno sheet, ora decidono cosa mostrare nel modale.
+ */
 @Composable
-fun CommunicationDetailRoute(
-  pubId: String,
-  evtCode: String,
-  onBack: () -> Unit,
-  modifier: Modifier = Modifier,
-  viewModel: CommunicationsViewModel = hiltViewModel(),
+private fun CommunicationDetailContent(
+  detail: CommunicationDetail,
+  isSubmittingAction: Boolean,
+  viewModel: CommunicationsViewModel,
+  context: Context,
+  onUpload: (CommunicationDetail) -> Unit,
 ) {
-  val state by viewModel.state.collectAsStateWithLifecycle()
-  val context = androidx.compose.ui.platform.LocalContext.current
-  val base = remember(state.communications, pubId, evtCode) {
-    state.communications.firstOrNull { it.pubId == pubId && it.evtCode == evtCode }
+  var replyDraft by rememberSaveable(detail.communication.id, detail.replyText) {
+    mutableStateOf(detail.replyText.orEmpty())
   }
-  val detail = state.selectedCommunication
-    ?.takeIf { it.communication.pubId == pubId && it.communication.evtCode == evtCode }
-  val communication = detail?.communication ?: base
-  var showActions by rememberSaveable(pubId, evtCode) { mutableStateOf(false) }
-  var pendingUploadDetail by remember { mutableStateOf<CommunicationDetail?>(null) }
-
-  LaunchedEffect(pubId, evtCode) {
-    viewModel.openCommunication(pubId, evtCode)
-  }
-  DisposableEffect(viewModel, pubId, evtCode) {
-    onDispose { viewModel.dismissDetail() }
-  }
-  LaunchedEffect(state.pendingOpenUri) {
-    val uri = state.pendingOpenUri ?: return@LaunchedEffect
-    val intent = Intent(Intent.ACTION_VIEW, uri).apply {
-      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .verticalScroll(rememberScrollState())
+      .padding(horizontal = 24.dp, vertical = 20.dp),
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
+    Text(
+      text = detail.communication.title,
+      style = MaterialTheme.typography.headlineSmall,
+    )
+    val formattedDate = remember(detail.communication.date) {
+      runCatching {
+        LocalDate.parse(detail.communication.date)
+          .format(DateTimeFormatter.ofPattern("d MMMM yyyy", italianLocale))
+      }.getOrDefault(detail.communication.date)
     }
-    runCatching { context.startActivity(Intent.createChooser(intent, "Apri allegato")) }
-      .onSuccess { viewModel.clearPendingUri() }
-      .onFailure(viewModel::reportAttachmentOpenFailure)
-  }
-
-  val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-    val selected = pendingUploadDetail ?: return@rememberLauncherForActivityResult
-    pendingUploadDetail = null
-    uri?.let { readPickedDocument(context, it) }?.let { picked ->
-      viewModel.upload(selected, picked.fileName, picked.mimeType, picked.bytes)
-    }
-  }
-
-  if (communication == null) {
-    FluidScreen(
-      title = "Dettaglio comunicazione",
-      modifier = modifier,
-      onBack = onBack,
-    ) {
-      item(key = "communication-detail-missing") {
-        FluidEmptyState(
-          title = "Comunicazione non disponibile",
-          detail = "Il messaggio potrebbe essere stato rimosso o non ancora sincronizzato.",
-        )
-      }
-    }
-    return
-  }
-
-  FluidContainerScaffold(
-    title = "Dettaglio comunicazione",
-    modifier = modifier,
-    onBack = onBack,
-    hero = {
-      FluidListRow(
-        title = communication.title,
-        subtitle = communication.sender.ifBlank { "Bacheca scuola" },
-        eyebrow = communication.date.toReadableDate(),
-        meta = communication.contentPreview.takeIf(String::isNotBlank),
-        tone = communicationTone(communication),
-        leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
-        badge = {
-          FluidStatusBadge(
-            label = communicationBadgeLabel(communication),
-            tone = communicationTone(communication),
-          )
-        },
-        animatePress = false,
-      )
-    },
-    secondary = {
-      val rendered = remember(detail?.content, communication.title, communication.contentPreview) {
-        renderCommunicationContent(detail?.content ?: communication.contentPreview, communication.title)
-      }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
       Text(
-        text = rendered.ifBlank { "Nessun contenuto fornito dal registro per questa comunicazione." },
-        style = MaterialTheme.typography.bodyLarge,
-        color = if (rendered.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant
-        else MaterialTheme.colorScheme.onSurface,
+        text = detail.communication.sender,
+        style = MaterialTheme.typography.labelLarge,
       )
-      if (detail == null) {
-        FluidLoading()
+      Text(
+        text = formattedDate,
+        style = MaterialTheme.typography.bodySmall,
+      )
+      if (!detail.communication.category.isNullOrBlank()) {
+        FluidStatusBadge(label = detail.communication.category!!, tone = FluidTone.Info)
       }
-      if (communication.noticeboardAttachments.isNotEmpty()) {
-        FluidSectionHeader("Allegati")
-        communication.noticeboardAttachments.forEach { attachment ->
-          val hasUrl = !attachment.url.isNullOrBlank()
-          FluidListRow(
-            title = attachment.name,
-            subtitle = attachment.mimeType ?: "Allegato",
-            meta = if (hasUrl) "Apri con download autenticato e cache locale" else "Non disponibile in API",
-            tone = FluidTone.Neutral,
-            leading = { Icon(Icons.Rounded.AttachFile, contentDescription = null) },
-            onClick = if (hasUrl) {
-              {
-                viewModel.openAttachment(
-                  RemoteAttachment(
-                    id = attachment.id,
-                    name = attachment.name,
-                    url = attachment.url,
-                    mimeType = attachment.mimeType,
-                    portalOnly = attachment.portalOnly,
-                  ),
-                  context,
-                )
-              }
-            } else null,
-          )
-        }
-      }
-      if (detail != null && detail.hasTransactionalActions()) {
+      if (!detail.communication.read) {
         FluidButton(
-          text = "Azioni comunicazione",
-          onClick = { showActions = true },
+          text = "Segna come letta",
+          onClick = { viewModel.markCommunicationRead(detail.communication.id) },
           style = FluidButtonStyle.Tinted,
           fillWidth = true,
         )
       }
-    },
-  )
-
-  if (showActions && detail != null) {
-    var replyDraft by rememberSaveable(detail.communication.id, detail.replyText) {
-      mutableStateOf(detail.replyText.orEmpty())
     }
-    FluidSheet(onDismissRequest = { showActions = false }) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-      ) {
-        Text("Azioni comunicazione", style = MaterialTheme.typography.headlineSmall)
-        if (!detail.communication.read) {
-          FluidButton(
-            text = "Segna come letta",
-            onClick = { viewModel.markCommunicationRead(detail.communication.id) },
-            style = FluidButtonStyle.Tinted,
-            fillWidth = true,
-          )
-        }
-        val canReply = shouldShowReplyComposer(detail)
-        if (canReply) {
-          FluidTextField(
-            value = replyDraft,
-            onValueChange = { replyDraft = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = if (detail.replyText != null) "Risposta inviata" else "Scrivi una risposta",
-            readOnly = detail.replyText != null,
-            minLines = 3,
-          )
-        }
-        if (state.isSubmittingAction) {
-          FluidLoading()
-        } else {
-          CommunicationActions(
-            detail = detail,
-            canReply = canReply,
-            replyDraft = replyDraft,
-            onAcknowledge = { viewModel.acknowledge(detail) },
-            onReply = { viewModel.reply(detail, replyDraft) },
-            onJoin = { viewModel.join(detail) },
-            onUpload = {
-              pendingUploadDetail = detail
-              uploadLauncher.launch(arrayOf("*/*"))
-            },
-          )
-        }
-        FluidButton(
-          text = "Chiudi",
-          onClick = { showActions = false },
-          style = FluidButtonStyle.Plain,
-          fillWidth = true,
-        )
-      }
+    val rendered = remember(detail.content, detail.communication.title) {
+      renderCommunicationContent(detail.content, detail.communication.title)
     }
-  }
-
-  state.attachmentDialog?.let { dialog ->
-    AttachmentDownloadDialog(dialog, viewModel::dismissAttachmentDialog)
-  }
-}
-
-@Composable
-fun NoteDetailRoute(
-  id: String,
-  categoryCode: String,
-  onBack: () -> Unit,
-  modifier: Modifier = Modifier,
-  viewModel: CommunicationsViewModel = hiltViewModel(),
-) {
-  val state by viewModel.state.collectAsStateWithLifecycle()
-  val base = remember(state.notes, id, categoryCode) {
-    state.notes.firstOrNull { it.id == id && it.categoryCode == categoryCode }
-  }
-  val detail = state.selectedNote
-    ?.takeIf { it.note.id == id && it.note.categoryCode == categoryCode }
-  val note = detail?.note ?: base
-
-  LaunchedEffect(id, categoryCode) { viewModel.openNote(id, categoryCode) }
-  DisposableEffect(viewModel, id, categoryCode) {
-    onDispose { viewModel.dismissDetail() }
-  }
-
-  if (note == null) {
-    FluidScreen(title = "Dettaglio nota", modifier = modifier, onBack = onBack) {
-      item(key = "note-detail-missing") {
-        FluidEmptyState(
-          title = "Nota non disponibile",
-          detail = "La nota potrebbe essere stata rimossa o non ancora sincronizzata.",
-        )
-      }
-    }
-    return
-  }
-
-  FluidContainerScaffold(
-    title = "Dettaglio nota",
-    modifier = modifier,
-    onBack = onBack,
-    hero = {
-      FluidListRow(
-        title = note.title.ifBlank { note.author.uppercase(italianLocale) },
-        subtitle = note.categoryLabel,
-        eyebrow = note.date.toReadableDate(),
-        meta = note.contentPreview.takeIf(String::isNotBlank),
-        tone = noteTone(note),
-        leading = { Icon(Icons.Rounded.Gavel, contentDescription = null) },
-        badge = { FluidStatusBadge(if (note.read) "LETTA" else "NOTA", tone = noteTone(note)) },
-        animatePress = false,
-      )
-    },
-    secondary = {
-      if (detail == null) FluidLoading()
+    if (rendered.isBlank()) {
       Text(
-        text = detail?.content?.takeIf(String::isNotBlank)
-          ?: note.contentPreview.takeIf(String::isNotBlank)
-          ?: "Nessun dettaglio disponibile.",
-        style = MaterialTheme.typography.bodyLarge,
+        text = "Nessun contenuto fornito dal registro per questa comunicazione.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
-    },
-  )
+    } else {
+      Text(text = rendered)
+    }
+    val canReply = shouldShowReplyComposer(detail)
+    if (canReply) {
+      FluidSectionHeader("Risposta")
+      FluidTextField(
+        value = replyDraft,
+        onValueChange = { replyDraft = it },
+        modifier = Modifier.fillMaxWidth(),
+        label = if (detail.replyText != null) "Risposta inviata" else "Scrivi una risposta",
+        readOnly = detail.replyText != null,
+        minLines = 3,
+      )
+    }
+    if (detail.communication.noticeboardAttachments.isNotEmpty()) {
+      FluidSectionHeader("Allegati")
+      // Da v5.6.0: sempre il path auth-aware (RestClient con refresh automatico del token). Il
+      // vecchio downloadAttachment usava DownloadManager, che spesso falliva perche' non riceveva
+      // l'header Z-Auth-Token aggiornato.
+      detail.communication.noticeboardAttachments.forEach { attachment ->
+        val hasUrl = !attachment.url.isNullOrBlank()
+        FluidListRow(
+          title = attachment.name,
+          subtitle = attachment.mimeType ?: "Allegato",
+          meta = when {
+            !hasUrl -> "Allegato non disponibile in API"
+            attachment.portalOnly -> "Tocca per aprire. Se manca, lo scarico e lo tengo per 30 giorni"
+            else -> "Tocca per aprire. Se è già in memoria non riscarico nulla"
+          },
+          tone = FluidTone.Neutral,
+          badge = {
+            Icon(Icons.Rounded.AttachFile, contentDescription = null)
+            if (hasUrl) {
+              FluidStatusBadge("CACHE 30G", tone = FluidTone.Info)
+            }
+          },
+          onClick = if (hasUrl) {
+            {
+              viewModel.openAttachment(
+                RemoteAttachment(
+                  id = attachment.id,
+                  name = attachment.name,
+                  url = attachment.url,
+                  mimeType = attachment.mimeType,
+                  portalOnly = attachment.portalOnly,
+                ),
+                context,
+              )
+            }
+          } else {
+            null
+          },
+          animatePress = true,
+        )
+      }
+    }
+    if (isSubmittingAction) {
+      FluidLoading()
+    } else {
+      CommunicationActions(
+        detail = detail,
+        canReply = canReply,
+        replyDraft = replyDraft,
+        onAcknowledge = { viewModel.acknowledge(detail) },
+        onReply = { viewModel.reply(detail, replyDraft) },
+        onJoin = { viewModel.join(detail) },
+        onUpload = { onUpload(detail) },
+      )
+    }
+    FluidButton(
+      text = "Chiudi",
+      onClick = viewModel::dismissDetail,
+      style = FluidButtonStyle.Filled,
+      fillWidth = true,
+    )
+  }
 }
 
 private fun CommunicationDetail.hasTransactionalActions(): Boolean =
