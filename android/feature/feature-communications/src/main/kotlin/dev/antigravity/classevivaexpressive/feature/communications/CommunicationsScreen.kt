@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material.icons.rounded.Draw
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Gavel
 import androidx.compose.material.icons.rounded.MarkEmailRead
@@ -413,6 +414,42 @@ class CommunicationsViewModel @Inject constructor(
     selectedNote.value = null
   }
 
+  /**
+   * Firma dal menu contestuale, senza aprire il dettaglio.
+   *
+   * La conferma vuole il [CommunicationDetail] (porta con se' l'URL di acknowledge), che la riga
+   * di lista non ha: lo si recupera e si firma in un gesto solo. Il dettaglio NON viene mostrato —
+   * chi voleva leggere avrebbe toccato la riga.
+   */
+  fun acknowledgeFromList(pubId: String, evtCode: String) {
+    viewModelScope.launch {
+      isSubmittingAction.value = true
+      communicationsRepository.getCommunicationDetail(pubId, evtCode)
+        .onSuccess { detail ->
+          communicationsRepository.acknowledgeCommunication(detail)
+            .onSuccess {
+              lastMessage.value = CommunicationsMessage(
+                text = "Conferma inviata.",
+                kind = CommunicationsMessageKind.Success,
+              )
+            }
+            .onFailure {
+              lastMessage.value = CommunicationsMessage(
+                text = it.message ?: "Non sono riuscito a confermare la comunicazione.",
+                kind = CommunicationsMessageKind.Error,
+              )
+            }
+        }
+        .onFailure {
+          lastMessage.value = CommunicationsMessage(
+            text = it.message ?: "Non sono riuscito a confermare la comunicazione.",
+            kind = CommunicationsMessageKind.Error,
+          )
+        }
+      isSubmittingAction.value = false
+    }
+  }
+
   fun markAllAsRead() {
     viewModelScope.launch {
       communicationsRepository.markAllAsRead()
@@ -779,9 +816,10 @@ fun CommunicationsRoute(
                 detailOrigin = rowBounds
                 viewModel.openCommunication(communication.pubId, communication.evtCode)
               },
-              // La pressione lunga dice cosa sa fare, invece di non esistere: aprire (con
-              // allegati e risposta dentro il dettaglio), segnare come letta senza aprire,
-              // condividere il testo.
+              // La pressione lunga dice cosa sa fare: aprire, firmare senza aprire (quando il
+              // registro chiede la conferma), andare dritti agli allegati, segnare come letta,
+              // condividere. Le voci condizionali compaiono solo quando l'azione esiste davvero:
+              // un menu che promette cose finte e' peggio di un menu corto.
               contextActions = {
                 buildList {
                   add(
@@ -794,6 +832,46 @@ fun CommunicationsRoute(
                       },
                     ),
                   )
+                  if (communication.needsAck) {
+                    add(
+                      FluidContextAction(
+                        label = "Firma per confermare",
+                        icon = Icons.Rounded.Draw,
+                        onClick = {
+                          viewModel.acknowledgeFromList(communication.pubId, communication.evtCode)
+                        },
+                      ),
+                    )
+                  }
+                  // Direttamente l'allegato, non il dettaglio che lo contiene: una voce "Apri
+                  // allegato" che apriva il pop-up completo era una promessa non mantenuta. Con
+                  // piu' allegati, una voce ciascuno — col nome, cosi' si sceglie dal menu stesso.
+                  val openableAttachments = communication.noticeboardAttachments
+                    .filter { !it.url.isNullOrBlank() }
+                  openableAttachments.take(4).forEach { attachment ->
+                    add(
+                      FluidContextAction(
+                        label = if (openableAttachments.size == 1) {
+                          "Apri allegato"
+                        } else {
+                          "Apri ${attachment.name.ifBlank { "allegato" }}"
+                        },
+                        icon = Icons.Rounded.AttachFile,
+                        onClick = {
+                          viewModel.openAttachment(
+                            RemoteAttachment(
+                              id = attachment.id,
+                              name = attachment.name,
+                              url = attachment.url,
+                              mimeType = attachment.mimeType,
+                              portalOnly = attachment.portalOnly,
+                            ),
+                            context,
+                          )
+                        },
+                      ),
+                    )
+                  }
                   if (!communication.read) {
                     add(
                       FluidContextAction(
@@ -888,57 +966,47 @@ fun CommunicationsRoute(
   // Ora e' questo portale e basta: dichiarato qui, accanto allo stato che legge, e disegnato alla
   // radice dell'app sopra la tab bar, dove il vetro campiona davvero la pagina.
   //
-  // Il contenuto cattura il valore, non lo stato: l'ospite rigioca l'ultima lambda buona durante
-  // l'uscita, e una lambda che leggesse `state.selectedCommunication` troverebbe null a meta'
-  // dell'animazione di chiusura.
-  val selectedCommunication = state.selectedCommunication
+  // La variante con `item` e' quella che sopravvive alla propria chiusura: e' il portale a
+  // conservare l'ultimo dettaglio non-null e a ripassarlo a questa lambda per tutta l'uscita.
+  // Catturare il valore in proprio non bastava — la lambda e' un contenitore mutabile e al primo
+  // frame della chiusura le sue catture erano gia' null, quindi il testo spariva di colpo mentre lo
+  // scrim restava a sfumare da solo.
   FluidGlassModalPortal(
-    visible = selectedCommunication != null,
+    item = state.selectedCommunication,
     onDismissRequest = viewModel::dismissDetail,
     origin = { detailOrigin },
     paneTitle = "Dettaglio comunicazione",
-  ) {
-    if (selectedCommunication != null) {
-      CommunicationDetailContent(
-        detail = selectedCommunication,
-        isSubmittingAction = state.isSubmittingAction,
-        viewModel = viewModel,
-        context = context,
-        onUpload = { detail ->
-          pendingUploadDetail = detail
-          uploadLauncher.launch(arrayOf("*/*"))
-        },
-      )
-    }
+  ) { detail ->
+    CommunicationDetailContent(
+      detail = detail,
+      isSubmittingAction = state.isSubmittingAction,
+      viewModel = viewModel,
+      context = context,
+      onUpload = { current ->
+        pendingUploadDetail = current
+        uploadLauncher.launch(arrayOf("*/*"))
+      },
+    )
   }
 
-  val selectedNote = state.selectedNote
   FluidGlassModalPortal(
-    visible = selectedNote != null,
+    item = state.selectedNote,
     onDismissRequest = viewModel::dismissDetail,
     origin = { detailOrigin },
     paneTitle = "Dettaglio nota",
-  ) {
-    if (selectedNote != null) {
-      Column(
-        modifier = Modifier
-          .fillMaxWidth()
-          .verticalScroll(rememberScrollState())
-          .padding(horizontal = 24.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
-        Text(
-          text = selectedNote.note.title.ifBlank { selectedNote.note.categoryLabel },
-          style = MaterialTheme.typography.headlineSmall,
-        )
-        Text(selectedNote.content)
-        FluidButton(
-          text = "Chiudi",
-          onClick = viewModel::dismissDetail,
-          style = FluidButtonStyle.Filled,
-          fillWidth = true,
-        )
-      }
+  ) { noteDetail ->
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .verticalScroll(rememberScrollState())
+        .padding(horizontal = 24.dp, vertical = 20.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text(
+        text = noteDetail.note.title.ifBlank { noteDetail.note.categoryLabel },
+        style = MaterialTheme.typography.headlineSmall,
+      )
+      Text(noteDetail.content)
     }
   }
 
@@ -1039,18 +1107,12 @@ private fun CommunicationDetailContent(
         val hasUrl = !attachment.url.isNullOrBlank()
         FluidListRow(
           title = attachment.name,
-          subtitle = attachment.mimeType ?: "Allegato",
-          meta = when {
-            !hasUrl -> "Allegato non disponibile in API"
-            attachment.portalOnly -> "Tocca per aprire. Se manca, lo scarico e lo tengo per 30 giorni"
-            else -> "Tocca per aprire. Se è già in memoria non riscarico nulla"
-          },
+          // Una riga sola: dentro un pop-up ogni riga di spiegazione spinge il contenuto vero
+          // fuori dallo schermo, e "come funziona la cache" non e' una cosa da leggere ogni volta.
+          subtitle = if (hasUrl) "Tocca per aprire" else "Non disponibile in API",
           tone = FluidTone.Neutral,
           badge = {
             Icon(Icons.Rounded.AttachFile, contentDescription = null)
-            if (hasUrl) {
-              FluidStatusBadge("CACHE 30G", tone = FluidTone.Info)
-            }
           },
           onClick = if (hasUrl) {
             {
@@ -1085,12 +1147,9 @@ private fun CommunicationDetailContent(
         onUpload = { onUpload(detail) },
       )
     }
-    FluidButton(
-      text = "Chiudi",
-      onClick = viewModel::dismissDetail,
-      style = FluidButtonStyle.Filled,
-      fillWidth = true,
-    )
+    // Niente pulsante "Chiudi": un pop-up che tiene la pagina visibile dietro di se' si chiude
+    // come ci si aspetta — toccando la pagina, o con back. Un pulsantone pieno in fondo diceva
+    // "questa e' una schermata", che e' esattamente cio' che il modale non e'.
   }
 }
 

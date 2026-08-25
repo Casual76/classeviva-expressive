@@ -49,5 +49,13 @@ fun <T> LazyListScope.fluidGlassGroups(
   }
 }
 
-/** Quante righe stanno in un pannello prima che ne cominci un altro. Vedi [fluidGlassGroups]. */
-private const val FluidGlassGroupMaxRows = 12
+/**
+ * Quante righe stanno in un pannello prima che ne cominci un altro. Vedi [fluidGlassGroups].
+ *
+ * Anche un numero di *composizione*, non solo di texture: un pannello e' un item solo della lista
+ * pigra, e tutto il suo contenuto viene composto e misurato nel frame in cui entra. A dodici righe
+ * di comunicazioni multi-riga quel frame costava 50-70 ms — il singhiozzo che si vedeva a ogni
+ * pannello nuovo anche su un telefono veloce. Otto tiene il pannello alla scala a cui il materiale
+ * si legge e il frame d'ingresso dentro il bilancio.
+ */
+private const val FluidGlassGroupMaxRows = 8

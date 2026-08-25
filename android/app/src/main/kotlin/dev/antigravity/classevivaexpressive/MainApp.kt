@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -160,7 +161,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidFoldAlignment
 import dev.antigravity.fluidengine.ui.fluid.FluidFoldingTabBar
 import dev.antigravity.fluidengine.ui.fluid.FluidFoldingTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidTabItem
-import dev.antigravity.fluidengine.ui.fluid.FluidTabRail
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidNotificationHostState
@@ -742,12 +742,12 @@ internal fun TopLevelNavigationSuite(
       .nestedScroll(chromeScrollConnection)
       .then(if (showNavigationSuite) Modifier.nestedScroll(barFold.connection) else Modifier),
   ) {
-    val useRail = maxWidth >= 600.dp
-    val bottomInset = if (showNavigationSuite && !useRail) {
-      FluidFoldingTabBarDefaults.ContentInset
-    } else {
-      0.dp
-    }
+    // Una navigazione sola, in basso, su ogni formato. Il rail laterale del tablet e' stato
+    // provato e tolto: era una colonna alta un pollice con quattro voci in cima, il suo fondale
+    // non coincideva mai con quello della pagina, e soprattutto era una *seconda* navigazione da
+    // imparare per la stessa app. La barra ripiegabile fa le stesse cose meglio, e sul tablet il
+    // pollice sta comunque in basso.
+    val bottomInset = if (showNavigationSuite) FluidFoldingTabBarDefaults.ContentInset else 0.dp
     val backdrop = chromeController.activeBackdrop.value ?: fallbackBackdrop
 
     ProvideFluidChrome(
@@ -755,11 +755,7 @@ internal fun TopLevelNavigationSuite(
       bottomInset = bottomInset,
       scrollToTop = scrollToTop,
     ) {
-      Box(
-        modifier = Modifier
-          .fillMaxSize()
-          .padding(start = if (showNavigationSuite && useRail) 100.dp else 0.dp),
-      ) {
+      Box(modifier = Modifier.fillMaxSize()) {
         content()
       }
     }
@@ -769,51 +765,36 @@ internal fun TopLevelNavigationSuite(
     }
     val onReselect: (FluidTabItem) -> Unit = { item -> onReselectRoute(item.route) }
 
-    if (useRail) {
-      AnimatedVisibility(
-        visible = showNavigationSuite,
-        enter = slideInHorizontally(animationSpec = barSlideSpec()) { -it },
-        exit = slideOutHorizontally(animationSpec = barSlideSpec()) { -it },
-        modifier = Modifier
-          .align(Alignment.CenterStart)
-          .systemBarsPadding()
-          .padding(start = 14.dp),
-      ) {
-        FluidTabRail(
-          items = tabItems,
-          selectedRoute = currentRoute,
-          onSelect = onSelect,
-          onReselect = onReselect,
-          backdrop = backdrop,
-        )
-      }
-    } else {
-      AnimatedVisibility(
-        visible = showNavigationSuite,
-        enter = slideInVertically(animationSpec = barSlideSpec()) { it },
-        exit = slideOutVertically(animationSpec = barSlideSpec()) { it },
-        modifier = Modifier
-          .align(Alignment.BottomCenter)
-          .navigationBarsPadding()
-          .padding(
-            horizontal = FluidFoldingTabBarDefaults.HorizontalMargin,
-            vertical = FluidFoldingTabBarDefaults.BottomMargin,
-          ),
-      ) {
-        FluidFoldingTabBar(
-          items = tabItems,
-          selectedRoute = currentRoute,
-          onSelect = onSelect,
-          onReselect = onReselect,
-          backdrop = backdrop,
-          fold = { barFold.progress.value },
-          // Ripiegata, l'unica scheda rimasta e' quella su cui sei: un tocco li' sarebbe una
-          // riselezione, cioe' "riportami in cima", che e' l'opposto di quello che serve a una
-          // barra chiusa. Riaprirla e' la cosa ovvia da fare con una barra chiusa.
-          onExpandRequest = barFold::unfold,
-          foldAlignment = FluidFoldAlignment.Start,
-        )
-      }
+    AnimatedVisibility(
+      visible = showNavigationSuite,
+      enter = slideInVertically(animationSpec = barSlideSpec()) { it },
+      exit = slideOutVertically(animationSpec = barSlideSpec()) { it },
+      modifier = Modifier
+        // Su uno schermo largo la barra non si stira da bordo a bordo: cinque schede spalmate su
+        // ventisette centimetri sono bersagli a mezzo schermo l'uno dall'altro. Resta larga come
+        // su un telefono e sta a sinistra, dalla parte del pollice — la stessa parte dove poi si
+        // raccoglie ripiegandosi.
+        .align(if (maxWidth >= 600.dp) Alignment.BottomStart else Alignment.BottomCenter)
+        .widthIn(max = 500.dp)
+        .navigationBarsPadding()
+        .padding(
+          horizontal = FluidFoldingTabBarDefaults.HorizontalMargin,
+          vertical = FluidFoldingTabBarDefaults.BottomMargin,
+        ),
+    ) {
+      FluidFoldingTabBar(
+        items = tabItems,
+        selectedRoute = currentRoute,
+        onSelect = onSelect,
+        onReselect = onReselect,
+        backdrop = backdrop,
+        fold = { barFold.progress.value },
+        // Ripiegata, l'unica scheda rimasta e' quella su cui sei: un tocco li' sarebbe una
+        // riselezione, cioe' "riportami in cima", che e' l'opposto di quello che serve a una
+        // barra chiusa. Riaprirla e' la cosa ovvia da fare con una barra chiusa.
+        onExpandRequest = barFold::unfold,
+        foldAlignment = FluidFoldAlignment.Start,
+      )
     }
   }
 }

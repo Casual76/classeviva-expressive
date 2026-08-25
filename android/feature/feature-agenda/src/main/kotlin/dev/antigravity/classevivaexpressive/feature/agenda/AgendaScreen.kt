@@ -39,7 +39,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +49,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -99,7 +99,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
-import dev.antigravity.fluidengine.ui.fluid.FluidSheet
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
+import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -241,6 +242,7 @@ fun AgendaRoute(
   val context = LocalContext.current
   var showDialog by rememberSaveable { mutableStateOf(false) }
   var selectedEntry by remember { mutableStateOf<AgendaEntry?>(null) }
+  var detailOrigin by remember { mutableStateOf<Rect?>(null) }
   val initialDateValue = remember(initialDate) {
     initialDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
   }
@@ -365,9 +367,12 @@ fun AgendaRoute(
       }
     } else {
       fluidGlassGroups(selectedDayEntries) { entry ->
+        var rowBounds by remember { mutableStateOf<Rect?>(null) }
         AgendaEntryRow(
           entry = entry,
+          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
           onClick = {
+            detailOrigin = rowBounds
             if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
           },
           // Era un onLongClick che condivideva e basta, senza dirlo: la stessa pressione ora
@@ -379,6 +384,7 @@ fun AgendaRoute(
                 label = "Dettagli",
                 icon = categoryIcon(entry.category),
                 onClick = {
+                  detailOrigin = rowBounds
                   if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
                 },
               ),
@@ -394,8 +400,14 @@ fun AgendaRoute(
     }
   }
 
-  if (showDialog) {
-    AddEventSheet(
+  // Portali, non sheet: dichiarati sempre e visibili a comando, cosi' l'uscita non si smonta
+  // insieme alla condizione che li mostrava.
+  FluidGlassModalPortal(
+    visible = showDialog,
+    onDismissRequest = { showDialog = false },
+    paneTitle = "Nuovo evento",
+  ) {
+    AddEventContent(
       onDismiss = { showDialog = false },
       onSave = { title, description, subject, date, time ->
         viewModel.addCustomEvent(title, description, subject, date, time)
@@ -404,10 +416,14 @@ fun AgendaRoute(
     )
   }
 
-  selectedEntry?.let { entry ->
-    AgendaDetailSheet(
+  FluidGlassModalPortal(
+    item = selectedEntry,
+    onDismissRequest = { selectedEntry = null },
+    origin = { detailOrigin },
+    paneTitle = "Dettaglio agenda",
+  ) { entry ->
+    AgendaDetailContent(
       entry = entry,
-      onDismiss = { selectedEntry = null },
       onShare = { shareEntry(context, entry) },
     )
   }
@@ -617,20 +633,14 @@ private fun AgendaEntryRow(
   )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AgendaDetailSheet(
+private fun AgendaDetailContent(
   entry: AgendaEntry,
-  onDismiss: () -> Unit,
   onShare: () -> Unit,
 ) {
-  val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   var showHistory by rememberSaveable(entry.id) { mutableStateOf(false) }
 
-  FluidSheet(
-    onDismissRequest = onDismiss,
-    sheetState = sheetState,
-  ) {
+  Box {
     LazyColumn(
       modifier = Modifier.fillMaxWidth(),
       contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
@@ -692,23 +702,14 @@ private fun AgendaDetailSheet(
               fillWidth = true,
             )
           }
-          Row(
+          // Niente bottone "Chiudi": il popover si congeda con un tocco fuori o col back, e un
+          // bottone che duplica il gesto occupava meta' della riga delle azioni.
+          FluidButton(
+            text = "Condividi",
+            onClick = onShare,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-          ) {
-            FluidButton(
-              text = "Condividi",
-              onClick = onShare,
-              modifier = Modifier.weight(1f),
-              style = FluidButtonStyle.Tinted,
-            )
-            FluidButton(
-              text = "Chiudi",
-              onClick = onDismiss,
-              modifier = Modifier.weight(1f),
-              style = FluidButtonStyle.Plain,
-            )
-          }
+            style = FluidButtonStyle.Tinted,
+          )
         }
       }
       if (showHistory && entry.history.isNotEmpty()) {
@@ -808,7 +809,7 @@ private fun InfoLine(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddEventSheet(
+private fun AddEventContent(
   onDismiss: () -> Unit,
   onSave: (title: String, description: String, subject: String, date: String, time: String?) -> Unit,
 ) {
@@ -820,7 +821,7 @@ private fun AddEventSheet(
   var showDatePicker by rememberSaveable { mutableStateOf(false) }
   var showTimePicker by rememberSaveable { mutableStateOf(false) }
 
-  FluidSheet(onDismissRequest = onDismiss) {
+  Box {
     LazyColumn(
       modifier = Modifier.fillMaxWidth(),
       contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),

@@ -7,7 +7,6 @@ import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionAnchor
 
 class LessonsTimelineTest {
 
@@ -60,63 +59,6 @@ class LessonsTimelineTest {
     assertEquals(listOf("l1", "l2"), sections.first().lessons.map(Lesson::id))
     assertTrue(sections.drop(1).all { it.lessons.isEmpty() })
     assertEquals(DayOfWeek.SATURDAY, sections.last().date.dayOfWeek)
-  }
-
-  @Test
-  fun activeAnchor_usesLatestHeaderThatCrossedTheActivationLine() {
-    val anchors = listOf(
-      FluidSectionAnchor("mon", "Lunedì", 6),
-      FluidSectionAnchor("tue", "Martedì", 9),
-      FluidSectionAnchor("wed", "Mercoledì", 12),
-    )
-    val indices = intArrayOf(8, 9, 10, 12)
-    val offsets = intArrayOf(-120, 48, 180, 520)
-
-    val active = activeTimelineAnchorForViewport(
-      anchors = anchors,
-      firstVisibleItemIndex = 8,
-      activationLine = 64,
-      visibleItemCount = indices.size,
-      itemIndexAt = indices::get,
-      itemOffsetAt = offsets::get,
-    )
-
-    assertEquals("tue", active?.key)
-  }
-
-  @Test
-  fun activeAnchor_fallsBackToTheSectionOwningTheFirstVisibleItem() {
-    val anchors = listOf(
-      FluidSectionAnchor("mon", "Lunedì", 6),
-      FluidSectionAnchor("tue", "Martedì", 9),
-    )
-    val indices = intArrayOf(7, 8)
-    val offsets = intArrayOf(-20, 160)
-
-    val active = activeTimelineAnchorForViewport(
-      anchors = anchors,
-      firstVisibleItemIndex = 7,
-      activationLine = 64,
-      visibleItemCount = indices.size,
-      itemIndexAt = indices::get,
-      itemOffsetAt = offsets::get,
-    )
-
-    assertEquals("mon", active?.key)
-  }
-
-  @Test
-  fun timelineAnchors_accountForHeaderAndOneStableEmptyRow() {
-    val anchors = buildLessonTimelineAnchors(
-      sections = listOf(
-        LessonTimelineSectionLayout("mon", "Lunedì", contentItemCount = 2),
-        LessonTimelineSectionLayout("tue", "Martedì", contentItemCount = 0),
-        LessonTimelineSectionLayout("wed", "Mercoledì", contentItemCount = 3),
-      ),
-      firstItemIndex = 6,
-    )
-
-    assertEquals(listOf(6, 9, 11), anchors.map { it.itemIndex })
   }
 
   @Test

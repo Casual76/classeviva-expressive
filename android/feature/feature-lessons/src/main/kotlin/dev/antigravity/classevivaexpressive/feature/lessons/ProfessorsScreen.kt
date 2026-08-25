@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,7 +50,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
-import dev.antigravity.fluidengine.ui.fluid.FluidSheet
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -487,8 +488,13 @@ fun ProfessorsRoute(
     }
   }
 
-  if (onOpenProfessor == null) state.selectedProfessor?.let { prof ->
-    ProfessorDetailSheet(prof = prof, onDismiss = viewModel::dismissProfessor)
+  // Portale, non sheet: dichiarato sempre, cosi' l'uscita non si smonta insieme alla selezione.
+  FluidGlassModalPortal(
+    item = if (onOpenProfessor == null) state.selectedProfessor else null,
+    onDismissRequest = viewModel::dismissProfessor,
+    paneTitle = "Dettaglio docente",
+  ) { prof ->
+    ProfessorDetailContent(prof = prof)
   }
 }
 
@@ -593,11 +599,9 @@ fun ProfessorDetailRoute(
   )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ProfessorDetailSheet(
+private fun ProfessorDetailContent(
   prof: ProfessorStats,
-  onDismiss: () -> Unit,
 ) {
   val strictnessTone = when (prof.strictnessLabel) {
     "Molto esigente" -> FluidTone.Danger
@@ -606,7 +610,7 @@ private fun ProfessorDetailSheet(
     else -> FluidTone.Success
   }
 
-  FluidSheet(onDismissRequest = onDismiss) {
+  Box {
     LazyColumn(
       modifier = Modifier.fillMaxWidth(),
       contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),

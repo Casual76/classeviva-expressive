@@ -84,7 +84,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
-import dev.antigravity.fluidengine.ui.fluid.FluidSheet
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEditorialCard
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -582,8 +582,14 @@ fun GradesRoute(
     }
   }
 
-  if (showSimulationDialog) {
-    AddSimulationSheet(
+  // Portali, non sheet: dichiarati sempre, visibili a comando — un portale dentro un `?.let` si
+  // smonterebbe alla chiusura e porterebbe via l'animazione di uscita.
+  FluidGlassModalPortal(
+    visible = showSimulationDialog,
+    onDismissRequest = { showSimulationDialog = false },
+    paneTitle = "Voto simulato",
+  ) {
+    AddSimulationContent(
       onDismiss = { showSimulationDialog = false },
       onSave = { subject, value, type, note ->
         viewModel.addSimulatedGrade(subject, value, type, note)
@@ -592,21 +598,28 @@ fun GradesRoute(
     )
   }
 
-  detailSubject?.let { subject ->
-    SubjectDetailSheet(
+  FluidGlassModalPortal(
+    item = detailSubject,
+    onDismissRequest = { detailSubject = null },
+    paneTitle = "Dettaglio materia",
+  ) { subject ->
+    SubjectDetailContent(
       subject = subject,
       grades = filteredGrades.filter { it.subject == subject },
-      onDismiss = { detailSubject = null },
       onOpenGrade = openGrade,
-      onSetGoal = { goalDialogSubject = subject }
+      onSetGoal = { goalDialogSubject = subject },
     )
   }
 
-  goalDialogSubject?.let { subject ->
+  FluidGlassModalPortal(
+    item = goalDialogSubject,
+    onDismissRequest = { goalDialogSubject = null },
+    paneTitle = "Obiettivo materia",
+  ) { subject ->
     val selectedGoal = state.subjectGoals.firstOrNull { it.subject == subject && it.periodCode == effectivePeriodCode }
       ?: state.subjectGoals.firstOrNull { it.subject == subject && it.periodCode == null }
-      
-    GoalSheet(
+
+    GoalContent(
       subject = subject,
       initialValue = selectedGoal?.targetAverage ?: 6.0,
       periodLabel = effectivePeriodLabel(state.periods, effectivePeriodCode),
@@ -622,44 +635,40 @@ fun GradesRoute(
     )
   }
 
-  selectedGrade?.let { grade ->
+  FluidGlassModalPortal(
+    item = selectedGrade,
+    onDismissRequest = viewModel::dismissGrade,
+    paneTitle = "Dettaglio voto",
+  ) { grade ->
     var showHistory by rememberSaveable(grade.id) { mutableStateOf(false) }
-    FluidSheet(onDismissRequest = viewModel::dismissGrade) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
-        Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
-        FluidListRow(
-          title = grade.valueLabel,
-          subtitle = grade.type.ifBlank { "Valutazione" },
-          eyebrow = grade.date.toReadableDate(),
-          meta = listOfNotNull(grade.description, grade.notes, grade.teacher).joinToString(" / "),
-          tone = gradeTone(grade.numericValue),
-          badge = {
-            if (grade.history.isNotEmpty()) {
-              FluidStatusBadge(label = "MODIFICATO", tone = FluidTone.Info)
-            }
-            GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
+    Column(
+      modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
+      FluidListRow(
+        title = grade.valueLabel,
+        subtitle = grade.type.ifBlank { "Valutazione" },
+        eyebrow = grade.date.toReadableDate(),
+        meta = listOfNotNull(grade.description, grade.notes, grade.teacher).joinToString(" / "),
+        tone = gradeTone(grade.numericValue),
+        badge = {
+          if (grade.history.isNotEmpty()) {
+            FluidStatusBadge(label = "MODIFICATO", tone = FluidTone.Info)
           }
-        )
-        if (grade.history.isNotEmpty()) {
-          FluidButton(
-            text = if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${grade.history.size})",
-            onClick = { showHistory = !showHistory },
-            style = FluidButtonStyle.Filled,
-            fillWidth = true,
-          )
+          GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
         }
-        if (showHistory && grade.history.isNotEmpty()) {
-          GradeHistorySection(grade = grade)
-        }
+      )
+      if (grade.history.isNotEmpty()) {
         FluidButton(
-          text = "Chiudi",
-          onClick = viewModel::dismissGrade,
-          style = FluidButtonStyle.Plain,
+          text = if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${grade.history.size})",
+          onClick = { showHistory = !showHistory },
+          style = FluidButtonStyle.Filled,
           fillWidth = true,
         )
+      }
+      if (showHistory && grade.history.isNotEmpty()) {
+        GradeHistorySection(grade = grade)
       }
     }
   }
@@ -794,12 +803,10 @@ private fun GradeVersionRow(
   )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SubjectDetailSheet(
+private fun SubjectDetailContent(
   subject: String,
   grades: List<Grade>,
-  onDismiss: () -> Unit,
   onOpenGrade: (String) -> Unit,
   onSetGoal: () -> Unit
 ) {
@@ -807,7 +814,7 @@ private fun SubjectDetailSheet(
   val oralAvg = calculateSubjectAverage(grades.filter { it.type.contains("orale", true) })
   val practicalAvg = calculateSubjectAverage(grades.filter { it.type.contains("pratico", true) })
 
-  FluidSheet(onDismissRequest = onDismiss) {
+  Box {
     LazyColumn(
       modifier = Modifier.fillMaxWidth(),
       contentPadding = PaddingValues(24.dp),
@@ -873,9 +880,8 @@ private fun PeriodSelector(
   )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GoalSheet(
+private fun GoalContent(
   subject: String,
   initialValue: Double,
   periodLabel: String,
@@ -888,7 +894,7 @@ private fun GoalSheet(
   }
   val numeric = valueText.parseDecimal()
 
-  FluidSheet(onDismissRequest = onDismiss) {
+  Box {
     Column(
       modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -925,9 +931,8 @@ private fun GoalSheet(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddSimulationSheet(
+private fun AddSimulationContent(
   onDismiss: () -> Unit,
   onSave: (subject: String, value: Double, type: String, note: String) -> Unit,
 ) {
@@ -937,7 +942,7 @@ private fun AddSimulationSheet(
   var note by rememberSaveable { mutableStateOf("") }
   val numeric = valueText.parseDecimal()
 
-  FluidSheet(onDismissRequest = onDismiss) {
+  Box {
     Column(
       modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),

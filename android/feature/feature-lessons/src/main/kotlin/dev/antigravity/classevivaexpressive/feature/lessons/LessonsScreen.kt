@@ -9,7 +9,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -33,14 +31,12 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,7 +44,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -81,9 +76,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import dev.antigravity.fluidengine.ui.fluid.FluidAlert
@@ -92,16 +85,14 @@ import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassIconButton
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionAnchor
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionIndex
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionSelectionMotion
-import dev.antigravity.fluidengine.ui.fluid.FluidSheet
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
-import dev.antigravity.fluidengine.ui.fluid.activeFluidSectionForItemIndex
+import dev.antigravity.fluidengine.ui.fluid.currentCanvasBackdrop
+import dev.antigravity.fluidengine.ui.fluid.rememberEmptyGlassBackdrop
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -316,14 +307,22 @@ fun LessonsRoute(
   val activeListState = if (selectedTab == TAB_TIMETABLE) templateListState else historyListState
   val scope = rememberCoroutineScope()
   val density = LocalDensity.current
-  val topBarHeight = FluidScreenDefaults.topBarHeight()
-  val anchorScrollOffset = with(density) { -(topBarHeight + 8.dp).roundToPx() }
-  val historyWeekMotion = remember { Animatable(0f) }
-  var previousAnimatedWeekOffset by remember { mutableIntStateOf(weekOffset) }
-  var templateScrollJob by remember { mutableStateOf<Job?>(null) }
-  var historyScrollJob by remember { mutableStateOf<Job?>(null) }
-  var templateProgrammaticScroll by remember { mutableStateOf(false) }
-  var historyProgrammaticScroll by remember { mutableStateOf(false) }
+
+  // Un giorno alla volta. La lista mostrava la settimana intera in sei sezioni, e i tasti giorno
+  // scrollavano fino alla sezione — con la barra laterale a fare da terza mano. Ora i tasti
+  // *scelgono* la giornata visibile, il cambio scivola di lato come ogni altra transizione
+  // dell'app, e scroll sincronizzato, ancore e barra laterale non hanno piu' niente da fare.
+  val dayMotion = remember { Animatable(0f) }
+  fun slideDay(direction: Float) {
+    scope.launch {
+      dayMotion.snapTo(direction * with(density) { 28.dp.toPx() })
+      dayMotion.animateTo(0f, FluidMotion.standard())
+    }
+  }
+  val dayMotionModifier = Modifier.graphicsLayer {
+    translationX = dayMotion.value
+    alpha = 1f - (abs(dayMotion.value) / 140.dp.toPx()).coerceIn(0f, 0.16f)
+  }
 
   val templateByDay = remember(state.timetableTemplate) { state.timetableTemplate.slotsByDay() }
   val visibleDays = remember { stableSchoolDays() }
@@ -353,30 +352,6 @@ fun LessonsRoute(
   }
   val weekLessonCount = remember(historySections) { historySections.sumOf { it.lessons.size } }
 
-  val leadingContentCount = 2 + if (state.lastMessage.isNullOrBlank()) 0 else 1
-  val templateTimelineStart = 1 + leadingContentCount + 2 + if (state.canImportOfficialTimetable) 1 else 0
-  val historyTimelineStart = 1 + leadingContentCount + 2
-  val templateAnchors = remember(templateSections, templateTimelineStart) {
-    buildLessonTimelineAnchors(
-      sections = templateSections.map {
-        LessonTimelineSectionLayout(it.day.name, it.day.longLabel(), it.blocks.size)
-      },
-      firstItemIndex = templateTimelineStart,
-    )
-  }
-  val historyAnchors = remember(historySections, historyTimelineStart) {
-    buildLessonTimelineAnchors(
-      sections = historySections.map {
-        LessonTimelineSectionLayout(
-          key = it.date.toString(),
-          label = it.date.format(weekdayShortFormatter).replaceFirstChar(Char::uppercase),
-          contentItemCount = it.lessons.size,
-        )
-      },
-      firstItemIndex = historyTimelineStart,
-    )
-  }
-
   LaunchedEffect(templateDayOptions) {
     if (selectedTemplateDayKey == null || templateDayOptions.none { it.key == selectedTemplateDayKey }) {
       val todayKey = LocalDate.now().dayOfWeek.name
@@ -392,102 +367,36 @@ fun LessonsRoute(
     }
   }
 
-  LaunchedEffect(templateListState, templateAnchors, anchorScrollOffset) {
-    snapshotFlow {
-      if (templateProgrammaticScroll) null
-      else activeTimelineAnchor(templateListState, templateAnchors, anchorScrollOffset)?.key
-    }
-      .distinctUntilChanged()
-      .collect { key ->
-        if (key != null) selectedTemplateDayKey = key
-      }
-  }
-  LaunchedEffect(historyListState, historyAnchors, anchorScrollOffset) {
-    snapshotFlow {
-      if (historyProgrammaticScroll) null
-      else activeTimelineAnchor(historyListState, historyAnchors, anchorScrollOffset)?.key
-    }
-      .distinctUntilChanged()
-      .collect { key ->
-        if (key != null) selectedHistoryDayKey = key
-      }
+  fun selectTemplateDay(key: String) {
+    if (key == selectedTemplateDayKey) return
+    val from = templateDayOptions.indexOfFirst { it.key == selectedTemplateDayKey }
+    val to = templateDayOptions.indexOfFirst { it.key == key }
+    selectedTemplateDayKey = key
+    slideDay(if (to >= from) 1f else -1f)
   }
 
-  LaunchedEffect(weekOffset, historyAnchors) {
-    if (weekOffset == previousAnimatedWeekOffset || historyAnchors.isEmpty()) return@LaunchedEffect
-    val direction = if (weekOffset < previousAnimatedWeekOffset) -1f else 1f
-    previousAnimatedWeekOffset = weekOffset
-    val target = historyAnchors.firstOrNull { it.key == selectedHistoryDayKey } ?: historyAnchors.first()
-    historyProgrammaticScroll = true
-    try {
-      historyListState.scrollToItem(target.itemIndex, anchorScrollOffset)
-      historyWeekMotion.snapTo(direction * with(density) { 28.dp.toPx() })
-      historyWeekMotion.animateTo(0f, FluidMotion.standard())
-    } finally {
-      historyProgrammaticScroll = false
-    }
-  }
-
-  fun selectTemplateSection(anchor: FluidSectionAnchor, motion: FluidSectionSelectionMotion) {
-    selectedTemplateDayKey = anchor.key
-    templateScrollJob?.cancel()
-    templateScrollJob = scope.launch {
-      templateProgrammaticScroll = true
-      try {
-        if (motion == FluidSectionSelectionMotion.Immediate) {
-          templateListState.stopScroll()
-          templateListState.scrollToItem(anchor.itemIndex, anchorScrollOffset)
-        } else {
-          templateListState.animateScrollToItem(anchor.itemIndex, anchorScrollOffset)
-        }
-      } finally {
-        templateProgrammaticScroll = false
-      }
-    }
-  }
-
-  fun selectHistorySection(anchor: FluidSectionAnchor, motion: FluidSectionSelectionMotion) {
-    selectedHistoryDayKey = anchor.key
-    historyScrollJob?.cancel()
-    historyScrollJob = scope.launch {
-      historyProgrammaticScroll = true
-      try {
-        if (motion == FluidSectionSelectionMotion.Immediate) {
-          historyListState.stopScroll()
-          historyListState.scrollToItem(anchor.itemIndex, anchorScrollOffset)
-        } else {
-          historyListState.animateScrollToItem(anchor.itemIndex, anchorScrollOffset)
-        }
-      } finally {
-        historyProgrammaticScroll = false
-      }
-    }
+  fun selectHistoryDay(key: String) {
+    if (key == selectedHistoryDayKey) return
+    val from = historyDayOptions.indexOfFirst { it.key == selectedHistoryDayKey }
+    val to = historyDayOptions.indexOfFirst { it.key == key }
+    selectedHistoryDayKey = key
+    slideDay(if (to >= from) 1f else -1f)
   }
 
   fun changeWeek(targetOffset: Int) {
+    if (targetOffset == weekOffset) return
     val selectedDay = selectedHistoryDayKey?.toLocalDateOrNull()?.dayOfWeek ?: DayOfWeek.MONDAY
     val targetStart = schoolWeekStart(targetOffset)
     val dayIndex = visibleDays.indexOf(selectedDay).coerceAtLeast(0)
     selectedHistoryDayKey = targetStart.plusDays(dayIndex.toLong()).toString()
+    slideDay(if (targetOffset > weekOffset) 1f else -1f)
     weekOffset = targetOffset
   }
 
-  val templateRailVisible by remember(templateListState, templateAnchors) {
-    derivedStateOf {
-      templateAnchors.size >= 2 && (templateListState.canScrollBackward || templateListState.canScrollForward)
-    }
-  }
-  val historyRailVisible by remember(historyListState, historyAnchors) {
-    derivedStateOf {
-      historyAnchors.size >= 2 && (historyListState.canScrollBackward || historyListState.canScrollForward)
-    }
-  }
-  val historyMotionModifier = Modifier.graphicsLayer {
-    translationX = historyWeekMotion.value
-    alpha = 1f - (abs(historyWeekMotion.value) / with(density) { 140.dp.toPx() }).coerceIn(0f, 0.16f)
-  }
-  val railSections = if (selectedTab == TAB_TIMETABLE) templateAnchors else historyAnchors
-  val activeRailKey = if (selectedTab == TAB_TIMETABLE) selectedTemplateDayKey else selectedHistoryDayKey
+  val templateSection = templateSections.firstOrNull { it.day.name == selectedTemplateDayKey }
+    ?: templateSections.firstOrNull()
+  val historySection = historySections.firstOrNull { it.date.toString() == selectedHistoryDayKey }
+    ?: historySections.firstOrNull()
 
   Box(modifier = modifier.fillMaxSize()) {
     FluidScreen(
@@ -497,15 +406,40 @@ fun LessonsRoute(
       subtitle = "Template settimanale stabile e storico delle lezioni svolte in una sola vista.",
       onBack = onBack,
       actions = {
-        FluidBarAction(
-          icon = Icons.Rounded.AutoFixHigh,
-          contentDescription = "Ricalcola orario",
-          onClick = viewModel::regenerateTemplate,
-        )
+        // Un tasto solo, con dentro tutti i verbi: toccato aggiorna, tenuto premuto offre anche il
+        // ricalcolo e l'importazione — che in barra non ci stavano e prima erano un secondo tasto
+        // dal significato oscuro.
         FluidBarAction(
           icon = Icons.Rounded.Refresh,
           contentDescription = "Aggiorna",
           onClick = viewModel::refresh,
+          actions = {
+            buildList {
+              add(
+                FluidContextAction(
+                  label = "Aggiorna",
+                  icon = Icons.Rounded.Refresh,
+                  onClick = viewModel::refresh,
+                ),
+              )
+              add(
+                FluidContextAction(
+                  label = "Ricalcola orario",
+                  icon = Icons.Rounded.AutoFixHigh,
+                  onClick = viewModel::regenerateTemplate,
+                ),
+              )
+              if (state.canImportOfficialTimetable) {
+                add(
+                  FluidContextAction(
+                    label = "Importa orario ufficiale 4F",
+                    icon = Icons.Rounded.AutoStories,
+                    onClick = viewModel::importOfficialTimetable,
+                  ),
+                )
+              }
+            }
+          },
         )
       },
       listState = activeListState,
@@ -513,19 +447,6 @@ fun LessonsRoute(
       onRefresh = viewModel::refresh,
       horizontalPadding = 20.dp,
       itemSpacing = 18.dp,
-      overlay = { backdrop ->
-        FluidSectionIndex(
-          sections = railSections,
-          activeSectionKey = activeRailKey,
-          onSelectSection = { anchor, motion ->
-            if (selectedTab == TAB_TIMETABLE) selectTemplateSection(anchor, motion)
-            else selectHistorySection(anchor, motion)
-          },
-          visible = if (selectedTab == TAB_TIMETABLE) templateRailVisible else historyRailVisible,
-          backdrop = backdrop,
-          modifier = Modifier.align(Alignment.CenterEnd),
-        )
-      },
     ) {
       if (!state.lastMessage.isNullOrBlank()) {
         item(key = "lessons:message", contentType = LessonsContentType.Message) {
@@ -585,10 +506,7 @@ fun LessonsRoute(
               selected = templateDayOptions.firstOrNull { it.key == selectedTemplateDayKey }?.label
                 ?: templateDayOptions.first().label,
               onSelect = { label ->
-                val key = templateDayOptions.firstOrNull { it.label == label }?.key ?: return@FluidPillTabs
-                templateAnchors.firstOrNull { it.key == key }?.let {
-                  selectTemplateSection(it, FluidSectionSelectionMotion.Animated)
-                }
+                templateDayOptions.firstOrNull { it.label == label }?.let { selectTemplateDay(it.key) }
               },
             )
           }
@@ -611,7 +529,7 @@ fun LessonsRoute(
               )
             }
           }
-          templateSections.forEach { section ->
+          templateSection?.let { section ->
             item(
               key = "lessons:template:${section.day}:header",
               contentType = LessonsContentType.SectionHeader,
@@ -619,7 +537,7 @@ fun LessonsRoute(
               FluidSectionHeader(
                 title = section.day.longLabel(),
                 detail = "Orario ricorrente",
-                modifier = Modifier.animateItem(),
+                modifier = dayMotionModifier,
               )
             }
             if (section.blocks.isEmpty()) {
@@ -629,7 +547,7 @@ fun LessonsRoute(
               ) {
                 TimelineEmptyDay(
                   message = "Nessuno slot stabile per questa giornata.",
-                  modifier = Modifier.animateItem(),
+                  modifier = dayMotionModifier,
                 )
               }
             } else {
@@ -643,7 +561,7 @@ fun LessonsRoute(
                   timetable = state.timetableTemplate,
                   onConfirm = { viewModel.startConfirming(block.primary) },
                   onEdit = { viewModel.startEditing(block.primary) },
-                  modifier = Modifier.animateItem(),
+                  modifier = dayMotionModifier,
                 )
               }
             }
@@ -666,15 +584,11 @@ fun LessonsRoute(
               selected = historyDayOptions.firstOrNull { it.key == selectedHistoryDayKey }?.label
                 ?: historyDayOptions.first().label,
               onSelect = { label ->
-                val key = historyDayOptions.firstOrNull { it.label == label }?.key ?: return@FluidPillTabs
-                historyAnchors.firstOrNull { it.key == key }?.let {
-                  selectHistorySection(it, FluidSectionSelectionMotion.Animated)
-                }
+                historyDayOptions.firstOrNull { it.label == label }?.let { selectHistoryDay(it.key) }
               },
-              modifier = historyMotionModifier,
             )
           }
-          historySections.forEach { section ->
+          historySection?.let { section ->
             item(
               key = "lessons:history:${section.date}:header",
               contentType = LessonsContentType.SectionHeader,
@@ -683,7 +597,7 @@ fun LessonsRoute(
                 title = section.date.format(weekdayLongFormatter)
                   .replaceFirstChar(Char::uppercase),
                 detail = "Lezioni svolte",
-                modifier = historyMotionModifier.animateItem(),
+                modifier = dayMotionModifier,
               )
             }
             if (section.lessons.isEmpty()) {
@@ -693,15 +607,17 @@ fun LessonsRoute(
               ) {
                 TimelineEmptyDay(
                   message = "Nessuna lezione registrata.",
-                  modifier = historyMotionModifier.animateItem(),
+                  modifier = dayMotionModifier,
                 )
               }
             } else {
-              fluidGlassGroups(section.lessons) { lesson ->
-                // Senza `animateItem()`: la riga non e' piu' un item della lista, il pannello si'.
+              fluidGlassGroups(
+                items = section.lessons,
+                key = "lessons:history:${section.date}:group",
+              ) { lesson ->
                 HistoryLessonRow(
                   lesson = lesson,
-                  modifier = historyMotionModifier,
+                  modifier = dayMotionModifier,
                 )
               }
             }
@@ -712,8 +628,14 @@ fun LessonsRoute(
 
   }
 
-  state.editingSlot?.let { slot ->
-    EditSlotSheet(
+  // Portali, non sheet: dichiarati sempre, visibili quando c'e' uno slot selezionato. Un portale
+  // dentro un `?.let` si smonterebbe alla chiusura e porterebbe via l'animazione di uscita.
+  FluidGlassModalPortal(
+    item = state.editingSlot,
+    onDismissRequest = viewModel::dismissEditing,
+    paneTitle = "Modifica slot orario",
+  ) { slot ->
+    EditSlotContent(
       slot = slot,
       onDismiss = viewModel::dismissEditing,
       onSave = { edited -> viewModel.saveSlotOverride(slot, edited) },
@@ -721,9 +643,12 @@ fun LessonsRoute(
     )
   }
 
-  val confirmationFlowSlot = state.confirmingSlot ?: state.settingRoomSlot
-  confirmationFlowSlot?.let { slot ->
-    SlotConfirmationSheet(
+  FluidGlassModalPortal(
+    item = state.confirmingSlot ?: state.settingRoomSlot,
+    onDismissRequest = viewModel::dismissConfirming,
+    paneTitle = "Conferma slot",
+  ) { slot ->
+    SlotConfirmationContent(
       slot = slot,
       enteringRoom = state.settingRoomSlot != null,
       onDismiss = viewModel::dismissConfirming,
@@ -743,12 +668,6 @@ internal data class TimetableDaySection(
 internal data class HistoryDaySection(
   val date: LocalDate,
   val lessons: List<Lesson>,
-)
-
-internal data class LessonTimelineSectionLayout(
-  val key: String,
-  val label: String,
-  val contentItemCount: Int,
 )
 
 internal fun stableSchoolDays(): List<DayOfWeek> = listOf(
@@ -793,65 +712,6 @@ internal fun buildHistoryDaySections(
       lessons = byDate[date].orEmpty().sortedBy { it.time },
     )
   }
-}
-
-internal fun buildLessonTimelineAnchors(
-  sections: List<LessonTimelineSectionLayout>,
-  firstItemIndex: Int,
-): List<FluidSectionAnchor> {
-  var itemIndex = firstItemIndex
-  return sections.map { section ->
-    FluidSectionAnchor(
-      key = section.key,
-      label = section.label,
-      itemIndex = itemIndex,
-    ).also {
-      // Every section owns one header and at least one content item, including empty school days.
-      itemIndex += 1 + section.contentItemCount.coerceAtLeast(1)
-    }
-  }
-}
-
-private fun activeTimelineAnchor(
-  listState: LazyListState,
-  anchors: List<FluidSectionAnchor>,
-  anchorScrollOffset: Int,
-): FluidSectionAnchor? {
-  val visibleItems = listState.layoutInfo.visibleItemsInfo
-  return activeTimelineAnchorForViewport(
-    anchors = anchors,
-    firstVisibleItemIndex = listState.firstVisibleItemIndex,
-    activationLine = -anchorScrollOffset,
-    visibleItemCount = visibleItems.size,
-    itemIndexAt = { visibleItems[it].index },
-    itemOffsetAt = { visibleItems[it].offset },
-  )
-}
-
-internal inline fun activeTimelineAnchorForViewport(
-  anchors: List<FluidSectionAnchor>,
-  firstVisibleItemIndex: Int,
-  activationLine: Int,
-  visibleItemCount: Int,
-  itemIndexAt: (Int) -> Int,
-  itemOffsetAt: (Int) -> Int,
-): FluidSectionAnchor? {
-  if (anchors.isEmpty()) return null
-  var crossedVisibleHeader: FluidSectionAnchor? = null
-  for (anchor in anchors) {
-    for (visibleIndex in 0 until visibleItemCount) {
-      if (itemIndexAt(visibleIndex) != anchor.itemIndex) continue
-      if (
-        itemOffsetAt(visibleIndex) <= activationLine &&
-        (crossedVisibleHeader == null || anchor.itemIndex > crossedVisibleHeader.itemIndex)
-      ) {
-        crossedVisibleHeader = anchor
-      }
-      break
-    }
-  }
-  return crossedVisibleHeader
-    ?: activeFluidSectionForItemIndex(anchors, firstVisibleItemIndex)
 }
 
 @Composable
@@ -978,22 +838,35 @@ private fun WeekNavigator(
   onNext: () -> Unit,
   onToday: () -> Unit,
 ) {
+  // Lenti di vetro, non IconButton Material: sopra il fondale colorato della pagina il cerchio
+  // grigio del ripple era l'unico controllo rimasto del vecchio vocabolario. Il fondale campionato
+  // e' il canvas ambientale — il corpo conterrebbe queste stesse frecce.
+  val emptyBackdrop = rememberEmptyGlassBackdrop()
+  val backdrop = currentCanvasBackdrop() ?: emptyBackdrop
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
     Row(
       modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      IconButton(onClick = onPrevious) {
-        Icon(Icons.Rounded.ChevronLeft, contentDescription = "Settimana precedente")
+      FluidGlassIconButton(onClick = onPrevious, backdrop = backdrop) {
+        Icon(
+          imageVector = Icons.Rounded.ChevronLeft,
+          contentDescription = "Settimana precedente",
+          tint = MaterialTheme.colorScheme.primary,
+        )
       }
       Text(
         text = "Settimana del ${weekStart.format(weekHeaderFormatter)}",
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.SemiBold,
       )
-      IconButton(onClick = onNext, enabled = weekOffset < 0) {
-        Icon(Icons.Rounded.ChevronRight, contentDescription = "Settimana successiva")
+      FluidGlassIconButton(onClick = onNext, backdrop = backdrop, enabled = weekOffset < 0) {
+        Icon(
+          imageVector = Icons.Rounded.ChevronRight,
+          contentDescription = "Settimana successiva",
+          tint = MaterialTheme.colorScheme.primary,
+        )
       }
     }
     if (weekOffset != 0) {
@@ -1108,7 +981,7 @@ private enum class SlotConfirmationStep {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SlotConfirmationSheet(
+private fun SlotConfirmationContent(
   slot: TemplateSlot,
   enteringRoom: Boolean,
   onDismiss: () -> Unit,
@@ -1120,7 +993,7 @@ private fun SlotConfirmationSheet(
   var room by rememberSaveable(slot.slotFingerprint()) { mutableStateOf(slot.room.orEmpty()) }
   val step = if (enteringRoom) SlotConfirmationStep.Room else SlotConfirmationStep.Review
 
-  FluidSheet(onDismissRequest = onDismiss) {
+  Box {
     AnimatedContent(
       targetState = step,
       transitionSpec = {
@@ -1256,20 +1129,20 @@ private fun SlotConfirmationSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditSlotSheet(
+private fun EditSlotContent(
   slot: TemplateSlot,
   onDismiss: () -> Unit,
   onSave: (TemplateSlot) -> Unit,
   onReset: () -> Unit,
 ) {
-  var subject by rememberSaveable { mutableStateOf(slot.subject) }
-  var teacher by rememberSaveable { mutableStateOf(slot.teacher.orEmpty()) }
-  var room by rememberSaveable { mutableStateOf(slot.room.orEmpty()) }
-  var startTime by rememberSaveable { mutableStateOf(slot.time) }
-  var endTime by rememberSaveable { mutableStateOf(slot.endTime.orEmpty()) }
+  var subject by rememberSaveable(slot.slotFingerprint()) { mutableStateOf(slot.subject) }
+  var teacher by rememberSaveable(slot.slotFingerprint()) { mutableStateOf(slot.teacher.orEmpty()) }
+  var room by rememberSaveable(slot.slotFingerprint()) { mutableStateOf(slot.room.orEmpty()) }
+  var startTime by rememberSaveable(slot.slotFingerprint()) { mutableStateOf(slot.time) }
+  var endTime by rememberSaveable(slot.slotFingerprint()) { mutableStateOf(slot.endTime.orEmpty()) }
   var editingField by rememberSaveable { mutableStateOf<String?>(null) }
 
-  FluidSheet(onDismissRequest = onDismiss) {
+  Box {
     Column(
       modifier = Modifier
         .fillMaxWidth()

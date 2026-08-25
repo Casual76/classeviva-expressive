@@ -78,7 +78,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
-import dev.antigravity.fluidengine.ui.fluid.FluidSheet
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
@@ -397,65 +397,70 @@ fun MeetingsRoute(
     }
   }
 
-  state.selectedBooking?.let { booking ->
-    FluidSheet(onDismissRequest = viewModel::dismissSelection) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
-        Text(booking.teacher.name, style = MaterialTheme.typography.headlineSmall)
-        Text(booking.slot.meetingSlotLabel(), style = MaterialTheme.typography.bodyMedium)
-        booking.bookingPosition?.let {
-          Text("Posizione: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        FluidButton(
-          text = "Partecipa",
-          onClick = { viewModel.joinSelectedBooking(context::openUrl) },
-          style = FluidButtonStyle.Filled,
-          fillWidth = true,
-          leading = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null,) },
-        )
-        FluidButton(
-          text = "Annulla prenotazione",
-          onClick = viewModel::cancelSelectedBooking,
-          style = FluidButtonStyle.Tinted,
-          fillWidth = true,
-        )
-        FluidButton(
-          text = "Apri portale",
-          onClick = { context.openUrl(viewModel.portalUrl()) },
-          style = FluidButtonStyle.Plain,
-          fillWidth = true,
-        )
+  // Portali, non sheet: dichiarati sempre, cosi' la chiusura resta un'animazione e non uno smontaggio.
+  FluidGlassModalPortal(
+    item = state.selectedBooking,
+    onDismissRequest = viewModel::dismissSelection,
+    paneTitle = "Prenotazione colloquio",
+  ) { booking ->
+    Column(
+      modifier = Modifier.fillMaxWidth().padding(24.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text(booking.teacher.name, style = MaterialTheme.typography.headlineSmall)
+      Text(booking.slot.meetingSlotLabel(), style = MaterialTheme.typography.bodyMedium)
+      booking.bookingPosition?.let {
+        Text("Posizione: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
+      FluidButton(
+        text = "Partecipa",
+        onClick = { viewModel.joinSelectedBooking(context::openUrl) },
+        style = FluidButtonStyle.Filled,
+        fillWidth = true,
+        leading = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null,) },
+      )
+      FluidButton(
+        text = "Annulla prenotazione",
+        onClick = viewModel::cancelSelectedBooking,
+        style = FluidButtonStyle.Tinted,
+        fillWidth = true,
+      )
+      FluidButton(
+        text = "Apri portale",
+        onClick = { context.openUrl(viewModel.portalUrl()) },
+        style = FluidButtonStyle.Plain,
+        fillWidth = true,
+      )
     }
   }
 
-  state.selectedSlot?.let { slot ->
+  FluidGlassModalPortal(
+    item = state.selectedSlot,
+    onDismissRequest = viewModel::dismissSelection,
+    paneTitle = "Disponibilita colloquio",
+  ) { slot ->
     val teacher = teachersById[slot.teacherId]
-    FluidSheet(onDismissRequest = viewModel::dismissSelection) {
-      Column(
-        modifier = Modifier.fillMaxWidth().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-      ) {
-        Text(teacher?.name ?: "Docente", style = MaterialTheme.typography.headlineSmall)
-        Text(slot.meetingSlotLabel(), style = MaterialTheme.typography.bodyMedium)
-        slot.location?.takeIf(String::isNotBlank)?.let {
-          Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        FluidButton(
-          text = "Prenota colloquio",
-          onClick = viewModel::bookSelectedSlot,
-          style = FluidButtonStyle.Filled,
-          fillWidth = true,
-        )
-        FluidButton(
-          text = "Apri portale",
-          onClick = { context.openUrl(viewModel.portalUrl()) },
-          style = FluidButtonStyle.Plain,
-          fillWidth = true,
-        )
+    Column(
+      modifier = Modifier.fillMaxWidth().padding(24.dp),
+      verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+      Text(teacher?.name ?: "Docente", style = MaterialTheme.typography.headlineSmall)
+      Text(slot.meetingSlotLabel(), style = MaterialTheme.typography.bodyMedium)
+      slot.location?.takeIf(String::isNotBlank)?.let {
+        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
+      FluidButton(
+        text = "Prenota colloquio",
+        onClick = viewModel::bookSelectedSlot,
+        style = FluidButtonStyle.Filled,
+        fillWidth = true,
+      )
+      FluidButton(
+        text = "Apri portale",
+        onClick = { context.openUrl(viewModel.portalUrl()) },
+        style = FluidButtonStyle.Plain,
+        fillWidth = true,
+      )
     }
   }
 
@@ -581,14 +586,18 @@ fun MaterialsRoute(
     }
   }
 
-  selectedItem?.let { item ->
-    FluidSheet(onDismissRequest = {
+  FluidGlassModalPortal(
+    item = selectedItem,
+    onDismissRequest = {
       selectedItem = null
       assetPreviewText = null
       assetErrorMessage = null
       isDownloading = false
       downloadMessage = null
-    }) {
+    },
+    paneTitle = "Dettaglio materiale",
+  ) { item ->
+    Box {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -722,8 +731,12 @@ fun MaterialDetailRoute(
     },
   )
 
-  if (showActions) {
-    FluidSheet(onDismissRequest = { showActions = false }) {
+  FluidGlassModalPortal(
+    visible = showActions,
+    onDismissRequest = { showActions = false },
+    paneTitle = "Azioni materiale",
+  ) {
+    Box {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -911,8 +924,12 @@ fun HomeworkRoute(
     }
   }
 
-  if (onOpenHomework == null) state.selectedHomework?.let { hw ->
-    FluidSheet(onDismissRequest = viewModel::dismiss) {
+  FluidGlassModalPortal(
+    item = if (onOpenHomework == null) state.selectedHomework else null,
+    onDismissRequest = viewModel::dismiss,
+    paneTitle = "Dettaglio compito",
+  ) { hw ->
+    Box {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1332,8 +1349,12 @@ fun DocumentsRoute(
     }
   }
 
-  if (onOpenDocument == null) state.selectedDocument?.let { doc ->
-    FluidSheet(onDismissRequest = viewModel::dismissDocument) {
+  FluidGlassModalPortal(
+    item = if (onOpenDocument == null) state.selectedDocument else null,
+    onDismissRequest = viewModel::dismissDocument,
+    paneTitle = "Dettaglio documento",
+  ) { doc ->
+    Box {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1467,13 +1488,15 @@ fun DocumentDetailRoute(
     },
   )
 
-  if (showActions) {
-    FluidSheet(
-      onDismissRequest = {
-        showActions = false
-        viewModel.dismissDocument()
-      },
-    ) {
+  FluidGlassModalPortal(
+    visible = showActions,
+    onDismissRequest = {
+      showActions = false
+      viewModel.dismissDocument()
+    },
+    paneTitle = "Azioni documento",
+  ) {
+    Box {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1702,8 +1725,12 @@ fun StudentScoreRoute(
     }
   }
 
-  state.importResult?.let { comparison ->
-    FluidSheet(onDismissRequest = viewModel::dismissImport) {
+  FluidGlassModalPortal(
+    item = state.importResult,
+    onDismissRequest = viewModel::dismissImport,
+    paneTitle = "Confronto punteggio",
+  ) { comparison ->
+    Box {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
