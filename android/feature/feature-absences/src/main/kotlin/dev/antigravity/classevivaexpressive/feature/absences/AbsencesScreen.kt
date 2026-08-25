@@ -28,6 +28,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsencesRepository
@@ -165,6 +166,10 @@ fun AbsencesRoute(
   FluidScreen(
     modifier = modifier,
     title = "Assenze",
+    // Rosso sotto la pagina quando c'e' qualcosa da giustificare, esattamente come l'intestazione:
+    // l'urgenza di questa sezione e' un fatto sulla sezione, non una decorazione del riquadro in
+    // cima.
+    ambient = FeatureIdentity.Attendance.ambient(urgent = pending.isNotEmpty()),
     subtitle = "Situazione sintetica, giustificazioni pendenti e cronologia ordinata.",
     onBack = onBack,
     actions = {

@@ -23,6 +23,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardStat
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
@@ -180,6 +181,7 @@ fun DashboardRoute(
   FluidScreen(
     modifier = modifier,
     title = titleText,
+    ambient = FeatureIdentity.Overview.ambient(),
     subtitle = snapshot.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
     actions = {

@@ -62,6 +62,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
@@ -487,6 +488,7 @@ fun LessonsRoute(
     FluidScreen(
       modifier = Modifier.fillMaxSize(),
       title = "Orario",
+      ambient = FeatureIdentity.Lessons.ambient(),
       subtitle = "Template settimanale stabile e storico delle lezioni svolte in una sola vista.",
       onBack = onBack,
       actions = {

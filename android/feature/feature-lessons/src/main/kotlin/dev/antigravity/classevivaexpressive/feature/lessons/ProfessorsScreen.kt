@@ -26,6 +26,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
@@ -406,6 +407,7 @@ fun ProfessorsRoute(
 
   FluidScreen(
     title = "Professori",
+    ambient = FeatureIdentity.People.ambient(),
     subtitle = "Presenza, rigore e valutazioni per i tuoi docenti — solo i docenti ufficiali della classe.",
     onBack = onBack,
     actions = {
@@ -543,9 +545,9 @@ fun ProfessorDetailRoute(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        FluidMetricTile("Presenti", professor.actualDays.toString(), "Lezioni firmate.", Modifier.weight(1f), FluidTone.Success)
-        FluidMetricTile("Attesi", professor.expectedDays.toString(), "Giornate tipiche.", Modifier.weight(1f), FluidTone.Info)
-        FluidMetricTile("Tasso", "${(professor.presenceRate * 100).toInt()}%", "Presenze / attesi.", Modifier.weight(1f), presenceTone)
+        FluidMetricTile("Presenti", professor.actualDays.toString(), "Lezioni firmate.", Modifier.weight(1f), FluidTone.Success, glass = true)
+        FluidMetricTile("Attesi", professor.expectedDays.toString(), "Giornate tipiche.", Modifier.weight(1f), FluidTone.Info, glass = true)
+        FluidMetricTile("Tasso", "${(professor.presenceRate * 100).toInt()}%", "Presenze / attesi.", Modifier.weight(1f), presenceTone, glass = true)
       }
       if (professor.absenceDays.isNotEmpty()) {
         FluidSectionHeader("Probabili assenze recenti")
@@ -571,9 +573,9 @@ fun ProfessorDetailRoute(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-          FluidMetricTile("Totale", professor.gradeCount.toString(), "Valutazioni.", Modifier.weight(1f))
+          FluidMetricTile("Totale", professor.gradeCount.toString(), "Valutazioni.", Modifier.weight(1f), glass = true)
           professor.averageGrade?.let { average ->
-            FluidMetricTile("Media", "%.1f".format(average), "Sul tuo profilo.", Modifier.weight(1f), presenceTone)
+            FluidMetricTile("Media", "%.1f".format(average), "Sul tuo profilo.", Modifier.weight(1f), presenceTone, glass = true)
           }
         }
       }
@@ -631,6 +633,7 @@ private fun ProfessorDetailSheet(
             detail = "Lezioni firmate.",
             modifier = Modifier.weight(1f),
             tone = FluidTone.Success,
+            glass = true,
           )
           FluidMetricTile(
             label = "Giorni attesi",
@@ -638,6 +641,7 @@ private fun ProfessorDetailSheet(
             detail = "Dalle sue giornate tipiche.",
             modifier = Modifier.weight(1f),
             tone = FluidTone.Info,
+            glass = true,
           )
           FluidMetricTile(
             label = "Tasso",
@@ -649,6 +653,7 @@ private fun ProfessorDetailSheet(
               prof.presenceRate >= 0.65f -> FluidTone.Warning
               else -> FluidTone.Danger
             },
+            glass = true,
           )
         }
       }
@@ -685,6 +690,7 @@ private fun ProfessorDetailSheet(
             detail = "Densita valutativa.",
             modifier = Modifier.weight(1f),
             tone = FluidTone.Info,
+            glass = true,
           )
           FluidMetricTile(
             label = "Scritti",
@@ -692,6 +698,7 @@ private fun ProfessorDetailSheet(
             detail = "Esami scritti.",
             modifier = Modifier.weight(1f),
             tone = FluidTone.Info,
+            glass = true,
           )
           FluidMetricTile(
             label = "Peso medio",
@@ -699,6 +706,7 @@ private fun ProfessorDetailSheet(
             detail = "Importanza voti.",
             modifier = Modifier.weight(1f),
             tone = FluidTone.Info,
+            glass = true,
           )
           FluidMetricTile(
             label = "Argomenti",
@@ -706,6 +714,7 @@ private fun ProfessorDetailSheet(
             detail = "Lezioni firmate.",
             modifier = Modifier.weight(1f),
             tone = FluidTone.Info,
+            glass = true,
           )
         }
       }
@@ -723,6 +732,7 @@ private fun ProfessorDetailSheet(
               value = "${prof.gradeCount}",
               detail = "Valutazioni assegnate.",
               modifier = Modifier.weight(1f),
+              glass = true,
             )
             prof.averageGrade?.let { avg ->
               FluidMetricTile(
@@ -735,6 +745,7 @@ private fun ProfessorDetailSheet(
                   avg >= 6.0 -> FluidTone.Warning
                   else -> FluidTone.Danger
                 },
+                glass = true,
               )
             }
             prof.mostFrequentGradeType?.let { type ->
@@ -744,6 +755,7 @@ private fun ProfessorDetailSheet(
                 detail = "Tipologia più comune.",
                 modifier = Modifier.weight(1f),
                 tone = FluidTone.Info,
+                glass = true,
               )
             }
           }
@@ -799,6 +811,7 @@ private fun ProfessorDetailSheet(
             detail = "Settimane consecutive.",
             modifier = Modifier.weight(1f),
             tone = if (prof.longestPresenceStreakWeeks >= 8) FluidTone.Success else FluidTone.Info,
+            glass = true,
           )
           FluidMetricTile(
             label = "Giorno top",
@@ -806,6 +819,7 @@ private fun ProfessorDetailSheet(
             detail = "Giorno con più firme.",
             modifier = Modifier.weight(1f),
             tone = FluidTone.Info,
+            glass = true,
           )
           FluidMetricTile(
             label = "Materie",
@@ -813,6 +827,7 @@ private fun ProfessorDetailSheet(
             detail = prof.subjects.joinToString(", ").take(30),
             modifier = Modifier.weight(1f),
             tone = if (prof.subjects.size > 1) FluidTone.Warning else FluidTone.Info,
+            glass = true,
           )
         }
       }

@@ -51,6 +51,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
@@ -632,6 +633,7 @@ fun CommunicationsRoute(
     FluidScreen(
     modifier = Modifier.fillMaxWidth(),
     title = "Comunicazioni",
+    ambient = FeatureIdentity.Communications.ambient(),
     subtitle = state.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
     onBack = onBack,

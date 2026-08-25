@@ -1623,6 +1623,7 @@ fun StudentScoreRoute(
             label = component.title,
             value = "%.1f / %.0f".format(component.value, component.maxValue),
             detail = "Peso ${(component.weight * 100).roundToInt()}%",
+            glass = true,
           )
         }
       }
@@ -1713,12 +1714,14 @@ fun StudentScoreRoute(
           value = "${comparison.current.score.roundToInt()}/100",
           detail = comparison.current.label,
           tone = FluidTone.Info,
+          glass = true,
         )
         FluidMetricTile(
           label = "Punteggio importato",
           value = "${comparison.imported.score.roundToInt()}/100",
           detail = comparison.imported.label,
           tone = FluidTone.Neutral,
+          glass = true,
         )
         val diffTone = when {
           comparison.difference > 0 -> FluidTone.Success
@@ -1730,6 +1733,7 @@ fun StudentScoreRoute(
           value = "${if (comparison.difference >= 0) "+" else ""}${"%.1f".format(comparison.difference)}",
           detail = if (comparison.difference > 0) "In miglioramento" else if (comparison.difference < 0) "In peggioramento" else "Invariato",
           tone = diffTone,
+          glass = true,
         )
       }
     }

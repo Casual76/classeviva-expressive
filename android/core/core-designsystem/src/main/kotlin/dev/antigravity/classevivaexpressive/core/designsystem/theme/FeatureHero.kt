@@ -3,6 +3,7 @@ package dev.antigravity.classevivaexpressive.core.designsystem.theme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
 import dev.antigravity.fluidengine.ui.fluid.FluidHero
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMetric
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
@@ -30,6 +31,20 @@ enum class FeatureIdentity(
   People(FluidHeroTone.TertiaryToPrimary, FluidHeroMotif.Figures),
   Attendance(FluidHeroTone.Alert, FluidHeroMotif.Ticks),
 }
+
+/**
+ * Il fondale della sezione, dalla stessa identita' che ne disegna l'intestazione.
+ *
+ * Non c'e' niente da decidere qui, ed e' il punto: la mappa fra sezione, tono e motivo esiste gia'
+ * sopra, e' gia' stata rivista, e il canvas la riusa invariata. Se il fondale avesse una tabella
+ * propria, prima o poi una sezione avrebbe un'intestazione di un colore e un fondale di un altro, e
+ * nessuno se ne accorgerebbe finche' non le si guarda una accanto all'altra.
+ *
+ * [urgent] promuove la sezione alla famiglia dell'errore esattamente come fa [FeatureHero]: le
+ * assenze da giustificare sono rosse anche sotto la pagina, non solo nel riquadro in cima.
+ */
+fun FeatureIdentity.ambient(urgent: Boolean = false, intensity: Float = 1f): FluidAmbient =
+  FluidAmbient(tone = tone, motif = motif, intensity = intensity, urgent = urgent)
 
 /** Il tipo dell'engine, riesportato con il nome che le schermate usano gia'. */
 typealias FeatureHeroMetric = FluidHeroMetric

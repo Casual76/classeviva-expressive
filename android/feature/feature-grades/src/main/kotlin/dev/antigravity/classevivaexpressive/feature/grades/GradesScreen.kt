@@ -47,6 +47,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradePill
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
@@ -336,6 +337,7 @@ fun GradesRoute(
   FluidScreen(
     modifier = modifier,
     title = "Voti",
+    ambient = FeatureIdentity.Grades.ambient(),
     subtitle = state.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
     actions = {
@@ -780,9 +782,9 @@ private fun SubjectDetailSheet(
       }
       item {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          FluidMetricTile(label = "Scritto", value = writtenAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(writtenAvg))
-          FluidMetricTile(label = "Orale", value = oralAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(oralAvg))
-          FluidMetricTile(label = "Pratico", value = practicalAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(practicalAvg))
+          FluidMetricTile(label = "Scritto", value = writtenAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(writtenAvg), glass = true)
+          FluidMetricTile(label = "Orale", value = oralAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(oralAvg), glass = true)
+          FluidMetricTile(label = "Pratico", value = practicalAvg?.format1() ?: "--", detail = "Media", modifier = Modifier.weight(1f), tone = gradeTone(practicalAvg), glass = true)
         }
       }
       item { FluidSectionHeader("Tutti i voti") }

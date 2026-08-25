@@ -63,6 +63,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
@@ -283,6 +284,7 @@ fun AgendaRoute(
   FluidScreen(
     modifier = modifier,
     title = "Agenda",
+    ambient = FeatureIdentity.Agenda.ambient(),
     subtitle = state.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
     actions = {
@@ -634,7 +636,7 @@ private fun AgendaDetailSheet(
       }
       item { HorizontalDivider() }
       item {
-        FluidCard(highlighted = true) {
+        FluidCard(highlighted = true, glass = true) {
           Text(
             text = "Dettagli",
             style = MaterialTheme.typography.labelLarge,
@@ -730,7 +732,7 @@ private fun AgendaVersionCard(
   recordedAt: String?,
   category: AgendaCategory,
 ) {
-  FluidCard(highlighted = label == "Versione attuale") {
+  FluidCard(highlighted = label == "Versione attuale", glass = true) {
     Text(
       text = label,
       style = MaterialTheme.typography.labelLarge,
@@ -1060,7 +1062,7 @@ fun AgendaDetailRoute(
         entry.teacher?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Docente", value = it) }
       }
       HorizontalDivider()
-      FluidCard(highlighted = true) {
+      FluidCard(highlighted = true, glass = true) {
         Text(
           text = "Dettagli",
           style = MaterialTheme.typography.labelLarge,

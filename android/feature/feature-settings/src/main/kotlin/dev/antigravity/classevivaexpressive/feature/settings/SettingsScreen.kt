@@ -857,6 +857,7 @@ private fun RuntimeStateCard(
   val isError = notificationsEnabled && (!runtimeState.permissionGranted || !runtimeState.appNotificationsEnabled)
   FluidCard(
     highlighted = isError,
+    glass = true,
   ) {
     Text(
       "Diagnostica notifiche",
@@ -949,6 +950,7 @@ private fun SettingToggleRow(
         role = Role.Switch,
         onValueChange = onCheckedChange,
       ),
+    glass = true,
   ) {
     Row(
       modifier = Modifier.fillMaxWidth(),
