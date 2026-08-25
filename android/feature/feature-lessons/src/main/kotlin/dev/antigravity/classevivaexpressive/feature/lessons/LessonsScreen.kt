@@ -29,6 +29,7 @@ import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.HistoryEdu
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -90,6 +91,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
@@ -907,7 +909,22 @@ private fun TimetableBlockRow(
     },
     leading = { Icon(Icons.Rounded.School, contentDescription = null) },
     onClick = onConfirm,
-    onLongClick = onEdit,
+    // Era un onLongClick che apriva la modifica senza dirlo. Il menu dice entrambe le cose che
+    // questa riga sa fare, e il tap resta la piu' frequente.
+    contextActions = {
+      listOf(
+        FluidContextAction(
+          label = "Conferma",
+          icon = Icons.Rounded.School,
+          onClick = onConfirm,
+        ),
+        FluidContextAction(
+          label = "Modifica",
+          icon = Icons.Rounded.Edit,
+          onClick = onEdit,
+        ),
+      )
+    },
     badge = {
       when {
         isConfirmed -> FluidStatusBadge("CONFERMATO", tone = FluidTone.Success)

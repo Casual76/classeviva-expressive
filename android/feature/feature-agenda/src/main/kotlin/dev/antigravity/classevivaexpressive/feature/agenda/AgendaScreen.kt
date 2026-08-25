@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Quiz
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.School
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -93,6 +94,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidAlert
 import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
@@ -368,7 +370,25 @@ fun AgendaRoute(
           onClick = {
             if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
           },
-          onLongClick = { shareEntry(context, entry) },
+          // Era un onLongClick che condivideva e basta, senza dirlo: la stessa pressione ora
+          // apre un menu che dice cosa sa fare.
+          onLongClick = null,
+          contextActions = {
+            listOf(
+              FluidContextAction(
+                label = "Dettagli",
+                icon = categoryIcon(entry.category),
+                onClick = {
+                  if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
+                },
+              ),
+              FluidContextAction(
+                label = "Condividi",
+                icon = Icons.Rounded.Share,
+                onClick = { shareEntry(context, entry) },
+              ),
+            )
+          },
         )
       }
     }
@@ -563,6 +583,7 @@ private fun AgendaEntryRow(
   onClick: (() -> Unit)?,
   onLongClick: (() -> Unit)?,
   modifier: Modifier = Modifier,
+  contextActions: (() -> List<FluidContextAction>)? = null,
 ) {
   FluidListRow(
     title = entry.title,
@@ -590,6 +611,7 @@ private fun AgendaEntryRow(
     },
     onClick = onClick,
     onLongClick = onLongClick,
+    contextActions = contextActions,
     modifier = modifier,
     animatePress = onClick != null || onLongClick != null,
   )

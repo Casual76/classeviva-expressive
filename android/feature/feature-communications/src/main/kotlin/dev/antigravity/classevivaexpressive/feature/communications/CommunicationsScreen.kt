@@ -20,8 +20,10 @@ import androidx.compose.material.icons.rounded.AttachFile
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Gavel
+import androidx.compose.material.icons.rounded.MarkEmailRead
 import androidx.compose.material.icons.rounded.MarkEmailUnread
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -75,6 +77,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
 import dev.antigravity.fluidengine.ui.fluid.FluidNotification
@@ -776,6 +779,39 @@ fun CommunicationsRoute(
                 detailOrigin = rowBounds
                 viewModel.openCommunication(communication.pubId, communication.evtCode)
               },
+              // La pressione lunga dice cosa sa fare, invece di non esistere: aprire (con
+              // allegati e risposta dentro il dettaglio), segnare come letta senza aprire,
+              // condividere il testo.
+              contextActions = {
+                buildList {
+                  add(
+                    FluidContextAction(
+                      label = "Apri",
+                      icon = Icons.Rounded.Campaign,
+                      onClick = {
+                        detailOrigin = rowBounds
+                        viewModel.openCommunication(communication.pubId, communication.evtCode)
+                      },
+                    ),
+                  )
+                  if (!communication.read) {
+                    add(
+                      FluidContextAction(
+                        label = "Segna come letta",
+                        icon = Icons.Rounded.MarkEmailRead,
+                        onClick = { viewModel.markCommunicationRead(communication.id) },
+                      ),
+                    )
+                  }
+                  add(
+                    FluidContextAction(
+                      label = "Condividi",
+                      icon = Icons.Rounded.Share,
+                      onClick = { shareCommunication(context, communication) },
+                    ),
+                  )
+                }
+              },
               animatePress = true,
             )
           }
@@ -820,6 +856,23 @@ fun CommunicationsRoute(
               onClick = {
                 detailOrigin = rowBounds
                 viewModel.openNote(note.id, note.categoryCode)
+              },
+              contextActions = {
+                listOf(
+                  FluidContextAction(
+                    label = "Apri",
+                    icon = Icons.Rounded.Gavel,
+                    onClick = {
+                      detailOrigin = rowBounds
+                      viewModel.openNote(note.id, note.categoryCode)
+                    },
+                  ),
+                  FluidContextAction(
+                    label = "Condividi",
+                    icon = Icons.Rounded.Share,
+                    onClick = { shareNote(context, note) },
+                  ),
+                )
               },
               animatePress = true,
             )
@@ -1341,4 +1394,37 @@ internal fun renderCommunicationContent(rawContent: String?, title: String): Str
     plain
   }
   return withoutDuplicateTitle.trim().ifBlank { plain.trim() }
+}
+
+private fun shareText(context: Context, title: String, text: String) {
+  val intent = Intent(Intent.ACTION_SEND).apply {
+    type = "text/plain"
+    putExtra(Intent.EXTRA_TEXT, text)
+  }
+  runCatching { context.startActivity(Intent.createChooser(intent, title)) }
+}
+
+private fun shareCommunication(context: Context, communication: Communication) {
+  shareText(
+    context = context,
+    title = "Condividi comunicazione",
+    text = buildString {
+      append(communication.title)
+      if (communication.sender.isNotBlank()) append("\n").append(communication.sender)
+      append("\n").append(communication.date.toReadableDate())
+      communication.contentPreview.takeIf { it.isNotBlank() }?.let { append("\n\n").append(it) }
+    },
+  )
+}
+
+private fun shareNote(context: Context, note: Note) {
+  shareText(
+    context = context,
+    title = "Condividi nota",
+    text = buildString {
+      append(note.title.ifBlank { note.categoryLabel })
+      append("\n").append(note.date.toReadableDate())
+      note.contentPreview.takeIf { it.isNotBlank() }?.let { append("\n\n").append(it) }
+    },
+  )
 }

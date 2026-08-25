@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.Grade
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -76,6 +77,7 @@ import kotlinx.coroutines.launch
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidChip
 import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
@@ -273,6 +275,7 @@ fun GradesRoute(
   viewModel: GradesViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val context = androidx.compose.ui.platform.LocalContext.current
   var selectedTab by rememberSaveable { mutableStateOf(TAB_RECENT) }
   var showSimulationDialog by rememberSaveable { mutableStateOf(false) }
   var goalDialogSubject by rememberSaveable { mutableStateOf<String?>(null) }
@@ -500,6 +503,27 @@ fun GradesRoute(
                 GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
               },
               onClick = { openGrade(grade.id) },
+              // Le stesse cose che il tap sa fare, ma dette: una pressione lunga che apre un menu
+              // e' un gesto che si scopre, una che fa una cosa sola in silenzio no.
+              contextActions = {
+                listOf(
+                  FluidContextAction(
+                    label = "Dettaglio",
+                    icon = Icons.Rounded.Grade,
+                    onClick = { openGrade(grade.id) },
+                  ),
+                  FluidContextAction(
+                    label = "Simula media",
+                    icon = Icons.AutoMirrored.Rounded.ShowChart,
+                    onClick = { showSimulationDialog = true },
+                  ),
+                  FluidContextAction(
+                    label = "Condividi",
+                    icon = Icons.Rounded.Share,
+                    onClick = { shareGrade(context, grade) },
+                  ),
+                )
+              },
               animatePress = true,
             )
           }
@@ -536,6 +560,20 @@ fun GradesRoute(
                 )
               },
               onClick = { detailSubject = row.subject },
+              contextActions = {
+                listOf(
+                  FluidContextAction(
+                    label = "Dettaglio materia",
+                    icon = Icons.AutoMirrored.Rounded.ShowChart,
+                    onClick = { detailSubject = row.subject },
+                  ),
+                  FluidContextAction(
+                    label = "Simula media",
+                    icon = Icons.Rounded.Grade,
+                    onClick = { showSimulationDialog = true },
+                  ),
+                )
+              },
               animatePress = true,
             )
           }
@@ -1089,3 +1127,19 @@ private fun String.toLocalDateOrNull(): LocalDate? {
 private fun Double.format1(): String = String.format(italianLocale, "%.1f", this)
 
 private fun Double.format2(): String = String.format(italianLocale, "%.2f", this)
+
+private fun shareGrade(context: android.content.Context, grade: Grade) {
+  val text = buildString {
+    append("${grade.subject}: ${grade.valueLabel}")
+    if (grade.type.isNotBlank()) append(" (${grade.type})")
+    append(" — ${grade.date.toReadableDate()}")
+    grade.description?.takeIf { it.isNotBlank() }?.let { append("\n").append(it) }
+  }
+  val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+    this.type = "text/plain"
+    putExtra(android.content.Intent.EXTRA_TEXT, text)
+  }
+  runCatching {
+    context.startActivity(android.content.Intent.createChooser(intent, "Condividi voto"))
+  }
+}
