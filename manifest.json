@@ -15,24 +15,31 @@
       "ref": ""
     },
     "stable": {
-      "version": "7.2.0",
-      "releaseDate": "2026-08-23",
-      "changelog": "Il widget della schermata home e' stato ridisegnato per stare nel linguaggio dell'app: intestazione con l'ora dell'ultimo aggiornamento, icone dentro le loro piastrelle, impegni raggruppati invece che in righe sciolte. Si adatta a sei dimensioni invece di una: quando lo spazio manca accorcia le righe e ne mostra meno, invece di lasciare che sia il launcher a tagliare il contenuto. E ora si ridisegna anche quando cambi tema o colore d'accento, non solo quando arrivano dati nuovi. Sotto, il design system e' passato alle fondamenta condivise con le altre app: niente di visibile, ottomilacinquecento righe duplicate in meno.",
-      "releaseTag": "stable-classeviva-expressive-v7.2.0",
-      "apkAsset": "classeviva-expressive-7.2.0.apk",
-      "exeAsset": "",
-      "sizeBytes": 23802004
+      "version": "7.4.0",
+      "releaseDate": "2026-08-25",
+      "changelog": "Nuovo Orario un giorno alla volta, pop-up che si aprono e chiudono dentro i loro bottoni, menu rapidi con firma e allegati diretti, indice liquido nelle liste lunghe e scorrimento piu' fluido.",
+      "releaseTag": "stable-classeviva-expressive-v7.4.0",
+      "apkAsset": "classeviva-expressive-7.4.0.apk",
+      "sizeBytes": 23965842
     },
     "beta": {
-      "version": "7.2.0",
-      "releaseDate": "2026-08-23",
-      "changelog": "Il widget della schermata home e' stato ridisegnato per stare nel linguaggio dell'app: intestazione con l'ora dell'ultimo aggiornamento, icone dentro le loro piastrelle, impegni raggruppati invece che in righe sciolte. Si adatta a sei dimensioni invece di una: quando lo spazio manca accorcia le righe e ne mostra meno, invece di lasciare che sia il launcher a tagliare il contenuto. E ora si ridisegna anche quando cambi tema o colore d'accento, non solo quando arrivano dati nuovi. Sotto, il design system e' passato alle fondamenta condivise con le altre app: niente di visibile, ottomilacinquecento righe duplicate in meno.",
-      "releaseTag": "stable-classeviva-expressive-v7.2.0",
-      "apkAsset": "classeviva-expressive-7.2.0.apk",
-      "exeAsset": "",
-      "sizeBytes": 23802004
+      "version": "7.4.0",
+      "releaseDate": "2026-08-25",
+      "changelog": "Nuovo Orario un giorno alla volta, pop-up che si aprono e chiudono dentro i loro bottoni, menu rapidi con firma e allegati diretti, indice liquido nelle liste lunghe e scorrimento piu' fluido.",
+      "releaseTag": "stable-classeviva-expressive-v7.4.0",
+      "apkAsset": "classeviva-expressive-7.4.0.apk",
+      "sizeBytes": 23965842
     },
     "history": [
+      {
+        "version": "7.2.0",
+        "releaseDate": "2026-08-23",
+        "changelog": "Il widget della schermata home e' stato ridisegnato per stare nel linguaggio dell'app: intestazione con l'ora dell'ultimo aggiornamento, icone dentro le loro piastrelle, impegni raggruppati invece che in righe sciolte. Si adatta a sei dimensioni invece di una: quando lo spazio manca accorcia le righe e ne mostra meno, invece di lasciare che sia il launcher a tagliare il contenuto. E ora si ridisegna anche quando cambi tema o colore d'accento, non solo quando arrivano dati nuovi. Sotto, il design system e' passato alle fondamenta condivise con le altre app: niente di visibile, ottomilacinquecento righe duplicate in meno.",
+        "releaseTag": "stable-classeviva-expressive-v7.2.0",
+        "apkAsset": "classeviva-expressive-7.2.0.apk",
+        "exeAsset": "",
+        "sizeBytes": 23802004
+      },
       {
         "version": "7.1.1",
         "releaseDate": "2026-08-23",
