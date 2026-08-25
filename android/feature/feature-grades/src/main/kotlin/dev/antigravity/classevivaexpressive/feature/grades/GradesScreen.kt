@@ -79,7 +79,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidChip
+import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
@@ -845,6 +845,13 @@ private fun SubjectDetailSheet(
   }
 }
 
+/**
+ * Il periodo: una scelta fra poche alternative che si escludono, cioe' un controllo segmentato.
+ *
+ * Era una riga di pastiglie che scorreva di lato, e quella forma dice un'altra cosa — che le voci
+ * sono tante, che sono filtri che si sommano, che ce n'e' altre fuori dallo schermo. Un trimestre e
+ * un pentamestre sono due, e o sei in uno o sei nell'altro.
+ */
 @Composable
 private fun PeriodSelector(
   periods: List<Period>,
@@ -852,18 +859,18 @@ private fun PeriodSelector(
   onSelect: (String?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Row(
-    modifier = modifier.horizontalScroll(rememberScrollState()),
-    horizontalArrangement = Arrangement.spacedBy(10.dp),
-  ) {
-    periods.sortedBy { it.order }.forEach { period ->
-      FluidChip(
-        label = period.label.ifBlank { period.description },
-        selected = period.code == selectedCode,
-        onClick = { onSelect(period.code) },
-      )
-    }
+  val ordered = remember(periods) { periods.sortedBy { it.order } }
+  if (ordered.isEmpty()) return
+  val selected = remember(ordered, selectedCode) {
+    ordered.firstOrNull { it.code == selectedCode } ?: ordered.first()
   }
+  FluidSegmentedControl(
+    options = ordered,
+    selected = selected,
+    onSelect = { onSelect(it.code) },
+    modifier = modifier,
+    label = { it.label.ifBlank { it.description } },
+  )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

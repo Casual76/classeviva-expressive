@@ -105,7 +105,6 @@ import kotlinx.coroutines.withContext
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidChip
 import dev.antigravity.fluidengine.ui.fluid.FluidColorDot
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
@@ -547,16 +546,14 @@ fun SettingsRoute(
           FluidSectionHeader(title = "Anno scolastico")
         }
         item {
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            state.availableSchoolYears.forEach { year ->
-              FluidChip(
-                label = year.label,
-                selected = state.selectedSchoolYear.id == year.id,
-                onClick = { viewModel.selectSchoolYear(year) },
-                enabled = !state.isRefreshing && !state.isChangingSchoolYear,
-              )
-            }
-          }
+          // Gli anni si escludono a vicenda: e' un controllo segmentato, non una nuvola di filtri.
+          FluidSegmentedControl(
+            options = state.availableSchoolYears,
+            selected = state.selectedSchoolYear,
+            onSelect = viewModel::selectSchoolYear,
+            enabled = !state.isRefreshing && !state.isChangingSchoolYear,
+            label = { it.label },
+          )
         }
         item {
           FluidButton(

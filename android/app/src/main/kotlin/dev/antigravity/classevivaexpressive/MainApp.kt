@@ -156,8 +156,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidNotificationHost
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidScrollToTopBus
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
-import dev.antigravity.fluidengine.ui.fluid.FluidTabBar
-import dev.antigravity.fluidengine.ui.fluid.FluidTabBarDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidFoldAlignment
+import dev.antigravity.fluidengine.ui.fluid.FluidFoldingTabBar
+import dev.antigravity.fluidengine.ui.fluid.FluidFoldingTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidTabItem
 import dev.antigravity.fluidengine.ui.fluid.FluidTabRail
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
@@ -165,6 +166,7 @@ import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidNotificationHostState
 import dev.antigravity.fluidengine.ui.fluid.ProvideFluidChrome
 import dev.antigravity.fluidengine.ui.fluid.fluidGlassModalObscured
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidBarFold
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidChromeController
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidChromeScrollConnection
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
@@ -705,6 +707,11 @@ internal fun LoginScreen(
  * every screen, which is why text ran into an invisible wall near the bottom of a list. Now content
  * occupies the whole display and simply pads its *scroll* by the bar's height, so the last item can
  * be scrolled clear of the bar while everything in between passes underneath it through the glass.
+ *
+ * **La barra si ripiega, non sparisce.** Scivolare fuori dallo schermo toglie alla pagina il suo
+ * unico punto fermo proprio mentre si muove, e per riaverla bisogna scorrere all'indietro: una
+ * navigazione che si nasconde quando la stai usando. Ripiegata resta — si raccoglie sulla scheda in
+ * cui sei, al centro, e un tocco la riapre.
  */
 @Composable
 internal fun TopLevelNavigationSuite(
@@ -717,12 +724,7 @@ internal fun TopLevelNavigationSuite(
   content: @Composable () -> Unit,
 ) {
   val fallbackBackdrop = rememberGlassBackdrop()
-  val bottomBarTravel = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
-    FluidTabBarDefaults.Height + FluidTabBarDefaults.BottomMargin
-  val bottomBarTravelPx = with(LocalDensity.current) { bottomBarTravel.toPx() }
-  LaunchedEffect(chromeController, bottomBarTravelPx) {
-    chromeController.updateBottomBarTravel(bottomBarTravelPx)
-  }
+  val barFold = rememberFluidBarFold()
   val chromeScrollConnection = rememberFluidChromeScrollConnection(
     controller = chromeController,
     enabled = showNavigationSuite,
@@ -737,10 +739,15 @@ internal fun TopLevelNavigationSuite(
   BoxWithConstraints(
     modifier = Modifier
       .fillMaxSize()
-      .nestedScroll(chromeScrollConnection),
+      .nestedScroll(chromeScrollConnection)
+      .then(if (showNavigationSuite) Modifier.nestedScroll(barFold.connection) else Modifier),
   ) {
     val useRail = maxWidth >= 600.dp
-    val bottomInset = if (showNavigationSuite && !useRail) FluidTabBarDefaults.ContentInset else 0.dp
+    val bottomInset = if (showNavigationSuite && !useRail) {
+      FluidFoldingTabBarDefaults.ContentInset
+    } else {
+      0.dp
+    }
     val backdrop = chromeController.activeBackdrop.value ?: fallbackBackdrop
 
     ProvideFluidChrome(
@@ -787,21 +794,24 @@ internal fun TopLevelNavigationSuite(
         exit = slideOutVertically(animationSpec = barSlideSpec()) { it },
         modifier = Modifier
           .align(Alignment.BottomCenter)
-          .graphicsLayer {
-            translationY = chromeController.bottomBarOffsetPx.value
-          }
           .navigationBarsPadding()
           .padding(
-            horizontal = FluidTabBarDefaults.HorizontalMargin,
-            vertical = FluidTabBarDefaults.BottomMargin,
+            horizontal = FluidFoldingTabBarDefaults.HorizontalMargin,
+            vertical = FluidFoldingTabBarDefaults.BottomMargin,
           ),
       ) {
-        FluidTabBar(
+        FluidFoldingTabBar(
           items = tabItems,
           selectedRoute = currentRoute,
           onSelect = onSelect,
           onReselect = onReselect,
           backdrop = backdrop,
+          fold = { barFold.progress.value },
+          // Ripiegata, l'unica scheda rimasta e' quella su cui sei: un tocco li' sarebbe una
+          // riselezione, cioe' "riportami in cima", che e' l'opposto di quello che serve a una
+          // barra chiusa. Riaprirla e' la cosa ovvia da fare con una barra chiusa.
+          onExpandRequest = barFold::unfold,
+          foldAlignment = FluidFoldAlignment.Start,
         )
       }
     }
