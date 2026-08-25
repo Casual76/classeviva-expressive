@@ -480,6 +480,8 @@ fun LessonsRoute(
     translationX = historyWeekMotion.value
     alpha = 1f - (abs(historyWeekMotion.value) / with(density) { 140.dp.toPx() }).coerceIn(0f, 0.16f)
   }
+  val railSections = if (selectedTab == TAB_TIMETABLE) templateAnchors else historyAnchors
+  val activeRailKey = if (selectedTab == TAB_TIMETABLE) selectedTemplateDayKey else selectedHistoryDayKey
 
   Box(modifier = modifier.fillMaxSize()) {
     FluidScreen(
@@ -504,6 +506,19 @@ fun LessonsRoute(
       onRefresh = viewModel::refresh,
       horizontalPadding = 20.dp,
       itemSpacing = 18.dp,
+      overlay = { backdrop ->
+        FluidSectionIndex(
+          sections = railSections,
+          activeSectionKey = activeRailKey,
+          onSelectSection = { anchor, motion ->
+            if (selectedTab == TAB_TIMETABLE) selectTemplateSection(anchor, motion)
+            else selectHistorySection(anchor, motion)
+          },
+          visible = if (selectedTab == TAB_TIMETABLE) templateRailVisible else historyRailVisible,
+          backdrop = backdrop,
+          modifier = Modifier.align(Alignment.CenterEnd),
+        )
+      },
     ) {
       if (!state.lastMessage.isNullOrBlank()) {
         item(key = "lessons:message", contentType = LessonsContentType.Message) {
@@ -691,18 +706,6 @@ fun LessonsRoute(
       }
     }
 
-    val railSections = if (selectedTab == TAB_TIMETABLE) templateAnchors else historyAnchors
-    val activeRailKey = if (selectedTab == TAB_TIMETABLE) selectedTemplateDayKey else selectedHistoryDayKey
-    FluidSectionIndex(
-      sections = railSections,
-      activeSectionKey = activeRailKey,
-      onSelectSection = { anchor, motion ->
-        if (selectedTab == TAB_TIMETABLE) selectTemplateSection(anchor, motion)
-        else selectHistorySection(anchor, motion)
-      },
-      visible = if (selectedTab == TAB_TIMETABLE) templateRailVisible else historyRailVisible,
-      modifier = Modifier.align(Alignment.CenterEnd),
-    )
   }
 
   state.editingSlot?.let { slot ->

@@ -64,7 +64,6 @@ import androidx.compose.material.icons.rounded.Report
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.WarningAmber
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -149,6 +148,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidAlert
 import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidChromeController
 import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidMotionPolicyProvider
@@ -425,6 +425,7 @@ fun MainApp(
   }
 
   ClassevivaExpressiveTheme(settings = uiState.settings) {
+    val chromeController = rememberFluidChromeController()
     CompositionLocalProvider(
       LocalFluidNotificationHostState provides notificationHostState,
       LocalRouteMotionSignals provides routeMotionSignals,
@@ -440,6 +441,7 @@ fun MainApp(
               onLogin = viewModel::login,
             )
             else -> AuthenticatedApp(
+              chromeController = chromeController,
               isCheckingForUpdates = uiState.isCheckingUpdate,
               updateCheckMessage = uiState.updateCheckMessage,
               onCheckForUpdates = { viewModel.checkUpdate() },
@@ -449,6 +451,7 @@ fun MainApp(
           }
           FluidNotificationHost(
             state = notificationHostState,
+            backdrop = chromeController.activeBackdrop.value,
             modifier = Modifier.align(Alignment.TopCenter),
           )
           val update = uiState.availableUpdate
@@ -660,22 +663,15 @@ internal fun LoginScreen(
             style = MaterialTheme.typography.bodyMedium,
           )
         }
-        Button(
+        FluidButton(
+          text = "Accedi",
           onClick = ::submit,
-          modifier = Modifier
-            .fillMaxWidth()
-            .testTag("login_submit"),
+          modifier = Modifier.testTag("login_submit"),
+          style = FluidButtonStyle.Filled,
           enabled = username.isNotBlank() && password.isNotBlank() && !isLoading,
-        ) {
-          if (isLoading) {
-            FluidLoading(
-              modifier = Modifier.size(18.dp),
-              color = MaterialTheme.colorScheme.onPrimary,
-            )
-          } else {
-            Text("Accedi")
-          }
-        }
+          loading = isLoading,
+          fillWidth = true,
+        )
       }
     }
     item {
@@ -702,9 +698,9 @@ internal fun TopLevelNavigationSuite(
   onNavigateRoute: (String) -> Unit,
   onReselectRoute: (String) -> Unit = {},
   scrollToTop: FluidScrollToTopBus = remember { FluidScrollToTopBus() },
+  chromeController: FluidChromeController = rememberFluidChromeController(),
   content: @Composable () -> Unit,
 ) {
-  val chromeController = rememberFluidChromeController()
   val fallbackBackdrop = rememberGlassBackdrop()
   val bottomBarTravel = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
     FluidTabBarDefaults.Height + FluidTabBarDefaults.BottomMargin
@@ -982,10 +978,12 @@ private fun LoginScreenPreview() {
 private fun TopLevelNavigationSuitePreview() {
   ClassevivaExpressiveTheme(settings = AppSettings()) {
     FluidScreenSurface {
+      val chromeController = rememberFluidChromeController()
       TopLevelNavigationSuite(
         currentRoute = "more",
         showNavigationSuite = true,
         onNavigateRoute = {},
+        chromeController = chromeController,
       ) {
         MoreHubScreen(
           onOpenBugReport = {},
@@ -1044,6 +1042,7 @@ internal fun pendingHomeworkRequest(
 
 @Composable
 private fun AuthenticatedApp(
+  chromeController: FluidChromeController,
   isCheckingForUpdates: Boolean,
   updateCheckMessage: String?,
   onCheckForUpdates: () -> Unit,
@@ -1108,6 +1107,7 @@ private fun AuthenticatedApp(
       },
       onReselectRoute = { scrollToTop.request() },
       scrollToTop = scrollToTop,
+      chromeController = chromeController,
     ) {
       NavHost(
         navController = navController,
@@ -1681,4 +1681,3 @@ private fun MoreHubActionGroup(actions: List<MoreHubAction>) {
     }
   }
 }
-

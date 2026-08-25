@@ -194,9 +194,8 @@ function Invoke-InstrumentationClass {
     "shell", "am", "instrument", "-w", "-r",
     "-e", "class", $ClassName,
     "-e", "androidx.benchmark.compilation.enabled", "false",
-    "-e", "androidx.benchmark.fullTracing.enable", "true",
     "-e", "additionalTestOutputDir", $RemoteOutputDirectory,
-    "-e", "listener", "androidx.benchmark.junit4.SideEffectRunListener",
+    "-e", "listener", "androidx.benchmark.macro.junit4.SideEffectRunListener",
     $instrumentation
   )
 

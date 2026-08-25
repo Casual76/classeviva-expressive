@@ -16,6 +16,7 @@ import androidx.test.uiautomator.Until
 import java.util.regex.Pattern
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assume.assumeTrue
 import org.junit.runner.RunWith
 
 /**
@@ -57,7 +58,10 @@ class MotionMacrobenchmark {
     setup = {
       openHome()
       clickText("Voti")
-      revealFirstGradeRow()
+      assumeTrue(
+        "No grade detail is available in the authenticated account for this school year.",
+        revealFirstGradeRow(),
+      )
     },
     measure = {
       openFirstGradeRow()
@@ -162,13 +166,13 @@ private fun MacrobenchmarkScope.openFirstGradeRow() {
  * legitimately reopen above or below the first row, so the benchmark must not mistake saved scroll
  * state for missing user data.
  */
-private fun MacrobenchmarkScope.revealFirstGradeRow() {
+private fun MacrobenchmarkScope.revealFirstGradeRow(): Boolean {
   repeat(3) { swipeContentDown() }
   repeat(6) { attempt ->
-    if (findFirstGradeRow() != null) return
+    if (findFirstGradeRow() != null) return true
     if (attempt < 5) swipeContentUp()
   }
-  error("No numeric grade row is available after traversing the grades list.")
+  return false
 }
 
 private fun MacrobenchmarkScope.findFirstGradeRow(): UiObject2? {

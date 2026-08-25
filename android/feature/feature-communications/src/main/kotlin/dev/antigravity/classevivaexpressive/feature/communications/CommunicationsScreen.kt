@@ -647,6 +647,31 @@ fun CommunicationsRoute(
     onRefresh = viewModel::refresh,
     itemSpacing = 18.dp,
     listState = listState,
+    overlay = { backdrop ->
+      FluidSectionIndex(
+        sections = sectionAnchors,
+        activeSectionKey = activeSectionKey,
+        visible = sectionAnchors.size >= 3 &&
+          (listState.canScrollBackward || listState.canScrollForward),
+        backdrop = backdrop,
+        modifier = Modifier.align(Alignment.CenterEnd),
+        onSelectSection = { anchor, motion ->
+          listScope.launch {
+            listState.stopScroll()
+            val currentIndex = listState.firstVisibleItemIndex
+            val nearby = kotlin.math.abs(anchor.itemIndex - currentIndex) <= 8
+            if (motion == FluidSectionSelectionMotion.Animated && nearby) {
+              listState.animateScrollToItem(anchor.itemIndex)
+            } else {
+              listState.scrollToItem(anchor.itemIndex, railSettleOffsetPx)
+              if (motion == FluidSectionSelectionMotion.Animated) {
+                listState.animateScrollToItem(anchor.itemIndex)
+              }
+            }
+          }
+        },
+      )
+    },
   ) {
     // Whatever the sync could not deliver, said where the missing data would have been. Reserved
     // only when there is something to say, so an ordinary page keeps its first item at the top.
@@ -794,28 +819,6 @@ fun CommunicationsRoute(
       }
     }
   }
-
-    FluidSectionIndex(
-      sections = sectionAnchors,
-      activeSectionKey = activeSectionKey,
-      visible = sectionAnchors.size >= 3 && (listState.canScrollBackward || listState.canScrollForward),
-      modifier = Modifier.align(Alignment.CenterEnd),
-      onSelectSection = { anchor, motion ->
-        listScope.launch {
-          listState.stopScroll()
-          val currentIndex = listState.firstVisibleItemIndex
-          val nearby = kotlin.math.abs(anchor.itemIndex - currentIndex) <= 8
-          if (motion == FluidSectionSelectionMotion.Animated && nearby) {
-            listState.animateScrollToItem(anchor.itemIndex)
-          } else {
-            listState.scrollToItem(anchor.itemIndex, railSettleOffsetPx)
-            if (motion == FluidSectionSelectionMotion.Animated) {
-              listState.animateScrollToItem(anchor.itemIndex)
-            }
-          }
-        }
-      },
-    )
   }
 
   if (onOpenCommunication == null) state.selectedCommunication?.let { detail ->
