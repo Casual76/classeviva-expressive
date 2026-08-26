@@ -1,10 +1,19 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.theme
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.dp
+import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
+import dev.antigravity.fluidengine.ui.fluid.FluidRadius
+import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
 import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
 import kotlin.math.abs
 
@@ -77,3 +86,25 @@ internal fun hueDistanceDegrees(first: Color, second: Color): Float {
 /** La distanza L1 per canale in sRGB, 0..3. La stessa metrica gia' usata dai test della palette. */
 internal fun channelDistance(first: Color, second: Color): Float =
   abs(first.red - second.red) + abs(first.green - second.green) + abs(first.blue - second.blue)
+
+/**
+ * Un'etichetta sopra una superficie satura.
+ *
+ * Un [dev.antigravity.fluidengine.ui.theme.FluidStatusBadge] qui non va: prende i suoi colori dalla
+ * palette, non da [LocalContentColor], e sopra una fascia gia' colorata diventa colore sopra
+ * colore — due tinte che non c'entrano niente l'una con l'altra a due centimetri di distanza.
+ * Questa invece e' il contenuto stesso, a bassa opacita': si legge sempre, su qualunque fondo, e
+ * non introduce una terza tinta.
+ */
+@Composable
+fun VividBadge(label: String, modifier: Modifier = Modifier) {
+  val content = LocalContentColor.current
+  Text(
+    text = label,
+    style = FluidTextStyles.uppercaseCaption,
+    color = content,
+    modifier = modifier
+      .background(content.copy(alpha = 0.16f), ContinuousCornerShape(FluidRadius.Small))
+      .padding(horizontal = 8.dp, vertical = 3.dp),
+  )
+}

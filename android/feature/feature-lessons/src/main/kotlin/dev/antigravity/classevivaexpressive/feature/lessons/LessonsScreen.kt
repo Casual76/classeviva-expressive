@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
@@ -38,6 +41,7 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -59,7 +63,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.accentVividColors
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberMinuteTicker
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
@@ -92,6 +98,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
+import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.fluid.currentCanvasBackdrop
 import dev.antigravity.fluidengine.ui.fluid.rememberEmptyGlassBackdrop
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
@@ -329,6 +337,9 @@ fun LessonsRoute(
   }
 
   val templateByDay = remember(state.timetableTemplate) { state.timetableTemplate.slotsByDay() }
+  // Lo `State` si passa giu' come lambda e non si legge qui: leggerlo nel corpo della schermata
+  // ricomporrebbe tutta la lista una volta al minuto per una card sola.
+  val nowState = rememberMinuteTicker()
   val visibleDays = remember { stableSchoolDays() }
   val templateDayOptions = remember(visibleDays) {
     visibleDays.map { day -> DayOption(key = day.name, label = day.shortLabel()) }
@@ -489,6 +500,15 @@ fun LessonsRoute(
             "lezioni in settimana"
           },
           icon = Icons.Rounded.AutoStories,
+        )
+      }
+
+      // Fuori dal `when` sulle schede di proposito: "in cosa sono adesso" non dipende da quale
+      // scheda stai leggendo, ed e' il fatto che la pagina ti deve nell'istante in cui la apri.
+      item(key = "lessons:live", contentType = LessonsContentType.Hero) {
+        LiveLessonCard(
+          blocksForToday = templateByDay[LocalDate.now().dayOfWeek].orEmpty(),
+          now = { nowState.value.toLocalTime() },
         )
       }
 
@@ -742,6 +762,7 @@ private fun TimetableBlockRow(
     .mapNotNull { it.room?.trim()?.takeIf(String::isNotBlank) }
     .firstOrNull()
   val isOfficial = timetable.isOfficial
+  val kind = slotKind(block, timetable)
   FluidListRow(
     title = block.displaySubject,
     subtitle = primary.teacher ?: "Docente non specificato",
@@ -756,14 +777,7 @@ private fun TimetableBlockRow(
         else -> "Ricorrenza ${(primary.confidence * 100).toInt()}% · ${primary.sampleCount} settimane"
       },
     ).joinToString(" / "),
-    tone = when {
-      isConfirmed -> FluidTone.Success
-      isOverridden -> FluidTone.Info
-      isOfficial -> FluidTone.Success
-      primary.confidence >= 0.8f -> FluidTone.Success
-      primary.confidence >= 0.6f -> FluidTone.Info
-      else -> FluidTone.Warning
-    },
+    tone = kind.tone(),
     leading = { Icon(Icons.Rounded.School, contentDescription = null) },
     onClick = onConfirm,
     // Era un onLongClick che apriva la modifica senza dirlo. Il menu dice entrambe le cose che
@@ -782,16 +796,10 @@ private fun TimetableBlockRow(
         ),
       )
     },
-    badge = {
-      when {
-        isConfirmed -> FluidStatusBadge("CONFERMATO", tone = FluidTone.Success)
-        isOverridden -> FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
-        isOfficial -> FluidStatusBadge("IMPORT", tone = FluidTone.Success)
-        block.isMulti -> FluidStatusBadge("BLOCCO ${block.allSlots.size}H", tone = FluidTone.Info)
-        primary.confidence >= 0.75f -> FluidStatusBadge("STABILE", tone = FluidTone.Success)
-        else -> FluidStatusBadge("DINAMICO", tone = FluidTone.Warning)
-      }
-    },
+    // Badge e tono escono dalla stessa espressione: prima erano due `when` paralleli con soglie
+    // diverse (0.8 e 0.6 per il colore, 0.75 per l'etichetta), e a confidenza 0.78 la riga si
+    // contraddiceva da sola dicendo "STABILE" in verde su un tono blu.
+    badge = { FluidStatusBadge(kind.badgeLabel(block), tone = kind.tone()) },
     animatePress = true,
     modifier = modifier,
   )
@@ -941,6 +949,148 @@ internal data class SlotBlock(
     return "${start.format(timeFormatter)} - ${end.format(timeFormatter)}"
   }
 }
+
+/**
+ * La lezione in corso adesso, se ce n'e' una.
+ *
+ * Il colore e' quello dell'accento: non e' un allarme, e' il "sei qui" della sezione — la stessa
+ * ricetta della fascia piu' alta dei voti, perche' e' il colore con cui l'app dice "questo e' il
+ * fatto che conta adesso".
+ *
+ * [now] e' una lambda e non un valore: il `derivedStateOf` la legge dentro il blocco derivato, e
+ * cosi' la card si ricompone solo quando cambia il *risultato*, non a ogni battito del minuto.
+ * Passando un valore invece di una lambda il ticker smetterebbe di funzionare in silenzio.
+ */
+@Composable
+private fun LiveLessonCard(
+  blocksForToday: List<TemplateSlot>,
+  now: () -> LocalTime,
+  modifier: Modifier = Modifier,
+) {
+  val blocks = remember(blocksForToday) { blocksForToday.mergeIntoBlocks() }
+  val live by remember(blocks) { derivedStateOf { liveSlot(blocks, now()) } }
+  val current = live ?: return
+
+  FluidVividCard(colors = accentVividColors(), modifier = modifier) {
+    Text(
+      text = "ADESSO",
+      style = FluidTextStyles.uppercaseCaption,
+      color = LocalContentColor.current.copy(alpha = 0.75f),
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = current.block.displaySubject,
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold,
+          maxLines = 2,
+        )
+        Text(
+          text = listOfNotNull(
+            current.block.timeRangeLabel(),
+            current.block.primary.room?.takeIf(String::isNotBlank),
+            current.block.primary.teacher?.takeIf(String::isNotBlank),
+          ).joinToString(" - "),
+          style = MaterialTheme.typography.bodySmall,
+          color = LocalContentColor.current.copy(alpha = 0.78f),
+          maxLines = 1,
+        )
+      }
+      Text(
+        text = if (current.minutesRemaining <= 0L) "sta finendo" else "${current.minutesRemaining}'",
+        style = FluidTextStyles.numeric,
+        fontWeight = FontWeight.Bold,
+        color = LocalContentColor.current,
+      )
+    }
+  }
+}
+
+/**
+ * Che tipo di riga e' uno slot dell'orario.
+ *
+ * Da qui vengono sia il tono sia il badge, cosi' non possono dissentire — ed e' l'unico modo di
+ * avere una soglia sola invece di due che scivolano una rispetto all'altra.
+ */
+internal enum class SlotKind { Confirmed, Official, Overridden, Block, Stable, Dynamic }
+
+/** Sopra questa confidenza una ricorrenza si considera stabile. Una soglia, non due. */
+internal const val SlotStableConfidence = 0.75f
+
+internal fun slotKind(block: SlotBlock, timetable: TimetableTemplate): SlotKind {
+  val isOverridden = block.allSlots.any { timetable.manualOverrides.containsKey(it.slotFingerprint()) }
+  return when {
+    block.allSlots.all(TemplateSlot::confirmed) -> SlotKind.Confirmed
+    isOverridden -> SlotKind.Overridden
+    timetable.isOfficial -> SlotKind.Official
+    block.isMulti -> SlotKind.Block
+    block.primary.confidence >= SlotStableConfidence -> SlotKind.Stable
+    else -> SlotKind.Dynamic
+  }
+}
+
+/**
+ * Il tono dice **cos'e'** la riga, non quanto e' sicuro l'algoritmo.
+ *
+ * Erano sei gradini di fiducia colorati, che dentro una lista raggruppata trasformano un gruppo
+ * ordinato in una mappa di calore. La confidenza numerica resta dove e' gia' una parola: nel meta
+ * ("Ricorrenza 62% - 8 settimane") e nel badge.
+ */
+internal fun SlotKind.tone(): FluidTone = when (this) {
+  SlotKind.Confirmed, SlotKind.Official -> FluidTone.Success
+  SlotKind.Overridden -> FluidTone.Info
+  SlotKind.Block, SlotKind.Stable -> FluidTone.Neutral
+  SlotKind.Dynamic -> FluidTone.Warning
+}
+
+internal fun SlotKind.badgeLabel(block: SlotBlock): String = when (this) {
+  SlotKind.Confirmed -> "CONFERMATO"
+  SlotKind.Overridden -> "MODIFICATO"
+  SlotKind.Official -> "IMPORT"
+  SlotKind.Block -> "BLOCCO ${block.allSlots.size}H"
+  SlotKind.Stable -> "STABILE"
+  SlotKind.Dynamic -> "DINAMICO"
+}
+
+/** La lezione che sta scorrendo adesso, con quanto le manca. */
+internal data class LiveSlot(
+  val block: SlotBlock,
+  val start: LocalTime,
+  val end: LocalTime,
+  val minutesRemaining: Long,
+)
+
+/**
+ * Il blocco in corso a quest'ora, o niente.
+ *
+ * L'intervallo e' chiuso a sinistra e aperto a destra: all'istante d'inizio la lezione e' gia'
+ * cominciata, all'istante di fine e' gia' finita. Il calcolo della fine e' lo stesso di
+ * [SlotBlock.timeRangeLabel] — l'ora dell'ultimo slot, o l'inizio piu' la somma delle durate.
+ */
+internal fun liveSlot(blocks: List<SlotBlock>, now: LocalTime): LiveSlot? = blocks
+  .asSequence()
+  .mapNotNull { block ->
+    val start = runCatching { LocalTime.parse(block.primary.time) }.getOrNull()
+      ?: return@mapNotNull null
+    val lastSlot = block.extra.lastOrNull() ?: block.primary
+    val end = lastSlot.endTime
+      ?.takeIf(String::isNotBlank)
+      ?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
+      ?: start.plusMinutes(block.allSlots.sumOf { it.durationMinutes }.toLong())
+    if (now < start || now >= end) return@mapNotNull null
+    LiveSlot(
+      block = block,
+      start = start,
+      end = end,
+      minutesRemaining = java.time.temporal.ChronoUnit.MINUTES.between(now, end),
+    )
+  }
+  .firstOrNull()
 
 private fun List<TemplateSlot>.mergeIntoBlocks(): List<SlotBlock> {
   if (isEmpty()) return emptyList()

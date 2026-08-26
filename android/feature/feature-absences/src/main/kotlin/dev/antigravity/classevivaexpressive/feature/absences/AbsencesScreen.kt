@@ -1,7 +1,12 @@
 package dev.antigravity.classevivaexpressive.feature.absences
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -12,6 +17,8 @@ import androidx.compose.material.icons.automirrored.rounded.Logout
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -20,7 +27,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -31,6 +41,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.dangerVividColors
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceType
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsencesRepository
@@ -51,7 +62,11 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
+import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
+import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
@@ -195,8 +210,19 @@ fun AbsencesRoute(
         value = pending.size.toString(),
         label = "da giustificare",
         icon = if (pending.isEmpty()) Icons.AutoMirrored.Rounded.FactCheck else Icons.Rounded.EventBusy,
-        urgent = pending.isNotEmpty(),
+        // Niente `urgent` qui quando c'e' la card sotto: sarebbero due bande rosse impilate che
+        // dicono lo stesso numero. Il rosso lo tiene la superficie su cui si puo' agire, e il
+        // fondale della pagina resta urgente lo stesso — quello e' una velatura, non una superficie.
+        urgent = false,
       )
+    }
+    if (pending.isNotEmpty()) {
+      item(key = "absences:pending") {
+        PendingJustificationsCard(
+          pending = pending,
+          onJustify = viewModel::requestJustification,
+        )
+      }
     }
     item {
       Row(
@@ -293,6 +319,67 @@ fun AbsencesRoute(
         )
       },
     )
+  }
+}
+
+/**
+ * Le giustificazioni in sospeso, come superficie invece che come conteggio.
+ *
+ * Il valore aggiunto non e' il numero — quello lo dice gia' la fascia in cima — ma il fatto che si
+ * possa toccare: la card apre la giustificazione della piu' recente. L'azione sta sulla card
+ * intera e non su un bottone dentro, perche' un bottone prende i suoi colori dalla palette e
+ * finirebbe per essere colore sopra colore; e la pressione al 97% e' gia' l'affordance del design
+ * system.
+ */
+@Composable
+private fun PendingJustificationsCard(
+  pending: List<AbsenceRecord>,
+  onJustify: (AbsenceRecord) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val latest = pending.first()
+  FluidVividCard(
+    colors = dangerVividColors(),
+    modifier = modifier,
+    onClick = { onJustify(latest) },
+  ) {
+    Text(
+      text = "DA GIUSTIFICARE",
+      style = FluidTextStyles.uppercaseCaption,
+      color = LocalContentColor.current.copy(alpha = 0.75f),
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = if (pending.size == 1) "1 voce in sospeso" else "${pending.size} voci in sospeso",
+          style = MaterialTheme.typography.titleMedium,
+          fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+          text = "${absenceLabel(latest.type)} del ${latest.date.toReadableDate()}",
+          style = MaterialTheme.typography.bodySmall,
+          color = LocalContentColor.current.copy(alpha = 0.78f),
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+      Text(
+        text = "GIUSTIFICA",
+        style = FluidTextStyles.uppercaseCaption,
+        color = LocalContentColor.current,
+        modifier = Modifier
+          .background(
+            LocalContentColor.current.copy(alpha = 0.16f),
+            ContinuousCornerShape(FluidRadius.Small),
+          )
+          .padding(horizontal = 10.dp, vertical = 5.dp),
+      )
+    }
   }
 }
 

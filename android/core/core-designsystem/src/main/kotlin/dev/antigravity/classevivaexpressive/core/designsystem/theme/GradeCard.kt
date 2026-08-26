@@ -204,7 +204,7 @@ private fun CompactGradeContent(
   }
 }
 
-/** Il segnale di stato, on-color: una capsula del contenuto all'11%, come i controlli del hero. */
+/** Il segnale di stato del voto: la stessa capsula on-color di ogni superficie satura. */
 @Composable
 private fun GradeCardFlag(unseen: Boolean, edited: Boolean) {
   val label = when {
@@ -212,13 +212,5 @@ private fun GradeCardFlag(unseen: Boolean, edited: Boolean) {
     edited -> "MODIFICATO"
     else -> return
   }
-  val content = LocalContentColor.current
-  Text(
-    text = label,
-    style = FluidTextStyles.uppercaseCaption,
-    color = content,
-    modifier = Modifier
-      .background(content.copy(alpha = 0.14f), ContinuousCornerShape(FluidRadius.Small))
-      .padding(horizontal = 7.dp, vertical = 2.dp),
-  )
+  VividBadge(label = label)
 }

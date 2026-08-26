@@ -1151,7 +1151,7 @@ internal fun AppBackupImportSummary.describe(): String {
       val years = gradeSchoolYears.takeIf { it.isNotEmpty() }?.joinToString(", ")
       add(plural(grades, "voto", "voti") + if (years != null) " ($years)" else "")
     }
-    if (seenGrades > 0) add("$seenGrades gia' visti")
+    if (seenGrades > 0) add("$seenGrades già visti")
     if (scoreSnapshots > 0) add(plural(scoreSnapshots, "punteggio", "punteggi"))
   }
   if (parts.isEmpty()) return "Backup importato, ma non conteneva dati da ripristinare."

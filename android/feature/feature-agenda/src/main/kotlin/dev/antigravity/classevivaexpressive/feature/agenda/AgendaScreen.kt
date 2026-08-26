@@ -35,6 +35,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
@@ -55,6 +56,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -65,6 +67,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.dangerVividColors
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
@@ -89,6 +92,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidAlert
 import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
@@ -96,11 +100,14 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
+import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
+import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -153,6 +160,57 @@ internal fun buildAgendaFacets(
   }
   val rest = window.size - assessments
   if (rest > 0) add(if (rest == 1) "1 impegno" else "$rest impegni")
+}
+
+/** La prossima verifica in arrivo, con quanto manca. */
+internal data class UpcomingAssessment(
+  val id: String,
+  val title: String,
+  val subject: String?,
+  val date: LocalDate,
+  val daysAway: Long,
+)
+
+/**
+ * La prossima verifica dentro la finestra che la barra gia' conta, o niente.
+ *
+ * Guarda i prossimi giorni e non il giorno selezionato di proposito. Il giorno selezionato la
+ * pagina lo racconta gia' due volte — la fascia in cima ne da' il conteggio e la lista sotto ne
+ * mostra il contenuto — mentre quello che la pagina non dice e' quando arriva la prossima verifica,
+ * ovunque sia. E una superficie satura agganciata alla selezione lampeggerebbe dentro e fuori a
+ * ogni tocco sul calendario, che e' il modo di rendere invisibile un colore.
+ *
+ * Stessa costante e stessa finestra di [buildAgendaFacets]: due modi di dire la stessa cosa, non
+ * due verita' diverse.
+ */
+internal fun upcomingAssessment(
+  items: List<AgendaItem>,
+  today: LocalDate,
+  lookaheadDays: Long = AgendaLookaheadDays,
+): UpcomingAssessment? {
+  val from = today.toString()
+  val until = today.plusDays(lookaheadDays).toString()
+  return items
+    .asSequence()
+    .filter { it.category == AgendaCategory.ASSESSMENT && it.date in from..until }
+    .mapNotNull { item ->
+      val date = runCatching { LocalDate.parse(item.date) }.getOrNull() ?: return@mapNotNull null
+      UpcomingAssessment(
+        id = item.id,
+        title = item.title,
+        subject = item.subject,
+        date = date,
+        daysAway = java.time.temporal.ChronoUnit.DAYS.between(today, date),
+      )
+    }
+    .minByOrNull { it.date }
+}
+
+/** "oggi", "domani", "fra 3 giorni": il tempo che manca detto come lo direbbe una persona. */
+internal fun upcomingAssessmentWhen(daysAway: Long): String = when {
+  daysAway <= 0L -> "oggi"
+  daysAway == 1L -> "domani"
+  else -> "fra $daysAway giorni"
 }
 
 internal fun agendaMonthLabel(date: LocalDate): String =
@@ -286,6 +344,9 @@ fun AgendaRoute(
   val titleFacets = remember(state.items, facetToday) {
     buildAgendaFacets(state.items, facetToday)
   }
+  val nextAssessment = remember(state.items, facetToday) {
+    upcomingAssessment(state.items, facetToday)
+  }
 
   FluidScreen(
     modifier = modifier,
@@ -320,6 +381,53 @@ fun AgendaRoute(
         label = if (selectedDayEntries.size == 1) "impegno nel giorno" else "impegni nel giorno",
         icon = Icons.Rounded.CalendarMonth,
       )
+    }
+    // Il primo fatto della pagina quando c'e', e assente quando non c'e' niente da dire. Rosso
+    // perche' e' la stessa famiglia del tono delle verifiche e del segno che portano nel calendario.
+    nextAssessment?.let { assessment ->
+      item(key = "agenda:next-assessment") {
+        FluidVividCard(
+          colors = dangerVividColors(),
+          onClick = { selectedDateText = assessment.date.toString() },
+        ) {
+          Text(
+            text = "PROSSIMA VERIFICA",
+            style = FluidTextStyles.uppercaseCaption,
+            color = LocalContentColor.current.copy(alpha = 0.75f),
+          )
+          Spacer(modifier = Modifier.height(4.dp))
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Bottom,
+          ) {
+            Text(
+              text = upcomingAssessmentWhen(assessment.daysAway),
+              style = MaterialTheme.typography.headlineSmall,
+              fontWeight = FontWeight.Bold,
+            )
+            Text(
+              text = assessment.subject ?: assessment.title,
+              modifier = Modifier
+                .weight(1f)
+                .padding(bottom = 3.dp),
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.SemiBold,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
+          if (assessment.subject != null && assessment.title.isNotBlank()) {
+            Text(
+              text = assessment.title,
+              style = MaterialTheme.typography.bodySmall,
+              color = LocalContentColor.current.copy(alpha = 0.78f),
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
+        }
+      }
     }
     item {
       MonthHeader(
@@ -530,7 +638,7 @@ private fun CalendarDayCell(
         onClick = onClick,
       ),
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(2.dp),
+    verticalArrangement = Arrangement.spacedBy(3.dp),
   ) {
     Box(
       modifier = Modifier
@@ -551,8 +659,8 @@ private fun CalendarDayCell(
       )
     }
     Row(
-      modifier = Modifier.height(6.dp),
-      horizontalArrangement = Arrangement.spacedBy(2.dp),
+      modifier = Modifier.height(8.dp),
+      horizontalArrangement = Arrangement.spacedBy(3.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       val categories = entries.map { it.category }.distinct()
@@ -561,24 +669,35 @@ private fun CalendarDayCell(
       // dell'accento scelto in impostazioni: tre puntini che restavano identici mentre tutto il
       // resto della pagina cambiava.
       if (categories.contains(AgendaCategory.EVENT) || categories.contains(AgendaCategory.CUSTOM)) {
-        CalendarDot(color = MaterialTheme.colorScheme.tertiary)
+        CalendarMark(color = MaterialTheme.colorScheme.tertiary)
       }
       if (categories.contains(AgendaCategory.HOMEWORK)) {
-        CalendarDot(color = MaterialTheme.colorScheme.secondary)
+        CalendarMark(color = MaterialTheme.colorScheme.secondary)
       }
       if (categories.contains(AgendaCategory.ASSESSMENT)) {
-        CalendarDot(color = MaterialTheme.colorScheme.error)
+        CalendarMark(color = MaterialTheme.colorScheme.error)
       }
     }
   }
 }
 
+/**
+ * Il segno di una famiglia di impegni in una cella del calendario.
+ *
+ * Una capsula e non un puntino: a cinque dp di diametro i tre colori erano distinguibili solo
+ * sapendo gia' quali cercare, ed erano l'indicatore piu' piccolo dell'app a portare
+ * l'informazione piu' densa. Con il doppio di superficie la differenza fra il compito e la
+ * verifica si vede senza avvicinare lo schermo.
+ *
+ * Il raggio viene clampato a meta' del lato corto, quindi da `FluidRadius.Small` su un box alto
+ * quattro esce una capsula esatta: nessuna forma inventata e nessun `CircleShape` a mano.
+ */
 @Composable
-private fun CalendarDot(color: Color) {
+private fun CalendarMark(color: Color) {
   Box(
     modifier = Modifier
-      .size(5.dp)
-      .background(color = color, shape = androidx.compose.foundation.shape.CircleShape),
+      .size(width = 10.dp, height = 4.dp)
+      .background(color = color, shape = ContinuousCornerShape(FluidRadius.Small)),
   )
 }
 

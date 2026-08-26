@@ -2,6 +2,7 @@ package dev.antigravity.classevivaexpressive.feature.dashboard
 
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.VividBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import android.content.ClipboardManager
@@ -49,7 +50,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentAsset
+import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
+import dev.antigravity.classevivaexpressive.core.domain.model.DocumentKind
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkDetail
@@ -66,6 +69,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreCompar
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreSnapshot
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -111,6 +115,77 @@ data class MaterialsUiState(
   val refreshError: String? = null,
   val isStale: Boolean = false,
 )
+
+/**
+ * Il tono di un materiale dice cosa succede toccandolo, non "e' un materiale".
+ *
+ * Era `Info` fisso su ogni riga: un colore che non distingue niente e' decorazione, e in una lista
+ * raggruppata e' rumore che compete con i toni che invece qualcosa la dicono.
+ */
+internal fun MaterialItem.materialTone(): FluidTone = when {
+  capabilityState.status == CapabilityStatus.UNAVAILABLE -> FluidTone.Warning
+  isLinkMaterial() -> FluidTone.Info
+  else -> FluidTone.Neutral
+}
+
+internal fun MaterialItem.materialBadgeLabel(): String = when {
+  capabilityState.status == CapabilityStatus.UNAVAILABLE -> "NON DISPONIBILE"
+  isLinkMaterial() -> "LINK"
+  else -> "FILE"
+}
+
+/** Quanto manca alla consegna di un compito. */
+internal enum class HomeworkDue { Overdue, Today, Tomorrow, Soon, Later, Unknown }
+
+internal fun homeworkDue(dueDate: String?, today: LocalDate): HomeworkDue {
+  val due = dueDate?.takeIf(String::isNotBlank)
+    ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    ?: return HomeworkDue.Unknown
+  val days = java.time.temporal.ChronoUnit.DAYS.between(today, due)
+  return when {
+    days < 0L -> HomeworkDue.Overdue
+    days == 0L -> HomeworkDue.Today
+    days == 1L -> HomeworkDue.Tomorrow
+    days <= 7L -> HomeworkDue.Soon
+    else -> HomeworkDue.Later
+  }
+}
+
+/**
+ * Un compito scaduto non e' piu' un'urgenza, e' storia: il giallo va a quello che si puo' ancora
+ * fare in tempo. Prima erano tutti `Warning`, cioe' nessuno lo era davvero.
+ */
+internal fun HomeworkDue.tone(): FluidTone = when (this) {
+  HomeworkDue.Today, HomeworkDue.Tomorrow -> FluidTone.Warning
+  HomeworkDue.Soon -> FluidTone.Info
+  HomeworkDue.Overdue, HomeworkDue.Later, HomeworkDue.Unknown -> FluidTone.Neutral
+}
+
+internal fun HomeworkDue.badgeLabel(dueDate: String?, today: LocalDate): String = when (this) {
+  HomeworkDue.Overdue -> "SCADUTO"
+  HomeworkDue.Today -> "OGGI"
+  HomeworkDue.Tomorrow -> "DOMANI"
+  HomeworkDue.Soon -> {
+    val due = dueDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    val days = due?.let { java.time.temporal.ChronoUnit.DAYS.between(today, it) }
+    if (days != null) "FRA $days GG" else "COMPITO"
+  }
+  HomeworkDue.Later, HomeworkDue.Unknown -> "COMPITO"
+}
+
+/**
+ * Una pagella e' un esito, un documento e' un documento: e' l'unica distinzione che c'e'.
+ *
+ * Niente ramo sulla capability, a differenza dei materiali: `DocumentItem.capabilityState` ha come
+ * default `UNAVAILABLE` e il parser non lo valorizza mai, quindi guardarlo qui marcherebbe come
+ * "non disponibile" ogni singolo documento. Per i materiali invece lo stato e' un parametro
+ * obbligatorio del modello, quindi li' vuol dire davvero qualcosa.
+ */
+internal fun DocumentItem.documentTone(): FluidTone =
+  if (kind == DocumentKind.SCHOOL_REPORT) FluidTone.Success else FluidTone.Neutral
+
+internal fun DocumentItem.documentBadgeLabel(): String =
+  if (kind == DocumentKind.SCHOOL_REPORT) "PAGELLA" else "DOCUMENTO"
 
 internal fun MaterialItem.isLinkMaterial(): Boolean = objectType.equals("link", ignoreCase = true)
 
@@ -351,7 +426,7 @@ fun MeetingsRoute(
         icon = Icons.Rounded.Groups,
         trailing = {
           if (state.bookings.isNotEmpty()) {
-            FluidStatusBadge("${state.bookings.size} PRENOTATI", tone = FluidTone.Success)
+            VividBadge("${state.bookings.size} PRENOTATI")
           }
         },
       )
@@ -611,13 +686,13 @@ fun MaterialsRoute(
             subtitle = item.teacherName,
             eyebrow = item.folderName,
             meta = item.sharedAt,
-            tone = FluidTone.Info,
+            tone = item.materialTone(),
             onClick = {
               materialOrigin = rowBounds
               if (onOpenMaterial != null) onOpenMaterial(item.id) else selectedItem = item
             },
             badge = {
-              FluidStatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = FluidTone.Info)
+              FluidStatusBadge(item.materialBadgeLabel(), tone = item.materialTone())
             },
           )
         }
@@ -756,8 +831,8 @@ fun MaterialDetailRoute(
         subtitle = item.teacherName,
         eyebrow = item.folderName,
         meta = item.sharedAt,
-        tone = FluidTone.Info,
-        badge = { FluidStatusBadge(if (item.isLinkMaterial()) "LINK" else "FILE", tone = FluidTone.Info) },
+        tone = item.materialTone(),
+        badge = { FluidStatusBadge(item.materialBadgeLabel(), tone = item.materialTone()) },
         animatePress = false,
       )
     },
@@ -913,6 +988,7 @@ fun HomeworkRoute(
   // Il rettangolo di cio' che si e' toccato: la finestra ci nasce sopra e ci ritorna.
   // Senza origine Fluid-physics non ha un viaggio da fare e il pannello arriva dal centro.
   var homeworkOrigin by remember { mutableStateOf<Rect?>(null) }
+  val homeworkToday = remember { LocalDate.now() }
 
   LaunchedEffect(initialHomeworkId, state.homeworks) {
     if (!initialHomeworkId.isNullOrBlank() && state.selectedHomework?.id != initialHomeworkId) {
@@ -965,7 +1041,7 @@ fun HomeworkRoute(
           subtitle = item.description,
           eyebrow = "COMPITO",
           meta = item.homeworkMeta(),
-          tone = FluidTone.Warning,
+          tone = homeworkDue(item.dueDate, homeworkToday).tone(),
           onClick = {
             homeworkOrigin = rowBounds
             if (onOpenHomework != null) onOpenHomework(item.id) else viewModel.selectHomework(item)
@@ -974,7 +1050,8 @@ fun HomeworkRoute(
             if (item.history.isNotEmpty()) {
               FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
             }
-            FluidStatusBadge("COMPITO", tone = FluidTone.Warning)
+            val due = homeworkDue(item.dueDate, homeworkToday)
+            FluidStatusBadge(due.badgeLabel(item.dueDate, homeworkToday), tone = due.tone())
           },
         )
       }
@@ -1088,10 +1165,11 @@ fun HomeworkDetailRoute(
         subtitle = homework.description,
         eyebrow = "COMPITO",
         meta = homework.homeworkMeta(),
-        tone = FluidTone.Warning,
+        tone = homeworkDue(homework.dueDate, LocalDate.now()).tone(),
         badge = {
           if (homework.history.isNotEmpty()) FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
-          FluidStatusBadge("COMPITO", tone = FluidTone.Warning)
+          val due = homeworkDue(homework.dueDate, LocalDate.now())
+          FluidStatusBadge(due.badgeLabel(homework.dueDate, LocalDate.now()), tone = due.tone())
         },
         animatePress = false,
       )
@@ -1122,9 +1200,20 @@ private fun Homework.homeworkMeta(): String? {
   return buildList {
     addedAtLabel()?.let { add("Aggiunto: $it") }
     modifiedAtLabel()?.let { add("Modificato: $it") }
-    dueDate.takeIf(String::isNotBlank)?.let { add("Scadenza: $it") }
+    dueDate.takeIf(String::isNotBlank)?.let { add("Scadenza: ${it.homeworkDueLabel()}") }
   }.joinToString(" / ").ifBlank { null }
 }
+
+/**
+ * La scadenza, scritta come le altre date della riga.
+ *
+ * Era l'unica in ISO grezzo (`Scadenza: 2026-03-14`) in mezzo a campi gia' in italiano.
+ */
+private fun String.homeworkDueLabel(): String =
+  runCatching { LocalDate.parse(this).format(homeworkDueFormatter) }.getOrDefault(this)
+
+private val homeworkDueFormatter: DateTimeFormatter =
+  DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ITALIAN)
 
 private fun Homework.addedAtLabel(): String? = createdAt
   ?.trim()
@@ -1322,7 +1411,7 @@ fun DocumentsRoute(
         icon = Icons.AutoMirrored.Rounded.MenuBook,
         trailing = {
           if (state.schoolbookCourses.isNotEmpty()) {
-            FluidStatusBadge("${state.schoolbookCourses.size} CORSI", tone = FluidTone.Info)
+            VividBadge("${state.schoolbookCourses.size} CORSI")
           }
         },
       )
@@ -1375,12 +1464,12 @@ fun DocumentsRoute(
             modifier = Modifier.fluidExpandOrigin { rowBounds = it },
             title = doc.title,
             subtitle = doc.detail,
-            tone = FluidTone.Info,
+            tone = doc.documentTone(),
             onClick = {
               documentOrigin = rowBounds
               if (onOpenDocument != null) onOpenDocument(doc.id) else viewModel.openDocument(doc)
             },
-            badge = { FluidStatusBadge("DOCUMENTO", tone = FluidTone.Info) },
+            badge = { FluidStatusBadge(doc.documentBadgeLabel(), tone = doc.documentTone()) },
             animatePress = true,
           )
         }
@@ -1548,8 +1637,8 @@ fun DocumentDetailRoute(
       FluidListRow(
         title = document.title,
         subtitle = document.detail,
-        tone = FluidTone.Info,
-        badge = { FluidStatusBadge("DOCUMENTO", tone = FluidTone.Info) },
+        tone = document.documentTone(),
+        badge = { FluidStatusBadge(document.documentBadgeLabel(), tone = document.documentTone()) },
         animatePress = false,
       )
     },
