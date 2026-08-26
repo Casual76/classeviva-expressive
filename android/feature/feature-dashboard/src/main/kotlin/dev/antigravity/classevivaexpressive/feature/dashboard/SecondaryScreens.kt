@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -79,6 +80,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
+import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
@@ -313,6 +315,10 @@ fun MeetingsRoute(
   val context = LocalContext.current
   val teachersById = remember(state.teachers) { state.teachers.associateBy { it.id } }
 
+  // Il rettangolo di cio' che si e' toccato: la finestra ci nasce sopra e ci ritorna.
+  // Senza origine Fluid-physics non ha un viaggio da fare e il pannello arriva dal centro.
+  var meetingOrigin by remember { mutableStateOf<Rect?>(null) }
+
   FluidScreen(
     title = "Colloqui",
     subtitle = "Prenotazioni e disponibilita dei docenti.",
@@ -347,13 +353,15 @@ fun MeetingsRoute(
     if (state.bookings.isNotEmpty()) {
       item { FluidSectionHeader("Prenotati") }
       fluidGlassGroups(state.bookings) { booking ->
+        var rowBounds by remember { mutableStateOf<Rect?>(null) }
         FluidListRow(
+          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
           title = booking.teacher.name,
           subtitle = booking.slot.meetingSlotLabel(),
           eyebrow = booking.teacher.subject ?: "Colloquio",
           meta = booking.bookingPosition?.let { "Posizione: $it" } ?: booking.status,
           tone = FluidTone.Success,
-          onClick = { viewModel.selectBooking(booking) },
+          onClick = { meetingOrigin = rowBounds; viewModel.selectBooking(booking) },
           badge = { FluidStatusBadge("PRENOTATO", tone = FluidTone.Success) },
           animatePress = true,
         )
@@ -364,14 +372,16 @@ fun MeetingsRoute(
     if (availableSlots.isNotEmpty()) {
       item { FluidSectionHeader("Disponibili") }
       fluidGlassGroups(availableSlots) { slot ->
+        var rowBounds by remember { mutableStateOf<Rect?>(null) }
         val teacher = teachersById[slot.teacherId]
         FluidListRow(
+          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
           title = teacher?.name ?: "Docente",
           subtitle = slot.meetingSlotLabel(),
           eyebrow = teacher?.subject ?: "Disponibile",
           meta = slot.location,
           tone = FluidTone.Info,
-          onClick = { viewModel.selectSlot(slot) },
+          onClick = { meetingOrigin = rowBounds; viewModel.selectSlot(slot) },
           badge = { FluidStatusBadge("PRENOTA", tone = FluidTone.Info) },
           animatePress = true,
         )
@@ -401,6 +411,7 @@ fun MeetingsRoute(
   FluidGlassModalPortal(
     item = state.selectedBooking,
     onDismissRequest = viewModel::dismissSelection,
+    origin = { meetingOrigin },
     paneTitle = "Prenotazione colloquio",
   ) { booking ->
     Column(
@@ -437,6 +448,7 @@ fun MeetingsRoute(
   FluidGlassModalPortal(
     item = state.selectedSlot,
     onDismissRequest = viewModel::dismissSelection,
+    origin = { meetingOrigin },
     paneTitle = "Disponibilita colloquio",
   ) { slot ->
     val teacher = teachersById[slot.teacherId]
@@ -516,6 +528,10 @@ fun MaterialsRoute(
   var downloadMessage by rememberSaveable { mutableStateOf<String?>(null) }
   val context = LocalContext.current
 
+  // Il rettangolo di cio' che si e' toccato: la finestra ci nasce sopra e ci ritorna.
+  // Senza origine Fluid-physics non ha un viaggio da fare e il pannello arriva dal centro.
+  var materialOrigin by remember { mutableStateOf<Rect?>(null) }
+
   FluidScreen(
     title = "Didattica",
     subtitle = "Materiali condivisi dai docenti, link a risorse esterne e file da scaricare.",
@@ -568,13 +584,16 @@ fun MaterialsRoute(
           }
         }
         fluidGlassGroups(items) { item ->
+          var rowBounds by remember { mutableStateOf<Rect?>(null) }
           FluidListRow(
+            modifier = Modifier.fluidExpandOrigin { rowBounds = it },
             title = item.title,
             subtitle = item.teacherName,
             eyebrow = item.folderName,
             meta = item.sharedAt,
             tone = FluidTone.Info,
             onClick = {
+              materialOrigin = rowBounds
               if (onOpenMaterial != null) onOpenMaterial(item.id) else selectedItem = item
             },
             badge = {
@@ -595,6 +614,7 @@ fun MaterialsRoute(
       isDownloading = false
       downloadMessage = null
     },
+    origin = { materialOrigin },
     paneTitle = "Dettaglio materiale",
   ) { item ->
     Box {
@@ -690,6 +710,10 @@ fun MaterialDetailRoute(
   var isDownloading by rememberSaveable { mutableStateOf(false) }
   var downloadMessage by rememberSaveable { mutableStateOf<String?>(null) }
 
+  // Il tasto che apre il foglio azioni e' l'ancora: e' lui che diventa il pannello.
+  // Un'azione che nasce da un tasto e cresce dal centro dello schermo perde il nesso fra i due.
+  var actionsOrigin by remember { mutableStateOf<Rect?>(null) }
+
   if (item == null) {
     FluidScreen(title = "Dettaglio materiale", modifier = modifier, onBack = onBack) {
       item(key = "material-detail-missing") {
@@ -725,6 +749,7 @@ fun MaterialDetailRoute(
       FluidButton(
         text = if (item.isLinkMaterial()) "Apri risorsa" else "Apri o scarica",
         onClick = { showActions = true },
+        modifier = Modifier.fluidExpandOrigin { actionsOrigin = it },
         style = FluidButtonStyle.Tinted,
         fillWidth = true,
       )
@@ -734,6 +759,7 @@ fun MaterialDetailRoute(
   FluidGlassModalPortal(
     visible = showActions,
     onDismissRequest = { showActions = false },
+    origin = { actionsOrigin },
     paneTitle = "Azioni materiale",
   ) {
     Box {
@@ -864,6 +890,10 @@ fun HomeworkRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
 
+  // Il rettangolo di cio' che si e' toccato: la finestra ci nasce sopra e ci ritorna.
+  // Senza origine Fluid-physics non ha un viaggio da fare e il pannello arriva dal centro.
+  var homeworkOrigin by remember { mutableStateOf<Rect?>(null) }
+
   LaunchedEffect(initialHomeworkId, state.homeworks) {
     if (!initialHomeworkId.isNullOrBlank() && state.selectedHomework?.id != initialHomeworkId) {
       state.homeworks.firstOrNull { it.id == initialHomeworkId }?.let(viewModel::selectHomework)
@@ -904,13 +934,16 @@ fun HomeworkRoute(
       }
     } else {
       fluidGlassGroups(state.homeworks) { item ->
+        var rowBounds by remember { mutableStateOf<Rect?>(null) }
         FluidListRow(
+          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
           title = item.subject,
           subtitle = item.description,
           eyebrow = "COMPITO",
           meta = item.homeworkMeta(),
           tone = FluidTone.Warning,
           onClick = {
+            homeworkOrigin = rowBounds
             if (onOpenHomework != null) onOpenHomework(item.id) else viewModel.selectHomework(item)
           },
           badge = {
@@ -927,6 +960,7 @@ fun HomeworkRoute(
   FluidGlassModalPortal(
     item = if (onOpenHomework == null) state.selectedHomework else null,
     onDismissRequest = viewModel::dismiss,
+    origin = { homeworkOrigin },
     paneTitle = "Dettaglio compito",
   ) { hw ->
     Box {
@@ -1235,6 +1269,10 @@ fun DocumentsRoute(
   }
   val context = LocalContext.current
 
+  // Il rettangolo di cio' che si e' toccato: la finestra ci nasce sopra e ci ritorna.
+  // Senza origine Fluid-physics non ha un viaggio da fare e il pannello arriva dal centro.
+  var documentOrigin by remember { mutableStateOf<Rect?>(null) }
+
   FluidScreen(
     title = "Documenti e libri",
     subtitle = "Documenti della scuola, pagelle e libri scolastici adottati.",
@@ -1299,11 +1337,14 @@ fun DocumentsRoute(
         }
       } else {
         fluidGlassGroups(state.documents) { doc ->
+          var rowBounds by remember { mutableStateOf<Rect?>(null) }
           FluidListRow(
+            modifier = Modifier.fluidExpandOrigin { rowBounds = it },
             title = doc.title,
             subtitle = doc.detail,
             tone = FluidTone.Info,
             onClick = {
+              documentOrigin = rowBounds
               if (onOpenDocument != null) onOpenDocument(doc.id) else viewModel.openDocument(doc)
             },
             badge = { FluidStatusBadge("DOCUMENTO", tone = FluidTone.Info) },
@@ -1352,6 +1393,7 @@ fun DocumentsRoute(
   FluidGlassModalPortal(
     item = if (onOpenDocument == null) state.selectedDocument else null,
     onDismissRequest = viewModel::dismissDocument,
+    origin = { documentOrigin },
     paneTitle = "Dettaglio documento",
   ) { doc ->
     Box {
@@ -1445,6 +1487,10 @@ fun DocumentDetailRoute(
   val context = LocalContext.current
   var showActions by rememberSaveable(documentId) { mutableStateOf(false) }
 
+  // Il tasto che apre il foglio azioni e' l'ancora: e' lui che diventa il pannello.
+  // Un'azione che nasce da un tasto e cresce dal centro dello schermo perde il nesso fra i due.
+  var actionsOrigin by remember { mutableStateOf<Rect?>(null) }
+
   DisposableEffect(viewModel, documentId) {
     onDispose { viewModel.dismissDocument() }
   }
@@ -1482,6 +1528,7 @@ fun DocumentDetailRoute(
           showActions = true
           if (state.selectedDocument?.id != documentId) viewModel.openDocument(document)
         },
+        modifier = Modifier.fluidExpandOrigin { actionsOrigin = it },
         style = FluidButtonStyle.Tinted,
         fillWidth = true,
       )
@@ -1494,6 +1541,7 @@ fun DocumentDetailRoute(
       showActions = false
       viewModel.dismissDocument()
     },
+    origin = { actionsOrigin },
     paneTitle = "Azioni documento",
   ) {
     Box {

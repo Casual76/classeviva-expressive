@@ -16,6 +16,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -51,6 +55,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
+import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -409,6 +414,9 @@ fun ProfessorsRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
 
+  // Il rettangolo della riga toccata: e' da li' che la finestra parte e li' che torna.
+  var professorOrigin by remember { mutableStateOf<Rect?>(null) }
+
   FluidScreen(
     title = "Professori",
     ambient = FeatureIdentity.People.ambient(),
@@ -456,6 +464,7 @@ fun ProfessorsRoute(
       }
       item { FluidSectionHeader("Docenti") }
       fluidGlassGroups(state.professors) { prof ->
+        var rowBounds by remember { mutableStateOf<Rect?>(null) }
         val presenceTone = when {
           prof.presenceRate >= 0.85f -> FluidTone.Success
           prof.presenceRate >= 0.65f -> FluidTone.Warning
@@ -468,6 +477,7 @@ fun ProfessorsRoute(
           else -> FluidTone.Success
         }
         FluidListRow(
+          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
           title = prof.teacherName,
           subtitle = prof.subjects.joinToString(", ").ifBlank { "Materia non specificata" },
           eyebrow = "Presenza ${(prof.presenceRate * 100).toInt()}%",
@@ -479,6 +489,7 @@ fun ProfessorsRoute(
           tone = presenceTone,
           leading = { Icon(Icons.Rounded.Person, contentDescription = null) },
           onClick = {
+            professorOrigin = rowBounds
             if (onOpenProfessor != null) onOpenProfessor(prof.teacherName) else viewModel.selectProfessor(prof)
           },
           badge = { FluidStatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
@@ -492,6 +503,7 @@ fun ProfessorsRoute(
   FluidGlassModalPortal(
     item = if (onOpenProfessor == null) state.selectedProfessor else null,
     onDismissRequest = viewModel::dismissProfessor,
+    origin = { professorOrigin },
     paneTitle = "Dettaglio docente",
   ) { prof ->
     ProfessorDetailContent(prof = prof)

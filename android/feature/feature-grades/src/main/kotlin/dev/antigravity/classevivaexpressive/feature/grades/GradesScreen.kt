@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,11 +55,8 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradePill
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
-import dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
-import dev.antigravity.classevivaexpressive.core.domain.model.SimulatedGrade
-import dev.antigravity.classevivaexpressive.core.domain.model.SimulationRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SubjectGoal
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import dev.antigravity.classevivaexpressive.core.domain.util.parseDecimal
@@ -85,6 +83,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
+import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEditorialCard
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -113,7 +112,6 @@ data class GradesUiState(
   val periods: List<Period> = emptyList(),
   val seenGradeIds: Set<String> = emptySet(),
   val subjectGoals: List<SubjectGoal> = emptyList(),
-  val simulation: GradeSimulationSummary = GradeSimulationSummary(),
   val selectedPeriodCode: String? = null,
   val selectedGradeId: String? = null,
   val isRefreshing: Boolean = false,
@@ -143,13 +141,11 @@ private data class GradesContentState(
   val periods: List<Period>,
   val seenGradeIds: Set<String>,
   val subjectGoals: List<SubjectGoal>,
-  val simulation: GradeSimulationSummary,
 )
 
 @HiltViewModel
 class GradesViewModel @Inject constructor(
   private val gradesRepository: GradesRepository,
-  private val simulationRepository: SimulationRepository,
   private val dashboardRepository: DashboardRepository,
 ) : ViewModel() {
   private val selectedPeriodCode = MutableStateFlow<String?>(null)
@@ -161,14 +157,12 @@ class GradesViewModel @Inject constructor(
     gradesRepository.observePeriods(),
     gradesRepository.observeSeenGradeStates(),
     gradesRepository.observeSubjectGoals(),
-    simulationRepository.observeSimulation(),
-  ) { grades, periods, seenStates, subjectGoals, simulation ->
+  ) { grades, periods, seenStates, subjectGoals ->
     GradesContentState(
       grades = grades,
       periods = periods,
       seenGradeIds = seenStates.map { it.gradeId }.toSet(),
       subjectGoals = subjectGoals,
-      simulation = simulation,
     )
   }
 
@@ -184,7 +178,6 @@ class GradesViewModel @Inject constructor(
       periods = content.periods,
       seenGradeIds = content.seenGradeIds,
       subjectGoals = content.subjectGoals,
-      simulation = content.simulation,
       selectedPeriodCode = periodCode,
       selectedGradeId = gradeId,
       isRefreshing = refreshing,
@@ -231,28 +224,6 @@ class GradesViewModel @Inject constructor(
     viewModelScope.launch { gradesRepository.removeSubjectGoal(subject, periodCode) }
   }
 
-  fun addSimulatedGrade(subject: String, value: Double, type: String, note: String) {
-    viewModelScope.launch {
-      simulationRepository.addSimulatedGrade(
-        SimulatedGrade(
-          id = "sim-${UUID.randomUUID()}",
-          subject = subject.trim(),
-          value = value,
-          type = type.trim(),
-          date = LocalDate.now().toString(),
-          note = note.takeIf { it.isNotBlank() },
-        ),
-      )
-    }
-  }
-
-  fun removeSimulatedGrade(id: String) {
-    viewModelScope.launch { simulationRepository.removeSimulatedGrade(id) }
-  }
-
-  fun clearSimulation() {
-    viewModelScope.launch { simulationRepository.clearSimulation() }
-  }
 
   private fun requestRefresh(force: Boolean, showIndicator: Boolean) {
     viewModelScope.launch {
@@ -277,9 +248,14 @@ fun GradesRoute(
   val state by viewModel.state.collectAsStateWithLifecycle()
   val context = androidx.compose.ui.platform.LocalContext.current
   var selectedTab by rememberSaveable { mutableStateOf(TAB_RECENT) }
-  var showSimulationDialog by rememberSaveable { mutableStateOf(false) }
   var goalDialogSubject by rememberSaveable { mutableStateOf<String?>(null) }
   var detailSubject by rememberSaveable { mutableStateOf<String?>(null) }
+
+  // Da dove nasce la finestra. Fluid-physics fa viaggiare la silhouette dal rettangolo della riga
+  // toccata al pannello: senza questo l'origine e' nulla e il pop-up si apre dal centro, cioe'
+  // arriva come una forma nuova invece di essere la riga che si e' trasformata.
+  var gradeOrigin by remember { mutableStateOf<Rect?>(null) }
+  var subjectOrigin by remember { mutableStateOf<Rect?>(null) }
 
   val effectivePeriodCode = remember(state.periods, state.selectedPeriodCode, state.grades) {
     if (state.selectedPeriodCode != null) state.selectedPeriodCode else {
@@ -353,18 +329,6 @@ fun GradesRoute(
         contentDescription = "Aggiorna",
         onClick = viewModel::refresh,
       )
-      FluidBarAction(
-        icon = Icons.Rounded.Add,
-        contentDescription = "Simulazione",
-        onClick = { showSimulationDialog = true },
-      )
-      if (state.simulation.grades.isNotEmpty()) {
-        FluidBarAction(
-          icon = Icons.Rounded.DeleteSweep,
-          contentDescription = "Pulisci",
-          onClick = viewModel::clearSimulation,
-        )
-      }
     },
     isRefreshing = state.isRefreshing,
     onRefresh = viewModel::refresh,
@@ -472,6 +436,7 @@ fun GradesRoute(
           }
         } else {
           fluidGlassGroups(recentGrades) { grade ->
+            var rowBounds by remember { mutableStateOf<Rect?>(null) }
             val unseen = !state.seenGradeIds.contains(grade.id)
             val readableDate = remember(grade.date) { grade.date.toReadableDate() }
             val meta = remember(grade.description, grade.notes, grade.teacher) {
@@ -482,6 +447,7 @@ fun GradesRoute(
             }
 
             FluidListRow(
+              modifier = Modifier.fluidExpandOrigin { rowBounds = it },
               // Lo sfondo per riga era l'unico posto dell'app che forzava un colore di
               // superficie a mano, ed era il modo di dire "questa lista ha bisogno di un
               // contenitore" senza avercelo. Ora il contenitore c'e' e la riga torna a essere
@@ -502,7 +468,7 @@ fun GradesRoute(
                 }
                 GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
               },
-              onClick = { openGrade(grade.id) },
+              onClick = { gradeOrigin = rowBounds; openGrade(grade.id) },
               // Le stesse cose che il tap sa fare, ma dette: una pressione lunga che apre un menu
               // e' un gesto che si scopre, una che fa una cosa sola in silenzio no.
               contextActions = {
@@ -510,12 +476,7 @@ fun GradesRoute(
                   FluidContextAction(
                     label = "Dettaglio",
                     icon = Icons.Rounded.Grade,
-                    onClick = { openGrade(grade.id) },
-                  ),
-                  FluidContextAction(
-                    label = "Simula media",
-                    icon = Icons.AutoMirrored.Rounded.ShowChart,
-                    onClick = { showSimulationDialog = true },
+                    onClick = { gradeOrigin = rowBounds; openGrade(grade.id) },
                   ),
                   FluidContextAction(
                     label = "Condividi",
@@ -540,7 +501,9 @@ fun GradesRoute(
           }
         } else {
           fluidGlassGroups(subjectRows) { row ->
+            var rowBounds by remember { mutableStateOf<Rect?>(null) }
             FluidListRow(
+              modifier = Modifier.fluidExpandOrigin { rowBounds = it },
               title = row.subject,
               subtitle = row.detail,
               eyebrow = if (row.average != null && row.average < 6.0) "Materia a rischio" else "Per materia",
@@ -559,18 +522,13 @@ fun GradesRoute(
                   numericValue = row.average,
                 )
               },
-              onClick = { detailSubject = row.subject },
+              onClick = { subjectOrigin = rowBounds; detailSubject = row.subject },
               contextActions = {
                 listOf(
                   FluidContextAction(
                     label = "Dettaglio materia",
                     icon = Icons.AutoMirrored.Rounded.ShowChart,
-                    onClick = { detailSubject = row.subject },
-                  ),
-                  FluidContextAction(
-                    label = "Simula media",
-                    icon = Icons.Rounded.Grade,
-                    onClick = { showSimulationDialog = true },
+                    onClick = { subjectOrigin = rowBounds; detailSubject = row.subject },
                   ),
                 )
               },
@@ -585,22 +543,9 @@ fun GradesRoute(
   // Portali, non sheet: dichiarati sempre, visibili a comando — un portale dentro un `?.let` si
   // smonterebbe alla chiusura e porterebbe via l'animazione di uscita.
   FluidGlassModalPortal(
-    visible = showSimulationDialog,
-    onDismissRequest = { showSimulationDialog = false },
-    paneTitle = "Voto simulato",
-  ) {
-    AddSimulationContent(
-      onDismiss = { showSimulationDialog = false },
-      onSave = { subject, value, type, note ->
-        viewModel.addSimulatedGrade(subject, value, type, note)
-        showSimulationDialog = false
-      },
-    )
-  }
-
-  FluidGlassModalPortal(
     item = detailSubject,
     onDismissRequest = { detailSubject = null },
+    origin = { subjectOrigin },
     paneTitle = "Dettaglio materia",
   ) { subject ->
     SubjectDetailContent(
@@ -638,6 +583,7 @@ fun GradesRoute(
   FluidGlassModalPortal(
     item = selectedGrade,
     onDismissRequest = viewModel::dismissGrade,
+    origin = { gradeOrigin },
     paneTitle = "Dettaglio voto",
   ) { grade ->
     var showHistory by rememberSaveable(grade.id) { mutableStateOf(false) }
@@ -931,63 +877,6 @@ private fun GoalContent(
   }
 }
 
-@Composable
-private fun AddSimulationContent(
-  onDismiss: () -> Unit,
-  onSave: (subject: String, value: Double, type: String, note: String) -> Unit,
-) {
-  var subject by rememberSaveable { mutableStateOf("") }
-  var valueText by rememberSaveable { mutableStateOf("") }
-  var type by rememberSaveable { mutableStateOf("Interrogazione") }
-  var note by rememberSaveable { mutableStateOf("") }
-  val numeric = valueText.parseDecimal()
-
-  Box {
-    Column(
-      modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-      Text(text = "Voto Simulato", style = MaterialTheme.typography.titleLarge)
-      FluidTextField(
-        value = subject,
-        onValueChange = { subject = it },
-        modifier = Modifier.fillMaxWidth(),
-        label = "Materia",
-      )
-      FluidTextField(
-        value = valueText,
-        onValueChange = { valueText = it },
-        modifier = Modifier.fillMaxWidth(),
-        label = "Valore",
-      )
-      FluidTextField(
-        value = type,
-        onValueChange = { type = it },
-        modifier = Modifier.fillMaxWidth(),
-        label = "Tipologia",
-      )
-      FluidTextField(
-        value = note,
-        onValueChange = { note = it },
-        modifier = Modifier.fillMaxWidth(),
-        label = "Nota",
-      )
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        FluidButton(
-          text = "Annulla",
-          onClick = onDismiss,
-          style = FluidButtonStyle.Plain,
-        )
-        FluidButton(
-          text = "Aggiungi",
-          onClick = { onSave(subject, numeric ?: 0.0, type, note) },
-          style = FluidButtonStyle.Filled,
-          enabled = subject.isNotBlank() && numeric != null,
-        )
-      }
-    }
-  }
-}
 
 private data class SubjectRow(
   val subject: String,

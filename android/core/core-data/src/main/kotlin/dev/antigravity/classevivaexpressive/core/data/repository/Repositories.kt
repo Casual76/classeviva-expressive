@@ -50,8 +50,6 @@ import dev.antigravity.classevivaexpressive.core.database.database.DownloadRecor
 import dev.antigravity.classevivaexpressive.core.database.database.DownloadRecordEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SeenGradeDao
 import dev.antigravity.classevivaexpressive.core.database.database.SeenGradeEntity
-import dev.antigravity.classevivaexpressive.core.database.database.SimulationDao
-import dev.antigravity.classevivaexpressive.core.database.database.SimulatedGradeEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao
 import dev.antigravity.classevivaexpressive.core.database.database.SyncMetadataDao
 import dev.antigravity.classevivaexpressive.core.database.database.SubjectGoalDao
@@ -87,7 +85,6 @@ import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeDistribution
-import dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
@@ -119,8 +116,6 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SeenGradeState
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
-import dev.antigravity.classevivaexpressive.core.domain.model.SimulatedGrade
-import dev.antigravity.classevivaexpressive.core.domain.model.SimulationRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.StatsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.StatsSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
@@ -330,7 +325,6 @@ class SchoolDataRepository @Inject constructor(
   private val snapshotCacheDao: SnapshotCacheDao,
   private val syncMetadataDao: SyncMetadataDao,
   private val customEventDao: CustomEventDao,
-  private val simulationDao: SimulationDao,
   private val studentScoreDao: StudentScoreDao,
   private val downloadRecordDao: DownloadRecordDao,
   private val seenGradeDao: SeenGradeDao,
@@ -364,8 +358,7 @@ class SchoolDataRepository @Inject constructor(
   MeetingsRepository,
   SchoolYearRepository,
   StatsRepository,
-  StudentScoreRepository,
-  SimulationRepository {
+  StudentScoreRepository {
 
   private suspend fun notifyExternalDashboardInvalidators() {
     externalDashboardInvalidators.notifySafely()
@@ -1184,33 +1177,6 @@ class SchoolDataRepository @Inject constructor(
     StudentScoreComparison(current = current, imported = decoded, difference = current.score - decoded.score)
   }
 
-  override fun observeSimulation(): Flow<GradeSimulationSummary> {
-    return combine(observeGrades(), simulationDao.observeAll()) { grades, simulations ->
-      val simulated = simulations.map { json.decodeFromString<SimulatedGrade>(it.payload) }
-      val realAverage = grades.mapNotNull { it.numericValue }.takeIf { it.isNotEmpty() }?.average()
-      val mergedValues = grades.mapNotNull { it.numericValue } + simulated.map { it.value }
-      val simulatedAverage = mergedValues.takeIf { it.isNotEmpty() }?.average()
-      GradeSimulationSummary(
-        realAverage = realAverage,
-        simulatedAverage = simulatedAverage,
-        delta = (simulatedAverage ?: realAverage ?: 0.0) - (realAverage ?: 0.0),
-        grades = simulated,
-      )
-    }.flowOn(Dispatchers.Default)
-  }
-
-  override suspend fun addSimulatedGrade(grade: SimulatedGrade) {
-    simulationDao.upsert(SimulatedGradeEntity(grade.id, json.encodeToString(grade), grade.subject, grade.date))
-  }
-
-  override suspend fun removeSimulatedGrade(id: String) {
-    simulationDao.deleteById(id)
-  }
-
-  override suspend fun clearSimulation() {
-    simulationDao.clearAll()
-  }
-
   private suspend fun queueDownloadInternal(url: String, title: String, mimeType: String?): Long {
     val studentId = sessionStore.session.value?.studentId ?: error("Sessione assente.")
     val accountDirectory = privateAccountPathPart(studentId)
@@ -1554,7 +1520,6 @@ abstract class RepositoryModule {
   @Binds abstract fun bindSchoolYearRepository(impl: SchoolDataRepository): SchoolYearRepository
   @Binds abstract fun bindStatsRepository(impl: SchoolDataRepository): StatsRepository
   @Binds abstract fun bindStudentScoreRepository(impl: SchoolDataRepository): StudentScoreRepository
-  @Binds abstract fun bindSimulationRepository(impl: SchoolDataRepository): SimulationRepository
   @Binds abstract fun bindSettingsRepository(impl: SchoolSettingsRepository): SettingsRepository
   @Binds abstract fun bindCapabilityResolver(impl: DefaultCapabilityResolver): CapabilityResolver
 }

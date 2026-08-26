@@ -52,15 +52,6 @@ data class CustomEventEntity(
 )
 
 @Serializable
-@Entity(tableName = "simulated_grades")
-data class SimulatedGradeEntity(
-  @PrimaryKey val id: String,
-  val payload: String,
-  val subject: String,
-  val date: String,
-)
-
-@Serializable
 @Entity(tableName = "student_score_snapshots")
 data class StudentScoreSnapshotEntity(
   @PrimaryKey val id: String,
@@ -298,27 +289,6 @@ interface CustomEventDao {
 }
 
 @Dao
-interface SimulationDao {
-  @Query("SELECT * FROM simulated_grades ORDER BY date ASC")
-  fun observeAll(): Flow<List<SimulatedGradeEntity>>
-
-  @Query("SELECT * FROM simulated_grades ORDER BY date ASC")
-  suspend fun getAll(): List<SimulatedGradeEntity>
-
-  @Insert(onConflict = OnConflictStrategy.REPLACE)
-  suspend fun upsert(entity: SimulatedGradeEntity)
-
-  @Insert(onConflict = OnConflictStrategy.REPLACE)
-  suspend fun upsertAll(entities: List<SimulatedGradeEntity>)
-
-  @Query("DELETE FROM simulated_grades WHERE id = :id")
-  suspend fun deleteById(id: String)
-
-  @Query("DELETE FROM simulated_grades")
-  suspend fun clearAll()
-}
-
-@Dao
 interface StudentScoreDao {
   @Query("SELECT * FROM student_score_snapshots ORDER BY createdAtEpochMillis DESC")
   fun observeAll(): Flow<List<StudentScoreSnapshotEntity>>
@@ -539,7 +509,6 @@ interface AttachmentCacheDao {
     SnapshotCacheEntity::class,
     SyncMetadataEntity::class,
     CustomEventEntity::class,
-    SimulatedGradeEntity::class,
     StudentScoreSnapshotEntity::class,
     DownloadRecordEntity::class,
     SeenGradeEntity::class,
@@ -554,14 +523,13 @@ interface AttachmentCacheDao {
     ReadNoteEntity::class,
     AttachmentCacheEntity::class,
   ],
-  version = 10,
+  version = 11,
   exportSchema = true,
 )
 abstract class SchoolDatabase : RoomDatabase() {
   abstract fun snapshotCacheDao(): SnapshotCacheDao
   abstract fun syncMetadataDao(): SyncMetadataDao
   abstract fun customEventDao(): CustomEventDao
-  abstract fun simulationDao(): SimulationDao
   abstract fun studentScoreDao(): StudentScoreDao
   abstract fun downloadRecordDao(): DownloadRecordDao
   abstract fun seenGradeDao(): SeenGradeDao
@@ -709,6 +677,24 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
   }
 }
 
+/**
+ * Via il voto simulato, e con lui la sua tabella.
+ *
+ * La funzione permetteva di inventarsi un voto per vedere che effetto avrebbe fatto sulla media.
+ * E' stata tolta perche' in pratica non serviva a nessuno, e una tabella che nessuno legge piu' non
+ * si lascia indietro: resterebbe a occupare spazio nel database di ogni installazione e a comparire
+ * in ogni schema esportato, senza che una riga di codice sappia piu' cosa farsene.
+ *
+ * `IF EXISTS` perche' una migrazione deve poter essere rigiocata senza fare danni: chi arriva qui
+ * dalla versione 10 la tabella ce l'ha di sicuro, ma un `DROP` che fallisce e' un aggiornamento che
+ * fallisce, e non c'e' niente da guadagnare a renderlo fragile.
+ */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL("DROP TABLE IF EXISTS `simulated_grades`")
+  }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -717,7 +703,7 @@ object DatabaseModule {
   fun provideDatabase(@ApplicationContext context: Context): SchoolDatabase {
     return Room
       .databaseBuilder(context, SchoolDatabase::class.java, "classeviva_expressive_native.db")
-      .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+      .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
       .build()
   }
 
@@ -729,9 +715,6 @@ object DatabaseModule {
 
   @Provides
   fun provideCustomEventDao(database: SchoolDatabase): CustomEventDao = database.customEventDao()
-
-  @Provides
-  fun provideSimulationDao(database: SchoolDatabase): SimulationDao = database.simulationDao()
 
   @Provides
   fun provideStudentScoreDao(database: SchoolDatabase): StudentScoreDao = database.studentScoreDao()

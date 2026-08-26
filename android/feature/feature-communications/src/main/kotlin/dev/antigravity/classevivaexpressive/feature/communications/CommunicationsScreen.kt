@@ -817,13 +817,7 @@ fun CommunicationsRoute(
               // La riga smette di disegnarsi mentre il suo dettaglio e' aperto: il pannello che ne
               // esce e' vetro, e la riga si vedeva attraverso — due bordi uno dentro l'altro e il
               // titolo leggibile due volte.
-              modifier = Modifier.fluidExpandOrigin(
-                open = {
-                  state.selectedCommunication?.communication?.let {
-                    it.pubId == communication.pubId && it.evtCode == communication.evtCode
-                  } == true
-                },
-              ) { rowBounds = it },
+              modifier = Modifier.fluidExpandOrigin { rowBounds = it },
               title = communication.title,
               subtitle = communication.sender.ifBlank { "Bacheca scuola" },
               eyebrow = communication.date.toReadableDate(),
@@ -942,9 +936,7 @@ fun CommunicationsRoute(
           ) { note ->
             var rowBounds by remember { mutableStateOf<Rect?>(null) }
             FluidListRow(
-              modifier = Modifier.fluidExpandOrigin(
-                open = { state.selectedNote?.note?.id == note.id },
-              ) { rowBounds = it },
+              modifier = Modifier.fluidExpandOrigin { rowBounds = it },
               title = note.title.ifBlank { note.author.uppercase(italianLocale) },
               subtitle = note.categoryLabel,
               eyebrow = note.date.toReadableDate(),

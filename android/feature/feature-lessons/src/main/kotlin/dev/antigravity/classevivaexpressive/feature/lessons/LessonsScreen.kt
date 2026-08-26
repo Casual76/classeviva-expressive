@@ -37,6 +37,7 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +88,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassIconButton
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
+import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
@@ -302,6 +304,9 @@ fun LessonsRoute(
   var selectedTemplateDayKey by rememberSaveable { mutableStateOf<String?>(null) }
   var selectedHistoryDayKey by rememberSaveable { mutableStateOf<String?>(null) }
   var weekOffset by rememberSaveable { mutableIntStateOf(0) }
+
+  // Lo slot toccato: modifica e conferma nascono dalla sua riga, non dal centro dello schermo.
+  var slotOrigin by remember { mutableStateOf<Rect?>(null) }
   val templateListState = rememberLazyListState()
   val historyListState = rememberLazyListState()
   val activeListState = if (selectedTab == TAB_TIMETABLE) templateListState else historyListState
@@ -556,12 +561,13 @@ fun LessonsRoute(
                 key = { block -> "lessons:template:${section.day}:${block.primary.time}:${block.primary.subject}" },
                 contentType = { LessonsContentType.TimetableRow },
               ) { block ->
+                var blockBounds by remember { mutableStateOf<Rect?>(null) }
                 TimetableBlockRow(
                   block = block,
                   timetable = state.timetableTemplate,
-                  onConfirm = { viewModel.startConfirming(block.primary) },
-                  onEdit = { viewModel.startEditing(block.primary) },
-                  modifier = dayMotionModifier,
+                  onConfirm = { slotOrigin = blockBounds; viewModel.startConfirming(block.primary) },
+                  onEdit = { slotOrigin = blockBounds; viewModel.startEditing(block.primary) },
+                  modifier = dayMotionModifier.fluidExpandOrigin { blockBounds = it },
                 )
               }
             }
@@ -633,6 +639,7 @@ fun LessonsRoute(
   FluidGlassModalPortal(
     item = state.editingSlot,
     onDismissRequest = viewModel::dismissEditing,
+    origin = { slotOrigin },
     paneTitle = "Modifica slot orario",
   ) { slot ->
     EditSlotContent(
@@ -646,6 +653,7 @@ fun LessonsRoute(
   FluidGlassModalPortal(
     item = state.confirmingSlot ?: state.settingRoomSlot,
     onDismissRequest = viewModel::dismissConfirming,
+    origin = { slotOrigin },
     paneTitle = "Conferma slot",
   ) { slot ->
     SlotConfirmationContent(

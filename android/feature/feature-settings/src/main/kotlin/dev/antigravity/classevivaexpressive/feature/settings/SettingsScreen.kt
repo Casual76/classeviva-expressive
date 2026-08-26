@@ -341,7 +341,6 @@ class SettingsViewModel @Inject constructor(
             append("Backup importato: impostazioni")
             append(", ${summary.timetableTemplates} orari")
             append(", ${summary.subjectGoals} obiettivi")
-            append(", ${summary.simulatedGrades} voti simulati")
             append(", ${summary.customEvents} eventi.")
           }
         }

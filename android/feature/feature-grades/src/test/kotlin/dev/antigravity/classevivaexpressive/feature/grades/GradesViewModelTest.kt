@@ -5,8 +5,6 @@ import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepositor
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
-import dev.antigravity.classevivaexpressive.core.domain.model.SimulatedGrade
-import dev.antigravity.classevivaexpressive.core.domain.model.SimulationRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -32,7 +30,6 @@ class GradesViewModelTest {
 
   private val testDispatcher = UnconfinedTestDispatcher(TestCoroutineScheduler())
   private val gradesRepository = mockk<GradesRepository>(relaxed = true)
-  private val simulationRepository = mockk<SimulationRepository>(relaxed = true)
   private val dashboardRepository = mockk<DashboardRepository>(relaxed = true)
 
   @Before fun setUp() {
@@ -41,7 +38,7 @@ class GradesViewModelTest {
   }
   @After fun tearDown() { Dispatchers.resetMain() }
 
-  private fun buildViewModel() = GradesViewModel(gradesRepository, simulationRepository, dashboardRepository)
+  private fun buildViewModel() = GradesViewModel(gradesRepository, dashboardRepository)
 
   @Test
   fun initialState_hasEmptyGradesList() = runTest {
@@ -49,7 +46,6 @@ class GradesViewModelTest {
     every { gradesRepository.observePeriods() } returns flowOf(emptyList())
     every { gradesRepository.observeSeenGradeStates() } returns flowOf(emptyList())
     every { gradesRepository.observeSubjectGoals() } returns flowOf(emptyList())
-    every { simulationRepository.observeSimulation() } returns flowOf(dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary())
 
     val vm = buildViewModel()
 
@@ -67,7 +63,6 @@ class GradesViewModelTest {
     every { gradesRepository.observePeriods() } returns flowOf(emptyList())
     every { gradesRepository.observeSeenGradeStates() } returns flowOf(emptyList())
     every { gradesRepository.observeSubjectGoals() } returns flowOf(emptyList())
-    every { simulationRepository.observeSimulation() } returns flowOf(dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary())
 
     val vm = buildViewModel()
 
@@ -85,7 +80,6 @@ class GradesViewModelTest {
     every { gradesRepository.observePeriods() } returns flowOf(emptyList())
     every { gradesRepository.observeSeenGradeStates() } returns flowOf(emptyList())
     every { gradesRepository.observeSubjectGoals() } returns flowOf(emptyList())
-    every { simulationRepository.observeSimulation() } returns flowOf(dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary())
 
     val vm = buildViewModel()
 
@@ -104,7 +98,6 @@ class GradesViewModelTest {
     every { gradesRepository.observePeriods() } returns flowOf(emptyList())
     every { gradesRepository.observeSeenGradeStates() } returns flowOf(emptyList())
     every { gradesRepository.observeSubjectGoals() } returns flowOf(emptyList())
-    every { simulationRepository.observeSimulation() } returns flowOf(dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary())
     coEvery { gradesRepository.refreshGrades(any()) } returns Result.success(emptyList())
 
     val vm = buildViewModel()
@@ -119,7 +112,6 @@ class GradesViewModelTest {
     every { gradesRepository.observePeriods() } returns flowOf(emptyList())
     every { gradesRepository.observeSeenGradeStates() } returns flowOf(emptyList())
     every { gradesRepository.observeSubjectGoals() } returns flowOf(emptyList())
-    every { simulationRepository.observeSimulation() } returns flowOf(dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary())
 
     val vm = buildViewModel()
     vm.openGrade("g1")
@@ -127,31 +119,4 @@ class GradesViewModelTest {
     coVerify { gradesRepository.markGradeSeen("g1") }
   }
 
-  @Test
-  fun addSimulatedGrade_callsSimulationRepository() = runTest {
-    every { gradesRepository.observeGrades() } returns flowOf(emptyList())
-    every { gradesRepository.observePeriods() } returns flowOf(emptyList())
-    every { gradesRepository.observeSeenGradeStates() } returns flowOf(emptyList())
-    every { gradesRepository.observeSubjectGoals() } returns flowOf(emptyList())
-    every { simulationRepository.observeSimulation() } returns flowOf(dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary())
-
-    val vm = buildViewModel()
-    vm.addSimulatedGrade("Matematica", 8.0, "Scritto", "")
-
-    coVerify { simulationRepository.addSimulatedGrade(any()) }
-  }
-
-  @Test
-  fun clearSimulation_callsSimulationRepository() = runTest {
-    every { gradesRepository.observeGrades() } returns flowOf(emptyList())
-    every { gradesRepository.observePeriods() } returns flowOf(emptyList())
-    every { gradesRepository.observeSeenGradeStates() } returns flowOf(emptyList())
-    every { gradesRepository.observeSubjectGoals() } returns flowOf(emptyList())
-    every { simulationRepository.observeSimulation() } returns flowOf(dev.antigravity.classevivaexpressive.core.domain.model.GradeSimulationSummary())
-
-    val vm = buildViewModel()
-    vm.clearSimulation()
-
-    coVerify { simulationRepository.clearSimulation() }
-  }
 }

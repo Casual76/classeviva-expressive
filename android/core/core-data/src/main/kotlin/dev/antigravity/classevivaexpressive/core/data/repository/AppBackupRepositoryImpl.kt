@@ -8,8 +8,6 @@ import dev.antigravity.classevivaexpressive.core.database.database.CustomEventDa
 import dev.antigravity.classevivaexpressive.core.database.database.CustomEventEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SeenGradeDao
 import dev.antigravity.classevivaexpressive.core.database.database.SeenGradeEntity
-import dev.antigravity.classevivaexpressive.core.database.database.SimulatedGradeEntity
-import dev.antigravity.classevivaexpressive.core.database.database.SimulationDao
 import dev.antigravity.classevivaexpressive.core.database.database.StudentScoreDao
 import dev.antigravity.classevivaexpressive.core.database.database.StudentScoreSnapshotEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SubjectGoalDao
@@ -39,7 +37,6 @@ private data class AppBackupPayload(
   val selectedSchoolYearId: String? = null,
   val timetableTemplates: Map<String, TimetableTemplate> = emptyMap(),
   val customEvents: List<CustomEventEntity> = emptyList(),
-  val simulatedGrades: List<SimulatedGradeEntity> = emptyList(),
   val seenGrades: List<SeenGradeEntity> = emptyList(),
   val subjectGoals: List<SubjectGoalEntity> = emptyList(),
   val scoreSnapshots: List<StudentScoreSnapshotEntity> = emptyList(),
@@ -52,7 +49,6 @@ class DefaultAppBackupRepository @Inject constructor(
   private val schoolYearStore: SchoolYearStore,
   private val timetableTemplateStore: TimetableTemplateStore,
   private val customEventDao: CustomEventDao,
-  private val simulationDao: SimulationDao,
   private val seenGradeDao: SeenGradeDao,
   private val subjectGoalDao: SubjectGoalDao,
   private val studentScoreDao: StudentScoreDao,
@@ -65,7 +61,6 @@ class DefaultAppBackupRepository @Inject constructor(
         selectedSchoolYearId = schoolYearStore.selectedSchoolYear().id,
         timetableTemplates = timetableTemplateStore.readAllTemplates(),
         customEvents = customEventDao.getAll(),
-        simulatedGrades = simulationDao.getAll(),
         seenGrades = seenGradeDao.getAll(),
         subjectGoals = subjectGoalDao.getAll(),
         scoreSnapshots = studentScoreDao.getAll(),
@@ -84,7 +79,6 @@ class DefaultAppBackupRepository @Inject constructor(
     timetableTemplateStore.writeAllTemplates(mergedTemplates)
 
     customEventDao.upsertAll(backup.customEvents)
-    simulationDao.upsertAll(backup.simulatedGrades)
     seenGradeDao.upsertAll(backup.seenGrades)
     subjectGoalDao.upsertAll(backup.subjectGoals)
     studentScoreDao.upsertAll(backup.scoreSnapshots)
@@ -93,7 +87,6 @@ class DefaultAppBackupRepository @Inject constructor(
       settingsImported = true,
       timetableTemplates = backup.timetableTemplates.size,
       customEvents = backup.customEvents.size,
-      simulatedGrades = backup.simulatedGrades.size,
       seenGrades = backup.seenGrades.size,
       subjectGoals = backup.subjectGoals.size,
       scoreSnapshots = backup.scoreSnapshots.size,

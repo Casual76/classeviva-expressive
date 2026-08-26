@@ -828,25 +828,6 @@ data class SubjectGoal(
 )
 
 @Serializable
-data class SimulatedGrade(
-  val id: String,
-  val subject: String,
-  val value: Double,
-  val type: String,
-  val date: String,
-  val weight: Double = 1.0,
-  val note: String? = null,
-)
-
-@Serializable
-data class GradeSimulationSummary(
-  val realAverage: Double? = null,
-  val simulatedAverage: Double? = null,
-  val delta: Double = 0.0,
-  val grades: List<SimulatedGrade> = emptyList(),
-)
-
-@Serializable
 data class StudentScoreComponent(
   val title: String,
   val value: Double,
@@ -1039,13 +1020,6 @@ interface StudentScoreRepository {
   suspend fun importPayload(payload: String): Result<StudentScoreComparison>
 }
 
-interface SimulationRepository {
-  fun observeSimulation(): Flow<GradeSimulationSummary>
-  suspend fun addSimulatedGrade(grade: SimulatedGrade)
-  suspend fun removeSimulatedGrade(id: String)
-  suspend fun clearSimulation()
-}
-
 interface AppBackupRepository {
   suspend fun exportBackup(): Result<String>
   suspend fun importBackup(payload: String): Result<AppBackupImportSummary>
@@ -1056,7 +1030,6 @@ data class AppBackupImportSummary(
   val settingsImported: Boolean = false,
   val timetableTemplates: Int = 0,
   val customEvents: Int = 0,
-  val simulatedGrades: Int = 0,
   val seenGrades: Int = 0,
   val subjectGoals: Int = 0,
   val scoreSnapshots: Int = 0,
