@@ -26,15 +26,19 @@ import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
 import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
-import dev.antigravity.fluidengine.ui.fluid.FluidVividEffect
 
 /**
  * Un voto come superficie intera del proprio colore.
  *
  * E' il posto dove la regola "il tono sta sulla piastrella, mai sullo sfondo" NON si applica: un
  * voto non e' una riga in un gruppo, e' un fatto che sta da solo, e il suo colore e' l'informazione
- * principale che porta. La fascia viene da [gradeBand]; l'eccellenza (dal 7,5 in su) e' l'unica
- * superficie dell'app con lo sheen.
+ * principale che porta. La fascia viene da [gradeBand].
+ *
+ * **La card non si muove, e non deve.** C'e' stato un momento in cui la fascia piu' alta aveva una
+ * banda di luce che la attraversava: su una superficie di questa taglia non si leggeva come pregio,
+ * si leggeva come un difetto di disegno. Il voto si distingue per il colore che ha, non per quanto
+ * si agita. Se torna la tentazione, l'effetto esiste ancora nell'engine (`FluidVividEffect`) e la
+ * risposta e' comunque no.
  *
  * Un voto non numerico non ha una fascia e resta su una superficie neutra: colorare "N.C." di verde
  * o di rosso direbbe una cosa che il registro non ha detto.
@@ -64,12 +68,9 @@ fun GradeCard(
       content = MaterialTheme.colorScheme.onSurface,
     )
   }
-  val effect = if (band == GradeBand.Eccellente) FluidVividEffect.Sheen else FluidVividEffect.None
-
   FluidVividCard(
     colors = colors,
     modifier = modifier,
-    effect = effect,
     onClick = onClick,
     contextActions = contextActions,
     contentPadding = if (compact) PaddingValues(14.dp) else PaddingValues(horizontal = 18.dp, vertical = 16.dp),
