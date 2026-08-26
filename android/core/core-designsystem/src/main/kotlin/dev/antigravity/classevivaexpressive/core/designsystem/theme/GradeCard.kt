@@ -1,6 +1,5 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.theme
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,9 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,9 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
-import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
 import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
@@ -40,21 +34,26 @@ import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
  * si agita. Se torna la tentazione, l'effetto esiste ancora nell'engine (`FluidVividEffect`) e la
  * risposta e' comunque no.
  *
- * Un voto non numerico non ha una fascia e resta su una superficie neutra: colorare "N.C." di verde
- * o di rosso direbbe una cosa che il registro non ha detto.
+ * **Tre livelli di testo e non cinque.** La versione precedente impilava data, materia, tipo e
+ * giudizio in quattro corpi quasi uguali a opacita' quasi uguali: una poltiglia in cui l'occhio non
+ * sapeva dove posarsi. Ora c'e' il numero, cosa riguarda, e una riga sola che lo colloca nel tempo.
+ *
+ * La stessa card serve a un voto e alla media di una materia: sono la stessa cosa — un numero, cosa
+ * riguarda, e da dove viene — e meritano la stessa forma.
+ *
+ * Un valore non numerico non ha una fascia e resta su una superficie neutra: colorare "N.C." di
+ * verde o di rosso direbbe una cosa che il registro non ha detto.
  */
 @Composable
 fun GradeCard(
   valueLabel: String,
   numericValue: Double?,
-  subject: String,
-  date: String,
-  type: String,
+  title: String,
   modifier: Modifier = Modifier,
+  subtitle: String? = null,
   meta: String? = null,
   unseen: Boolean = false,
   edited: Boolean = false,
-  compact: Boolean = false,
   onClick: (() -> Unit)? = null,
   contextActions: (() -> List<FluidContextAction>)? = null,
 ) {
@@ -68,139 +67,60 @@ fun GradeCard(
       content = MaterialTheme.colorScheme.onSurface,
     )
   }
+
   FluidVividCard(
     colors = colors,
     modifier = modifier,
     onClick = onClick,
     contextActions = contextActions,
-    contentPadding = if (compact) PaddingValues(14.dp) else PaddingValues(horizontal = 18.dp, vertical = 16.dp),
-  ) {
-    if (compact) {
-      CompactGradeContent(
-        valueLabel = valueLabel,
-        subject = subject,
-        date = date,
-        unseen = unseen,
-        edited = edited,
-      )
-    } else {
-      FullGradeContent(
-        valueLabel = valueLabel,
-        subject = subject,
-        date = date,
-        type = type,
-        meta = meta,
-        unseen = unseen,
-        edited = edited,
-      )
-    }
-  }
-}
-
-@Composable
-private fun FullGradeContent(
-  valueLabel: String,
-  subject: String,
-  date: String,
-  type: String,
-  meta: String?,
-  unseen: Boolean,
-  edited: Boolean,
-) {
-  val content = LocalContentColor.current
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.spacedBy(14.dp),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Column(
-      modifier = Modifier.weight(1f),
-      verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-      Text(
-        text = date.uppercase(),
-        style = FluidTextStyles.uppercaseCaption,
-        color = content.copy(alpha = 0.72f),
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-      Text(
-        text = subject,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        maxLines = 2,
-        overflow = TextOverflow.Ellipsis,
-      )
-      Text(
-        text = type,
-        style = MaterialTheme.typography.bodySmall,
-        color = content.copy(alpha = 0.78f),
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-      )
-      if (!meta.isNullOrBlank()) {
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-          text = meta,
-          style = MaterialTheme.typography.bodySmall,
-          color = content.copy(alpha = 0.66f),
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
-    }
-    Column(
-      horizontalAlignment = Alignment.End,
-      verticalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-      Text(
-        text = valueLabel,
-        style = FluidTextStyles.largeNumeric,
-        maxLines = 1,
-      )
-      GradeCardFlag(unseen = unseen, edited = edited)
-    }
-  }
-}
-
-@Composable
-private fun CompactGradeContent(
-  valueLabel: String,
-  subject: String,
-  date: String,
-  unseen: Boolean,
-  edited: Boolean,
-) {
-  val content = LocalContentColor.current
-  Column(
-    modifier = Modifier.widthIn(min = 128.dp, max = 168.dp),
-    verticalArrangement = Arrangement.spacedBy(3.dp),
+    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
   ) {
     Row(
       modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.Top,
+      horizontalArrangement = Arrangement.spacedBy(16.dp),
+      verticalAlignment = Alignment.CenterVertically,
     ) {
-      Text(
-        text = valueLabel,
-        style = FluidTextStyles.largeNumeric,
-        maxLines = 1,
-      )
-      GradeCardFlag(unseen = unseen, edited = edited)
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = title.asReadableSubject(),
+          style = MaterialTheme.typography.titleLarge,
+          fontWeight = FontWeight.SemiBold,
+          maxLines = 2,
+          overflow = TextOverflow.Ellipsis,
+        )
+        if (!subtitle.isNullOrBlank()) {
+          Spacer(modifier = Modifier.height(3.dp))
+          Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = LocalContentColor.current.copy(alpha = 0.82f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
+      }
+      Column(
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+      ) {
+        Text(
+          text = valueLabel,
+          style = FluidTextStyles.largeNumeric,
+          maxLines = 1,
+        )
+        GradeCardFlag(unseen = unseen, edited = edited)
+      }
     }
-    Text(
-      text = subject,
-      style = MaterialTheme.typography.labelLarge,
-      fontWeight = FontWeight.SemiBold,
-      maxLines = 2,
-      overflow = TextOverflow.Ellipsis,
-    )
-    Text(
-      text = date,
-      style = MaterialTheme.typography.labelSmall,
-      color = content.copy(alpha = 0.72f),
-      maxLines = 1,
-    )
+    if (!meta.isNullOrBlank()) {
+      Spacer(modifier = Modifier.height(10.dp))
+      Text(
+        text = meta,
+        style = MaterialTheme.typography.bodySmall,
+        color = LocalContentColor.current.copy(alpha = 0.72f),
+        maxLines = 3,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
   }
 }
 
@@ -213,4 +133,24 @@ private fun GradeCardFlag(unseen: Boolean, edited: Boolean) {
     else -> return
   }
   VividBadge(label = label)
+}
+
+/**
+ * Il nome di una materia, smesso di urlare.
+ *
+ * Il registro le manda tutte in maiuscolo ("SCIENZE NATURALI (BIOLOGIA, CHIMICA, SCIENZE DELLA
+ * TERRA)"), che su una card larga come questa e' una riga di lettere maiuscole lunga due righe: non
+ * si legge, si decifra. La conversione avviene solo se **non c'e' una sola minuscola** in tutta la
+ * stringa, cosi' un nome gia' scritto bene non viene toccato e nessun acronimo isolato viene
+ * rovinato per sbaglio.
+ */
+internal fun String.asReadableSubject(): String {
+  if (isBlank()) return this
+  if (any { it.isLowerCase() }) return this
+  val lowered = lowercase()
+  val firstLetter = lowered.indexOfFirst { it.isLetter() }
+  if (firstLetter < 0) return lowered
+  return lowered.substring(0, firstLetter) +
+    lowered[firstLetter].uppercaseChar() +
+    lowered.substring(firstLetter + 1)
 }

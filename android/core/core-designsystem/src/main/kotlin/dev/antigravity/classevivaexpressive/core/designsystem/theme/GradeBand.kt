@@ -3,6 +3,8 @@ package dev.antigravity.classevivaexpressive.core.designsystem.theme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
 
 /**
@@ -101,11 +103,63 @@ internal fun lodeVividColors(
 ): FluidVividColors {
   val distinct = accentIsDistinctFromGradeScale(accentPrimary, accentSecondary, isDark)
   return if (distinct) {
-    accentVividColors(accentPrimary, accentSecondary)
+    lodeAccentColors(accentPrimary, accentSecondary)
   } else {
     gradeVividColors(GradeBand.Eccellente, isDark, accentPrimary, accentSecondary)
   }
 }
+
+/**
+ * L'accento, schiarito quanto basta perche' il voto ci si legga sopra **scuro** come su tutte le
+ * altre fasce.
+ *
+ * Le quattro fasce fisse sono colori pieni e chiari, e il contenuto che vince e' sempre quello
+ * scuro. L'accento a piena saturazione no: l'ametista sta nella banda di luminanza dove il bianco
+ * vince per un soffio (4.53 contro 4.07), e il risultato era una sola card in tutta la lista con il
+ * testo bianco — che non si legge come "questa e' speciale", si legge come un errore. Schiarire
+ * l'accento mantiene la tinta dell'app e riporta la lode nella stessa famiglia di lettura delle
+ * altre quattro.
+ *
+ * Il fattore non e' una costante ma il minimo che serve: un accento gia' chiaro non si tocca quasi,
+ * uno scuro si schiarisce di piu'. Cosi' la regola vale anche per un colore di sistema arbitrario.
+ */
+internal fun lodeAccentColors(accentPrimary: Color, accentSecondary: Color): FluidVividColors {
+  val amount = lightenAmountForDarkContent(accentPrimary)
+  return accentVividColors(
+    lerp(accentPrimary, Color.White, amount),
+    lerp(accentSecondary, Color.White, amount),
+  )
+}
+
+/**
+ * Quanto schiarire un colore perche' il contenuto scuro ci arrivi a [LodeDarkContrastTarget].
+ *
+ * A passi, e non con una formula chiusa, perche' il contrasto non e' lineare nel canale: il passo
+ * piccolo costa qualche iterazione e in cambio la regola resta leggibile.
+ */
+private fun lightenAmountForDarkContent(color: Color): Float {
+  var amount = 0f
+  while (amount < LodeMaxLighten) {
+    val candidate = lerp(color, Color.White, amount)
+    if (contrastRatio(DarkContent, candidate) >= LodeDarkContrastTarget) return amount
+    amount += LodeLightenStep
+  }
+  return LodeMaxLighten
+}
+
+private fun contrastRatio(foreground: Color, background: Color): Float {
+  val high = maxOf(foreground.luminance(), background.luminance())
+  val low = minOf(foreground.luminance(), background.luminance())
+  return (high + 0.05f) / (low + 0.05f)
+}
+
+/** Lo stesso scuro che [dev.antigravity.fluidengine.ui.fluid.FluidVividColors] userebbe. */
+private val DarkContent = Color(0xFF121214)
+
+/** Le altre fasce stanno fra 5.1 e 8.8: sotto questo valore la lode sarebbe l'anello debole. */
+private const val LodeDarkContrastTarget = 5.5f
+private const val LodeLightenStep = 0.05f
+private const val LodeMaxLighten = 0.6f
 
 /**
  * Vero quando l'accento e' abbastanza suo da poter essere una fascia.

@@ -52,6 +52,8 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeDetailContent
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradePaneTint
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradePill
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeBand
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeVividColors
@@ -480,9 +482,8 @@ fun GradesRoute(
             GradeCard(
               valueLabel = grade.valueLabel,
               numericValue = grade.numericValue,
-              subject = grade.subject,
-              date = readableDate,
-              type = grade.type.ifBlank { "Valutazione" },
+              title = grade.subject,
+              subtitle = listOf(grade.type.ifBlank { "Valutazione" }, readableDate).joinToString(" · "),
               modifier = Modifier.fluidExpandOrigin { rowBounds = it },
               meta = meta,
               unseen = unseen,
@@ -518,28 +519,21 @@ fun GradesRoute(
             )
           }
         } else {
-          fluidGlassGroups(subjectRows) { row ->
+          // La media di una materia e' un voto come gli altri: stessa card, stesso colore, stessa
+          // scala. Erano righe grigie con una pill, cioe' il vecchio vocabolario sopravvissuto in
+          // una scheda sola.
+          items(subjectRows, key = SubjectRow::subject) { row ->
             var rowBounds by remember { mutableStateOf<Rect?>(null) }
-            FluidListRow(
-              modifier = Modifier.fluidExpandOrigin { rowBounds = it },
+            GradeCard(
+              valueLabel = row.average?.format2() ?: "--",
+              numericValue = row.average,
               title = row.subject,
+              modifier = Modifier.fluidExpandOrigin { rowBounds = it },
               subtitle = row.detail,
-              eyebrow = if (row.average != null && row.average < 6.0) "Materia a rischio" else "Per materia",
-              meta = row.meta,
-              tone = gradeTone(row.average),
-              leading = { Icon(Icons.AutoMirrored.Rounded.ShowChart, contentDescription = null) },
-              badge = {
-                row.target?.let {
-                  FluidStatusBadge(
-                    label = "TARGET ${it.format1()}",
-                    tone = FluidTone.Primary,
-                  )
-                }
-                GradePill(
-                  value = row.average?.format2() ?: "--",
-                  numericValue = row.average,
-                )
-              },
+              meta = listOfNotNull(
+                row.meta.ifBlank { null },
+                row.target?.let { "Obiettivo ${it.format1()}" },
+              ).joinToString(" · ").ifBlank { null },
               onClick = { subjectOrigin = rowBounds; detailSubject = row.subject },
               contextActions = {
                 listOf(
@@ -550,7 +544,6 @@ fun GradesRoute(
                   ),
                 )
               },
-              animatePress = true,
             )
           }
         }
@@ -603,37 +596,13 @@ fun GradesRoute(
     onDismissRequest = viewModel::dismissGrade,
     origin = { gradeOrigin },
     paneTitle = "Dettaglio voto",
+    paneTint = selectedGrade?.let { gradePaneTint(it) },
   ) { grade ->
-    var showHistory by rememberSaveable(grade.id) { mutableStateOf(false) }
-    Column(
-      modifier = Modifier.fillMaxWidth().padding(24.dp).padding(bottom = 32.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-      Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
-      // Il voto come superficie del suo colore, e qui — il posto dove lo si guarda da vicino — lo
-      // sheen dell'eccellenza rende di piu'.
-      GradeCard(
-        valueLabel = grade.valueLabel,
-        numericValue = grade.numericValue,
-        subject = grade.subject,
-        date = grade.date.toReadableDate(),
-        type = grade.type.ifBlank { "Valutazione" },
-        meta = listOfNotNull(grade.description, grade.notes, grade.teacher)
-          .joinToString(" / ").ifBlank { null },
-        edited = grade.history.isNotEmpty(),
-      )
-      if (grade.history.isNotEmpty()) {
-        FluidButton(
-          text = if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${grade.history.size})",
-          onClick = { showHistory = !showHistory },
-          style = FluidButtonStyle.Filled,
-          fillWidth = true,
-        )
-      }
-      if (showHistory && grade.history.isNotEmpty()) {
-        GradeHistorySection(grade = grade)
-      }
-    }
+    GradeDetailContent(
+      grade = grade,
+      dateLabel = grade.date.toReadableDate(),
+      historyDateLabel = { it.toReadableDateTime() },
+    )
   }
 }
 
@@ -675,15 +644,10 @@ fun GradeDetailRoute(
     onBack = onBack,
     hero = {
       Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
-      GradeCard(
-        valueLabel = grade.valueLabel,
-        numericValue = grade.numericValue,
-        subject = grade.subject,
-        date = grade.date.toReadableDate(),
-        type = grade.type.ifBlank { "Valutazione" },
-        meta = listOfNotNull(grade.description, grade.notes, grade.teacher)
-          .joinToString(" / ").ifBlank { null },
-        edited = grade.history.isNotEmpty(),
+      GradeDetailContent(
+        grade = grade,
+        dateLabel = grade.date.toReadableDate(),
+        historyDateLabel = { it.toReadableDateTime() },
       )
     },
     secondary = {
@@ -820,16 +784,18 @@ private fun SubjectDetailContent(
         }
       }
       item { FluidSectionHeader("Tutti i voti") }
-      fluidGlassGroups(grades.sortedByDescending { it.date }) { grade ->
-          FluidListRow(
-            title = grade.valueLabel,
-            subtitle = grade.type,
-            eyebrow = grade.date.toReadableDate(),
-            meta = grade.description ?: grade.notes,
-            tone = gradeTone(grade.numericValue),
-            onClick = { onOpenGrade(grade.id) },
-            animatePress = true,
-          )
+      items(grades.sortedByDescending { it.date }, key = Grade::id) { grade ->
+        GradeCard(
+          valueLabel = grade.valueLabel,
+          numericValue = grade.numericValue,
+          title = grade.subject,
+          subtitle = listOf(
+            grade.type.ifBlank { "Valutazione" },
+            grade.date.toReadableDate(),
+          ).joinToString(" · "),
+          meta = grade.description ?: grade.notes,
+          onClick = { onOpenGrade(grade.id) },
+        )
       }
       item { Spacer(Modifier.height(32.dp)) }
     }

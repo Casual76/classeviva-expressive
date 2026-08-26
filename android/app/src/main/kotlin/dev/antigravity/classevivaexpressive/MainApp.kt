@@ -1240,13 +1240,14 @@ private fun AuthenticatedApp(
             .getStateFlow<String?>(ConsumedGradeRequestKey, null)
             .collectAsStateWithLifecycle()
           FluidRouteMotionHost(this@composable) {
+            // Niente `onOpenGrade`: senza, la schermata apre il proprio pop-up invece di
+            // navigare a una pagina intera. Per guardare un numero e tornare indietro, un viaggio
+            // di rotta era sproporzionato — e il pop-up esisteva gia', semplicemente non veniva
+            // mai raggiunto. La rotta `grade/{gradeId}` resta per i collegamenti dalle notifiche.
             GradesRoute(
               initialGradeId = pendingGradeRequest(requestedGradeId, consumedGradeId),
               onInitialGradeConsumed = { gradeId ->
                 entry.savedStateHandle[ConsumedGradeRequestKey] = gradeId
-              },
-              onOpenGrade = { gradeId ->
-                navigateRoute("grade/${Uri.encode(gradeId)}")
               },
             )
           }

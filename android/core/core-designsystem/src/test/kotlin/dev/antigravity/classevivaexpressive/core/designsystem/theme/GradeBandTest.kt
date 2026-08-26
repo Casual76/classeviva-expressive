@@ -39,13 +39,27 @@ class GradeBandTest {
           contrastRatio(colors.content, colors.start),
           contrastRatio(colors.content, colors.end),
         )
-        // Le quattro fasce fisse sono scelte da noi e arrivano a 4.5. La Lode e' l'accento
-        // dell'utente: gli accenti pieni stanno nella banda di luminanza dove nessun contenuto
-        // arriva a 4.5, ed e' la stessa soglia che usa il test delle fasce di sezione nell'engine.
-        val minimum = if (band == GradeBand.Lode) 4.0f else 4.5f
         assertTrue(
-          "$band in $name illeggibile: rapporto peggiore $worst (minimo $minimum)",
-          worst >= minimum,
+          "$band in $name illeggibile: rapporto peggiore $worst",
+          worst >= 4.5f,
+        )
+      }
+    }
+  }
+
+  @Test
+  fun everyBand_readsWithDarkContent() {
+    // La lode era l'unica card della lista con il testo bianco, e per un soffio (4.53 contro 4.07):
+    // una sola card che si legge al contrario non dice "sono speciale", dice "sono un errore".
+    // L'accento viene schiarito quanto basta perche' tutta la scala si legga allo stesso modo.
+    accentSchemes().forEach { (name, scheme) ->
+      GradeBand.entries.forEach { band ->
+        val colors = vivid(band, scheme)
+        val onDark = contrastRatio(Color(0xFF121214), colors.start)
+        val onLight = contrastRatio(Color(0xFFFDFDFF), colors.start)
+        assertTrue(
+          "$band in $name si legge col bianco invece che con lo scuro ($onDark vs $onLight)",
+          onDark >= onLight,
         )
       }
     }

@@ -1,12 +1,16 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
@@ -22,7 +26,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -34,12 +42,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeDetailContent
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeDateLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradePaneTint
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardStat
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
+import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,7 +60,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
+import dev.antigravity.fluidengine.ui.fluid.FluidRadius
+import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
@@ -196,6 +212,11 @@ fun DashboardRoute(
     buildDashboardFacets(snapshot, facetToday)
   }
 
+  // Il voto si apre qui, non altrove: toccarlo in home portava alla scheda Voti e apriva il
+  // pop-up li'. Due schermate per guardare un numero.
+  var openedGrade by remember { mutableStateOf<Grade?>(null) }
+  var gradeOrigin by remember { mutableStateOf<Rect?>(null) }
+
   FluidScreen(
     modifier = modifier,
     title = titleText,
@@ -302,49 +323,39 @@ fun DashboardRoute(
       // Una rail di card vivide, non righe grigie: in home il voto e' un elemento che sta da solo,
       // e il colore della fascia e' l'informazione che porta. Chiude una incoerenza vera: queste
       // righe erano le uniche a mostrare un voto senza il suo colore.
-      item {
-        LazyRow(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-          items(recentGrades, key = { it.id }) { grade ->
+      // Un voto alla volta, non una rail che scorre libera: era l'unico scorrimento laterale di
+      // tutta l'app, e uno scorrimento che si ferma dove capita non somiglia a niente'altro qui.
+      // Il pager si aggancia, mostra una carta intera e lascia sbirciare la successiva quanto basta
+      // a sapere che c'e'.
+      item(key = "dashboard:grades") {
+        val pagerState = rememberPagerState(pageCount = { recentGrades.size })
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+          // Nessuno sbirciare della carta successiva: la pagina occupa tutta la larghezza e i
+          // puntini dicono gia' che ce n'e' altra. Un bordo colorato che spunta a destra somiglia a
+          // una card tagliata male piu' che a un invito a scorrere.
+          HorizontalPager(state = pagerState, pageSpacing = 10.dp) { page ->
+            val grade = recentGrades[page]
+            var cardBounds by remember { mutableStateOf<Rect?>(null) }
             GradeCard(
               valueLabel = grade.valueLabel,
               numericValue = grade.numericValue,
-              subject = grade.subject,
-              date = grade.date,
-              type = grade.type.ifBlank { "Valutazione" },
+              title = grade.subject,
+              // Il rettangolo di cio' che si e' toccato: senza, la finestra nasce dal centro e la
+              // card resta li' sotto lo scrim, come se ce ne fossero due. Con l'origine la card
+              // *diventa* il pop-up e ci ritorna.
+              modifier = Modifier.fluidExpandOrigin { cardBounds = it },
+              subtitle = listOf(grade.type.ifBlank { "Valutazione" }, gradeDateLabel(grade.date)).joinToString(" · "),
               unseen = unseenGradeIds.contains(grade.id),
-              compact = true,
-              onClick = { onOpenGrade(grade.id) },
+              onClick = { gradeOrigin = cardBounds; openedGrade = grade },
             )
           }
-          item(key = "dashboard:grades:all") {
-            // La card fantasma che chiude la rail: neutra, stessa sagoma delle vivide.
-            FluidVividCard(
-              colors = FluidVividColors(
-                start = MaterialTheme.colorScheme.surfaceContainerHigh,
-                end = MaterialTheme.colorScheme.surfaceContainerHigh,
-                content = MaterialTheme.colorScheme.onSurface,
-              ),
-              onClick = onNavigateGrades,
-              contentPadding = PaddingValues(14.dp),
-            ) {
-              Column(
-                modifier = Modifier.widthIn(min = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-              ) {
-                Icon(
-                  imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                  contentDescription = null,
-                )
-                Text(
-                  text = "Tutti i voti",
-                  style = MaterialTheme.typography.labelLarge,
-                  fontWeight = FontWeight.SemiBold,
-                )
-              }
-            }
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            PagerDots(count = recentGrades.size, current = pagerState.currentPage)
+            FluidQuickAction(label = "Tutti i voti", onClick = onNavigateGrades)
           }
         }
       }
@@ -394,6 +405,48 @@ fun DashboardRoute(
           animatePress = true
         )
       }
+    }
+  }
+
+  // Dichiarato sempre, visibile a comando: un portale dentro un `?.let` si smonterebbe alla
+  // chiusura e porterebbe via l'animazione di uscita.
+  FluidGlassModalPortal(
+    item = openedGrade,
+    onDismissRequest = { openedGrade = null },
+    origin = { gradeOrigin },
+    paneTitle = "Dettaglio voto",
+    paneTint = openedGrade?.let { gradePaneTint(it) },
+  ) { grade ->
+    GradeDetailContent(grade = grade)
+  }
+}
+
+/**
+ * Dove sei nella pila dei voti recenti.
+ *
+ * Sostituisce l'unica cosa che la rail diceva bene — che ce n'era altra a destra — ora che si vede
+ * una carta alla volta.
+ */
+@Composable
+private fun PagerDots(count: Int, current: Int) {
+  Row(
+    horizontalArrangement = Arrangement.spacedBy(5.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    repeat(count) { index ->
+      val active = index == current
+      Box(
+        modifier = Modifier
+          .size(width = if (active) 16.dp else 6.dp, height = 6.dp)
+          .background(
+            color = if (active) {
+              MaterialTheme.colorScheme.primary
+            } else {
+              MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+            },
+            shape = ContinuousCornerShape(FluidRadius.Small),
+          ),
+      )
     }
   }
 }
