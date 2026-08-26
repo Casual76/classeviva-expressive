@@ -15,22 +15,30 @@
       "ref": ""
     },
     "stable": {
-      "version": "7.6.0",
+      "version": "7.7.0",
       "releaseDate": "2026-08-26",
-      "changelog": "Un colore per ogni cosa. L'app cambia accento: l'ametista prende il posto del verde, e con lei arrivano lo zaffiro e il quarzo rosa delle sezioni. I pannelli in cima alle pagine diventano fasce compatte e sature, e lo spazio che occupavano torna ai tuoi dati. I voti non sono piu' righe grigie con una stellina: ogni voto e' una card interamente del suo colore, su quattro fasce invece di tre, e dal 7,5 in su la card si illumina di suo. Questa versione porta anche il vetro liquido della 7.5.0: pannelli che nascono dal punto che hai toccato.",
-      "releaseTag": "stable-classeviva-expressive-v7.6.0",
-      "apkAsset": "classeviva-expressive-7.6.0.apk",
-      "sizeBytes": 24080673
+      "changelog": "Cinque fasce invece di quattro: sotto il sei arancio, 6-7,49 verde acqua, 7,5-9,49 verde, e dal 9,5 l'accento dell'app quando si distingue abbastanza dal resto della scala. Il backup ora include anche i voti — chi resetta i dati o cambia telefono non li perde piu', anno per anno. Il colore misurato anche in agenda, assenze, lezioni e nelle schermate secondarie: capsule al posto dei pallini, la lezione in corso, i compiti colorati per scadenza. Il dettaglio di un voto si apre in un pop-up invece che in una schermata a se', e quel pop-up e' il voto stesso in vetro tinto del suo colore.",
+      "releaseTag": "stable-classeviva-expressive-v7.7.0",
+      "apkAsset": "classeviva-expressive-7.7.0.apk",
+      "sizeBytes": 24129817
     },
     "beta": {
-      "version": "7.6.0",
+      "version": "7.7.0",
       "releaseDate": "2026-08-26",
-      "changelog": "Un colore per ogni cosa. L'app cambia accento: l'ametista prende il posto del verde, e con lei arrivano lo zaffiro e il quarzo rosa delle sezioni. I pannelli in cima alle pagine diventano fasce compatte e sature, e lo spazio che occupavano torna ai tuoi dati. I voti non sono piu' righe grigie con una stellina: ogni voto e' una card interamente del suo colore, su quattro fasce invece di tre, e dal 7,5 in su la card si illumina di suo. Questa versione porta anche il vetro liquido della 7.5.0: pannelli che nascono dal punto che hai toccato.",
-      "releaseTag": "stable-classeviva-expressive-v7.6.0",
-      "apkAsset": "classeviva-expressive-7.6.0.apk",
-      "sizeBytes": 24080673
+      "changelog": "Cinque fasce invece di quattro: sotto il sei arancio, 6-7,49 verde acqua, 7,5-9,49 verde, e dal 9,5 l'accento dell'app quando si distingue abbastanza dal resto della scala. Il backup ora include anche i voti — chi resetta i dati o cambia telefono non li perde piu', anno per anno. Il colore misurato anche in agenda, assenze, lezioni e nelle schermate secondarie: capsule al posto dei pallini, la lezione in corso, i compiti colorati per scadenza. Il dettaglio di un voto si apre in un pop-up invece che in una schermata a se', e quel pop-up e' il voto stesso in vetro tinto del suo colore.",
+      "releaseTag": "stable-classeviva-expressive-v7.7.0",
+      "apkAsset": "classeviva-expressive-7.7.0.apk",
+      "sizeBytes": 24129817
     },
     "history": [
+      {
+        "version": "7.6.0",
+        "releaseDate": "2026-08-26",
+        "changelog": "Un colore per ogni cosa. L'app cambia accento: l'ametista prende il posto del verde, e con lei arrivano lo zaffiro e il quarzo rosa delle sezioni. I pannelli in cima alle pagine diventano fasce compatte e sature, e lo spazio che occupavano torna ai tuoi dati. I voti non sono piu' righe grigie con una stellina: ogni voto e' una card interamente del suo colore, su quattro fasce invece di tre, e dal 7,5 in su la card si illumina di suo. Questa versione porta anche il vetro liquido della 7.5.0: pannelli che nascono dal punto che hai toccato.",
+        "releaseTag": "stable-classeviva-expressive-v7.6.0",
+        "apkAsset": "classeviva-expressive-7.6.0.apk",
+        "sizeBytes": 24080673
+      },
       {
         "version": "7.4.0",
         "releaseDate": "2026-08-25",
