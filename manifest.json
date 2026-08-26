@@ -15,22 +15,30 @@
       "ref": ""
     },
     "stable": {
-      "version": "7.4.0",
-      "releaseDate": "2026-08-25",
-      "changelog": "Nuovo Orario un giorno alla volta, pop-up che si aprono e chiudono dentro i loro bottoni, menu rapidi con firma e allegati diretti, indice liquido nelle liste lunghe e scorrimento piu' fluido.",
-      "releaseTag": "stable-classeviva-expressive-v7.4.0",
-      "apkAsset": "classeviva-expressive-7.4.0.apk",
-      "sizeBytes": 23965842
+      "version": "7.6.0",
+      "releaseDate": "2026-08-26",
+      "changelog": "Un colore per ogni cosa. L'app cambia accento: l'ametista prende il posto del verde, e con lei arrivano lo zaffiro e il quarzo rosa delle sezioni. I pannelli in cima alle pagine diventano fasce compatte e sature, e lo spazio che occupavano torna ai tuoi dati. I voti non sono piu' righe grigie con una stellina: ogni voto e' una card interamente del suo colore, su quattro fasce invece di tre, e dal 7,5 in su la card si illumina di suo. Questa versione porta anche il vetro liquido della 7.5.0: pannelli che nascono dal punto che hai toccato.",
+      "releaseTag": "stable-classeviva-expressive-v7.6.0",
+      "apkAsset": "classeviva-expressive-7.6.0.apk",
+      "sizeBytes": 24080673
     },
     "beta": {
-      "version": "7.4.0",
-      "releaseDate": "2026-08-25",
-      "changelog": "Nuovo Orario un giorno alla volta, pop-up che si aprono e chiudono dentro i loro bottoni, menu rapidi con firma e allegati diretti, indice liquido nelle liste lunghe e scorrimento piu' fluido.",
-      "releaseTag": "stable-classeviva-expressive-v7.4.0",
-      "apkAsset": "classeviva-expressive-7.4.0.apk",
-      "sizeBytes": 23965842
+      "version": "7.6.0",
+      "releaseDate": "2026-08-26",
+      "changelog": "Un colore per ogni cosa. L'app cambia accento: l'ametista prende il posto del verde, e con lei arrivano lo zaffiro e il quarzo rosa delle sezioni. I pannelli in cima alle pagine diventano fasce compatte e sature, e lo spazio che occupavano torna ai tuoi dati. I voti non sono piu' righe grigie con una stellina: ogni voto e' una card interamente del suo colore, su quattro fasce invece di tre, e dal 7,5 in su la card si illumina di suo. Questa versione porta anche il vetro liquido della 7.5.0: pannelli che nascono dal punto che hai toccato.",
+      "releaseTag": "stable-classeviva-expressive-v7.6.0",
+      "apkAsset": "classeviva-expressive-7.6.0.apk",
+      "sizeBytes": 24080673
     },
     "history": [
+      {
+        "version": "7.4.0",
+        "releaseDate": "2026-08-25",
+        "changelog": "Nuovo Orario un giorno alla volta, pop-up che si aprono e chiudono dentro i loro bottoni, menu rapidi con firma e allegati diretti, indice liquido nelle liste lunghe e scorrimento piu' fluido.",
+        "releaseTag": "stable-classeviva-expressive-v7.4.0",
+        "apkAsset": "classeviva-expressive-7.4.0.apk",
+        "sizeBytes": 23965842
+      },
       {
         "version": "7.2.0",
         "releaseDate": "2026-08-23",
