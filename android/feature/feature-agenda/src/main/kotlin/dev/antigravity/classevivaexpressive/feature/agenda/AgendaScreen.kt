@@ -62,7 +62,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
@@ -314,22 +313,12 @@ fun AgendaRoute(
       }
     }
     item {
-      val monthEntryCount = monthEntriesByDate.values.sumOf(List<AgendaEntry>::size)
       FeatureHero(
         identity = FeatureIdentity.Agenda,
         eyebrow = selectedMonth.format(calendarHeaderFormatter).replaceFirstChar { it.uppercase() },
         value = selectedDayEntries.size.toString(),
-        title = if (selectedDayEntries.size == 1) "impegno nel giorno scelto" else "impegni nel giorno scelto",
-        description = if (selectedDayEntries.isEmpty()) {
-          "La data selezionata è libera da compiti, verifiche ed eventi."
-        } else {
-          "Tutto ciò che richiede attenzione nella data selezionata, in ordine cronologico."
-        },
+        label = if (selectedDayEntries.size == 1) "impegno nel giorno" else "impegni nel giorno",
         icon = Icons.Rounded.CalendarMonth,
-        metrics = listOf(
-          FeatureHeroMetric("Nel mese", monthEntryCount.toString()),
-          FeatureHeroMetric("Giorni impegnati", monthEntriesByDate.size.toString()),
-        ),
       )
     }
     item {

@@ -57,7 +57,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
@@ -484,22 +483,12 @@ fun LessonsRoute(
             else -> "Storico selezionato"
           },
           value = visibleCount.toString(),
-          title = if (showingTemplate) "slot nell'orario" else if (visibleCount == 1) {
-            "lezione nella settimana"
+          label = if (showingTemplate) "slot nell'orario" else if (visibleCount == 1) {
+            "lezione in settimana"
           } else {
-            "lezioni nella settimana"
-          },
-          description = when {
-            showingOfficialTemplate -> "L'orario ufficiale importato, con conferme e modifiche manuali sempre riconoscibili."
-            showingTemplate -> "Una timeline stabile costruita dalle ricorrenze reali e dalle tue conferme."
-            else -> "Argomenti e firme della settimana scelta, organizzati giorno per giorno."
+            "lezioni in settimana"
           },
           icon = Icons.Rounded.AutoStories,
-          metrics = listOf(
-            FeatureHeroMetric("Settimane campione", state.timetableTemplate.sampledWeeks.toString()),
-            FeatureHeroMetric("Docenti rilevati", state.totalTeachersCount.toString()),
-            FeatureHeroMetric("Lezioni archiviate", state.lessons.size.toString()),
-          ),
         )
       }
 

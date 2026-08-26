@@ -1,5 +1,7 @@
 package dev.antigravity.classevivaexpressive.feature.absences
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -26,7 +28,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
@@ -53,6 +54,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
+import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -189,22 +191,40 @@ fun AbsencesRoute(
     item {
       FeatureHero(
         identity = FeatureIdentity.Attendance,
-        eyebrow = "Presenze e giustificazioni",
+        eyebrow = "Presenze",
         value = pending.size.toString(),
-        title = if (pending.size == 1) "voce da giustificare" else "voci da giustificare",
-        description = if (pending.isEmpty()) {
-          "La situazione è allineata: non risultano azioni in sospeso."
-        } else {
-          "Controlla le registrazioni in sospeso e giustifica solo quelle corrette."
-        },
+        label = "da giustificare",
         icon = if (pending.isEmpty()) Icons.AutoMirrored.Rounded.FactCheck else Icons.Rounded.EventBusy,
-        metrics = listOf(
-          FeatureHeroMetric("Assenze", absenceCount.toString()),
-          FeatureHeroMetric("Ritardi", lateCount.toString()),
-          FeatureHeroMetric("Uscite", exitCount.toString()),
-        ),
         urgent = pending.isNotEmpty(),
       )
+    }
+    item {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        FluidMetricTile(
+          label = "Assenze",
+          value = absenceCount.toString(),
+          detail = "nell'anno",
+          modifier = Modifier.weight(1f),
+          glass = true,
+        )
+        FluidMetricTile(
+          label = "Ritardi",
+          value = lateCount.toString(),
+          detail = "nell'anno",
+          modifier = Modifier.weight(1f),
+          glass = true,
+        )
+        FluidMetricTile(
+          label = "Uscite",
+          value = exitCount.toString(),
+          detail = "anticipate",
+          modifier = Modifier.weight(1f),
+          glass = true,
+        )
+      }
     }
     if (state.isSubmitting) {
       item {

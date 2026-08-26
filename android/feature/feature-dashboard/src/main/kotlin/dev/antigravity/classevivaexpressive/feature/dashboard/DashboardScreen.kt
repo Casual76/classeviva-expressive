@@ -1,7 +1,15 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Grade
@@ -10,10 +18,13 @@ import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Today
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -21,8 +32,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardStat
@@ -40,7 +51,11 @@ import java.time.LocalDate
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
+import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
+import dev.antigravity.fluidengine.ui.theme.FluidQuickAction
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -211,33 +226,46 @@ fun DashboardRoute(
         identity = FeatureIdentity.Overview,
         eyebrow = "La tua giornata",
         value = snapshot.todayLessons.size.toString(),
-        title = if (snapshot.todayLessons.size == 1) "lezione oggi" else "lezioni oggi",
-        description = if (snapshot.todayLessons.isEmpty()) {
-          "Nessuna lezione registrata: il resto della giornata resta comunque sotto controllo."
-        } else {
-          "Orario, risultati e avvisi importanti in un solo colpo d'occhio."
-        },
+        label = if (snapshot.todayLessons.size == 1) "lezione oggi" else "lezioni oggi",
         icon = Icons.Rounded.Today,
-        metrics = listOf(
-          FeatureHeroMetric(
-            label = "Media generale",
-            value = snapshot.averageNumeric?.let { snapshot.averageLabel } ?: "--",
-            onClick = onNavigateGrades,
-          ),
-          FeatureHeroMetric(
-            label = "Voti nuovi",
-            value = snapshot.unseenGrades.size.toString(),
-            onClick = onNavigateGrades,
-          ),
-          FeatureHeroMetric(
-            label = "Bacheca non letta",
-            value = snapshot.unreadCommunications.size.toString(),
-            onClick = onNavigateCommunications,
-          ),
-        ),
-        actionLabel = "Apri orario",
-        onAction = onNavigateLessons,
       )
+    }
+    // Le metriche che vivevano dentro il pannello editoriale: ora sono superfici della pagina,
+    // sotto la fascia, con lo stesso peso delle altre.
+    item {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        FluidMetricTile(
+          label = "Media",
+          value = snapshot.averageNumeric?.let { snapshot.averageLabel } ?: "--",
+          detail = "generale",
+          modifier = Modifier.weight(1f),
+          tone = FluidTone.Primary,
+          onClick = onNavigateGrades,
+          glass = true,
+        )
+        FluidMetricTile(
+          label = "Voti nuovi",
+          value = snapshot.unseenGrades.size.toString(),
+          detail = "da vedere",
+          modifier = Modifier.weight(1f),
+          onClick = onNavigateGrades,
+          glass = true,
+        )
+        FluidMetricTile(
+          label = "Bacheca",
+          value = snapshot.unreadCommunications.size.toString(),
+          detail = "non lette",
+          modifier = Modifier.weight(1f),
+          onClick = onNavigateCommunications,
+          glass = true,
+        )
+      }
+    }
+    item {
+      FluidQuickAction(label = "Apri orario", onClick = onNavigateLessons)
     }
 
     if (snapshot.todayLessons.isNotEmpty()) {
@@ -271,25 +299,54 @@ fun DashboardRoute(
         )
       }
     } else {
-      fluidGlassGroups(recentGrades) { grade ->
-        val isUnseen = unseenGradeIds.contains(grade.id)
-
-        FluidListRow(
-          title = grade.subject,
-          subtitle = grade.type.ifBlank { "Valutazione" },
-          eyebrow = grade.date,
-          meta = grade.description ?: grade.notes,
-          tone = if (isUnseen) FluidTone.Primary else FluidTone.Neutral,
-          leading = { Icon(Icons.Rounded.Grade, contentDescription = null) },
-          onClick = { onOpenGrade(grade.id) },
-          badge = {
-            FluidStatusBadge(
-              label = grade.valueLabel,
-              tone = if (isUnseen) FluidTone.Primary else FluidTone.Neutral,
+      // Una rail di card vivide, non righe grigie: in home il voto e' un elemento che sta da solo,
+      // e il colore della fascia e' l'informazione che porta. Chiude una incoerenza vera: queste
+      // righe erano le uniche a mostrare un voto senza il suo colore.
+      item {
+        LazyRow(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+          items(recentGrades, key = { it.id }) { grade ->
+            GradeCard(
+              valueLabel = grade.valueLabel,
+              numericValue = grade.numericValue,
+              subject = grade.subject,
+              date = grade.date,
+              type = grade.type.ifBlank { "Valutazione" },
+              unseen = unseenGradeIds.contains(grade.id),
+              compact = true,
+              onClick = { onOpenGrade(grade.id) },
             )
-          },
-          animatePress = true
-        )
+          }
+          item(key = "dashboard:grades:all") {
+            // La card fantasma che chiude la rail: neutra, stessa sagoma delle vivide.
+            FluidVividCard(
+              colors = FluidVividColors(
+                start = MaterialTheme.colorScheme.surfaceContainerHigh,
+                end = MaterialTheme.colorScheme.surfaceContainerHigh,
+                content = MaterialTheme.colorScheme.onSurface,
+              ),
+              onClick = onNavigateGrades,
+              contentPadding = PaddingValues(14.dp),
+            ) {
+              Column(
+                modifier = Modifier.widthIn(min = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+              ) {
+                Icon(
+                  imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                  contentDescription = null,
+                )
+                Text(
+                  text = "Tutti i voti",
+                  style = MaterialTheme.typography.labelLarge,
+                  fontWeight = FontWeight.SemiBold,
+                )
+              }
+            }
+          }
+        }
       }
     }
     item { FluidSectionHeader("In arrivo") }

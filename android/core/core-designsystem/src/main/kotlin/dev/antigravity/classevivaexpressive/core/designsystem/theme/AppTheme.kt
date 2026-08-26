@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.fluidengine.foundation.EngineSettings
+import dev.antigravity.fluidengine.ui.theme.AccentPoles
 import dev.antigravity.fluidengine.ui.theme.AccentPreset
 import dev.antigravity.fluidengine.ui.theme.FluidTheme
 import dev.antigravity.fluidengine.ui.theme.fluidColorScheme
@@ -14,17 +15,29 @@ import dev.antigravity.fluidengine.foundation.AccentMode as EngineAccentMode
 import dev.antigravity.fluidengine.foundation.ThemeMode as EngineThemeMode
 
 /**
- * Il verde di ClasseViva, nelle due versioni che gli servono.
+ * L'ametista di ClasseViva, nelle due versioni che le servono.
  *
  * Da questa coppia l'engine deriva l'intera scala di superfici: cambiare qui cambia l'app in modo
- * coerente. Prima era il seme di una palette scritta in questo modulo; ora e' l'unica cosa che
- * questo modulo ha ancora da dire sul colore.
+ * coerente. Il nome resta "classeviva" perche' le impostazioni salvano la scelta per nome: e' il
+ * marchio che cambia colore, non un preset nuovo.
+ *
+ * I poli servono perche' un viola sta a un passo dall'ancora storica del secondary (l'indaco iOS):
+ * senza, l'anello a sette toni collassa in un viola solo. Con lo zaffiro e il quarzo rosa come
+ * parenti, le tre famiglie restano gemme evidentemente imparentate ma distinguibili.
  */
 private val BrandAccent = AccentPreset(
   name = "classeviva",
-  label = "Classeviva",
-  light = Color(0xFF1F9E6E),
-  dark = Color(0xFF2ED8A0),
+  label = "Ametista",
+  light = Color(0xFF9966CC),
+  dark = Color(0xFFB88CE8),
+  poles = AccentPoles(
+    secondaryLight = Color(0xFF007AFF),
+    secondaryDark = Color(0xFF0A84FF),
+    tertiaryLight = Color(0xFFFF2D55),
+    tertiaryDark = Color(0xFFFF375F),
+    secondaryBlend = 0.45f,
+    tertiaryBlend = 0.40f,
+  ),
 )
 
 /**
@@ -34,8 +47,8 @@ private val BrandAccent = AccentPreset(
  * la scelta per nome e la confrontano con `preset.name`, quindi rinominare "expressive" in "fluid"
  * farebbe apparire nessun preset come selezionato a chiunque abbia gia' scelto il blu.
  *
- * L'engine, dal canto suo, non conosce il nome "expressive" e ricade sul primo preset, che e' lo
- * stesso blu: il colore resta quello, cambia solo chi lo chiama come.
+ * Questa lista viene passata a `FluidTheme(presets = ...)`, quindi i nomi si risolvono davvero:
+ * niente piu' fallback fortuito sul primo preset dell'engine.
  */
 val expressiveAccentPresets: List<AccentPreset> = listOf(
   AccentPreset("expressive", "Blu", Color(0xFF007AFF), Color(0xFF0A84FF)),
@@ -62,6 +75,7 @@ fun ClassevivaExpressiveTheme(
   FluidTheme(
     settings = settings.toEngine(),
     brand = BrandAccent,
+    presets = expressiveAccentPresets,
     content = content,
   )
 }
@@ -81,6 +95,7 @@ fun classevivaColorScheme(
   settings = settings.toEngine(),
   isDark = isDark,
   brand = BrandAccent,
+  presets = expressiveAccentPresets,
   dynamicScheme = dynamicScheme,
 )
 

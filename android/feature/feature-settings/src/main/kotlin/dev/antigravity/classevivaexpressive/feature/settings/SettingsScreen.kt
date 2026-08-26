@@ -73,6 +73,8 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkChan
 import dev.antigravity.classevivaexpressive.core.data.notifications.LiveTimetableChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.NotesChannelId
 import dev.antigravity.classevivaexpressive.core.data.notifications.TestChannelId
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.classevivaBrandAccent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveAccentPresets
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
@@ -478,6 +480,7 @@ fun SettingsRoute(
   ) { section ->
     FluidScreen(
       title = section?.title ?: "Impostazioni",
+      ambient = FeatureIdentity.Settings.ambient(),
       subtitle = section?.subtitle ?: "Tutto ciò che serve, senza il muro di opzioni.",
       onBack = if (section != null || onBack != null) navigateBack else null,
       actions = {

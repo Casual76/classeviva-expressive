@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,11 +48,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradePill
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeBand
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeVividColors
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
@@ -81,6 +84,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
+import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
@@ -346,19 +351,42 @@ fun GradesRoute(
         identity = FeatureIdentity.Grades,
         eyebrow = effectivePeriodLabel(state.periods, effectivePeriodCode),
         value = periodAverage?.format2() ?: "--",
-        title = "media del periodo",
-        description = when {
-          filteredGrades.isEmpty() -> "Non ci sono ancora valutazioni numeriche nel periodo selezionato."
-          riskSubjectsCount > 0 -> "$riskSubjectsCount ${if (riskSubjectsCount == 1) "materia richiede" else "materie richiedono"} attenzione."
-          else -> "Le medie del periodo risultano tutte sopra la soglia del sei."
-        },
+        label = "media del periodo",
         icon = Icons.Rounded.Insights,
-        metrics = listOf(
-          FeatureHeroMetric("Media annuale", overallAverage?.format2() ?: "--"),
-          FeatureHeroMetric("Valutazioni", filteredGrades.size.toString()),
-          FeatureHeroMetric("Materie a rischio", riskSubjectsCount.toString()),
-        ),
       )
+    }
+    // I fatti secondari del vecchio pannello, come superfici della pagina. Il tono della media
+    // annuale dice gia' da solo se l'anno regge; le materie a rischio si accendono solo quando
+    // esistono.
+    item {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        FluidMetricTile(
+          label = "Media annuale",
+          value = overallAverage?.format2() ?: "--",
+          detail = "tutto l'anno",
+          modifier = Modifier.weight(1f),
+          tone = gradeTone(overallAverage),
+          glass = true,
+        )
+        FluidMetricTile(
+          label = "Valutazioni",
+          value = filteredGrades.size.toString(),
+          detail = "nel periodo",
+          modifier = Modifier.weight(1f),
+          glass = true,
+        )
+        FluidMetricTile(
+          label = "A rischio",
+          value = riskSubjectsCount.toString(),
+          detail = if (riskSubjectsCount == 1) "materia" else "materie",
+          modifier = Modifier.weight(1f),
+          tone = if (riskSubjectsCount > 0) FluidTone.Warning else FluidTone.Neutral,
+          glass = true,
+        )
+      }
     }
     
     if (chartPoints.isNotEmpty()) {
@@ -435,7 +463,10 @@ fun GradesRoute(
             )
           }
         } else {
-          fluidGlassGroups(recentGrades) { grade ->
+          // Card separate, non righe in un gruppo: il colore della fascia E' l'informazione, e la
+          // superficie intera lo porta. Superfici piccole e opache — il tetto texture che impone
+          // fluidGlassGroups alle liste su vetro qui non e' in gioco.
+          items(recentGrades, key = Grade::id) { grade ->
             var rowBounds by remember { mutableStateOf<Rect?>(null) }
             val unseen = !state.seenGradeIds.contains(grade.id)
             val readableDate = remember(grade.date) { grade.date.toReadableDate() }
@@ -446,28 +477,16 @@ fun GradesRoute(
               ).joinToString(" / ").ifBlank { null }
             }
 
-            FluidListRow(
+            GradeCard(
+              valueLabel = grade.valueLabel,
+              numericValue = grade.numericValue,
+              subject = grade.subject,
+              date = readableDate,
+              type = grade.type.ifBlank { "Valutazione" },
               modifier = Modifier.fluidExpandOrigin { rowBounds = it },
-              // Lo sfondo per riga era l'unico posto dell'app che forzava un colore di
-              // superficie a mano, ed era il modo di dire "questa lista ha bisogno di un
-              // contenitore" senza avercelo. Ora il contenitore c'e' e la riga torna a essere
-              // una riga: dodici sfondi dentro un pannello sono dodici rettangoli sopra il
-              // vetro, che e' esattamente cio' che il vetro non deve avere davanti.
-              title = grade.subject,
-              subtitle = grade.type.ifBlank { "Valutazione" },
-              eyebrow = readableDate,
               meta = meta,
-              tone = gradeTone(grade.numericValue),
-              leading = { Icon(Icons.Rounded.Grade, contentDescription = null) },
-              badge = {
-                if (unseen) {
-                  FluidStatusBadge(label = "NUOVO", tone = FluidTone.Primary)
-                }
-                if (grade.history.isNotEmpty()) {
-                  FluidStatusBadge(label = "MODIFICATO", tone = FluidTone.Info)
-                }
-                GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
-              },
+              unseen = unseen,
+              edited = grade.history.isNotEmpty(),
               onClick = { gradeOrigin = rowBounds; openGrade(grade.id) },
               // Le stesse cose che il tap sa fare, ma dette: una pressione lunga che apre un menu
               // e' un gesto che si scopre, una che fa una cosa sola in silenzio no.
@@ -485,7 +504,6 @@ fun GradesRoute(
                   ),
                 )
               },
-              animatePress = true,
             )
           }
         }
@@ -592,18 +610,17 @@ fun GradesRoute(
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
       Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
-      FluidListRow(
-        title = grade.valueLabel,
-        subtitle = grade.type.ifBlank { "Valutazione" },
-        eyebrow = grade.date.toReadableDate(),
-        meta = listOfNotNull(grade.description, grade.notes, grade.teacher).joinToString(" / "),
-        tone = gradeTone(grade.numericValue),
-        badge = {
-          if (grade.history.isNotEmpty()) {
-            FluidStatusBadge(label = "MODIFICATO", tone = FluidTone.Info)
-          }
-          GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
-        }
+      // Il voto come superficie del suo colore, e qui — il posto dove lo si guarda da vicino — lo
+      // sheen dell'eccellenza rende di piu'.
+      GradeCard(
+        valueLabel = grade.valueLabel,
+        numericValue = grade.numericValue,
+        subject = grade.subject,
+        date = grade.date.toReadableDate(),
+        type = grade.type.ifBlank { "Valutazione" },
+        meta = listOfNotNull(grade.description, grade.notes, grade.teacher)
+          .joinToString(" / ").ifBlank { null },
+        edited = grade.history.isNotEmpty(),
       )
       if (grade.history.isNotEmpty()) {
         FluidButton(
@@ -658,19 +675,15 @@ fun GradeDetailRoute(
     onBack = onBack,
     hero = {
       Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
-      FluidListRow(
-        title = grade.valueLabel,
-        subtitle = grade.type.ifBlank { "Valutazione" },
-        eyebrow = grade.date.toReadableDate(),
-        meta = listOfNotNull(grade.description, grade.notes, grade.teacher).joinToString(" / "),
-        tone = gradeTone(grade.numericValue),
-        badge = {
-          if (grade.history.isNotEmpty()) {
-            FluidStatusBadge(label = "MODIFICATO", tone = FluidTone.Info)
-          }
-          GradePill(value = grade.valueLabel, numericValue = grade.numericValue)
-        },
-        animatePress = false,
+      GradeCard(
+        valueLabel = grade.valueLabel,
+        numericValue = grade.numericValue,
+        subject = grade.subject,
+        date = grade.date.toReadableDate(),
+        type = grade.type.ifBlank { "Valutazione" },
+        meta = listOfNotNull(grade.description, grade.notes, grade.teacher)
+          .joinToString(" / ").ifBlank { null },
+        edited = grade.history.isNotEmpty(),
       )
     },
     secondary = {
@@ -771,6 +784,31 @@ private fun SubjectDetailContent(
           Text(text = subject, style = MaterialTheme.typography.headlineSmall)
           IconButton(onClick = onSetGoal) {
               Icon(Icons.Rounded.Settings, contentDescription = "Obiettivo")
+          }
+        }
+      }
+      // La media della materia sul colore della sua fascia: e' il verdetto della pagina, e sta
+      // sopra le medie parziali che lo spiegano.
+      val subjectAverage = calculateSubjectAverage(grades)
+      val averageBand = gradeBand(subjectAverage)
+      if (subjectAverage != null && averageBand != null) {
+        item {
+          FluidVividCard(colors = gradeVividColors(averageBand)) {
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                text = "MEDIA DELLA MATERIA",
+                style = FluidTextStyles.uppercaseCaption,
+                color = LocalContentColor.current.copy(alpha = 0.75f),
+              )
+              Text(
+                text = subjectAverage.format2(),
+                style = FluidTextStyles.largeNumeric,
+              )
+            }
           }
         }
       }

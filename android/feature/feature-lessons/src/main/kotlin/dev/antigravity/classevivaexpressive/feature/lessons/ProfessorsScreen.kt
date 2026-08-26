@@ -29,7 +29,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
@@ -446,20 +445,12 @@ fun ProfessorsRoute(
       }
     } else {
       item {
-        val avgPresence = state.professors.map { it.presenceRate }.average()
-        val distinctSubjects = state.professors.flatMap { it.subjects }.distinct().size
         FeatureHero(
           identity = FeatureIdentity.People,
           eyebrow = "La classe docente",
           value = state.professors.size.toString(),
-          title = if (state.professors.size == 1) "docente rilevato" else "docenti rilevati",
-          description = "Presenza, materie e valutazioni diventano un profilo leggibile per ogni docente ufficiale.",
+          label = if (state.professors.size == 1) "docente rilevato" else "docenti rilevati",
           icon = Icons.Rounded.Groups,
-          metrics = listOf(
-            FeatureHeroMetric("Presenza media", "${(avgPresence * 100).toInt()}%"),
-            FeatureHeroMetric("Materie", distinctSubjects.toString()),
-            FeatureHeroMetric("Voti assegnati", state.professors.sumOf { it.gradeCount }.toString()),
-          ),
         )
       }
       item { FluidSectionHeader("Docenti") }

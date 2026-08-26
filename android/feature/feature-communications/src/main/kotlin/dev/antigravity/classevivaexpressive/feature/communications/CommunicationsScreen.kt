@@ -51,7 +51,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHeroMetric
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
@@ -745,17 +744,8 @@ fun CommunicationsRoute(
         identity = FeatureIdentity.Communications,
         eyebrow = "Centro messaggi",
         value = totalUnreadCount.toString(),
-        title = if (totalUnreadCount == 1) "comunicazione da leggere" else "comunicazioni da leggere",
-        description = if (totalUnreadCount == 0) {
-          "Hai letto tutti gli avvisi disponibili; note e circolari restano raccolte qui."
-        } else {
-          "Dai priorità ai nuovi avvisi senza perdere allegati, richieste e annotazioni."
-        },
+        label = "da leggere",
         icon = if (totalUnreadCount > 0) Icons.Rounded.MarkEmailUnread else Icons.Rounded.Forum,
-        metrics = listOf(
-          FeatureHeroMetric("Circolari", state.communications.size.toString()),
-          FeatureHeroMetric("Note", state.notes.size.toString()),
-        ),
       )
     }
     item {

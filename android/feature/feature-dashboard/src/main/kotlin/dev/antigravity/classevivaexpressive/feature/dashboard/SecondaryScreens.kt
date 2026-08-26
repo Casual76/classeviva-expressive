@@ -1,5 +1,8 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import android.content.ClipboardManager
 import android.content.Context
@@ -13,8 +16,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Assignment
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
@@ -82,7 +90,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
-import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -321,6 +328,7 @@ fun MeetingsRoute(
 
   FluidScreen(
     title = "Colloqui",
+    ambient = FeatureIdentity.Meetings.ambient(),
     subtitle = "Prenotazioni e disponibilita dei docenti.",
     onBack = onBack,
     actions = {
@@ -335,9 +343,17 @@ fun MeetingsRoute(
     itemSpacing = 12.dp,
   ) {
     item {
-      FluidHeroCard(
-        title = "Colloqui",
-        subtitle = "${state.slots.count { it.available }} disponibilità · ${state.bookings.size} prenotazioni",
+      FeatureHero(
+        identity = FeatureIdentity.Meetings,
+        eyebrow = "Colloqui",
+        value = state.slots.count { it.available }.toString(),
+        label = "disponibilità",
+        icon = Icons.Rounded.Groups,
+        trailing = {
+          if (state.bookings.isNotEmpty()) {
+            FluidStatusBadge("${state.bookings.size} PRENOTATI", tone = FluidTone.Success)
+          }
+        },
       )
     }
     state.lastMessage?.let { message ->
@@ -534,6 +550,7 @@ fun MaterialsRoute(
 
   FluidScreen(
     title = "Didattica",
+    ambient = FeatureIdentity.Materials.ambient(),
     subtitle = "Materiali condivisi dai docenti, link a risorse esterne e file da scaricare.",
     onBack = onBack,
     actions = {
@@ -548,9 +565,12 @@ fun MaterialsRoute(
     itemSpacing = 12.dp,
   ) {
     item {
-      FluidHeroCard(
-        title = "Didattica",
-        subtitle = if (items.isEmpty()) "Materiali in sincronizzazione" else "${items.size} contenuti disponibili",
+      FeatureHero(
+        identity = FeatureIdentity.Materials,
+        eyebrow = "Didattica",
+        value = items.size.toString(),
+        label = if (items.size == 1) "contenuto" else "contenuti",
+        icon = Icons.Rounded.Folder,
       )
     }
     // Loading, error and empty all live inside the scroll rather than replacing it, so the title
@@ -715,7 +735,7 @@ fun MaterialDetailRoute(
   var actionsOrigin by remember { mutableStateOf<Rect?>(null) }
 
   if (item == null) {
-    FluidScreen(title = "Dettaglio materiale", modifier = modifier, onBack = onBack) {
+    FluidScreen(title = "Dettaglio materiale", ambient = FeatureIdentity.Materials.ambient(), modifier = modifier, onBack = onBack) {
       item(key = "material-detail-missing") {
         FluidEmptyState(
           title = "Materiale non disponibile",
@@ -902,6 +922,7 @@ fun HomeworkRoute(
 
   FluidScreen(
     title = "Compiti",
+    ambient = FeatureIdentity.Homework.ambient(),
     subtitle = "Compiti assegnati dai docenti con data di consegna e dettaglio.",
     onBack = onBack,
     actions = {
@@ -916,9 +937,12 @@ fun HomeworkRoute(
     itemSpacing = 12.dp,
   ) {
     item {
-      FluidHeroCard(
-        title = "Compiti",
-        subtitle = if (state.homeworks.isEmpty()) "Nessuna attività assegnata" else "${state.homeworks.size} attività assegnate",
+      FeatureHero(
+        identity = FeatureIdentity.Homework,
+        eyebrow = "Compiti",
+        value = state.homeworks.size.toString(),
+        label = if (state.homeworks.size == 1) "attività assegnata" else "attività assegnate",
+        icon = Icons.AutoMirrored.Rounded.Assignment,
       )
     }
     if (state.homeworks.isEmpty()) {
@@ -1042,7 +1066,7 @@ fun HomeworkDetailRoute(
   }
 
   if (homework == null) {
-    FluidScreen(title = "Dettaglio compito", modifier = modifier, onBack = onBack) {
+    FluidScreen(title = "Dettaglio compito", ambient = FeatureIdentity.Homework.ambient(), modifier = modifier, onBack = onBack) {
       item(key = "homework-detail-missing") {
         FluidEmptyState(
           title = "Compito non disponibile",
@@ -1275,6 +1299,7 @@ fun DocumentsRoute(
 
   FluidScreen(
     title = "Documenti e libri",
+    ambient = FeatureIdentity.Documents.ambient(),
     subtitle = "Documenti della scuola, pagelle e libri scolastici adottati.",
     onBack = onBack,
     actions = {
@@ -1289,9 +1314,17 @@ fun DocumentsRoute(
     itemSpacing = 12.dp,
   ) {
     item {
-      FluidHeroCard(
-        title = "Archivio scolastico",
-        subtitle = "${state.documents.size} documenti · ${state.schoolbookCourses.size} corsi con libri",
+      FeatureHero(
+        identity = FeatureIdentity.Documents,
+        eyebrow = "Archivio scolastico",
+        value = state.documents.size.toString(),
+        label = if (state.documents.size == 1) "documento" else "documenti",
+        icon = Icons.AutoMirrored.Rounded.MenuBook,
+        trailing = {
+          if (state.schoolbookCourses.isNotEmpty()) {
+            FluidStatusBadge("${state.schoolbookCourses.size} CORSI", tone = FluidTone.Info)
+          }
+        },
       )
     }
     if (state.initialLoading && state.documents.isEmpty() && state.schoolbookCourses.isEmpty()) {
@@ -1496,7 +1529,7 @@ fun DocumentDetailRoute(
   }
 
   if (document == null) {
-    FluidScreen(title = "Dettaglio documento", modifier = modifier, onBack = onBack) {
+    FluidScreen(title = "Dettaglio documento", ambient = FeatureIdentity.Documents.ambient(), modifier = modifier, onBack = onBack) {
       item(key = "document-detail-missing") {
         FluidEmptyState(
           title = "Documento non disponibile",
@@ -1671,6 +1704,7 @@ fun StudentScoreRoute(
 
   FluidScreen(
     title = "Media studente",
+    ambient = FeatureIdentity.StudentScore.ambient(),
     subtitle = "Punteggio composito calcolato su media voti, frequenza e costanza.",
     actions = {
       FluidBarAction(
@@ -1685,9 +1719,12 @@ fun StudentScoreRoute(
   ) {
     state.currentScore?.let { score ->
       item {
-        FluidHeroCard(
-          title = "${score.score.roundToInt()}/100",
-          subtitle = score.label,
+        FeatureHero(
+          identity = FeatureIdentity.StudentScore,
+          eyebrow = score.label,
+          value = score.score.roundToInt().toString(),
+          label = "su 100",
+          icon = Icons.Rounded.Insights,
         )
       }
       if (score.components.isNotEmpty()) {
