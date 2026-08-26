@@ -1033,6 +1033,19 @@ data class AppBackupImportSummary(
   val seenGrades: Int = 0,
   val subjectGoals: Int = 0,
   val scoreSnapshots: Int = 0,
+  val grades: Int = 0,
+  val gradeHistory: Int = 0,
+  /**
+   * Gli anni scolastici a cui appartengono i voti importati.
+   *
+   * "487 voti" non dimostra niente; "487 voti (2024-2025, 2025-2026)" dimostra che l'anno scorso e'
+   * arrivato, che e' l'unico motivo per cui i voti stanno nel backup. Senza questa riga chi importa
+   * cambia anno, non li vede subito perche' deve ancora selezionarlo, e conclude che non ha
+   * funzionato.
+   */
+  val gradeSchoolYears: List<String> = emptyList(),
+  /** Voti appartenenti a un altro profilo: scritti, ma invisibili con l'account corrente. */
+  val skippedForeignStudentGrades: Int = 0,
 )
 
 interface SettingsRepository {

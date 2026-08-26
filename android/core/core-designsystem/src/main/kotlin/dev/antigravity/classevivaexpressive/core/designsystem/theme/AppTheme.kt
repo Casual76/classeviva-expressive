@@ -21,6 +21,9 @@ import dev.antigravity.fluidengine.foundation.ThemeMode as EngineThemeMode
  * coerente. Il nome resta "classeviva" perche' le impostazioni salvano la scelta per nome: e' il
  * marchio che cambia colore, non un preset nuovo.
  *
+ * La saturazione sta con gli altri accenti di proposito: la prima ametista era a 0.50 mentre
+ * l'indaco sta a 0.60 e il verde a 0.74, ed era l'unico colore della famiglia che sembrava spento.
+ *
  * I poli servono perche' un viola sta a un passo dall'ancora storica del secondary (l'indaco iOS):
  * senza, l'anello a sette toni collassa in un viola solo. Con lo zaffiro e il quarzo rosa come
  * parenti, le tre famiglie restano gemme evidentemente imparentate ma distinguibili.
@@ -28,8 +31,8 @@ import dev.antigravity.fluidengine.foundation.ThemeMode as EngineThemeMode
 private val BrandAccent = AccentPreset(
   name = "classeviva",
   label = "Ametista",
-  light = Color(0xFF9966CC),
-  dark = Color(0xFFB88CE8),
+  light = Color(0xFF9D4EDD),
+  dark = Color(0xFFC77DFF),
   poles = AccentPoles(
     secondaryLight = Color(0xFF007AFF),
     secondaryDark = Color(0xFF0A84FF),

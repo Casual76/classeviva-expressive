@@ -253,6 +253,15 @@ interface SnapshotCacheDao {
 
   @Query("DELETE FROM snapshot_cache WHERE cacheKey LIKE :prefix || '%'")
   suspend fun deleteByPrefix(prefix: String)
+
+  /**
+   * Le voci di cache richieste, e solo quelle.
+   *
+   * Non c'e' un `getAll()` apposta: questa tabella tiene anche materiali, documenti e bacheca, che
+   * possono essere megabyte. Chi fa un backup dei voti chiede le chiavi che gli servono.
+   */
+  @Query("SELECT * FROM snapshot_cache WHERE cacheKey IN (:keys)")
+  suspend fun getByKeys(keys: List<String>): List<SnapshotCacheEntity>
 }
 
 @Dao
@@ -364,6 +373,10 @@ interface ChangeHistoryDao {
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsertAll(entities: List<ChangeHistoryEntity>)
+
+  /** Tutta la storia di un tipo, per il backup. */
+  @Query("SELECT * FROM change_history WHERE itemKind = :itemKind ORDER BY recordedAtEpochMillis ASC")
+  suspend fun getAllByKind(itemKind: String): List<ChangeHistoryEntity>
 }
 
 @Dao
@@ -379,6 +392,16 @@ interface GradeDao {
 
   @Query("DELETE FROM grades WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
   suspend fun deleteByYear(studentId: String, schoolYearId: String)
+
+  /**
+   * Tutti i voti di ogni studente e ogni anno.
+   *
+   * Serve al backup, ed e' l'unica query che ignora l'anno di proposito: il registro non sa
+   * restituire i voti di un anno passato, quindi quelli esistono solo qui e un backup che ne
+   * salvasse solo l'anno corrente non servirebbe a niente.
+   */
+  @Query("SELECT * FROM grades ORDER BY schoolYearId ASC, date DESC")
+  suspend fun getAll(): List<GradeEntity>
 }
 
 @Dao

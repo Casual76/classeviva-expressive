@@ -38,8 +38,8 @@ class AppThemeAccentTest {
   /** L'ametista e' il default: senza scelte salvate, primary deve essere il marchio. */
   @Test
   fun brandMode_isAmethyst() {
-    assertEquals(Color(0xFF9966CC), classevivaColorScheme(AppSettings(), isDark = false).primary)
-    assertEquals(Color(0xFFB88CE8), classevivaColorScheme(AppSettings(), isDark = true).primary)
+    assertEquals(Color(0xFF9D4EDD), classevivaColorScheme(AppSettings(), isDark = false).primary)
+    assertEquals(Color(0xFFC77DFF), classevivaColorScheme(AppSettings(), isDark = true).primary)
   }
 
   /**

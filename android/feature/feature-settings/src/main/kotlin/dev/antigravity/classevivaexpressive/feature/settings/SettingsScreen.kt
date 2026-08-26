@@ -78,6 +78,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.classevivaBrandAccent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveAccentPresets
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
+import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupImportSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
@@ -338,14 +339,7 @@ class SettingsViewModel @Inject constructor(
       }
 
       appBackupRepository.importBackup(payload)
-        .onSuccess { summary ->
-          lastMessage.value = buildString {
-            append("Backup importato: impostazioni")
-            append(", ${summary.timetableTemplates} orari")
-            append(", ${summary.subjectGoals} obiettivi")
-            append(", ${summary.customEvents} eventi.")
-          }
-        }
+        .onSuccess { summary -> lastMessage.value = summary.describe() }
         .onFailure {
           lastMessage.value = it.message ?: "Importazione backup non riuscita."
         }
@@ -1135,3 +1129,43 @@ private fun CapabilityRow(capability: FeatureCapability) {
     badge = { FluidStatusBadge(capability.mode.name.replace('_', ' '), tone = tone) },
   )
 }
+
+/**
+ * Cosa e' arrivato con il backup, in una frase.
+ *
+ * Elenca solo le parti che hanno un contenuto: un backup senza voti non dice "0 voti", perche' uno
+ * zero in un elenco di successi si legge come un errore. Gli anni dei voti sono nominati apposta —
+ * "487 voti" non dimostra niente, "487 voti (2024-2025, 2025-2026)" dimostra che l'anno scorso e'
+ * arrivato, ed e' l'unico motivo per cui i voti stanno nel backup.
+ *
+ * E' una funzione pura e non un `buildString` dentro il ViewModel perche' e' testo che l'utente
+ * legge nel momento in cui vuole sapere se ha riavuto i suoi dati: e' copy, e va provata come copy.
+ */
+internal fun AppBackupImportSummary.describe(): String {
+  val parts = buildList {
+    if (settingsImported) add("impostazioni")
+    if (timetableTemplates > 0) add("$timetableTemplates orari")
+    if (subjectGoals > 0) add(plural(subjectGoals, "obiettivo", "obiettivi"))
+    if (customEvents > 0) add(plural(customEvents, "evento", "eventi"))
+    if (grades > 0) {
+      val years = gradeSchoolYears.takeIf { it.isNotEmpty() }?.joinToString(", ")
+      add(plural(grades, "voto", "voti") + if (years != null) " ($years)" else "")
+    }
+    if (seenGrades > 0) add("$seenGrades gia' visti")
+    if (scoreSnapshots > 0) add(plural(scoreSnapshots, "punteggio", "punteggi"))
+  }
+  if (parts.isEmpty()) return "Backup importato, ma non conteneva dati da ripristinare."
+  return buildString {
+    append("Backup importato: ")
+    append(parts.joinToString(", "))
+    append(".")
+    if (skippedForeignStudentGrades > 0) {
+      append(" ")
+      append(skippedForeignStudentGrades)
+      append(" voti appartengono a un altro profilo e non sono visibili con questo account.")
+    }
+  }
+}
+
+private fun plural(count: Int, singular: String, plural: String): String =
+  "$count " + if (count == 1) singular else plural
