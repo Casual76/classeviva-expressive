@@ -47,12 +47,12 @@ import dev.antigravity.fluidengine.ui.fluid.glassSurface
 fun AssistantTextBar(
   backdrop: GlassBackdropState,
   busy: Boolean,
-  autoFocus: Boolean = true,
   micAvailable: Boolean,
   onSend: (String) -> Unit,
   onVoice: () -> Unit,
   onNewConversation: () -> Unit,
   modifier: Modifier = Modifier,
+  autoFocus: Boolean = true,
 ) {
   var text by rememberSaveable { mutableStateOf("") }
   val focus = remember { FocusRequester() }

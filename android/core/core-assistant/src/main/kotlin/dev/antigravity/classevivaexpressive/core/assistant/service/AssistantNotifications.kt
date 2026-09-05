@@ -1,14 +1,19 @@
 package dev.antigravity.classevivaexpressive.core.assistant.service
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.antigravity.classevivaexpressive.core.assistant.runtime.ExecutionResult
 import dev.antigravity.classevivaexpressive.core.assistant.tools.RegistroToolGroup
@@ -61,14 +66,25 @@ class AssistantNotifications @Inject constructor(@ApplicationContext private val
       .build()
   }
 
-  fun updateProgress(question: String, status: String) {
-    if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
-    runCatching { NotificationManagerCompat.from(context).notify(PROGRESS_ID, progress(question, status)) }
+  /** Dal 13 le notifiche sono un permesso a runtime: senza, niente `notify` — l'avanzamento resta nella card. */
+  private fun canPost(): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+      ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+    ) return false
+    return NotificationManagerCompat.from(context).areNotificationsEnabled()
   }
+
+  /** L'unico punto che chiama `notify`: il controllo del permesso sta qui, e lint lo vede qui. */
+  @SuppressLint("MissingPermission")
+  private fun post(id: Int, notification: Notification) {
+    if (!canPost()) return
+    runCatching { NotificationManagerCompat.from(context).notify(id, notification) }
+  }
+
+  fun updateProgress(question: String, status: String) = post(PROGRESS_ID, progress(question, status))
 
   fun showResult(result: ExecutionResult) {
     if (result.cancelled) return
-    if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
     ensureChannel()
     val text = result.answer?.let { firstLines(it) } ?: failureText(result.failure ?: FailureKind.UNKNOWN)
     val notification = NotificationCompat.Builder(context, CHANNEL_ID)
@@ -80,7 +96,7 @@ class AssistantNotifications @Inject constructor(@ApplicationContext private val
       .setContentIntent(openConversation(result.conversationId))
       .setCategory(NotificationCompat.CATEGORY_MESSAGE)
       .build()
-    runCatching { NotificationManagerCompat.from(context).notify(RESULT_ID, notification) }
+    post(RESULT_ID, notification)
   }
 
   fun cancelProgress() {

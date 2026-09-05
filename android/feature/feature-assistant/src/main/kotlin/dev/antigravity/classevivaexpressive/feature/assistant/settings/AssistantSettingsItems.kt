@@ -142,7 +142,7 @@ private fun OpenRouterKeyDetails(state: AssistantSettingsUiState) {
     val credits = info?.let {
       val left = it.limitRemainingUsd ?: it.limitUsd
       val today = it.usageDailyUsd ?: 0.0
-      "Crediti: ${left?.let { v -> String.format(Locale.getDefault(), "%.2f $", v) } ?: "illimitati"} · oggi ${String.format(Locale.getDefault(), "%.3f $", today)}" +
+      "Crediti: ${left?.let { v -> String.format(Locale.ITALIAN, "%.2f $", v) } ?: "illimitati"} · oggi ${String.format(Locale.ITALIAN, "%.3f $", today)}" +
         if (it.isFreeTier) " · account gratuito" else " · account con crediti"
     } ?: "Crediti: verifica la chiave per leggerli"
     Text(credits, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -266,7 +266,7 @@ private fun AssistantUsage(state: AssistantSettingsUiState, onOpenHistory: (() -
         "Nessuna conversazione ancora."
       } else {
         "${totals.conversations} conversazioni · ${totals.runs} risposte · ${formatTokens(totals.tokens)} token" +
-          (if (totals.costUsd > 0.0) " · ${String.format(Locale.getDefault(), "%.3f $", totals.costUsd)}" else "")
+          (if (totals.costUsd > 0.0) " · ${String.format(Locale.ITALIAN, "%.3f $", totals.costUsd)}" else "")
       },
       onClick = onOpenHistory,
     )
