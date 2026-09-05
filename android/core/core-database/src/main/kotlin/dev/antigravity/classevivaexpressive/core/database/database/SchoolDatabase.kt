@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.database.database
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -545,9 +546,14 @@ interface AttachmentCacheDao {
     DocumentEntity::class,
     ReadNoteEntity::class,
     AttachmentCacheEntity::class,
+    AssistantConversationEntity::class,
+    AssistantMessageEntity::class,
+    AssistantRunEntity::class,
   ],
-  version = 11,
+  version = 12,
   exportSchema = true,
+  // 11 -> 12 aggiunge solo le tre tabelle dell'assistente: Room la deriva dallo schema esportato.
+  autoMigrations = [AutoMigration(from = 11, to = 12)],
 )
 abstract class SchoolDatabase : RoomDatabase() {
   abstract fun snapshotCacheDao(): SnapshotCacheDao
@@ -566,6 +572,9 @@ abstract class SchoolDatabase : RoomDatabase() {
   abstract fun documentDao(): DocumentDao
   abstract fun readNoteDao(): ReadNoteDao
   abstract fun attachmentCacheDao(): AttachmentCacheDao
+  abstract fun assistantConversationDao(): AssistantConversationDao
+  abstract fun assistantMessageDao(): AssistantMessageDao
+  abstract fun assistantRunDao(): AssistantRunDao
 }
 
 val MIGRATION_6_7 = object : Migration(6, 7) {
@@ -768,6 +777,15 @@ object DatabaseModule {
 
   @Provides
   fun provideMaterialDao(database: SchoolDatabase): MaterialDao = database.materialDao()
+
+  @Provides
+  fun provideAssistantConversationDao(database: SchoolDatabase): AssistantConversationDao = database.assistantConversationDao()
+
+  @Provides
+  fun provideAssistantMessageDao(database: SchoolDatabase): AssistantMessageDao = database.assistantMessageDao()
+
+  @Provides
+  fun provideAssistantRunDao(database: SchoolDatabase): AssistantRunDao = database.assistantRunDao()
 
   @Provides
   fun provideDocumentDao(database: SchoolDatabase): DocumentDao = database.documentDao()
