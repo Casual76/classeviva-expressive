@@ -1,0 +1,45 @@
+plugins {
+  alias(libs.plugins.android.library)
+  alias(libs.plugins.kotlin.android)
+  alias(libs.plugins.kotlin.serialization)
+  alias(libs.plugins.ksp)
+  alias(libs.plugins.hilt)
+}
+
+android {
+  namespace "dev.antigravity.classevivaexpressive.core.assistant"
+  compileSdk 36
+
+  defaultConfig {
+    minSdk 26
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+}
+
+dependencies {
+  // Il trasporto e l'orchestrazione senza dominio stanno nell'engine; qui c'e' solo il registro.
+  api project(":engine-ai")
+  implementation project(":core:core-domain")
+  implementation project(":core:core-data")
+  implementation project(":core:core-database")
+
+  implementation libs.androidx.core.ktx
+  implementation libs.hilt.android
+  implementation libs.serialization.json
+  implementation libs.kotlinx.coroutines.android
+  // Il testo dei PDF allegati, estratto sul telefono quando il modello non legge i documenti.
+  implementation libs.pdfbox.android
+
+  ksp libs.hilt.compiler
+
+  testImplementation libs.junit4
+  testImplementation libs.kotlinx.coroutines.test
+}
