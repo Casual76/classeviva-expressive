@@ -43,6 +43,10 @@ class AssistantHistoryViewModel @Inject constructor(
 
   val activeConversationId: StateFlow<Long?> = runtime.activeConversationId
 
+  /** Vero mentre una domanda gira: la riga della conversazione attiva dice "in corso" solo allora. */
+  val busy: StateFlow<Boolean> = runtime.state.map { it.isBusy }.distinctUntilChanged()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
   fun delete(id: Long) = viewModelScope.launch {
     if (runtime.activeConversationId.value == id) {
       if (runtime.isBusy) runtime.cancel()

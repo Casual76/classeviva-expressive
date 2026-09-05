@@ -114,6 +114,24 @@ class AssistantRuntime @Inject constructor(
         previous = current
       }
     }
+    // Un'azione che aspetta il si': lo stato lo dice — la card mostra Conferma/Annulla, la notifica
+    // la frase — e quando la risposta arriva (o scade) si torna a com'era. Senza questo passaggio
+    // i tasti non comparivano mai e ogni conferma scadeva in silenzio.
+    scope.launch {
+      var before: AssistantState? = null
+      gate.current.collect { pending ->
+        val current = stateFlow.value
+        if (pending != null) {
+          if (current !is AssistantState.AwaitingConfirmation && current.isBusy) {
+            before = current
+            stateFlow.value = AssistantState.AwaitingConfirmation(current.questionOrEmpty(), pending, current.providerOrNull() ?: providersFirstId())
+          }
+        } else if (current is AssistantState.AwaitingConfirmation) {
+          stateFlow.value = before ?: AssistantState.Working(current.question, 0, 1, "thinking", 0, current.provider)
+          before = null
+        }
+      }
+    }
   }
 
   val isBusy: Boolean get() = stateFlow.value.isBusy
@@ -247,6 +265,26 @@ class AssistantRuntime @Inject constructor(
   }
 
   private fun providersFirstId(): ProviderId = ProviderId.defaultOrder.first()
+
+  private fun AssistantState.questionOrEmpty(): String = when (this) {
+    is AssistantState.Classifying -> question
+    is AssistantState.Working -> question
+    is AssistantState.WaitingRateLimit -> question
+    is AssistantState.SwitchingProvider -> question
+    is AssistantState.Answering -> question
+    is AssistantState.AwaitingConfirmation -> question
+    else -> ""
+  }
+
+  private fun AssistantState.providerOrNull(): ProviderId? = when (this) {
+    is AssistantState.Classifying -> provider
+    is AssistantState.Working -> provider
+    is AssistantState.WaitingRateLimit -> provider
+    is AssistantState.SwitchingProvider -> to
+    is AssistantState.Answering -> provider
+    is AssistantState.AwaitingConfirmation -> provider
+    else -> null
+  }
 
   /** I totali per la diagnostica delle impostazioni: conversazioni, scambi, token, spesa. */
   @OptIn(ExperimentalCoroutinesApi::class)

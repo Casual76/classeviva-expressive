@@ -129,6 +129,7 @@ class AssistantEngine @Inject constructor(
     val persister = launch(Dispatchers.IO) {
       runtime.state.filterIsInstance<AssistantState.Answering>().sample(300).collect { conversations.updatePartial(messageId, it.partial) }
     }
+    var traced: AssistantToolContext? = null
     try {
       val conversation = memory.getOrPut(conversationId) { rebuild(conversationId, now) }
       conversation.lastActivityMillis = now
@@ -147,6 +148,7 @@ class AssistantEngine @Inject constructor(
         actions = if (settings.actionsEnabled) executor else dev.antigravity.classevivaexpressive.core.assistant.actions.AssistantActionSink.Disabled,
         deepCapabilities = first.capabilities(first.model(ModelTier.DEEP)),
       )
+      traced = toolContext
       val prompt = PromptBuilder.build(promptContext(today, settings.actionsEnabled, request))
       val pre = PreRouter.decide(question, settings.actionsEnabled)
       val input = AskInput(
@@ -169,7 +171,7 @@ class AssistantEngine @Inject constructor(
       persister.cancel()
       val finished = System.currentTimeMillis()
       conversations.complete(messageId, result.answer, result.chips)
-      conversations.addRun(conversationId, messageId, result.log, finished, "ok", null)
+      conversations.addRun(conversationId, messageId, result.log, finished, "ok", null, toolContext.traces)
       conversations.touch(conversationId, finished, result.provider)
       runtime.setState(
         AssistantState.Done(
@@ -183,7 +185,7 @@ class AssistantEngine @Inject constructor(
       val partial = (runtime.state.value as? AssistantState.Answering)?.partial
       withContext(kotlinx.coroutines.NonCancellable) {
         conversations.cancel(messageId, partial)
-        conversations.addFailedRun(conversationId, messageId, now, System.currentTimeMillis(), "cancelled", null)
+        conversations.addFailedRun(conversationId, messageId, now, System.currentTimeMillis(), "cancelled", null, traced?.traces.orEmpty())
         conversations.touch(conversationId, System.currentTimeMillis(), null)
       }
       runtime.setState(AssistantState.Cancelled(question, partial))
@@ -192,14 +194,14 @@ class AssistantEngine @Inject constructor(
       persister.cancel()
       val partial = (runtime.state.value as? AssistantState.Answering)?.partial
       conversations.fail(messageId, e.kind, partial)
-      conversations.addFailedRun(conversationId, messageId, now, System.currentTimeMillis(), "failed", e.error?.message ?: e.kind.name)
+      conversations.addFailedRun(conversationId, messageId, now, System.currentTimeMillis(), "failed", e.error?.message ?: e.kind.name, traced?.traces.orEmpty())
       conversations.touch(conversationId, System.currentTimeMillis(), null)
       runtime.setState(AssistantState.Failed(question, e.kind, e.error, e.retryAfterSec, partial))
       ExecutionResult(conversationId, question, null, e.kind, cancelled = false)
     } catch (e: Throwable) {
       persister.cancel()
       conversations.fail(messageId, FailureKind.UNKNOWN, null)
-      conversations.addFailedRun(conversationId, messageId, now, System.currentTimeMillis(), "failed", e.message ?: e::class.simpleName)
+      conversations.addFailedRun(conversationId, messageId, now, System.currentTimeMillis(), "failed", e.message ?: e::class.simpleName, traced?.traces.orEmpty())
       runtime.setState(AssistantState.Failed(question, FailureKind.UNKNOWN, e as? AiError, null, null))
       ExecutionResult(conversationId, question, null, FailureKind.UNKNOWN, cancelled = false)
     }

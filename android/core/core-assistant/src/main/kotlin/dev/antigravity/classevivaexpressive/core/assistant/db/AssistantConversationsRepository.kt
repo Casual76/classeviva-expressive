@@ -10,7 +10,7 @@ import dev.antigravity.fluidengine.ai.orchestrator.AiRequestLog
 import dev.antigravity.fluidengine.ai.orchestrator.AnswerChip
 import dev.antigravity.fluidengine.ai.orchestrator.Exchange
 import dev.antigravity.fluidengine.ai.orchestrator.FailureKind
-import dev.antigravity.fluidengine.ai.orchestrator.ToolTrace
+import dev.antigravity.classevivaexpressive.core.assistant.tools.AssistantToolTrace
 import dev.antigravity.fluidengine.ai.provider.ModelTier
 import dev.antigravity.fluidengine.ai.provider.ProviderId
 import javax.inject.Inject
@@ -63,7 +63,7 @@ data class AssistantRun(
   val completionTokens: Int?,
   val costUsd: Double?,
   val waitedSeconds: Int,
-  val tools: List<ToolTrace>,
+  val tools: List<AssistantToolTrace>,
   val outcome: String,
   val error: String?,
 ) {
@@ -77,7 +77,7 @@ data class AssistantTotals(val conversations: Int, val runs: Int, val tokens: Lo
 private data class ChipJson(val id: String, val value: String? = null)
 
 @Serializable
-private data class TraceJson(val name: String, val millis: Long, val ok: Boolean, val chars: Int)
+private data class TraceJson(val name: String, val millis: Long, val ok: Boolean, val chars: Int, val args: String = "", val preview: String = "")
 
 /**
  * Le conversazioni su disco: una riga per conversazione, una per messaggio, una per scambio con la
@@ -154,7 +154,15 @@ class AssistantConversationsRepository @Inject constructor(
     messageDao.failStale(MessageStatus.FAILED.name, FailureKind.UNKNOWN.name, listOf(MessageStatus.PENDING.name, MessageStatus.STREAMING.name))
   }
 
-  suspend fun addRun(conversationId: Long, messageId: Long, log: AiRequestLog, finishedAtMillis: Long, outcome: String, error: String?): Long =
+  suspend fun addRun(
+    conversationId: Long,
+    messageId: Long,
+    log: AiRequestLog,
+    finishedAtMillis: Long,
+    outcome: String,
+    error: String?,
+    traces: List<AssistantToolTrace> = emptyList(),
+  ): Long =
     runDao.insert(
       AssistantRunEntity(
         conversationId = conversationId,
@@ -172,19 +180,32 @@ class AssistantConversationsRepository @Inject constructor(
         completionTokens = log.usage?.completionTokens,
         costUsd = log.usage?.costUsd,
         waitedSeconds = log.waitedSeconds,
-        toolTracesJson = json.encodeToString(log.tools.map { TraceJson(it.name, it.millis, it.ok, it.chars) }),
+        toolTracesJson = json.encodeToString(
+          if (traces.isNotEmpty()) traces.map { TraceJson(it.name, it.millis, it.ok, it.chars, it.args, it.preview) }
+          else log.tools.map { TraceJson(it.name, it.millis, it.ok, it.chars) },
+        ),
         outcome = outcome,
         error = error,
       ),
     )
 
   /** Un tentativo fallito o fermato, senza log dell'orchestratore: resta traccia di quando e come. */
-  suspend fun addFailedRun(conversationId: Long, messageId: Long, startedAtMillis: Long, finishedAtMillis: Long, outcome: String, error: String?): Long =
+  suspend fun addFailedRun(
+    conversationId: Long,
+    messageId: Long,
+    startedAtMillis: Long,
+    finishedAtMillis: Long,
+    outcome: String,
+    error: String?,
+    traces: List<AssistantToolTrace> = emptyList(),
+  ): Long =
     runDao.insert(
       AssistantRunEntity(
         conversationId = conversationId, messageId = messageId, startedAtEpochMillis = startedAtMillis, finishedAtEpochMillis = finishedAtMillis,
         steps = 0, provider = null, routerModel = null, chatModel = null, deepModel = null, tierReached = null, groupsJson = null,
-        promptTokens = null, completionTokens = null, costUsd = null, waitedSeconds = 0, toolTracesJson = null, outcome = outcome, error = error,
+        promptTokens = null, completionTokens = null, costUsd = null, waitedSeconds = 0,
+        toolTracesJson = traces.takeIf { it.isNotEmpty() }?.let { list -> json.encodeToString(list.map { TraceJson(it.name, it.millis, it.ok, it.chars, it.args, it.preview) }) },
+        outcome = outcome, error = error,
       ),
     )
 
@@ -253,7 +274,7 @@ class AssistantConversationsRepository @Inject constructor(
     completionTokens = completionTokens,
     costUsd = costUsd,
     waitedSeconds = waitedSeconds,
-    tools = toolTracesJson?.let { runCatching { json.decodeFromString<List<TraceJson>>(it) }.getOrNull() }?.map { ToolTrace(it.name, it.millis, it.ok, it.chars) } ?: emptyList(),
+    tools = toolTracesJson?.let { runCatching { json.decodeFromString<List<TraceJson>>(it) }.getOrNull() }?.map { AssistantToolTrace(it.name, it.args, it.millis, it.ok, it.chars, it.preview) } ?: emptyList(),
     outcome = outcome,
     error = error,
   )

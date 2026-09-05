@@ -157,8 +157,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.util.fastCoerceIn
-import androidx.compose.ui.util.lerp
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -837,10 +835,10 @@ internal fun TopLevelNavigationSuite(
 
 /**
  * La pillola e, sopra di lei, il tasto dell'assistente: un solo numero (la piega) muove entrambi.
- * Aperta, il tasto e' una capsula centrata sopra la barra; ripiegata, la barra si raccoglie a
- * sinistra in un quadrato e il tasto diventa un cerchio della stessa misura, che le sta sopra.
- * Il tragitto e' interpolato dalla piega, cosi' i due leggono come una cosa sola che si contrae.
- * Come nella barra dell'engine, la piega si legge in misura: nessuna ricomposizione per fotogramma.
+ * Aperta, il tasto e' una capsula centrata sopra la barra; mentre la barra si ripiega a sinistra
+ * il tasto **sparisce** — sfuma e scende verso la pillola che si chiude — e ritorna con la
+ * riapertura. Lo spazio che occupa resta lo stesso, cosi' la pagina non salta. La piega la legge
+ * il tasto stesso in disegno: nessuna ricomposizione per fotogramma.
  */
 @Composable
 private fun AssistantAboveBar(
@@ -867,18 +865,12 @@ private fun AssistantAboveBar(
       }
     },
   ) { measurables, constraints ->
-    val f = fold().fastCoerceIn(0f, 1f)
     val barPlaceable = measurables.first { it.layoutId == SlotBar }.measure(constraints)
     val button = measurables.firstOrNull { it.layoutId == SlotAssistant }?.measure(Constraints())
     val gap = if (button != null) spacingPx else 0
     val height = barPlaceable.height + (button?.height?.plus(gap) ?: 0)
     layout(barPlaceable.width, height) {
-      button?.let {
-        // Aperta: centrato sopra la barra. Ripiegata: sopra il quadrato in cui la barra si e'
-        // raccolta, che con l'allineamento Start sta al bordo sinistro.
-        val openX = (barPlaceable.width - it.width) / 2
-        it.place(lerp(openX, 0, f), 0)
-      }
+      button?.let { it.place((barPlaceable.width - it.width) / 2, 0) }
       barPlaceable.place(0, height - barPlaceable.height)
     }
   }

@@ -41,6 +41,8 @@ class PromptBuilderTest {
     assertTrue(prompt.contains("offline"))
     assertTrue(prompt.contains("Azioni nell'app: abilitate"))
     assertTrue(prompt.contains("voti_media"))
+    assertTrue(prompt.contains("SOLO se lo studente l'ha chiesta"))
+    assertTrue(prompt.contains("SOLO la tua risposta finale"))
     assertTrue(prompt.contains("[[pagina:voti]]"))
     assertFalse(prompt.contains("Periodo corrente"))
   }

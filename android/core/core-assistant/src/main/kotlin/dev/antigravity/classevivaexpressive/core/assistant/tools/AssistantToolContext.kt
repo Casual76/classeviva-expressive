@@ -48,6 +48,15 @@ class AssistantToolContext(
   /** Cosa il modello profondo del provider in uso sa prendere: decide la forma di un allegato. */
   val deepCapabilities: ModelCapabilities,
 ) {
+  private val traceList = java.util.Collections.synchronizedList(mutableListOf<AssistantToolTrace>())
+
+  /** Le chiamate agli strumenti di questa domanda, nell'ordine in cui sono finite. */
+  val traces: List<AssistantToolTrace> get() = synchronized(traceList) { traceList.toList() }
+
+  fun trace(trace: AssistantToolTrace) {
+    traceList += trace
+  }
+
   /** Il periodo in corso oggi, se i periodi del registro lo dicono. */
   suspend fun currentPeriod(): Period? {
     val periods = grades.observePeriods().first()

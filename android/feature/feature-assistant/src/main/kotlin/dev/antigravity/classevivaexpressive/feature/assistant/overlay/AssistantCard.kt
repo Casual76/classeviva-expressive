@@ -119,7 +119,7 @@ fun AssistantCard(
         }
       }
     }
-    if (state is AssistantState.AwaitingConfirmation && pending != null) {
+    if (pending != null && state.isBusy) {
       Spacer(Modifier.height(12.dp))
       ConfirmationRow(pending, onConfirm = { onConfirm(pending.id, it) })
     }

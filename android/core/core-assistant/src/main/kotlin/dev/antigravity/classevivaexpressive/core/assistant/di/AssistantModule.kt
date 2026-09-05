@@ -97,9 +97,11 @@ object AssistantModule {
       // Il service ha quattro minuti; una card che aspetta ne avrebbe uno e mezzo.
       config = AiOrchestratorConfig(
         maxRounds = 8,
+        // Un'azione con conferma aspetta l'utente fino a 60 s dentro il tool: il limite del tool
+        // deve stare sopra, altrimenti e' il tool a scadere mentre il tasto Conferma e' a schermo.
+        toolTimeoutMillis = 90_000L,
         totalBudgetMillis = 240_000L,
         finalReserveMillis = 20_000L,
-        toolTimeoutMillis = 30_000L,
         maxOutputTokens = 1_500,
       ),
     )

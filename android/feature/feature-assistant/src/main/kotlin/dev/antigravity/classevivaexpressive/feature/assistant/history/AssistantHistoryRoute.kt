@@ -40,6 +40,7 @@ fun AssistantHistoryRoute(
 ) {
   val items by viewModel.items.collectAsStateWithLifecycle()
   val active by viewModel.activeConversationId.collectAsStateWithLifecycle()
+  val busy by viewModel.busy.collectAsStateWithLifecycle()
   val zone = ZoneId.systemDefault()
   val today = LocalDate.now(zone)
   val grouped = items.groupBy { Instant.ofEpochMilli(it.updatedAtMillis).atZone(zone).toLocalDate() }
@@ -92,7 +93,7 @@ fun AssistantHistoryRoute(
               subtitle = buildString {
                 append(DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(conversation.updatedAtMillis)))
                 conversation.lastProvider?.let { append(" · ").append(it.label) }
-                if (conversation.id == active) append(" · in corso")
+                if (conversation.id == active && busy) append(" · in corso")
               },
               tone = if (conversation.id == active) FluidTone.Primary else FluidTone.Neutral,
               onClick = { onOpenConversation(conversation.id) },

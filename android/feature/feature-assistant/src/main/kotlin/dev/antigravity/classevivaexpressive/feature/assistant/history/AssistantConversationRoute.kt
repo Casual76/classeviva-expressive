@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.assistant.history
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -166,7 +167,7 @@ private fun AssistantBubble(
     val text = liveText?.takeIf { it.isNotBlank() } ?: message.text
     if (live != null && live.isBusy) {
       AssistantTexts.statusLine(live)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium) }
-      if (live is AssistantState.AwaitingConfirmation && pending != null) {
+      if (pending != null) {
         Spacer(Modifier.height(8.dp))
         Text(pending.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         pending.detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -196,9 +197,40 @@ private fun AssistantBubble(
         }
       }
     }
-    run?.let {
+    run?.let { r ->
       Spacer(Modifier.height(8.dp))
-      Text(telemetry(it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      RunTelemetry(r)
+    }
+  }
+}
+
+/**
+ * La riga di telemetria e, sotto, a richiesta, le tracce degli strumenti: cosa il modello ha
+ * chiesto a ciascuno e come ha risposto. Quando una risposta e' storta, la spiegazione e' qui.
+ */
+@Composable
+private fun RunTelemetry(run: AssistantRun) {
+  val hasDetails = run.tools.isNotEmpty() || run.error != null
+  var details by rememberSaveable(run.id) { mutableStateOf(false) }
+  Text(
+    text = telemetry(run) + if (hasDetails) (if (details) " · meno" else " · dettagli") else "",
+    style = MaterialTheme.typography.labelSmall,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    modifier = if (hasDetails) Modifier.clickable { details = !details } else Modifier,
+  )
+  if (details) {
+    Spacer(Modifier.height(6.dp))
+    run.error?.let { Text("errore: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+    run.tools.forEach { trace ->
+      Spacer(Modifier.height(4.dp))
+      Text(
+        text = "${trace.name} ${trace.args} · ${trace.millis} ms · ${if (trace.ok) "ok" else "errore"}",
+        style = MaterialTheme.typography.labelSmall,
+        color = if (trace.ok) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+      )
+      if (trace.preview.isNotBlank()) {
+        Text(trace.preview, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
     }
   }
 }
@@ -213,8 +245,11 @@ private fun LiveBubble(live: AssistantState, pending: PendingConfirmation?, onRe
       Spacer(Modifier.height(8.dp))
       MarkdownBody(it)
     }
-    if (live is AssistantState.AwaitingConfirmation && pending != null) {
+    if (pending != null) {
       Spacer(Modifier.height(8.dp))
+      Text(pending.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+      pending.detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+      Spacer(Modifier.height(6.dp))
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FluidButton(text = "Conferma", onClick = { onResolve(pending.id, true) }, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Small)
         FluidButton(text = "Annulla", onClick = { onResolve(pending.id, false) }, style = FluidButtonStyle.Plain, size = FluidButtonSize.Small)
