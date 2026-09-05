@@ -43,7 +43,8 @@ if (engineDir.exists()) {
    'engine-net',
    'engine-config',
    'engine-update',
-   'engine-widget'
+   'engine-widget',
+   'engine-ai'
   ].each { name ->
     include ":$name"
     project(":$name").projectDir = new File(engineDir, name)
