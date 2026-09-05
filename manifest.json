@@ -12,25 +12,33 @@
       "repoOwner": "Casual76",
       "repoName": "classeviva-expressive",
       "manifestPath": "manifest.json",
-      "ref": ""
+      "ref": "main"
     },
     "stable": {
-      "version": "7.7.0",
-      "releaseDate": "2026-08-26",
-      "changelog": "Cinque fasce invece di quattro: sotto il sei arancio, 6-7,49 verde acqua, 7,5-9,49 verde, e dal 9,5 l'accento dell'app quando si distingue abbastanza dal resto della scala. Il backup ora include anche i voti — chi resetta i dati o cambia telefono non li perde piu', anno per anno. Il colore misurato anche in agenda, assenze, lezioni e nelle schermate secondarie: capsule al posto dei pallini, la lezione in corso, i compiti colorati per scadenza. Il dettaglio di un voto si apre in un pop-up invece che in una schermata a se', e quel pop-up e' il voto stesso in vetro tinto del suo colore.",
-      "releaseTag": "stable-classeviva-expressive-v7.7.0",
-      "apkAsset": "classeviva-expressive-7.7.0.apk",
-      "sizeBytes": 24129817
+      "version": "7.8.0",
+      "releaseDate": "2026-09-05",
+      "changelog": "Arriva l'assistente IA, del tutto opzionale: resta spento finche' non lo accendi dalle impostazioni con una chiave tua (Groq, Gemini o OpenRouter), dopo una pagina di consenso. Un tasto sopra la pillola: un tocco per parlare, una pressione lunga per scrivere. Legge voti e medie, agenda, compiti, orario, comunicazioni con i loro allegati, assenze e statistiche; su richiesta apre le pagine, cambia aspetto, notifiche e sincronizzazione, segna lette le comunicazioni o da' la presa visione, aggiunge eventi in agenda e obiettivi per materia, sempre con un tasto di conferma per cio' che conta. Le richieste lunghe continuano in background con una notifica anche ad app chiusa; le conversazioni restano sul telefono, continuabili da Altro, con token, modelli e costo di ogni scambio. Le chiavi sono cifrate sul telefono e non passano da nessun server nostro.",
+      "releaseTag": "stable-classeviva-expressive-v7.8.0",
+      "apkAsset": "classeviva-expressive-7.8.0.apk",
+      "sizeBytes": 33114685
     },
     "beta": {
-      "version": "7.7.0",
-      "releaseDate": "2026-08-26",
-      "changelog": "Cinque fasce invece di quattro: sotto il sei arancio, 6-7,49 verde acqua, 7,5-9,49 verde, e dal 9,5 l'accento dell'app quando si distingue abbastanza dal resto della scala. Il backup ora include anche i voti — chi resetta i dati o cambia telefono non li perde piu', anno per anno. Il colore misurato anche in agenda, assenze, lezioni e nelle schermate secondarie: capsule al posto dei pallini, la lezione in corso, i compiti colorati per scadenza. Il dettaglio di un voto si apre in un pop-up invece che in una schermata a se', e quel pop-up e' il voto stesso in vetro tinto del suo colore.",
-      "releaseTag": "stable-classeviva-expressive-v7.7.0",
-      "apkAsset": "classeviva-expressive-7.7.0.apk",
-      "sizeBytes": 24129817
+      "version": "7.8.0",
+      "releaseDate": "2026-09-05",
+      "changelog": "Arriva l'assistente IA, del tutto opzionale: resta spento finche' non lo accendi dalle impostazioni con una chiave tua (Groq, Gemini o OpenRouter), dopo una pagina di consenso. Un tasto sopra la pillola: un tocco per parlare, una pressione lunga per scrivere. Legge voti e medie, agenda, compiti, orario, comunicazioni con i loro allegati, assenze e statistiche; su richiesta apre le pagine, cambia aspetto, notifiche e sincronizzazione, segna lette le comunicazioni o da' la presa visione, aggiunge eventi in agenda e obiettivi per materia, sempre con un tasto di conferma per cio' che conta. Le richieste lunghe continuano in background con una notifica anche ad app chiusa; le conversazioni restano sul telefono, continuabili da Altro, con token, modelli e costo di ogni scambio. Le chiavi sono cifrate sul telefono e non passano da nessun server nostro.",
+      "releaseTag": "stable-classeviva-expressive-v7.8.0",
+      "apkAsset": "classeviva-expressive-7.8.0.apk",
+      "sizeBytes": 33114685
     },
     "history": [
+      {
+        "version": "7.7.0",
+        "releaseDate": "2026-08-26",
+        "changelog": "Cinque fasce invece di quattro: sotto il sei arancio, 6-7,49 verde acqua, 7,5-9,49 verde, e dal 9,5 l'accento dell'app quando si distingue abbastanza dal resto della scala. Il backup ora include anche i voti — chi resetta i dati o cambia telefono non li perde piu', anno per anno. Il colore misurato anche in agenda, assenze, lezioni e nelle schermate secondarie: capsule al posto dei pallini, la lezione in corso, i compiti colorati per scadenza. Il dettaglio di un voto si apre in un pop-up invece che in una schermata a se', e quel pop-up e' il voto stesso in vetro tinto del suo colore.",
+        "releaseTag": "stable-classeviva-expressive-v7.7.0",
+        "apkAsset": "classeviva-expressive-7.7.0.apk",
+        "sizeBytes": 24129817
+      },
       {
         "version": "7.6.0",
         "releaseDate": "2026-08-26",
