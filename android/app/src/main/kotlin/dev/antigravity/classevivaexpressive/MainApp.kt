@@ -140,6 +140,26 @@ import dev.antigravity.classevivaexpressive.feature.lessons.ProfessorsRoute
 import dev.antigravity.classevivaexpressive.feature.lessons.ProfessorDetailRoute
 import dev.antigravity.classevivaexpressive.feature.lessons.ProfessorsViewModel
 import dev.antigravity.classevivaexpressive.feature.settings.SettingsRoute
+import dev.antigravity.classevivaexpressive.feature.assistant.consent.AssistantConsentRoute
+import dev.antigravity.classevivaexpressive.feature.assistant.history.AssistantConversationRoute
+import dev.antigravity.classevivaexpressive.feature.assistant.history.AssistantHistoryRoute
+import androidx.compose.material.icons.rounded.AutoAwesome
+import dev.antigravity.classevivaexpressive.core.assistant.actions.AppPage
+import dev.antigravity.classevivaexpressive.feature.assistant.bar.AssistantBarButton
+import dev.antigravity.classevivaexpressive.feature.assistant.bar.AssistantBarButtonDefaults
+import dev.antigravity.classevivaexpressive.feature.assistant.bar.AssistantBarState
+import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantNavigator
+import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantOverlay
+import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantOverlayState
+import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantOverlayViewModel
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.util.fastCoerceIn
+import androidx.compose.ui.util.lerp
+import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlin.math.roundToInt
@@ -193,6 +213,9 @@ private const val BugReportRepositoryOwner = "Casual76"
 private const val BugReportRepositoryName = "classeviva-expressive"
 private const val BugReportTemplateName = "app_bug_report.md"
 internal const val BugReportRoute = "bugReport"
+internal const val AssistantConsentRouteName = "assistant-consent"
+internal const val AssistantHistoryRouteName = "assistant"
+internal const val AssistantConversationRouteName = "assistant/{conversationId}"
 private const val BugReportSourceRoute = "more"
 private const val ConsumedAgendaRequestKey = "consumed-agenda-request"
 private const val ConsumedGradeRequestKey = "consumed-grade-request"
@@ -721,6 +744,10 @@ internal fun TopLevelNavigationSuite(
   onReselectRoute: (String) -> Unit = {},
   scrollToTop: FluidScrollToTopBus = remember { FluidScrollToTopBus() },
   chromeController: FluidChromeController = rememberFluidChromeController(),
+  /** Il tasto "Chiedi all'AI" sopra la pillola; null quando l'assistente e' spento. */
+  assistant: AssistantBarState? = null,
+  /** L'overlay dell'assistente: sopra la pagina e la barra, sotto i modali della radice. */
+  overlay: @Composable BoxScope.(GlassBackdropState) -> Unit = {},
   content: @Composable () -> Unit,
 ) {
   val fallbackBackdrop = rememberGlassBackdrop()
@@ -747,7 +774,12 @@ internal fun TopLevelNavigationSuite(
     // non coincideva mai con quello della pagina, e soprattutto era una *seconda* navigazione da
     // imparare per la stessa app. La barra ripiegabile fa le stesse cose meglio, e sul tablet il
     // pollice sta comunque in basso.
-    val bottomInset = if (showNavigationSuite) FluidFoldingTabBarDefaults.ContentInset else 0.dp
+    // Col tasto dell'assistente sopra la pillola, la pagina lascia libero anche il suo spazio.
+    val bottomInset = when {
+      !showNavigationSuite -> 0.dp
+      assistant != null -> FluidFoldingTabBarDefaults.ContentInset + AssistantBarButtonDefaults.ContentInset
+      else -> FluidFoldingTabBarDefaults.ContentInset
+    }
     val backdrop = chromeController.activeBackdrop.value ?: fallbackBackdrop
 
     ProvideFluidChrome(
@@ -782,22 +814,78 @@ internal fun TopLevelNavigationSuite(
           vertical = FluidFoldingTabBarDefaults.BottomMargin,
         ),
     ) {
-      FluidFoldingTabBar(
-        items = tabItems,
-        selectedRoute = currentRoute,
-        onSelect = onSelect,
-        onReselect = onReselect,
-        backdrop = backdrop,
-        fold = { barFold.progress.value },
-        // Ripiegata, l'unica scheda rimasta e' quella su cui sei: un tocco li' sarebbe una
-        // riselezione, cioe' "riportami in cima", che e' l'opposto di quello che serve a una
-        // barra chiusa. Riaprirla e' la cosa ovvia da fare con una barra chiusa.
-        onExpandRequest = barFold::unfold,
-        foldAlignment = FluidFoldAlignment.Start,
-      )
+      AssistantAboveBar(fold = { barFold.progress.value }, assistant = assistant, backdrop = backdrop) {
+        FluidFoldingTabBar(
+          items = tabItems,
+          selectedRoute = currentRoute,
+          onSelect = onSelect,
+          onReselect = onReselect,
+          backdrop = backdrop,
+          fold = { barFold.progress.value },
+          // Ripiegata, l'unica scheda rimasta e' quella su cui sei: un tocco li' sarebbe una
+          // riselezione, cioe' "riportami in cima", che e' l'opposto di quello che serve a una
+          // barra chiusa. Riaprirla e' la cosa ovvia da fare con una barra chiusa.
+          onExpandRequest = barFold::unfold,
+          foldAlignment = FluidFoldAlignment.Start,
+        )
+      }
+    }
+
+    overlay(backdrop)
+  }
+}
+
+/**
+ * La pillola e, sopra di lei, il tasto dell'assistente: un solo numero (la piega) muove entrambi.
+ * Aperta, il tasto e' una capsula centrata sopra la barra; ripiegata, la barra si raccoglie a
+ * sinistra in un quadrato e il tasto diventa un cerchio della stessa misura, che le sta sopra.
+ * Il tragitto e' interpolato dalla piega, cosi' i due leggono come una cosa sola che si contrae.
+ * Come nella barra dell'engine, la piega si legge in misura: nessuna ricomposizione per fotogramma.
+ */
+@Composable
+private fun AssistantAboveBar(
+  fold: () -> Float,
+  assistant: AssistantBarState?,
+  backdrop: GlassBackdropState,
+  bar: @Composable () -> Unit,
+) {
+  val spacingPx = with(LocalDensity.current) { AssistantBarButtonDefaults.Spacing.roundToPx() }
+  Layout(
+    content = {
+      Box(modifier = Modifier.layoutId(SlotBar)) { bar() }
+      if (assistant != null) {
+        Box(modifier = Modifier.layoutId(SlotAssistant)) {
+          AssistantBarButton(
+            fold = fold,
+            working = assistant.working,
+            backdrop = backdrop,
+            onTap = assistant.onTap,
+            onLongPress = assistant.onLongPress,
+            onBounds = assistant.onBounds,
+          )
+        }
+      }
+    },
+  ) { measurables, constraints ->
+    val f = fold().fastCoerceIn(0f, 1f)
+    val barPlaceable = measurables.first { it.layoutId == SlotBar }.measure(constraints)
+    val button = measurables.firstOrNull { it.layoutId == SlotAssistant }?.measure(Constraints())
+    val gap = if (button != null) spacingPx else 0
+    val height = barPlaceable.height + (button?.height?.plus(gap) ?: 0)
+    layout(barPlaceable.width, height) {
+      button?.let {
+        // Aperta: centrato sopra la barra. Ripiegata: sopra il quadrato in cui la barra si e'
+        // raccolta, che con l'allineamento Start sta al bordo sinistro.
+        val openX = (barPlaceable.width - it.width) / 2
+        it.place(lerp(openX, 0, f), 0)
+      }
+      barPlaceable.place(0, height - barPlaceable.height)
     }
   }
 }
+
+private const val SlotBar = "shell:bar"
+private const val SlotAssistant = "shell:assistant"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1100,6 +1188,33 @@ private fun AuthenticatedApp(
     }
   }
 
+  // L'assistente: lo stato dell'overlay vive qui, sopra la navigazione, cosi' il tasto nella
+  // barra e la card che ne nasce parlano dello stesso rettangolo.
+  val assistantOverlay = remember { AssistantOverlayState() }
+  val assistantViewModel: AssistantOverlayViewModel = hiltViewModel()
+  val assistantEnabled by assistantViewModel.enabled.collectAsState()
+  val assistantState by assistantViewModel.state.collectAsState()
+
+  /** Dove porta una pagina chiesta dall'assistente: le sezioni principali si aprono, le altre si spingono. */
+  fun openAssistantPage(page: AppPage, itemId: String?) {
+    when (page) {
+      AppPage.HOME -> expandToTopLevelRoute("home")
+      AppPage.VOTI -> if (itemId != null) navigateRoute("grades?gradeId=${Uri.encode(itemId)}") else expandToTopLevelRoute("grades")
+      AppPage.AGENDA -> expandToTopLevelRoute("agenda")
+      AppPage.BACHECA -> expandToTopLevelRoute("communications?tab=board")
+      AppPage.ORARIO -> navigateRoute("lessons")
+      AppPage.COMPITI -> navigateRoute(if (itemId != null) "homework?homeworkId=${Uri.encode(itemId)}" else "homework")
+      AppPage.ASSENZE -> navigateRoute("absences")
+      AppPage.NOTE -> navigateRoute("notes")
+      AppPage.DIDATTICA -> navigateRoute("materials")
+      AppPage.DOCUMENTI -> navigateRoute("documents")
+      AppPage.PROFESSORI -> navigateRoute("professors")
+      AppPage.PUNTEGGIO -> navigateRoute("studentScore")
+      AppPage.IMPOSTAZIONI -> navigateRoute("settings")
+      AppPage.ASSISTENTE -> navigateRoute(AssistantHistoryRouteName)
+    }
+  }
+
   // The policy wraps the whole shell: top-level chrome is motion too, not only route content.
   // Keeping the provider inside the NavHost left the floating tab indicator animating at 0x.
   FluidMotionPolicyProvider {
@@ -1114,6 +1229,26 @@ private fun AuthenticatedApp(
       onReselectRoute = { scrollToTop.request() },
       scrollToTop = scrollToTop,
       chromeController = chromeController,
+      assistant = if (assistantEnabled) {
+        AssistantBarState(
+          working = assistantState.isBusy,
+          onTap = { assistantOverlay.openVoice() },
+          onLongPress = { assistantOverlay.openText() },
+          onBounds = { assistantOverlay.originBounds = it },
+        )
+      } else {
+        null
+      },
+      overlay = { backdrop ->
+        if (assistantEnabled) {
+          AssistantOverlay(
+            overlay = assistantOverlay,
+            viewModel = assistantViewModel,
+            backdrop = backdrop,
+            navigator = AssistantNavigator { page, itemId -> openAssistantPage(page, itemId) },
+          )
+        }
+      },
     ) {
       NavHost(
         navController = navController,
@@ -1344,6 +1479,11 @@ private fun AuthenticatedApp(
               onOpenDocuments = { navigateRoute("documents") },
               onOpenProfessors = { navigateRoute("professors") },
               onOpenMeetings = { navigateRoute("meetings") },
+              onOpenAssistant = if (assistantEnabled) {
+                { navigateRoute(AssistantHistoryRouteName) }
+              } else {
+                null
+              },
             )
           }
         }
@@ -1531,6 +1671,45 @@ private fun AuthenticatedApp(
               updateCheckMessage = updateCheckMessage,
               onCheckForUpdates = onCheckForUpdates,
               onClearUpdateCheckMessage = onClearUpdateCheckMessage,
+              onOpenAssistantConsent = { navigateRoute(AssistantConsentRouteName) },
+              onOpenAssistantHistory = if (assistantEnabled) {
+                { navigateRoute(AssistantHistoryRouteName) }
+              } else {
+                null
+              },
+            )
+          }
+        }
+        composable(AssistantConsentRouteName) { entry ->
+          FluidRouteMotionHost(this@composable) {
+            AssistantConsentRoute(
+              onBack = navController::navigateUp,
+              onAccepted = navController::navigateUp,
+            )
+          }
+        }
+        composable(
+          route = AssistantHistoryRouteName,
+          deepLinks = listOf(navDeepLink { uriPattern = "classevivaexpressive://open/assistant" }),
+        ) { entry ->
+          FluidRouteMotionHost(this@composable) {
+            AssistantHistoryRoute(
+              onBack = navController::navigateUp,
+              onOpenConversation = { id -> navigateRoute("assistant/$id") },
+              onNewConversation = { navigateRoute("assistant/new") },
+            )
+          }
+        }
+        composable(
+          route = AssistantConversationRouteName,
+          arguments = listOf(navArgument("conversationId") { type = NavType.StringType }),
+          deepLinks = listOf(navDeepLink { uriPattern = "classevivaexpressive://open/assistant?conversationId={conversationId}" }),
+        ) { entry ->
+          FluidRouteMotionHost(this@composable) {
+            AssistantConversationRoute(
+              onBack = navController::navigateUp,
+              onOpenPage = { page, itemId -> openAssistantPage(page, itemId) },
+              onOverlaySuppressed = { assistantOverlay.suppressed = it },
             )
           }
         }
@@ -1575,6 +1754,8 @@ private fun MoreHubScreen(
   onOpenDocuments: () -> Unit,
   onOpenProfessors: () -> Unit,
   onOpenMeetings: () -> Unit,
+  /** Le conversazioni con l'assistente; null quando l'assistente e' spento, e la voce non c'e'. */
+  onOpenAssistant: (() -> Unit)? = null,
 ) {
   val registerActions = listOf(
     MoreHubAction("Orario", "Lezioni di oggi e della settimana.", "Lezioni", FluidTone.Info, Icons.Rounded.Schedule, onOpenLessons),
@@ -1600,6 +1781,17 @@ private fun MoreHubScreen(
     item { FluidSectionHeader("App") }
     item {
       FluidListGroup(glass = true) {
+        if (onOpenAssistant != null) {
+          FluidListRow(
+            title = "Assistente",
+            subtitle = "Le conversazioni salvate, da rileggere o continuare.",
+            eyebrow = "IA",
+            tone = FluidTone.Primary,
+            leading = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
+            onClick = onOpenAssistant,
+          )
+          FluidListDivider()
+        }
         FluidListRow(
           title = "Segnala un problema",
           subtitle = "Issue GitHub pubblica con diagnostica minima modificabile.",

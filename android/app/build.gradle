@@ -105,6 +105,8 @@ dependencies {
   implementation project(":feature:feature-communications")
   implementation project(":feature:feature-absences")
   implementation project(":feature:feature-settings")
+  implementation project(":feature:feature-assistant")
+  implementation project(":core:core-assistant")
   implementation project(":feature:feature-widgets")
 
   implementation platform(libs.compose.bom)

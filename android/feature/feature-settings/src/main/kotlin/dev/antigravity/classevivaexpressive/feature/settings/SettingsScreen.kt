@@ -124,12 +124,15 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.antigravity.classevivaexpressive.feature.assistant.settings.AssistantSettingsViewModel
+import dev.antigravity.classevivaexpressive.feature.assistant.settings.assistantSettingsItems
 
 private enum class SettingsSection(val title: String, val subtitle: String) {
   Account("Account", "Profilo, anno scolastico e sessione"),
   Appearance("Aspetto", "Tema, contrasto e colore accento"),
   Notifications("Notifiche e sync", "Preferenze essenziali e stato"),
   Data("Dati e backup", "Esporta o ripristina i dati locali"),
+  Assistant("Assistente IA", "Chiavi, modelli, voce e privacy"),
   About("Informazioni e aggiornamenti", "Versione, update e funzionalità"),
   Diagnostics("Diagnostica avanzata", "Canali Android, test e stato runtime"),
 }
@@ -356,9 +359,13 @@ fun SettingsRoute(
   updateCheckMessage: String? = null,
   onCheckForUpdates: () -> Unit = {},
   onClearUpdateCheckMessage: () -> Unit = {},
+  onOpenAssistantConsent: () -> Unit = {},
+  onOpenAssistantHistory: (() -> Unit)? = null,
   viewModel: SettingsViewModel = hiltViewModel(),
+  assistantViewModel: AssistantSettingsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val assistantState by assistantViewModel.state.collectAsStateWithLifecycle()
   var sectionName by rememberSaveable { mutableStateOf<String?>(null) }
   val section = sectionName?.let { name -> SettingsSection.entries.firstOrNull { it.name == name } }
   val context = LocalContext.current
@@ -517,6 +524,12 @@ fun SettingsRoute(
                     FluidStatusBadge(
                       if (state.settings.notificationsEnabled) "ON" else "OFF",
                       tone = if (state.settings.notificationsEnabled) FluidTone.Success else FluidTone.Neutral,
+                    )
+                  }
+                  if (destination == SettingsSection.Assistant) {
+                    FluidStatusBadge(
+                      if (assistantState.enabled) "ON" else "OFF",
+                      tone = if (assistantState.enabled) FluidTone.Success else FluidTone.Neutral,
                     )
                   }
                 },
@@ -683,6 +696,15 @@ fun SettingsRoute(
             leading = { Icon(Icons.Rounded.FileUpload, contentDescription = null) },
           )
         }
+      }
+
+      if (section == SettingsSection.Assistant) {
+        assistantSettingsItems(
+          viewModel = assistantViewModel,
+          state = assistantState,
+          onOpenConsent = onOpenAssistantConsent,
+          onOpenHistory = onOpenAssistantHistory,
+        )
       }
 
       if (section == SettingsSection.About) {

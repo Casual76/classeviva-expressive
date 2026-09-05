@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-  namespace "dev.antigravity.classevivaexpressive.feature.settings"
+  namespace "dev.antigravity.classevivaexpressive.feature.assistant"
   compileSdk 36
 
   defaultConfig {
@@ -29,10 +29,10 @@ android {
 }
 
 dependencies {
+  api project(":core:core-assistant")
   implementation project(":core:core-domain")
   implementation project(":core:core-designsystem")
   implementation project(":core:core-data")
-  implementation project(":feature:feature-assistant")
   implementation platform(libs.compose.bom)
   implementation libs.bundles.compose
   implementation libs.hilt.android
@@ -40,7 +40,5 @@ dependencies {
 
   ksp libs.hilt.compiler
   testImplementation libs.junit4
-  testImplementation libs.mockk
   testImplementation libs.kotlinx.coroutines.test
-  testImplementation libs.turbine
 }
