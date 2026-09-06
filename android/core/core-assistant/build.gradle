@@ -27,6 +27,8 @@ android {
 dependencies {
   // Il trasporto e l'orchestrazione senza dominio stanno nell'engine; qui c'e' solo il registro.
   api project(":engine-ai")
+  // I tool del registro esposti a un assistente esterno (PampAI/Aria), a permesso `signature`.
+  implementation project(":engine-ai-bridge")
   implementation project(":core:core-domain")
   implementation project(":core:core-data")
   implementation project(":core:core-database")

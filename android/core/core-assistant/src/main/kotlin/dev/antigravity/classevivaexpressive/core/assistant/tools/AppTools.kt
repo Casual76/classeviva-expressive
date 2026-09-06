@@ -43,6 +43,7 @@ class ApriTool : AiTool<AssistantToolContext> {
   override val name = "apri"
   override val group: AiToolGroup = RegistroToolGroup.APP
   override val description = "Apre una pagina dell'app, o il dettaglio di un voto / comunicazione / compito dato il suo id"
+  override val isAction = true
   override val parameters = Schema.obj(
     mapOf(
       "pagina" to Schema.str("la pagina", AppPage.entries.map { it.id }),
@@ -63,6 +64,7 @@ class ImpostazioneTool : AiTool<AssistantToolContext> {
   override val name = "impostazione"
   override val group: AiToolGroup = RegistroToolGroup.APP
   override val description = "Cambia un'impostazione dell'app: " + AssistantSetting.entries.joinToString("; ") { "${it.id} (${it.hint})" }
+  override val isAction = true
   override val parameters = Schema.obj(
     mapOf(
       "chiave" to Schema.str("quale impostazione", AssistantSetting.entries.map { it.id }),
@@ -116,6 +118,7 @@ class BachecaSegnaLetteTool : AiTool<AssistantToolContext> {
   override val name = "bacheca_segna_lette"
   override val group: AiToolGroup = RegistroToolGroup.APP
   override val description = "Segna come lette le comunicazioni in bacheca: tutte, o una sola dato il suo id"
+  override val isAction = true
   override val parameters = Schema.obj(mapOf("id" to Schema.str("l'id di una comunicazione; vuoto per segnarle tutte")))
 
   override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput {
@@ -139,6 +142,11 @@ class BachecaPresaVisioneTool : AiTool<AssistantToolContext> {
   override val group: AiToolGroup = RegistroToolGroup.APP
   override val description = "Conferma la presa visione di una comunicazione che la richiede (un atto verso la scuola: l'app chiede conferma con un tasto)"
   override val parameters = Schema.obj(mapOf("id" to Schema.str("l'id della comunicazione")), required = listOf("id"))
+  override val needsConfirmation = true
+  override val isAction = true
+
+  override suspend fun describe(args: JsonObject, ctx: AssistantToolContext) =
+    ctx.findCommunication(args.str("id"))?.let { dev.antigravity.fluidengine.ai.tools.ConfirmationText("Confermare la presa visione?", it.title) }
 
   override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput {
     if (!ctx.actionsEnabled) return ToolOutput(ACTIONS_OFF)
@@ -163,6 +171,13 @@ class AgendaAggiungiEventoTool : AiTool<AssistantToolContext> {
     ),
     required = listOf("titolo", "data"),
   )
+  override val needsConfirmation = true
+  override val isAction = true
+
+  override suspend fun describe(args: JsonObject, ctx: AssistantToolContext): dev.antigravity.fluidengine.ai.tools.ConfirmationText? {
+    val date = Dates.parse(args.str("data"), ctx.today) ?: return null
+    return dev.antigravity.fluidengine.ai.tools.ConfirmationText("Aggiungere in agenda?", "${args.str("titolo")} · ${Dates.label(date)}${args.str("ora")?.let { " $it" } ?: ""}")
+  }
 
   override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput {
     if (!ctx.actionsEnabled) return ToolOutput(ACTIONS_OFF)
@@ -196,6 +211,13 @@ class ObiettivoSalvaTool : AiTool<AssistantToolContext> {
     ),
     required = listOf("materia", "obiettivo"),
   )
+  override val needsConfirmation = true
+  override val isAction = true
+
+  override suspend fun describe(args: JsonObject, ctx: AssistantToolContext): dev.antigravity.fluidengine.ai.tools.ConfirmationText? {
+    val target = args.double("obiettivo") ?: return null
+    return dev.antigravity.fluidengine.ai.tools.ConfirmationText("Salvare l'obiettivo?", "${args.str("materia")}: media ${GradeMath.format(target)}")
+  }
 
   override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput {
     if (!ctx.actionsEnabled) return ToolOutput(ACTIONS_OFF)
@@ -213,6 +235,8 @@ class AggiornaDatiTool : AiTool<AssistantToolContext> {
   override val name = "aggiorna_dati"
   override val group: AiToolGroup = RegistroToolGroup.APP
   override val description = "Scarica dal registro i dati aggiornati (serve la rete): tutto o una sezione. Usalo se l'utente chiede dati freschi o se i dati sembrano vecchi"
+  override val isAction = true
+  override val longRunning = true
   override val parameters = Schema.obj(mapOf("sezione" to Schema.str("cosa aggiornare", RefreshSection.entries.map { it.id })))
 
   override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput {

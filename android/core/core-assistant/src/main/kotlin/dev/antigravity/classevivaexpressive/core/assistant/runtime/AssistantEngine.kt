@@ -70,6 +70,7 @@ class AssistantEngine @Inject constructor(
   private val settingsStore: AiSettingsStore,
   private val conversations: AssistantConversationsRepository,
   private val executor: AssistantActionExecutor,
+  private val contextFactory: AssistantContextFactory,
   private val attachments: AttachmentReader,
   private val timetable: PredictiveTimetableUseCase,
   private val auth: AuthRepository,
@@ -141,13 +142,12 @@ class AssistantEngine @Inject constructor(
       runtime.setState(AssistantState.Classifying(question, first.provider.id))
       val zone = ZoneId.systemDefault()
       val today = LocalDate.now(zone)
-      val toolContext = AssistantToolContext(
-        grades = grades, agenda = agenda, homework = homework, lessons = lessons, communications = communications,
-        absences = absences, stats = stats, studentScore = studentScore, materials = materials, documents = documents,
-        dashboard = dashboard, settings = appSettings, timetable = timetable, attachments = attachments,
-        zone = zone, today = today, actionsEnabled = settings.actionsEnabled,
-        actions = if (settings.actionsEnabled) executor else dev.antigravity.classevivaexpressive.core.assistant.actions.AssistantActionSink.Disabled,
+      val toolContext = contextFactory.create(
+        actionsEnabled = settings.actionsEnabled,
+        actions = executor,
         deepCapabilities = first.capabilities(first.model(ModelTier.DEEP)),
+        zone = zone,
+        today = today,
       )
       traced = toolContext
       val prompt = PromptBuilder.build(promptContext(today, settings.actionsEnabled, request))

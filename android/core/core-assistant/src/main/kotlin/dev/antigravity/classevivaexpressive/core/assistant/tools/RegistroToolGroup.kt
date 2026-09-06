@@ -12,16 +12,24 @@ enum class RegistroToolGroup(
   override val id: String,
   override val statusKey: String,
   override val hint: String,
+  /**
+   * I gruppi che si aprono per primi quando un assistente esterno apre la categoria del registro
+   * (dal 1.26.0 dell'engine): i due che rispondono alla maggior parte delle domande. Dentro l'app
+   * non cambia niente — il router locale sceglie sempre fra tutti.
+   */
+  override val loadsWithCategory: Boolean = false,
 ) : AiToolGroup {
   VOTI(
     "voti",
     "grades",
     "voti presi, medie per materia e generali, obiettivi per materia, cosa serve per raggiungere una media",
+    loadsWithCategory = true,
   ),
   AGENDA(
     "agenda",
     "agenda",
     "impegni in agenda, verifiche e interrogazioni in arrivo, compiti assegnati e il loro testo, eventi personali",
+    loadsWithCategory = true,
   ),
   ORARIO(
     "orario",
@@ -47,6 +55,11 @@ enum class RegistroToolGroup(
     "didattica",
     "materials",
     "materiali didattici condivisi dai docenti, documenti della scuola (pagelle, certificati), libri di testo",
+  ),
+  GIORNATA(
+    "giornata",
+    "day",
+    "la giornata di scuola tutta insieme (lezioni, compiti, verifiche, voti del giorno), la settimana, e la simulazione di una media con un voto ipotetico",
   ),
   APP(
     "app",

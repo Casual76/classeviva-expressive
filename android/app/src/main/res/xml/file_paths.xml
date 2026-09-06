@@ -12,4 +12,9 @@
   <files-path
     name="offline_assets"
     path="offline_assets/" />
+  <!-- Gli allegati che un tool consegna a PampAI/Aria: file temporanei con un permesso di lettura
+       concesso al chiamante e a nessun altro. -->
+  <cache-path
+    name="ai_bridge"
+    path="ai-bridge/" />
 </paths>

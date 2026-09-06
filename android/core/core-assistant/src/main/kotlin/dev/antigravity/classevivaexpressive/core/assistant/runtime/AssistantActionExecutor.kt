@@ -16,6 +16,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.fluidengine.ai.orchestrator.AiConfirmationGate
 import dev.antigravity.fluidengine.ai.orchestrator.ConfirmationOutcome
@@ -43,6 +44,7 @@ class AssistantActionExecutor @Inject constructor(
   private val materials: MaterialsRepository,
   private val documents: DocumentsRepository,
   private val dashboard: DashboardRepository,
+  private val schoolYear: SchoolYearRepository,
 ) : AssistantActionSink {
 
   private val navigationFlow = MutableStateFlow<NavigationRequest?>(null)
@@ -54,6 +56,18 @@ class AssistantActionExecutor @Inject constructor(
     val request = navigationFlow.value
     navigationFlow.value = null
     return request
+  }
+
+  /**
+   * Esegue senza chiedere: la conferma l'ha gia' data qualcun altro. E' la strada dei tool federati
+   * (PampAI/Aria chiede all'utente prima di chiamare); dentro l'app si passa sempre da [perform].
+   */
+  suspend fun performPreConfirmed(action: AssistantAction): ActionResult = try {
+    execute(action)
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Throwable) {
+    ActionResult(ActionOutcome.FAILED, e.message)
   }
 
   override suspend fun perform(action: AssistantAction): ActionResult {
@@ -119,6 +133,30 @@ class AssistantActionExecutor @Inject constructor(
     }
     is AssistantAction.SaveGoal -> {
       grades.saveSubjectGoal(action.subject, action.periodCode, action.target)
+      ActionResult(ActionOutcome.DONE)
+    }
+    is AssistantAction.Join -> {
+      val detail = communications.getCommunicationDetail(action.pubId, action.evtCode).getOrElse { return ActionResult(ActionOutcome.FAILED, it.message) }
+      communications.joinCommunication(detail).fold({ ActionResult(ActionOutcome.DONE) }, { ActionResult(ActionOutcome.FAILED, it.message) })
+    }
+    is AssistantAction.MarkGradeSeen -> {
+      grades.markGradeSeen(action.gradeId)
+      ActionResult(ActionOutcome.DONE)
+    }
+    is AssistantAction.RemoveCustomEvent -> {
+      agenda.removeCustomEvent(action.eventId)
+      ActionResult(ActionOutcome.DONE)
+    }
+    is AssistantAction.RemoveGoal -> {
+      grades.removeSubjectGoal(action.subject, action.periodCode)
+      ActionResult(ActionOutcome.DONE)
+    }
+    is AssistantAction.SaveSlotOverride -> {
+      lessons.saveSlotOverride(action.fingerprint, action.slot)
+      ActionResult(ActionOutcome.DONE)
+    }
+    is AssistantAction.SelectSchoolYear -> {
+      schoolYear.selectSchoolYear(action.year)
       ActionResult(ActionOutcome.DONE)
     }
     is AssistantAction.Refresh -> refresh(action.section)

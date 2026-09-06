@@ -4,6 +4,7 @@ import dev.antigravity.classevivaexpressive.core.assistant.actions.AssistantActi
 import dev.antigravity.classevivaexpressive.core.assistant.attachments.AttachmentReader
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsencesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityResolver
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentsRepository
@@ -12,6 +13,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.StatsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.StudentScoreRepository
@@ -40,6 +42,9 @@ class AssistantToolContext(
   val dashboard: DashboardRepository,
   val settings: SettingsRepository,
   val timetable: PredictiveTimetableUseCase,
+  val schoolYear: SchoolYearRepository,
+  /** Cosa questa scuola espone davvero: il registro non e' uguale per tutti. */
+  val capabilities: CapabilityResolver,
   val attachments: AttachmentReader,
   val zone: ZoneId,
   val today: LocalDate,

@@ -2,6 +2,8 @@ package dev.antigravity.classevivaexpressive.core.assistant.actions
 
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
 import dev.antigravity.classevivaexpressive.core.domain.model.CustomEvent
+import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
+import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 
 /** Le pagine dell'app che l'assistente puo' aprire; l'id e' la parola che il modello usa. */
@@ -150,6 +152,46 @@ sealed interface AssistantAction {
     override val needsConfirmation = true
     override val title get() = "Salvare l'obiettivo?"
     override val detail get() = "$subject: media $target" + (periodLabel?.let { " nel $it" } ?: "")
+  }
+
+  /** Adesione a una comunicazione che la chiede (una gita, un colloquio): un atto verso la scuola. */
+  data class Join(val pubId: String, val evtCode: String, val communicationTitle: String) : AssistantAction {
+    override val needsConfirmation = true
+    override val title get() = "Confermare l'adesione?"
+    override val detail get() = communicationTitle
+  }
+
+  /** Segna un voto come visto: e' solo il pallino dell'app, resta sul telefono. */
+  data class MarkGradeSeen(val gradeId: String, val label: String) : AssistantAction {
+    override val needsConfirmation = false
+    override val title get() = "Segna visto"
+    override val detail get() = label
+  }
+
+  data class RemoveCustomEvent(val eventId: String, val eventTitle: String) : AssistantAction {
+    override val needsConfirmation = true
+    override val title get() = "Togliere dall'agenda?"
+    override val detail get() = eventTitle
+  }
+
+  data class RemoveGoal(val subject: String, val periodCode: String?, val periodLabel: String?) : AssistantAction {
+    override val needsConfirmation = true
+    override val title get() = "Togliere l'obiettivo?"
+    override val detail get() = subject + (periodLabel?.let { " ($it)" } ?: "")
+  }
+
+  /** Una correzione all'orario appreso dall'app: resta sul telefono, non tocca il registro. */
+  data class SaveSlotOverride(val fingerprint: String, val slot: TemplateSlot, val description: String) : AssistantAction {
+    override val needsConfirmation = true
+    override val title get() = "Correggere l'orario?"
+    override val detail get() = description
+  }
+
+  /** Cambia l'anno scolastico da cui l'app legge: ricarica tutto, quindi si conferma. */
+  data class SelectSchoolYear(val year: SchoolYearRef) : AssistantAction {
+    override val needsConfirmation = true
+    override val title get() = "Passare all'anno ${year.label}?"
+    override val detail = "L'app ricarica voti, agenda e orario dell'anno scelto."
   }
 
   data class Refresh(val section: RefreshSection) : AssistantAction {

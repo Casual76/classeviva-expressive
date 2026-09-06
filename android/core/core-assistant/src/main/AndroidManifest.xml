@@ -10,5 +10,18 @@
       android:name=".service.AssistantForegroundService"
       android:exported="false"
       android:foregroundServiceType="dataSync" />
+
+    <!-- I tool del registro per PampAI/Aria: il permesso e' `signature`, quindi li chiama solo
+         un'app firmata con la stessa chiave. L'authority segue l'applicationId. -->
+    <provider
+      android:name=".pampai.RegistroToolHostProvider"
+      android:authorities="${applicationId}.ai.tools"
+      android:exported="true"
+      android:grantUriPermissions="true"
+      android:permission="dev.antigravity.fluidengine.permission.AI_TOOLS">
+      <meta-data
+        android:name="dev.antigravity.fluidengine.ai.TOOL_HOST"
+        android:value="1" />
+    </provider>
   </application>
 </manifest>
