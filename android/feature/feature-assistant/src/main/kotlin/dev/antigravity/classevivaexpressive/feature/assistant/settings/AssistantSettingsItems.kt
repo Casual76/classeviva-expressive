@@ -167,9 +167,13 @@ private fun AssistantModelsSection(viewModel: AssistantSettingsViewModel, state:
         ModelTier.entries.forEachIndexed { index, tier ->
           if (index > 0) FluidListDivider()
           val chosen = state.settings.model(provider, tier)
+          // Se il profondo e' lo stesso della chat non c'e' nessun passaggio da fare, e il tool
+          // `modello_avanzato` non viene nemmeno offerto al modello: meglio dirlo qui.
+          val sameAsChat = tier == ModelTier.DEEP && chosen == state.settings.model(provider, ModelTier.CHAT)
           FluidListRow(
             title = "${provider.label} · ${tier.label()}",
-            subtitle = "${tier.hint()} · ${catalogue.summary(chosen)}",
+            subtitle = "${tier.hint()} · ${catalogue.summary(chosen)}" +
+              if (sameAsChat) " · uguale alla chat: scegline uno piu' capace e l'assistente ci passera' da solo sulle domande difficili" else "",
             onClick = { picker = ModelPickRequest(provider, tier) },
           )
         }

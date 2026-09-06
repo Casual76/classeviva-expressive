@@ -129,9 +129,12 @@ class AssistantConversationsRepository @Inject constructor(
     messageDao.insert(AssistantMessageEntity(conversationId = conversationId, role = MessageRole.ASSISTANT.name, text = "", status = MessageStatus.PENDING.name, createdAtEpochMillis = nowMillis))
 
   suspend fun updatePartial(messageId: Long, text: String) {
-    val current = messageDao.get(messageId) ?: return
-    if (current.status != MessageStatus.PENDING.name && current.status != MessageStatus.STREAMING.name) return
-    messageDao.update(current.copy(text = text, status = MessageStatus.STREAMING.name))
+    messageDao.updatePartial(
+      id = messageId,
+      text = text,
+      streaming = MessageStatus.STREAMING.name,
+      openStatuses = listOf(MessageStatus.PENDING.name, MessageStatus.STREAMING.name),
+    )
   }
 
   suspend fun complete(messageId: Long, text: String, chips: List<AnswerChip>) {

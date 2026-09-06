@@ -39,6 +39,40 @@ internal fun Communication.toolLine(): String = buildString {
   append(" · id ").append(id)
 }
 
+/**
+ * Un allegato letto e messo nella forma che il modello regge: il documento intero, il testo
+ * estratto sul telefono, o le pagine come immagini. Ci passano sia `allegato_leggi` sia
+ * `comunicazione`, che se lo legge da solo — chiedere "vuoi che apra l'allegato?" e' esattamente
+ * il giro in piu' che l'assistente non deve far fare.
+ */
+internal suspend fun AssistantToolContext.readAttachment(
+  communication: Communication,
+  attachment: RemoteAttachment,
+  pages: IntRange?,
+): ToolOutput {
+  if (attachment.portalOnly || attachment.url.isNullOrBlank()) {
+    return ToolOutput("l'allegato \"${attachment.name}\" si puo' aprire solo dal portale web della scuola: dillo all'utente")
+  }
+  val path = communications.resolveAttachmentLocalPath(attachment).getOrElse { e ->
+    return ToolOutput.error("scaricamento dell'allegato \"${attachment.name}\" non riuscito: ${e.message ?: "errore di rete"}")
+  }
+  return when (val content = attachments.read(path, attachment.name, attachment.mimeType, pages, deepCapabilities)) {
+    is AttachmentContent.Document -> ToolOutput(
+      "allegato \"${attachment.name}\" (${content.pages} pagine, ${content.sizeLabel}) della comunicazione \"${communication.title}\": il documento viene passato al modello per la lettura",
+      parts = listOf(content.part),
+    )
+    is AttachmentContent.Text -> ToolOutput(
+      "allegato \"${attachment.name}\" (${content.pages} pagine${if (content.truncated) ", testo troncato" else ""}) della comunicazione \"${communication.title}\": il testo estratto segue come messaggio",
+      parts = listOf(content.part),
+    )
+    is AttachmentContent.Images -> ToolOutput(
+      "allegato \"${attachment.name}\": ${content.parts.size} pagine scansionate passate al modello come immagini${if (content.truncated) " (le prime)" else ""}",
+      parts = content.parts,
+    )
+    is AttachmentContent.Unreadable -> ToolOutput("allegato \"${attachment.name}\": ${content.reason}. Suggerisci di aprirlo dall'app.")
+  }
+}
+
 class ComunicazioniCercaTool : AiTool<AssistantToolContext> {
   override val name = "comunicazioni_cerca"
   override val group: AiToolGroup = RegistroToolGroup.BACHECA
@@ -98,15 +132,25 @@ class ComunicazioniCercaTool : AiTool<AssistantToolContext> {
 class ComunicazioneTool : AiTool<AssistantToolContext> {
   override val name = "comunicazione"
   override val group: AiToolGroup = RegistroToolGroup.BACHECA
-  override val description = "Il testo completo di una comunicazione (per id o per titolo), con gli allegati (e i loro id) e le azioni che richiede"
-  override val parameters = Schema.obj(mapOf("id" to Schema.str("l'id da comunicazioni_cerca, oppure parole del titolo")), required = listOf("id"))
+  override val description = "Il testo completo di una comunicazione (per id o per titolo), con le azioni che richiede. Se ha un allegato lo legge da se': non serve chiamare allegato_leggi dopo"
+  override val parameters = Schema.obj(
+    mapOf(
+      "id" to Schema.str("l'id da comunicazioni_cerca, oppure parole del titolo"),
+      "leggi_allegato" to Schema.bool("falso solo se ti basta il titolo e non ti interessa il contenuto (default: vero)"),
+    ),
+    required = listOf("id"),
+  )
 
   override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput {
     val communication = ctx.findCommunication(args.str("id")) ?: return ToolOutput.error("comunicazione non trovata: cerca prima con comunicazioni_cerca")
     val detail = ctx.communications.getCommunicationDetail(communication.pubId, communication.evtCode).getOrNull()
     val content = detail?.content?.takeIf { it.isNotBlank() } ?: communication.contentPreview
     val attachments = communication.allAttachments()
-    return ToolText.output {
+    // Il contenuto di una circolare sta quasi sempre nel PDF, non nella riga di anteprima: si legge
+    // subito, senza chiedere. Il modello puo' dire di no, ma deve dirlo apposta.
+    val readable = attachments.firstOrNull { !it.portalOnly && !it.url.isNullOrBlank() }
+    val attachment = if (args.bool("leggi_allegato") == false) null else readable?.let { ctx.readAttachment(communication, it, null) }
+    val header = ToolText.build {
       line("titolo", communication.title)
       line("data", Dates.label(communication.date))
       line("da", communication.sender)
@@ -127,11 +171,18 @@ class ComunicazioneTool : AiTool<AssistantToolContext> {
         blank()
         line("allegati: ${attachments.size}")
         attachments.forEach { line("- ${it.name} · id ${it.id}${if (it.portalOnly) " · solo dal portale" else ""}") }
-        attachments.firstOrNull { !it.portalOnly }?.let {
-          line("il testo qui sopra spesso non basta: se la domanda riguarda il contenuto, chiama ORA allegato_leggi(comunicazione_id=\"${communication.id}\", allegato_id=\"${it.id}\") e rispondi dopo averlo letto")
+        if (attachment == null && readable != null) {
+          line("non letto perche' l'hai chiesto tu: se ti serve il contenuto, allegato_leggi(comunicazione_id=\"${communication.id}\", allegato_id=\"${readable.id}\")")
+        }
+        if (attachments.size > 1) {
+          line("gli altri allegati si leggono con allegato_leggi, uno per volta")
         }
       }
     }
+    return ToolOutput(
+      text = if (attachment == null) header else header + "\n\n" + attachment.text,
+      parts = attachment?.parts.orEmpty(),
+    )
   }
 }
 
@@ -157,29 +208,7 @@ class AllegatoLeggiTool : AiTool<AssistantToolContext> {
       ref == null -> attachments.first()
       else -> attachments.firstOrNull { it.id == ref } ?: attachments.firstOrNull { Text.matches(ref, it.name) } ?: ref.toIntOrNull()?.let { attachments.getOrNull(it - 1) }
     } ?: return ToolOutput.error("allegato \"$ref\" non trovato: " + attachments.joinToString("; ") { "${it.name} (id ${it.id})" })
-    if (attachment.portalOnly || attachment.url.isNullOrBlank()) {
-      return ToolOutput("l'allegato \"${attachment.name}\" si puo' aprire solo dal portale web della scuola: dillo all'utente")
-    }
-    val path = ctx.communications.resolveAttachmentLocalPath(attachment).getOrElse { e ->
-      return ToolOutput.error("scaricamento dell'allegato non riuscito: ${e.message ?: "errore di rete"}")
-    }
-    val pages = parsePages(args.str("pagine"))
-    val content = ctx.attachments.read(path, attachment.name, attachment.mimeType, pages, ctx.deepCapabilities)
-    return when (content) {
-      is AttachmentContent.Document -> ToolOutput(
-        "allegato \"${attachment.name}\" (${content.pages} pagine, ${content.sizeLabel}): il documento viene passato al modello per la lettura",
-        parts = listOf(content.part),
-      )
-      is AttachmentContent.Text -> ToolOutput(
-        "allegato \"${attachment.name}\" (${content.pages} pagine${if (content.truncated) ", testo troncato" else ""}): il testo estratto segue come messaggio",
-        parts = listOf(content.part),
-      )
-      is AttachmentContent.Images -> ToolOutput(
-        "allegato \"${attachment.name}\": ${content.parts.size} pagine scansionate passate al modello come immagini${if (content.truncated) " (le prime)" else ""}",
-        parts = content.parts,
-      )
-      is AttachmentContent.Unreadable -> ToolOutput("allegato \"${attachment.name}\": ${content.reason}. Suggerisci di aprirlo dall'app.")
-    }
+    return ctx.readAttachment(communication, attachment, parsePages(args.str("pagine")))
   }
 
   private fun parsePages(raw: String?): IntRange? {

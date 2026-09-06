@@ -40,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
@@ -168,7 +169,8 @@ class AssistantEngine @Inject constructor(
         attachmentFallback = { part -> fallbackText(part) },
       )
       val result = orchestrator.ask(input, runtime.mutableState())
-      persister.cancel()
+      // Aspettarlo, non solo fermarlo: `cancel()` torna prima che la sua ultima scrittura sia finita.
+      persister.cancelAndJoin()
       val finished = System.currentTimeMillis()
       conversations.complete(messageId, result.answer, result.chips)
       conversations.addRun(conversationId, messageId, result.log, finished, "ok", null, toolContext.traces)

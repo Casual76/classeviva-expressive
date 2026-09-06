@@ -104,6 +104,14 @@ interface AssistantMessageDao {
   @Update
   suspend fun update(entity: AssistantMessageEntity)
 
+  /**
+   * Il testo che si sta formando, scritto solo se il messaggio e' ancora aperto. La condizione sta
+   * QUI e non in Kotlin: fra un `get` e un `update` ci sta in mezzo la scrittura della risposta
+   * finale, e l'ultimo parziale la sovrascriveva — con i chip ancora grezzi dentro al testo.
+   */
+  @Query("UPDATE assistant_messages SET text = :text, status = :streaming WHERE id = :id AND status IN (:openStatuses)")
+  suspend fun updatePartial(id: Long, text: String, streaming: String, openStatuses: List<String>)
+
   @Query("UPDATE assistant_messages SET status = :status, failureKind = :failureKind WHERE status IN (:staleStatuses)")
   suspend fun failStale(status: String, failureKind: String, staleStatuses: List<String>)
 
