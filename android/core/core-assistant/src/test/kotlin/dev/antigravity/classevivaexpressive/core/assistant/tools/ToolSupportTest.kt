@@ -2,6 +2,7 @@ package dev.antigravity.classevivaexpressive.core.assistant.tools
 
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,6 +10,20 @@ import org.junit.Test
 class ToolSupportTest {
 
   private val today = LocalDate.of(2026, 9, 5) // sabato
+
+  @Test
+  fun `la ricerca larga conta le parole trovate, quella stretta le vuole tutte`() {
+    val titolo = "Servizio di ristorazione scolastica: nuove modalita'"
+    // stretta: "bar" non c'e', e nemmeno tutte e due le parole di "circolare bar"
+    assertFalse(Text.matches("bar", titolo))
+    assertFalse(Text.matches("circolare bar", titolo))
+    // larga: "ristorazione" da sola basta a farla emergere
+    assertEquals(1, Text.score("circolare ristorazione", titolo))
+    assertEquals(2, Text.score("servizio ristorazione", titolo))
+    assertEquals(0, Text.score("bar", titolo))
+    // le parole di una lettera o due non contano: cercherebbero dappertutto
+    assertEquals(0, Text.score("di", titolo))
+  }
 
   @Test
   fun `le date si leggono in ogni forma che il modello usa`() {

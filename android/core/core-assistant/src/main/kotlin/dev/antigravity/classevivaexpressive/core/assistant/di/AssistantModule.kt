@@ -96,13 +96,18 @@ object AssistantModule {
       diagnostics = diagnostics,
       // Il service ha quattro minuti; una card che aspetta ne avrebbe uno e mezzo.
       config = AiOrchestratorConfig(
-        maxRounds = 8,
+        // Dodici giri, non otto: qui una domanda vera ne vale piu' d'uno — cerca, non trova,
+        // riprova con un'altra parola, apre la circolare, legge l'allegato, risponde.
+        maxRounds = 12,
+        maxMoreTools = 4,
         // Un'azione con conferma aspetta l'utente fino a 60 s dentro il tool: il limite del tool
         // deve stare sopra, altrimenti e' il tool a scadere mentre il tasto Conferma e' a schermo.
         toolTimeoutMillis = 90_000L,
-        totalBudgetMillis = 240_000L,
-        finalReserveMillis = 20_000L,
-        maxOutputTokens = 1_500,
+        totalBudgetMillis = 300_000L,
+        finalReserveMillis = 25_000L,
+        // Un elenco di voti dell'anno o il confronto fra tutte le materie non sta in 2400 caratteri.
+        toolTextChars = 4_000,
+        maxOutputTokens = 2_000,
       ),
     )
 }

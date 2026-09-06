@@ -27,6 +27,25 @@ object GradeMath {
     val weightedDiffers: Boolean get() = simple != null && weighted != null && kotlin.math.abs(simple - weighted) >= 0.005
   }
 
+  /**
+   * Come e' andata nel tempo: la media della prima meta' dei voti contro quella della seconda,
+   * in ordine di data. Con meno di [minimum] voti numerici non si risponde: "migliorato" su due
+   * voti non vuol dire niente, e il modello lo direbbe lo stesso.
+   */
+  data class Trend(val counted: Int, val first: Double, val second: Double, val firstCount: Int, val secondCount: Int) {
+    val delta: Double get() = second - first
+  }
+
+  fun trend(grades: List<Grade>, minimum: Int = 4): Trend? {
+    val values = grades.sortedBy { it.date }.mapNotNull { it.numericValue }
+    if (values.size < minimum) return null
+    val half = values.size / 2
+    val first = values.take(half)
+    val second = values.drop(half)
+    if (first.isEmpty() || second.isEmpty()) return null
+    return Trend(values.size, first.average(), second.average(), first.size, second.size)
+  }
+
   fun simpleAverage(grades: List<Grade>): Double? {
     val values = grades.mapNotNull { it.numericValue }
     return values.takeIf { it.isNotEmpty() }?.average()

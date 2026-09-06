@@ -46,6 +46,26 @@ class GradeMathTest {
   }
 
   @Test
+  fun `l'andamento confronta la prima meta' dell'anno con la seconda`() {
+    val grades = listOf(
+      grade(5.0, date = "2025-10-01"), grade(5.0, date = "2025-11-01"),
+      grade(7.0, date = "2026-03-01"), grade(9.0, date = "2026-04-01"),
+    )
+    val trend = GradeMath.trend(grades)!!
+    assertEquals(4, trend.counted)
+    assertEquals(5.0, trend.first, 1e-9)
+    assertEquals(8.0, trend.second, 1e-9)
+    assertEquals(3.0, trend.delta, 1e-9)
+    // con un numero dispari il voto di mezzo sta nella seconda meta'
+    val odd = GradeMath.trend(grades + grade(9.0, date = "2026-05-01"), minimum = 4)!!
+    assertEquals(2, odd.firstCount)
+    assertEquals(3, odd.secondCount)
+    // pochi voti: non si dice niente, invece di dire una cosa a caso
+    assertNull(GradeMath.trend(listOf(grade(4.0), grade(9.0))))
+    assertNull(GradeMath.trend(listOf(grade(null), grade(null), grade(6.0), grade(7.0), grade(8.0))))
+  }
+
+  @Test
   fun `i numeri si scrivono senza zeri inutili`() {
     assertEquals("7", GradeMath.format(7.0))
     assertEquals("7.5", GradeMath.format(7.5))

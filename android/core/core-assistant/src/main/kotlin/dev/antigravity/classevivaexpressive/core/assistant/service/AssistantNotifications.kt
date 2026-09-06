@@ -117,6 +117,7 @@ class AssistantNotifications @Inject constructor(@ApplicationContext private val
         RegistroToolGroup.DIDATTICA.statusKey -> "Cerco fra i materiali…"
         RegistroToolGroup.APP.statusKey -> "Agisco nell'app…"
         "more_tools" -> "Mi serve dell'altro…"
+        "deep_model" -> "Passo al modello piu' capace…"
         else -> if (state.tier == ModelTier.DEEP) "Analizzo con calma: puo' volerci un po'…" else "Penso…"
       }
       if (state.tier == ModelTier.DEEP && state.statusKey == "thinking") base else if (state.tier == ModelTier.DEEP) "$base (modello profondo)" else base

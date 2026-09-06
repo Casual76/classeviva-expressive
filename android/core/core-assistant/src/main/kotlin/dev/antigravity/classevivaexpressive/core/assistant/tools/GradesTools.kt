@@ -13,6 +13,9 @@ import dev.antigravity.fluidengine.ai.tools.ToolText
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.JsonObject
 
+/** Il tetto di un elenco lungo: sotto a quello dell'orchestratore, sopra al default dei tool. */
+private const val LONG_LIST_CHARS = 3_800
+
 /** I voti filtrati come li chiede il modello: materia (con nome risolto), periodo, intervallo di date. */
 internal suspend fun AssistantToolContext.filteredGrades(
   subjectArg: String?,
@@ -21,8 +24,13 @@ internal suspend fun AssistantToolContext.filteredGrades(
   to: String?,
 ): Triple<List<Grade>, String?, String?> {
   val all = grades.observeGrades().first()
-  val subject = Subjects.match(subjectArg, all.map { it.subject } + grades.observeSubjects().first().map { it.description })
-  if (subjectArg != null && subject == null) return Triple(emptyList(), null, "materia \"$subjectArg\" non trovata")
+  val names = (all.map { it.subject } + grades.observeSubjects().first().map { it.description }).distinct()
+  val subject = Subjects.match(subjectArg, names)
+  if (subjectArg != null && subject == null) {
+    // Un errore che si corregge da solo: il modello riprova col nome giusto invece di rispondere
+    // "non ho trovato la materia", che dall'altra parte suona come "quella materia non esiste".
+    return Triple(emptyList(), null, "materia \"$subjectArg\" non trovata. Le materie del registro sono: ${names.sorted().joinToString(", ")}. Riprova con uno di questi nomi.")
+  }
   val period = matchPeriod(periodArg)
   if (periodArg != null && period == null) return Triple(emptyList(), subject, "periodo \"$periodArg\" non trovato")
   var list = all
@@ -56,19 +64,21 @@ class VotiElencoTool : AiTool<AssistantToolContext> {
       "periodo" to Schema.str("primo, secondo, corrente, o il codice; vuoto per tutto l'anno"),
       "da" to Schema.str("data di inizio (aaaa-mm-gg, oggi, ieri, lunedi...)"),
       "a" to Schema.str("data di fine"),
-      "ultimi" to Schema.int("quanti voti al massimo (default 15)", 1, 40),
+      "ultimi" to Schema.int("quanti voti al massimo (default 20)", 1, 60),
     ),
   )
 
   override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput {
     val (grades, subject, error) = ctx.filteredGrades(args.str("materia"), args.str("periodo"), args.str("da"), args.str("a"))
     if (error != null) return ToolOutput.error(error)
-    val limit = args.int("ultimi") ?: 15
-    return ToolText.output {
+    val limit = args.int("ultimi") ?: 20
+    return ToolText.output(maxChars = LONG_LIST_CHARS) {
       line("materia", subject ?: "tutte")
       line("voti trovati", grades.size)
+      if (grades.isEmpty()) line("nessun voto con questi filtri: prova senza materia o senza periodo, oppure guarda `materie` per i nomi")
+      line("ogni riga: data · materia · voto (tipo) · argomento del voto · nota del docente · id")
       grades.take(limit).forEach { line(it.toolLine(withSubject = subject == null)) }
-      if (grades.size > limit) line("… altri ${grades.size - limit} voti piu' vecchi")
+      if (grades.size > limit) line("… altri ${grades.size - limit} voti piu' vecchi: rialza \"ultimi\" o restringi le date")
     }
   }
 }
@@ -120,6 +130,55 @@ class VotiMediaTool : AiTool<AssistantToolContext> {
       }
     }
   }
+}
+
+class VotiAndamentoTool : AiTool<AssistantToolContext> {
+  override val name = "voti_andamento"
+  override val group: AiToolGroup = RegistroToolGroup.VOTI
+  override val description = "Come sta andando ogni materia nel tempo: la media della prima meta' dei voti contro quella della seconda, con il miglioramento o il peggioramento, tutte le materie insieme e ordinate. E' lo strumento per \"quale materia e' migliorata di piu'\", \"dove sto peggiorando\", \"com'e' andato l'anno\""
+  override val parameters = Schema.obj(
+    mapOf(
+      "materia" to Schema.str("una sola materia; vuoto (consigliato) per il confronto fra tutte"),
+      "periodo" to Schema.str("primo, secondo, corrente; vuoto per tutto l'anno"),
+      "minimo" to Schema.int("quanti voti servono per giudicare una materia (default 4)", 2, 20),
+    ),
+  )
+
+  override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput {
+    val (grades, subject, error) = ctx.filteredGrades(args.str("materia"), args.str("periodo"), null, null)
+    if (error != null) return ToolOutput.error(error)
+    if (grades.isEmpty()) return ToolOutput("nessun voto nel periodo richiesto")
+    val minimum = args.int("minimo") ?: 4
+    val perSubject = grades.groupBy { it.subject }
+    val trends = perSubject.mapNotNull { (name, list) -> GradeMath.trend(list, minimum)?.let { name to it } }
+      .sortedByDescending { it.second.delta }
+    val thin = perSubject.filterKeys { name -> trends.none { it.first == name } }
+    return ToolText.output(maxChars = LONG_LIST_CHARS) {
+      line("periodo", args.str("periodo") ?: "tutto l'anno")
+      line("materie giudicabili", "${trends.size} (almeno $minimum voti numerici)")
+      GradeMath.trend(grades, minimum)?.let {
+        line("in generale", "prima meta' ${GradeMath.format(it.first)} → seconda ${GradeMath.format(it.second)} (${signed(it.delta)})")
+      }
+      if (trends.isNotEmpty()) {
+        blank()
+        line("dal miglioramento maggiore al peggioramento (media prima meta' → seconda meta'):")
+        trends.forEach { (name, t) ->
+          line("$name: ${GradeMath.format(t.first)} → ${GradeMath.format(t.second)} · ${signed(t.delta)} · ${t.counted} voti (${t.firstCount}+${t.secondCount})")
+        }
+      }
+      if (thin.isNotEmpty()) {
+        blank()
+        line("troppo pochi voti per dire come vanno: " + thin.entries.sortedBy { it.key }.joinToString(", ") { "${it.key} (${it.value.size})" })
+      }
+      if (subject != null) {
+        blank()
+        line("voti di $subject in ordine di data:")
+        grades.sortedBy { it.date }.forEach { line(it.toolLine(withSubject = false)) }
+      }
+    }
+  }
+
+  private fun signed(delta: Double): String = (if (delta > 0) "+" else "") + GradeMath.format(delta)
 }
 
 class VotiServeTool : AiTool<AssistantToolContext> {

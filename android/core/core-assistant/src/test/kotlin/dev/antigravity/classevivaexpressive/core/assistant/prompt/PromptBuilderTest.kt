@@ -43,6 +43,9 @@ class PromptBuilderTest {
     assertTrue(prompt.contains("voti_media"))
     assertTrue(prompt.contains("SOLO se lo studente l'ha chiesta"))
     assertTrue(prompt.contains("SOLO la tua risposta finale"))
+    assertTrue(prompt.contains("Non fermarti al primo tentativo a vuoto"))
+    assertTrue(prompt.contains("modello_avanzato"))
+    assertTrue(prompt.contains("voti_andamento"))
     assertTrue(prompt.contains("[[pagina:voti]]"))
     assertFalse(prompt.contains("Periodo corrente"))
   }

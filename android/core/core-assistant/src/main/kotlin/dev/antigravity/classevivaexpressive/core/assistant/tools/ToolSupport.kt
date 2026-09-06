@@ -115,6 +115,19 @@ object Text {
     return words.all { w -> targetWords.any { it.startsWith(w) } || target.contains(w) }
   }
 
+  /**
+   * Quante parole di [query] compaiono in [candidate]: zero se nessuna. Serve alla ricerca larga,
+   * quella che scatta quando la ricerca stretta non trova niente — chi cerca "circolare bar" non
+   * vuole che tutte e due le parole stiano nel titolo, vuole la circolare del bar.
+   */
+  fun score(query: String, candidate: String?): Int {
+    val words = normalize(query).split(" ").filter { it.length > 2 }
+    if (words.isEmpty() || candidate.isNullOrBlank()) return 0
+    val target = normalize(candidate)
+    val targetWords = target.split(" ")
+    return words.count { w -> targetWords.any { it.startsWith(w) } || target.contains(w) }
+  }
+
   fun clip(text: String?, max: Int): String {
     val clean = text?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
     return if (clean.length <= max) clean else clean.take(max - 1) + "…"

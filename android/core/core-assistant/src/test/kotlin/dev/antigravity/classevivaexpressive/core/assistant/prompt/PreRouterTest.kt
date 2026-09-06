@@ -31,6 +31,13 @@ class PreRouterTest {
   }
 
   @Test
+  fun `un'analisi su tutte le materie chiede i voti e parte dal livello profondo`() {
+    val verdict = PreRouter.decide("Quale materia e' migliorata di piu' durante l'anno?", actionsEnabled = false)
+    assertTrue(RegistroToolGroup.VOTI in verdict.groups)
+    assertTrue(verdict.deep)
+  }
+
+  @Test
   fun `le azioni contano solo se sono attive, e non decidono mai da sole`() {
     val off = PreRouter.decide("Metti il tema scuro", actionsEnabled = false)
     assertFalse(RegistroToolGroup.APP in off.groups)

@@ -15,6 +15,7 @@ object AssistantTexts {
     val base = when (key) {
       "thinking" -> if (tier == ModelTier.DEEP) "Analizzo con calma…" else "Penso…"
       "more_tools" -> "Mi serve dell'altro…"
+      "deep_model" -> "Passo al modello piu' capace…"
       RegistroToolGroup.VOTI.statusKey -> "Guardo i voti…"
       RegistroToolGroup.AGENDA.statusKey -> "Guardo l'agenda…"
       RegistroToolGroup.ORARIO.statusKey -> "Guardo l'orario…"

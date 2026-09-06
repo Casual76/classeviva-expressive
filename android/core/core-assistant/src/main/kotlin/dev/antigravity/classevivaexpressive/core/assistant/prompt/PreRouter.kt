@@ -24,6 +24,9 @@ object PreRouter {
   }
 
   private val rules = listOf(
+    // "quale materia e' migliorata di piu' quest'anno" non nomina la parola voto da nessuna
+    // parte, e senza questa riga la domanda finiva a chi i voti non ce li ha.
+    Rule(RegistroToolGroup.VOTI, "\\b(materi[ae]|miglior\\w*|peggior\\w*|risultat[oi]|come sto andando)\\b", 1),
     Rule(RegistroToolGroup.VOTI, "\\b(vot[oi]|medi[ae]|obiettiv\\w*|insufficienz\\w*|sufficienz\\w*|ho preso|prender[oe]|valutazion[ei])\\b"),
     Rule(RegistroToolGroup.VOTI, "\\b(pagell\\w*)\\b", 1),
     Rule(RegistroToolGroup.AGENDA, "\\b(compit[oi]|verific[ah]e?|interrogazion[ei]|impegn[oi]|scadenz[ae]|agenda|event[oi]|da fare|da studiare|consegn\\w*)\\b"),
@@ -37,6 +40,9 @@ object PreRouter {
     Rule(RegistroToolGroup.APP, "\\b(presa visione|presa d'atto|conferma la lettura|segna(le)? (come )?lett[ae])\\b", 3),
   )
 
+  /** Domande che vogliono un ragionamento, non un dato: si parte gia' dal modello piu' capace. */
+  private val heavySignals = Regex("\\b(analizz\\w*|confront\\w*|tutte le materie|tutti i voti|tutto l'anno|tutto l anno|quale materia|conviene|consigl\\w*)\\b")
+
   private val deepSignals = Regex("\\b(allegat[oi]|pdf|cosa dice|cosa c'e' scritto|cosa c e scritto|contenuto|riassum\\w*|leggi(mi)?|leggere|testo (della|del))\\b")
 
   fun decide(question: String, actionsEnabled: Boolean): Verdict {
@@ -48,6 +54,7 @@ object PreRouter {
       if (hits > 0) scores[rule.group] = (scores[rule.group] ?: 0) + rule.weight * hits
     }
     val deep = deepSignals.containsMatchIn(text) && (scores.containsKey(RegistroToolGroup.BACHECA) || scores.containsKey(RegistroToolGroup.DIDATTICA)) ||
+      heavySignals.containsMatchIn(text) ||
       question.length > 400
     if (scores.isEmpty()) return Verdict(emptySet(), confident = false, deep = deep)
     val ranked = scores.entries.sortedByDescending { it.value }

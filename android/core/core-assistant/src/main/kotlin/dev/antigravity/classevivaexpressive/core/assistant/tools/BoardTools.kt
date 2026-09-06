@@ -60,18 +60,37 @@ class ComunicazioniCercaTool : AiTool<AssistantToolContext> {
     val from = Dates.parse(args.str("da"), ctx.today)
     val to = Dates.parse(args.str("a"), ctx.today)
     val all = ctx.communications.observeCommunications().first()
-    val filtered = all
+    val inWindow = all
       .filter { !unreadOnly || !it.read }
       .filter { c -> from == null || Dates.parseAppDate(c.date)?.let { !it.isBefore(from) } == true }
       .filter { c -> to == null || Dates.parseAppDate(c.date)?.let { !it.isAfter(to) } == true }
-      .filter { c -> query == null || Text.matches(query, c.title) || Text.matches(query, c.contentPreview) || Text.matches(query, c.category.orEmpty()) }
       .sortedByDescending { it.date }
-    return ToolText.output {
+    // Tre reti, sempre piu' larghe: tutte le parole, almeno una parola, e in ultimo le piu' recenti.
+    // La scuola non chiama "bar" il bar: lo chiama "servizio di ristorazione", e una ricerca secca
+    // faceva rispondere "non esiste" su una circolare che stava in cima alla bacheca.
+    val strict = if (query == null) inWindow else inWindow.filter { c ->
+      Text.matches(query, c.title) || Text.matches(query, c.contentPreview) || Text.matches(query, c.category.orEmpty())
+    }
+    val loose = if (query == null || strict.isNotEmpty()) emptyList() else inWindow
+      .map { c -> c to maxOf(Text.score(query, c.title), Text.score(query, c.contentPreview), Text.score(query, c.category), Text.score(query, c.sender)) }
+      .filter { it.second > 0 }
+      .sortedWith(compareByDescending<Pair<Communication, Int>> { it.second }.thenByDescending { it.first.date })
+      .map { it.first }
+    val found = if (strict.isNotEmpty()) strict else loose
+    return ToolText.output(maxChars = 3_400) {
       line("in bacheca", "${all.size} comunicazioni, ${all.count { !it.read }} non lette")
-      line("trovate", filtered.size)
-      if (filtered.isEmpty()) line("nessuna comunicazione corrisponde" + (query?.let { " a \"$it\"" } ?: ""))
-      filtered.take(limit).forEach { line(it.toolLine()) }
-      if (filtered.size > limit) line("… altre ${filtered.size - limit} piu' vecchie: restringi con testo o date")
+      line("trovate", found.size)
+      if (loose.isNotEmpty()) line("nessuna corrispondenza esatta: queste contengono almeno una delle parole")
+      found.take(limit).forEach { line(it.toolLine()) }
+      if (found.size > limit) line("… altre ${found.size - limit} piu' vecchie: restringi con testo o date")
+      if (found.isEmpty()) {
+        line("nessuna comunicazione corrisponde" + (query?.let { " a \"$it\"" } ?: ""))
+        if (inWindow.isNotEmpty()) {
+          blank()
+          line("NON vuol dire che non esista: la scuola usa spesso altre parole (bar → ristorazione, gita → uscita didattica). Ecco le piu' recenti, guarda se una e' quella e poi aprila con `comunicazione`:")
+          inWindow.take(12).forEach { line(it.toolLine()) }
+        }
+      }
     }
   }
 }
@@ -106,8 +125,11 @@ class ComunicazioneTool : AiTool<AssistantToolContext> {
       line(Text.clip(content, 1600).ifBlank { "(nessun testo: il contenuto e' negli allegati)" })
       if (attachments.isNotEmpty()) {
         blank()
-        line("allegati (leggili con allegato_leggi):")
+        line("allegati: ${attachments.size}")
         attachments.forEach { line("- ${it.name} · id ${it.id}${if (it.portalOnly) " · solo dal portale" else ""}") }
+        attachments.firstOrNull { !it.portalOnly }?.let {
+          line("il testo qui sopra spesso non basta: se la domanda riguarda il contenuto, chiama ORA allegato_leggi(comunicazione_id=\"${communication.id}\", allegato_id=\"${it.id}\") e rispondi dopo averlo letto")
+        }
       }
     }
   }

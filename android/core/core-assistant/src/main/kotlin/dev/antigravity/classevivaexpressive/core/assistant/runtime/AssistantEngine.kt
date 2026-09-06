@@ -230,6 +230,7 @@ class AssistantEngine @Inject constructor(
       actionsEnabled = actionsEnabled,
       mode = request.mode,
       syncStatus = snapshot?.syncStatus ?: dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus(),
+      maxSteps = orchestrator.maxRounds,
     )
   }
 

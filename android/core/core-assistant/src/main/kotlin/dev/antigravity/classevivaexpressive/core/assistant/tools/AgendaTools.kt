@@ -125,7 +125,19 @@ class CompitiTool : AiTool<AssistantToolContext> {
     return ToolText.output {
       line("scadenze fra", "${Dates.label(range.start)} e ${Dates.label(range.endInclusive)}")
       line("compiti", items.size)
-      if (items.isEmpty()) line("nessun compito con scadenza in questo intervallo")
+      if (items.isEmpty()) {
+        line("nessun compito con scadenza in questo intervallo")
+        val nearby = all
+          .filter { subject == null || Text.normalize(it.subject) == Text.normalize(subject) }
+          .mapNotNull { hw -> Dates.parseAppDate(hw.dueDate)?.let { hw to it } }
+          .filter { it.second !in range }
+          .sortedBy { kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(ctx.today, it.second)) }
+          .take(5)
+        if (nearby.isNotEmpty()) {
+          line("ma ce ne sono altri fuori da questo intervallo: se cercavi questi, richiama con le date giuste")
+          nearby.forEach { (hw, _) -> line("- ${Dates.label(hw.dueDate)} · ${hw.subject} · ${Text.clip(hw.description, 80)} · id ${hw.id}") }
+        }
+      }
       items.take(25).forEach { hw ->
         line("${Dates.label(hw.dueDate)} · ${hw.subject} · ${Text.clip(hw.description, 120)}${if (hw.attachments.isNotEmpty()) " · ${hw.attachments.size} allegati" else ""} · id ${hw.id}")
       }

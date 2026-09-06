@@ -3,12 +3,12 @@ package dev.antigravity.classevivaexpressive.core.assistant.tools
 import dev.antigravity.fluidengine.ai.tools.AiTool
 import dev.antigravity.fluidengine.ai.tools.ToolRegistry
 
-/** Il catalogo del registro: trentadue strumenti in otto gruppi, ognuno tracciato. L'ordine e' quello del prompt. */
+/** Il catalogo del registro: trentatre strumenti in otto gruppi, ognuno tracciato. L'ordine e' quello del prompt. */
 object AllTools {
   fun registry(): ToolRegistry<AssistantToolContext> = ToolRegistry(
     tools = traced(
       // voti
-      VotiElencoTool(), VotiMediaTool(), VotiServeTool(), VotiDettaglioTool(), MaterieTool(), ObiettiviTool(),
+      VotiElencoTool(), VotiMediaTool(), VotiAndamentoTool(), VotiServeTool(), VotiDettaglioTool(), MaterieTool(), ObiettiviTool(),
       // agenda
       ImpegniTool(), VerificheProssimeTool(), CompitiTool(), CompitoDettaglioTool(), EventiPersonaliTool(),
       // orario
