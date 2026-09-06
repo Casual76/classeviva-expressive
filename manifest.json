@@ -15,22 +15,30 @@
       "ref": "main"
     },
     "stable": {
-      "version": "7.8.0",
-      "releaseDate": "2026-09-05",
-      "changelog": "Arriva l'assistente IA, del tutto opzionale: resta spento finche' non lo accendi dalle impostazioni con una chiave tua (Groq, Gemini o OpenRouter), dopo una pagina di consenso. Un tasto sopra la pillola: un tocco per parlare, una pressione lunga per scrivere. Legge voti e medie, agenda, compiti, orario, comunicazioni con i loro allegati, assenze e statistiche; su richiesta apre le pagine, cambia aspetto, notifiche e sincronizzazione, segna lette le comunicazioni o da' la presa visione, aggiunge eventi in agenda e obiettivi per materia, sempre con un tasto di conferma per cio' che conta. Le richieste lunghe continuano in background con una notifica anche ad app chiusa; le conversazioni restano sul telefono, continuabili da Altro, con token, modelli e costo di ogni scambio. Le chiavi sono cifrate sul telefono e non passano da nessun server nostro.",
-      "releaseTag": "stable-classeviva-expressive-v7.8.0",
-      "apkAsset": "classeviva-expressive-7.8.0.apk",
-      "sizeBytes": 33114685
+      "version": "7.8.1",
+      "releaseDate": "2026-09-06",
+      "changelog": "L'assistente porta a termine la domanda al primo colpo. Cerca in bacheca con le parole che usa la scuola (chiedi del bar e trova la circolare sulla ristorazione), apre la circolare e legge l'allegato PDF senza chiedere il permesso, e non dice piu' che una cosa non esiste dopo un solo tentativo andato a vuoto. Le domande di analisi ora hanno il loro strumento: quale materia e' migliorata di piu' nell'anno, prima meta' contro seconda, tutte le materie insieme e ordinate. Puo' passare da solo a un modello piu' capace quando il compito e' difficile, se ne hai scelto uno diverso da quello della chat nelle impostazioni. Dodici passaggi invece di otto e piu' spazio per i dati di ogni strumento. E parla come una persona: se hai voglia di due chiacchiere sulla scuola, sta al gioco.",
+      "releaseTag": "stable-classeviva-expressive-v7.8.1",
+      "apkAsset": "classeviva-expressive-7.8.1.apk",
+      "sizeBytes": 33114687
     },
     "beta": {
-      "version": "7.8.0",
-      "releaseDate": "2026-09-05",
-      "changelog": "Arriva l'assistente IA, del tutto opzionale: resta spento finche' non lo accendi dalle impostazioni con una chiave tua (Groq, Gemini o OpenRouter), dopo una pagina di consenso. Un tasto sopra la pillola: un tocco per parlare, una pressione lunga per scrivere. Legge voti e medie, agenda, compiti, orario, comunicazioni con i loro allegati, assenze e statistiche; su richiesta apre le pagine, cambia aspetto, notifiche e sincronizzazione, segna lette le comunicazioni o da' la presa visione, aggiunge eventi in agenda e obiettivi per materia, sempre con un tasto di conferma per cio' che conta. Le richieste lunghe continuano in background con una notifica anche ad app chiusa; le conversazioni restano sul telefono, continuabili da Altro, con token, modelli e costo di ogni scambio. Le chiavi sono cifrate sul telefono e non passano da nessun server nostro.",
-      "releaseTag": "stable-classeviva-expressive-v7.8.0",
-      "apkAsset": "classeviva-expressive-7.8.0.apk",
-      "sizeBytes": 33114685
+      "version": "7.8.1",
+      "releaseDate": "2026-09-06",
+      "changelog": "L'assistente porta a termine la domanda al primo colpo. Cerca in bacheca con le parole che usa la scuola (chiedi del bar e trova la circolare sulla ristorazione), apre la circolare e legge l'allegato PDF senza chiedere il permesso, e non dice piu' che una cosa non esiste dopo un solo tentativo andato a vuoto. Le domande di analisi ora hanno il loro strumento: quale materia e' migliorata di piu' nell'anno, prima meta' contro seconda, tutte le materie insieme e ordinate. Puo' passare da solo a un modello piu' capace quando il compito e' difficile, se ne hai scelto uno diverso da quello della chat nelle impostazioni. Dodici passaggi invece di otto e piu' spazio per i dati di ogni strumento. E parla come una persona: se hai voglia di due chiacchiere sulla scuola, sta al gioco.",
+      "releaseTag": "stable-classeviva-expressive-v7.8.1",
+      "apkAsset": "classeviva-expressive-7.8.1.apk",
+      "sizeBytes": 33114687
     },
     "history": [
+      {
+        "version": "7.8.0",
+        "releaseDate": "2026-09-05",
+        "changelog": "Arriva l'assistente IA, del tutto opzionale: resta spento finche' non lo accendi dalle impostazioni con una chiave tua (Groq, Gemini o OpenRouter), dopo una pagina di consenso. Un tasto sopra la pillola: un tocco per parlare, una pressione lunga per scrivere. Legge voti e medie, agenda, compiti, orario, comunicazioni con i loro allegati, assenze e statistiche; su richiesta apre le pagine, cambia aspetto, notifiche e sincronizzazione, segna lette le comunicazioni o da' la presa visione, aggiunge eventi in agenda e obiettivi per materia, sempre con un tasto di conferma per cio' che conta. Le richieste lunghe continuano in background con una notifica anche ad app chiusa; le conversazioni restano sul telefono, continuabili da Altro, con token, modelli e costo di ogni scambio. Le chiavi sono cifrate sul telefono e non passano da nessun server nostro.",
+        "releaseTag": "stable-classeviva-expressive-v7.8.0",
+        "apkAsset": "classeviva-expressive-7.8.0.apk",
+        "sizeBytes": 33114685
+      },
       {
         "version": "7.7.0",
         "releaseDate": "2026-08-26",
