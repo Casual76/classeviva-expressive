@@ -15,22 +15,30 @@
       "ref": "main"
     },
     "stable": {
-      "version": "7.9.0",
-      "releaseDate": "2026-09-08",
-      "changelog": "Il registro parla con Aria: undici strumenti nuovi (la giornata di scuola, la settimana, la simulazione delle medie, l'adesione a una comunicazione, il dettaglio di una nota, l'anno scolastico, il voto segnato come visto, la rimozione di eventi e obiettivi, la modifica dell'orario) e il ponte che li espone all'assistente PampAI.",
-      "releaseTag": "stable-classeviva-expressive-v7.9.0",
-      "apkAsset": "classeviva-expressive-7.9.0.apk",
-      "sizeBytes": 33196797
+      "version": "7.9.1",
+      "releaseDate": "2026-09-10",
+      "changelog": "Fix e migliorie varie",
+      "releaseTag": "stable-classeviva-expressive-v7.9.1",
+      "apkAsset": "classeviva-expressive-7.9.1.apk",
+      "sizeBytes": 33213192
     },
     "beta": {
-      "version": "7.9.0",
-      "releaseDate": "2026-09-08",
-      "changelog": "Il registro parla con Aria: undici strumenti nuovi (la giornata di scuola, la settimana, la simulazione delle medie, l'adesione a una comunicazione, il dettaglio di una nota, l'anno scolastico, il voto segnato come visto, la rimozione di eventi e obiettivi, la modifica dell'orario) e il ponte che li espone all'assistente PampAI.",
-      "releaseTag": "stable-classeviva-expressive-v7.9.0",
-      "apkAsset": "classeviva-expressive-7.9.0.apk",
-      "sizeBytes": 33196797
+      "version": "7.9.1",
+      "releaseDate": "2026-09-10",
+      "changelog": "Fix e migliorie varie",
+      "releaseTag": "stable-classeviva-expressive-v7.9.1",
+      "apkAsset": "classeviva-expressive-7.9.1.apk",
+      "sizeBytes": 33213192
     },
     "history": [
+      {
+        "version": "7.9.0",
+        "releaseDate": "2026-09-08",
+        "changelog": "Il registro parla con Aria: undici strumenti nuovi (la giornata di scuola, la settimana, la simulazione delle medie, l'adesione a una comunicazione, il dettaglio di una nota, l'anno scolastico, il voto segnato come visto, la rimozione di eventi e obiettivi, la modifica dell'orario) e il ponte che li espone all'assistente PampAI.",
+        "releaseTag": "stable-classeviva-expressive-v7.9.0",
+        "apkAsset": "classeviva-expressive-7.9.0.apk",
+        "sizeBytes": 33196797
+      },
       {
         "version": "7.8.1",
         "releaseDate": "2026-09-06",
