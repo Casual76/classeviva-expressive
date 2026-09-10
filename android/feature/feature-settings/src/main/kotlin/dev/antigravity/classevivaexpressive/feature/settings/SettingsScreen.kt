@@ -831,9 +831,12 @@ private fun AppUpdateSettingsCard(
       horizontalArrangement = Arrangement.spacedBy(10.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
+      // Senza peso i due bottoni misurano wrap-content: insieme superano la larghezza di un
+      // telefono da 360dp e "Nascondi" finiva fuori dalla card.
       FluidButton(
         text = if (isChecking) "Controllo..." else "Controlla aggiornamenti",
         onClick = onCheckForUpdates,
+        modifier = Modifier.weight(1f),
         style = FluidButtonStyle.Tinted,
         enabled = !isChecking,
         loading = isChecking,

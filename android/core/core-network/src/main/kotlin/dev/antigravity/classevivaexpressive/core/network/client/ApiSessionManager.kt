@@ -49,7 +49,10 @@ class ApiSessionManager @Inject constructor(
     }.getOrNull() ?: return null
 
     if (!response.isSuccessful) {
-      sessionStore.clear()
+      // Solo un rifiuto delle credenziali giustifica buttare via la sessione salvata. Un 500, un
+      // 503 di manutenzione o un 429 dicono soltanto "non adesso": cancellare li' dentro
+      // sloggava chi dormiva mentre una sincronizzazione notturna trovava Spaggiari giu'.
+      if (response.code() == 401 || response.code() == 403) sessionStore.clear()
       return null
     }
 

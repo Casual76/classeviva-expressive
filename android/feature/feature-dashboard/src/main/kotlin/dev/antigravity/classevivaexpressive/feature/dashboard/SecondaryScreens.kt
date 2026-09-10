@@ -93,6 +93,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
+import dev.antigravity.fluidengine.ui.fluid.rememberCurrentDate
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -988,7 +989,7 @@ fun HomeworkRoute(
   // Il rettangolo di cio' che si e' toccato: la finestra ci nasce sopra e ci ritorna.
   // Senza origine Fluid-physics non ha un viaggio da fare e il pannello arriva dal centro.
   var homeworkOrigin by remember { mutableStateOf<Rect?>(null) }
-  val homeworkToday = remember { LocalDate.now() }
+  val homeworkToday = rememberCurrentDate()
 
   LaunchedEffect(initialHomeworkId, state.homeworks) {
     if (!initialHomeworkId.isNullOrBlank() && state.selectedHomework?.id != initialHomeworkId) {

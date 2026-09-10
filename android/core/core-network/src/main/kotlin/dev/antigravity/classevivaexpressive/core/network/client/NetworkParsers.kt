@@ -840,7 +840,9 @@ internal fun normalizePeriod(data: JsonElement): Period {
 
 internal fun normalizeSubject(data: JsonElement): Subject {
   val obj = data.obj()
-  val teachers = extractArray(obj["teachers"].obj(), "teachers").mapNotNull { teacher ->
+  // `teachers` arriva come array: passarlo da `.obj()` lo trasformava in un oggetto vuoto e la
+  // lista dei docenti usciva sempre vuota. La chiave si cerca nell'oggetto della materia.
+  val teachers = extractArray(obj, "teachers").mapNotNull { teacher ->
     sanitizeRegisterText(teacher.obj().string("teacherName", "name"))
   }
   return Subject(
@@ -1198,10 +1200,18 @@ private fun isClassevivaPortalUrl(value: String?): Boolean {
     !isOfficialRestUrl(value)
 }
 
+/**
+ * L'id numerico dello studente dalle forme che Classeviva usa: "S1234567A", "G1234567", "1234567".
+ *
+ * Torna null per tutto il resto - un'email, un nome utente della scuola - invece di inventarsi un
+ * id con le cifre che trova dentro: chi chiama ha una catena di sorgenti alternative (`ident`,
+ * `userId`) e la prima vinceva sempre, mandando ogni richiesta a
+ * `/students/mario.rossi@liceo.it/...` per poi prendere 404 ovunque.
+ */
 internal fun normalizeStudentId(value: String?): String? {
   val raw = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-  val match = Regex("^[SG](\\d+)(?:[A-Z]+)?$", RegexOption.IGNORE_CASE).find(raw)
-  return match?.groupValues?.get(1) ?: raw.filter(Char::isDigit).ifBlank { raw }
+  Regex("^[SG](\\d+)[A-Z]*$", RegexOption.IGNORE_CASE).find(raw)?.let { return it.groupValues[1] }
+  return raw.takeIf { it.all(Char::isDigit) }
 }
 
 internal fun normalizeDate(value: String?): String {

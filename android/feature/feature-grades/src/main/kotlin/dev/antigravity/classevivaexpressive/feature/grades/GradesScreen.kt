@@ -40,7 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -397,8 +397,7 @@ fun GradesRoute(
           Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
               Text(
                 text = "ANDAMENTO",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
+                style = FluidTextStyles.uppercaseCaption,
                 color = MaterialTheme.colorScheme.primary,
               )
               val latestValue = chartPoints.lastOrNull()
@@ -410,18 +409,25 @@ fun GradesRoute(
                   )
               }
           }
+          // Il grafico si autoscala sui voti che ha (e sulla soglia del 6), quindi le etichette
+          // dell'asse si ricavano dagli stessi numeri: scritte a mano dicevano sempre 10 e 2, e
+          // una serie fra 6 e 8 si leggeva come un crollo.
+          val shownPoints = chartPoints.takeLast(15)
+          val axisBottom = minOf(shownPoints.min(), 6f)
+          val axisTop = axisBottom + maxOf(maxOf(shownPoints.max(), 1f) - axisBottom, 1f)
           Box(modifier = Modifier.fillMaxWidth()) {
               FluidMiniChart(
-                points = chartPoints.takeLast(15),
+                points = shownPoints,
                 color = MaterialTheme.colorScheme.primary,
                 threshold = 6f,
                 modifier = Modifier.height(110.dp)
               )
-              // Min/Max axis indicators
-              Column(modifier = Modifier.align(Alignment.TopStart).padding(4.dp)) {
-                  Text("10", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                  Spacer(Modifier.height(70.dp))
-                  Text("2", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+              Column(
+                modifier = Modifier.align(Alignment.TopStart).height(110.dp).padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+              ) {
+                  Text(axisTop.toDouble().format1(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                  Text(axisBottom.toDouble().format1(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
               }
           }
         }
@@ -745,7 +751,15 @@ private fun SubjectDetailContent(
     ) {
       item {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-          Text(text = subject, style = MaterialTheme.typography.headlineSmall)
+          // Senza peso il titolo si prende tutta la riga: con "SCIENZE NATURALI (BIOLOGIA, CHIMICA
+          // E SCIENZE DELLA TERRA)" al tasto dell'obiettivo non restava larghezza e spariva.
+          Text(
+            text = subject,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+          )
           IconButton(onClick = onSetGoal) {
               Icon(Icons.Rounded.Settings, contentDescription = "Obiettivo")
           }

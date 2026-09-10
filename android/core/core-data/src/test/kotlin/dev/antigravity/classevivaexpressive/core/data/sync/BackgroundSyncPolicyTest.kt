@@ -51,7 +51,14 @@ class BackgroundSyncPolicyTest {
       ),
     )
 
-    assertEquals(setOf(GradesSection, AgendaSection, CommunicationsSection, LessonsSection), sections)
+    assertEquals(setOf(GradesSection, AgendaSection, CommunicationsSection, AbsencesSection, LessonsSection), sections)
+  }
+
+  @Test
+  fun fastSections_dropAbsencesWhenTheirNotificationIsOff() {
+    val sections = BackgroundSyncPolicy.fastSections(NotificationPreferences(enabled = true, absences = false))
+
+    assertFalse(AbsencesSection in sections)
   }
 
   @Test

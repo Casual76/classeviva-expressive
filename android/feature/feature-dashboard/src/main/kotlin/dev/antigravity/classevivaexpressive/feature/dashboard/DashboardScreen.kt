@@ -69,6 +69,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
+import dev.antigravity.fluidengine.ui.fluid.rememberCurrentDate
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
 import dev.antigravity.fluidengine.ui.theme.FluidQuickAction
@@ -207,7 +208,7 @@ fun DashboardRoute(
 
   val firstName = snapshot.profile.name.takeIf { it.isNotBlank() }?.split(" ")?.firstOrNull()?.replaceFirstChar { it.titlecase() } ?: "Studente"
   val titleText = snapshot.headline.ifBlank { "Ciao, $firstName" }
-  val facetToday = remember { LocalDate.now() }
+  val facetToday = rememberCurrentDate()
   val titleFacets = remember(snapshot, facetToday) {
     buildDashboardFacets(snapshot, facetToday)
   }

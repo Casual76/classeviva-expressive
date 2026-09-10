@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from .models import (
     AbsenceJustificationPayload,
@@ -28,6 +31,26 @@ from .service import ClassevivaGatewayService
 
 app = FastAPI(title="Classeviva Expressive Gateway", version="0.1.0")
 service = ClassevivaGatewayService()
+
+
+@app.exception_handler(httpx.HTTPStatusError)
+async def upstream_error(_: Request, exc: httpx.HTTPStatusError) -> JSONResponse:
+    """Un errore di Classeviva non e' un errore del gateway.
+
+    `raise_for_status()` alza un'eccezione che non e' `HTTPException`, quindi una password
+    sbagliata (che a monte e' un 422) usciva di qui come 500. Il codice a monte viene ripetuto se
+    e' colpa di chi chiama, altrimenti diventa 502.
+    """
+    status = exc.response.status_code
+    detail = "Credenziali Classeviva non valide." if status in (401, 403, 422) else f"Classeviva ha risposto {status}."
+    return JSONResponse(status_code=status if 400 <= status < 500 else 502, content={"detail": detail})
+
+
+@app.exception_handler(ValidationError)
+async def invalid_payload(_: Request, exc: ValidationError) -> JSONResponse:
+    """I payload delle azioni sono validati dentro gli handler, dove FastAPI non li vede piu':
+    senza questo, un corpo incompleto tornava 500 invece di 422."""
+    return JSONResponse(status_code=422, content={"detail": exc.errors(include_url=False)})
 
 
 @app.get("/health")
@@ -93,8 +116,6 @@ async def get_homework_detail(homework_id: str, envelope: GatewayEnvelope) -> Ho
 @app.post("/gateway/homeworks/{homework_id}/submit", response_model=HomeworkSubmissionReceiptModel)
 async def submit_homework(homework_id: str, envelope: GatewayEnvelope) -> HomeworkSubmissionReceiptModel:
     payload = HomeworkSubmissionPayload.model_validate(envelope.payload or {"homeworkId": homework_id})
-    if not payload.homeworkId:
-        payload.homeworkId = homework_id
     return await service.submit_homework(envelope.credentials, payload)
 
 

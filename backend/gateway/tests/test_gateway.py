@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from app.models import GatewayCredentials, GatewaySchoolYear, HomeworkModel
+import pytest
+from fastapi import HTTPException
+
 from app.service import (
     ClassevivaGatewayService,
     decode_action_token,
     encode_action_token,
     parse_meetings_snapshot,
+    require_portal_url,
     school_year_bounds,
 )
 
@@ -65,3 +69,22 @@ async def test_homework_detail_adds_submission_token(monkeypatch) -> None:
         "hw-1",
     )
     assert decode_action_token(detail.homework.id)["submitUrl"] == "https://example.test/homeworks/submit"
+
+
+def test_require_portal_url_accepts_only_the_portal() -> None:
+    assert require_portal_url("https://web.spaggiari.eu/sol/app/default/giustifica.php?id=1")
+    assert require_portal_url("https://spaggiari.eu/x")
+
+    # Gli URL delle azioni arrivano dal corpo della richiesta e vengono chiamati con la sessione
+    # del portale gia' aperta: tutto cio' che non e' il portale, su https, va rifiutato.
+    for hostile in [
+        "http://169.254.169.254/latest/meta-data/",
+        "https://169.254.169.254/latest/meta-data/",
+        "http://web.spaggiari.eu/sol/app/default/giustifica.php",
+        "https://web.spaggiari.eu.example.test/phish",
+        "https://example.test/?next=web.spaggiari.eu",
+        "file:///etc/passwd",
+    ]:
+        with pytest.raises(HTTPException) as raised:
+            require_portal_url(hostile)
+        assert raised.value.status_code == 400

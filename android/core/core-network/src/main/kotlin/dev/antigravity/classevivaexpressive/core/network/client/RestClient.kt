@@ -213,12 +213,12 @@ class ClassevivaRestClient @Inject constructor(
         Unit
       }
     } catch (e: ClassevivaNetworkException) {
-      val msg = e.message.orEmpty()
-      // Solo gli errori espliciti "gia' letta" sono idempotenti; un payload
-      // invalido deve restare visibile per non sporcare lo stato locale.
-      val isAlreadyRead = msg.contains("already", ignoreCase = true) ||
-        msg.contains("gia", ignoreCase = true) || msg.contains("read", ignoreCase = true)
-      if (!isAlreadyRead) throw e
+      // Solo gli errori espliciti "gia' letta" sono idempotenti; un payload invalido deve restare
+      // visibile per non sporcare lo stato locale. Cercare le sottostringhe "gia" e "read" faceva
+      // il contrario di quel che dice questa riga: "gia" sta dentro "spaggiari" e "read" dentro
+      // l'URL /noticeboard/read/..., cosi' qualunque errore passava per una conferma. E la frase
+      // italiana vera, "gia' letta", non conteneva nessuna delle due.
+      if (!isAlreadyReadError(e.message)) throw e
     }
   }
 
@@ -644,4 +644,14 @@ private fun String?.isLegacyNoticeboardAttachmentUrl(): Boolean {
 private fun String.isInvalidPayloadError(): Boolean {
   val normalized = lowercase().replace('_', ' ').replace('-', ' ')
   return normalized.contains("invalid") && normalized.contains("payload")
+}
+
+/** Le frasi con cui Classeviva dice che la comunicazione era gia' stata letta, senza accenti. */
+private fun isAlreadyReadError(message: String?): Boolean {
+  val normalized = message.orEmpty().lowercase()
+    .replace('à', 'a').replace('è', 'e').replace('é', 'e')
+    .replace('ì', 'i').replace('ò', 'o').replace('ù', 'u')
+    .replace("'", "")
+  return listOf("already read", "alreadyread", "already been read", "gia letta", "gia letto", "gia confermata")
+    .any { normalized.contains(it) }
 }

@@ -380,7 +380,7 @@ class SchoolSyncCoordinatorTest {
     coordinator.refreshAll(force = true)
 
     coVerify {
-      gradeDao.upsertAll(
+      gradeDao.replaceByYear(any(), any(),
         match { entities ->
           entities.single().id == "local-g1" &&
             entities.single().valueLabel == "8"
@@ -515,7 +515,7 @@ class SchoolSyncCoordinatorTest {
     coordinator.refreshAll(force = true)
 
     coVerify {
-      agendaDao.upsertAll(
+      agendaDao.replaceByYear(any(), any(),
         match { entities ->
           entities.single().id == "local-a1" &&
             entities.single().title == "Verifica capitoli 1-2"
@@ -615,7 +615,7 @@ class SchoolSyncCoordinatorTest {
     coordinator.refreshAll(force = true)
 
     coVerify {
-      agendaDao.upsertAll(
+      agendaDao.replaceByYear(any(), any(),
         match { entities ->
           entities.single().id == "local-a1" &&
             entities.single().title == "Verifica capitoli 1-2"
@@ -659,7 +659,7 @@ class SchoolSyncCoordinatorTest {
     coordinator.refreshAll(force = true)
 
     coVerify {
-      gradeDao.upsertAll(
+      gradeDao.replaceByYear(any(), any(),
         match { entities ->
           entities.single().id == "remote-ambiguous"
         },
@@ -707,7 +707,7 @@ class SchoolSyncCoordinatorTest {
     coordinator.refreshAll(force = true)
 
     coVerify {
-      gradeDao.upsertAll(
+      gradeDao.replaceByYear(any(), any(),
         match { entities ->
           entities.size == 2 &&
             entities.map { it.id }.distinct().size == 2 &&

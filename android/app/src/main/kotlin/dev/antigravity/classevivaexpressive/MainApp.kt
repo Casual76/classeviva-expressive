@@ -153,7 +153,6 @@ import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantO
 import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantOverlayState
 import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantOverlayViewModel
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.unit.Constraints
@@ -1184,8 +1183,8 @@ private fun AuthenticatedApp(
   // barra e la card che ne nasce parlano dello stesso rettangolo.
   val assistantOverlay = remember { AssistantOverlayState() }
   val assistantViewModel: AssistantOverlayViewModel = hiltViewModel()
-  val assistantEnabled by assistantViewModel.enabled.collectAsState()
-  val assistantState by assistantViewModel.state.collectAsState()
+  val assistantEnabled by assistantViewModel.enabled.collectAsStateWithLifecycle()
+  val assistantState by assistantViewModel.state.collectAsStateWithLifecycle()
 
   /** Dove porta una pagina chiesta dall'assistente: le sezioni principali si aprono, le altre si spingono. */
   fun openAssistantPage(page: AppPage, itemId: String?) {

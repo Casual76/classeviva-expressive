@@ -1198,6 +1198,29 @@ class NetworkParsersTest {
     assertEquals("pagella.html", asset.fileName)
   }
 
+  @Test
+  fun normalizeSubject_readsTheTeacherArrayThatClassevivaActuallySends() {
+    val subject = normalizeSubject(
+      Json.parseToJsonElement(
+        """{"id":"12","description":"MATEMATICA","teachers":[{"teacherName":"Rossi Mario"},{"name":"Bianchi Anna"}]}""",
+      ),
+    )
+
+    assertEquals(listOf("Rossi Mario", "Bianchi Anna"), subject.teachers)
+  }
+
+  @Test
+  fun normalizeStudentId_keepsRealIdsAndRefusesEverythingElse() {
+    assertEquals("1234567", normalizeStudentId("S1234567A"))
+    assertEquals("1234567", normalizeStudentId("G1234567"))
+    assertEquals("1234567", normalizeStudentId("1234567"))
+    // Un'email non e' un id: chi chiama deve poter passare alla sorgente successiva.
+    assertNull(normalizeStudentId("mario.rossi@liceo.it"))
+    assertNull(normalizeStudentId("mario2rossi"))
+    assertNull(normalizeStudentId("   "))
+    assertNull(normalizeStudentId(null))
+  }
+
   private fun fixture(name: String) = Json.parseToJsonElement(
     checkNotNull(javaClass.classLoader?.getResource("fixtures/$name")) {
       "Fixture not found: $name"

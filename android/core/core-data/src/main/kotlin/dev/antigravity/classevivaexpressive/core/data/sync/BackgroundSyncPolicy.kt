@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.core.data.sync
 
+import dev.antigravity.classevivaexpressive.core.data.repository.AbsencesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.AgendaSection
 import dev.antigravity.classevivaexpressive.core.data.repository.CommunicationsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.GradesSection
@@ -51,6 +52,9 @@ internal object BackgroundSyncPolicy {
       if (preferences.agenda) add(AgendaSection)
       if (preferences.homework) add(HomeworkSection)
       if (preferences.communications) add(CommunicationsSection)
+      // Il coordinatore ha gia' il ramo FAST per le assenze (unisce la finestra di date invece di
+      // sostituirla): mancava solo qui, e senza sezione la notifica "Assenze" non poteva scattare.
+      if (preferences.absences) add(AbsencesSection)
       if (preferences.notes) add(NotesSection)
       if (preferences.liveTimetable) add(LessonsSection)
     }

@@ -32,7 +32,6 @@ import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -110,6 +109,10 @@ import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
 import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassIconButton
+import dev.antigravity.fluidengine.ui.fluid.currentCanvasBackdrop
+import dev.antigravity.fluidengine.ui.fluid.rememberCurrentDate
+import dev.antigravity.fluidengine.ui.fluid.rememberEmptyGlassBackdrop
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -340,7 +343,7 @@ fun AgendaRoute(
     }
   }
 
-  val facetToday = remember { LocalDate.now() }
+  val facetToday = rememberCurrentDate()
   val titleFacets = remember(state.items, facetToday) {
     buildAgendaFacets(state.items, facetToday)
   }
@@ -533,13 +536,21 @@ private fun MonthHeader(
   onNext: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  // Le stesse frecce di vetro con cui si cambia settimana in Lezioni: erano IconButton di Material
+  // da 40dp, cioe' un altro materiale e un bersaglio sotto i 48dp minimi.
+  val emptyBackdrop = rememberEmptyGlassBackdrop()
+  val backdrop = currentCanvasBackdrop() ?: emptyBackdrop
   Row(
     modifier = modifier.fillMaxWidth().padding(horizontal = 4.dp),
     horizontalArrangement = Arrangement.SpaceBetween,
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    IconButton(onClick = onPrevious, modifier = Modifier.size(40.dp)) {
-      Icon(Icons.Rounded.ChevronLeft, contentDescription = "Mese precedente")
+    FluidGlassIconButton(onClick = onPrevious, backdrop = backdrop) {
+      Icon(
+        imageVector = Icons.Rounded.ChevronLeft,
+        contentDescription = "Mese precedente",
+        tint = MaterialTheme.colorScheme.primary,
+      )
     }
     Text(
       text = month.format(calendarHeaderFormatter).replaceFirstChar { it.uppercase() },
@@ -547,8 +558,12 @@ private fun MonthHeader(
       color = MaterialTheme.colorScheme.onBackground,
       fontWeight = FontWeight.SemiBold,
     )
-    IconButton(onClick = onNext, modifier = Modifier.size(40.dp)) {
-      Icon(Icons.Rounded.ChevronRight, contentDescription = "Mese successivo")
+    FluidGlassIconButton(onClick = onNext, backdrop = backdrop) {
+      Icon(
+        imageVector = Icons.Rounded.ChevronRight,
+        contentDescription = "Mese successivo",
+        tint = MaterialTheme.colorScheme.primary,
+      )
     }
   }
 }
@@ -562,7 +577,7 @@ private fun MonthGrid(
   modifier: Modifier = Modifier,
 ) {
   val cells = remember(month) { buildCalendarCells(month) }
-  val today = remember { LocalDate.now() }
+  val today = rememberCurrentDate()
   val weekdayLabels = listOf("Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom")
 
   Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -645,10 +660,8 @@ private fun CalendarDayCell(
         .size(32.dp)
         .background(
           color = containerColor,
-          shape = MaterialTheme.shapes.medium,
-        )
-        .padding(2.dp)
-        .run { this },
+          shape = ContinuousCornerShape(FluidRadius.Small),
+        ),
       contentAlignment = Alignment.Center,
     ) {
       Text(
@@ -781,7 +794,7 @@ private fun AgendaDetailContent(
           }
         }
       }
-      item { HorizontalDivider() }
+      item { FluidListDivider() }
       item {
         FluidCard(highlighted = true, glass = true) {
           Text(
@@ -1199,7 +1212,7 @@ fun AgendaDetailRoute(
         entry.subject?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Materia", value = it) }
         entry.teacher?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Docente", value = it) }
       }
-      HorizontalDivider()
+      FluidListDivider()
       FluidCard(highlighted = true, glass = true) {
         Text(
           text = "Dettagli",

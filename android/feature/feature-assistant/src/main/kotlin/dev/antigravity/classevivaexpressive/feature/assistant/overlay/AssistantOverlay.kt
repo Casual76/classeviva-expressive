@@ -26,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.classevivaexpressive.core.assistant.actions.AppPage
 import dev.antigravity.fluidengine.ai.orchestrator.AskMode
 import dev.antigravity.fluidengine.ai.orchestrator.AssistantState
@@ -84,11 +84,11 @@ fun BoxScope.AssistantOverlay(
   navigator: AssistantNavigator,
 ) {
   val context = LocalContext.current
-  val state by viewModel.state.collectAsState()
-  val mic by viewModel.micLevel.collectAsState()
-  val pending by viewModel.pending.collectAsState()
-  val settings by viewModel.settings.collectAsState()
-  val navigation by viewModel.navigation.collectAsState()
+  val state by viewModel.state.collectAsStateWithLifecycle()
+  val mic by viewModel.micLevel.collectAsStateWithLifecycle()
+  val pending by viewModel.pending.collectAsStateWithLifecycle()
+  val settings by viewModel.settings.collectAsStateWithLifecycle()
+  val navigation by viewModel.navigation.collectAsStateWithLifecycle()
   val scope = rememberCoroutineScope()
   val speaker = remember { TtsSpeaker(context) }
   DisposableEffect(speaker) { onDispose { speaker.release() } }

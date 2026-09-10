@@ -394,6 +394,12 @@ interface GradeDao {
   @Query("DELETE FROM grades WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
   suspend fun deleteByYear(studentId: String, schoolYearId: String)
 
+  @Transaction
+  suspend fun replaceByYear(studentId: String, schoolYearId: String, entities: List<GradeEntity>) {
+    deleteByYear(studentId, schoolYearId)
+    if (entities.isNotEmpty()) upsertAll(entities)
+  }
+
   /**
    * Tutti i voti di ogni studente e ogni anno.
    *
@@ -418,6 +424,12 @@ interface AgendaDao {
 
   @Query("DELETE FROM agenda_items WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
   suspend fun deleteByYear(studentId: String, schoolYearId: String)
+
+  @Transaction
+  suspend fun replaceByYear(studentId: String, schoolYearId: String, entities: List<AgendaItemEntity>) {
+    deleteByYear(studentId, schoolYearId)
+    if (entities.isNotEmpty()) upsertAll(entities)
+  }
 }
 
 @Dao
@@ -430,6 +442,12 @@ interface AbsenceDao {
 
   @Query("DELETE FROM absences WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
   suspend fun deleteByYear(studentId: String, schoolYearId: String)
+
+  @Transaction
+  suspend fun replaceByYear(studentId: String, schoolYearId: String, entities: List<AbsenceEntity>) {
+    deleteByYear(studentId, schoolYearId)
+    if (entities.isNotEmpty()) upsertAll(entities)
+  }
 }
 
 @Dao
@@ -442,6 +460,12 @@ interface CommunicationDao {
 
   @Query("DELETE FROM communications WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
   suspend fun deleteByYear(studentId: String, schoolYearId: String)
+
+  @Transaction
+  suspend fun replaceByYear(studentId: String, schoolYearId: String, entities: List<CommunicationEntity>) {
+    deleteByYear(studentId, schoolYearId)
+    if (entities.isNotEmpty()) upsertAll(entities)
+  }
 
   @Query("UPDATE communications SET read = 1 WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
   suspend fun markAllRead(studentId: String, schoolYearId: String)

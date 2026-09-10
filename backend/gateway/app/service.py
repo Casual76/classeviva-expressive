@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 from bs4 import BeautifulSoup, Tag
@@ -45,6 +45,22 @@ from .models import (
 
 REST_BASE_URL = "https://web.spaggiari.eu/rest/"
 PORTAL_LOGIN_URL = "https://web.spaggiari.eu/home/app/default/login.php"
+PORTAL_ALLOWED_HOST_SUFFIX = "spaggiari.eu"
+
+
+def require_portal_url(url: str) -> str:
+    """L'URL deve stare sul portale, e su https.
+
+    Gli URL delle azioni (giustifica, rispondi, aderisci, allega, prenota) arrivano nel corpo
+    della richiesta, e qui vengono chiamati con la sessione del portale gia' autenticata: senza
+    questo controllo chiunque abbia un account poteva far bussare il gateway a un indirizzo
+    qualsiasi, rete interna compresa, e riavere indietro la risposta.
+    """
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if parts.scheme != "https" or not (host == PORTAL_ALLOWED_HOST_SUFFIX or host.endswith("." + PORTAL_ALLOWED_HOST_SUFFIX)):
+        raise HTTPException(status_code=400, detail="URL non appartenente al portale Classeviva.")
+    return url
 USER_AGENT = "CVVS/std/4.1.7 Android/10"
 DEV_API_KEY = "Tg1NWEwNGIgIC0K"
 
@@ -57,9 +73,21 @@ class RestContext:
 
 @dataclass(slots=True)
 class PortalSession:
+    """Una sessione aperta sul portale, da usare con ``async with``.
+
+    Il client tiene un pool di connessioni TLS: senza chiuderlo, ogni azione sul portale ne
+    lasciava indietro uno e il processo finiva per esaurire i descrittori di file.
+    """
+
     client: httpx.AsyncClient
     landing_html: str
     landing_url: str
+
+    async def __aenter__(self) -> "PortalSession":
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        await self.client.aclose()
 
 
 class ClassevivaGatewayService:
@@ -143,21 +171,21 @@ class ClassevivaGatewayService:
         if not submit_url:
             raise HTTPException(status_code=501, detail="Il tenant non espone ancora un flusso compiti inviabile dal gateway.")
 
-        session = await self._login_portal(credentials)
-        await self._submit_portal_action(
-            session=session,
-            page_url=submit_url,
-            direct_url=submit_url,
-            keywords=["consegna", "restituisci", "invia", "carica", "upload"],
-            text_value=payload.text,
-            attachment=payload.attachments[0] if payload.attachments else None,
-        )
-        return HomeworkSubmissionReceiptModel(
-            homeworkId=payload.homeworkId,
-            state="SUCCESS",
-            submittedAt=datetime.now(UTC).isoformat(),
-            message="Compito inviato tramite gateway.",
-        )
+        async with await self._login_portal(credentials) as session:
+            await self._submit_portal_action(
+                session=session,
+                page_url=submit_url,
+                direct_url=submit_url,
+                keywords=["consegna", "restituisci", "invia", "carica", "upload"],
+                text_value=payload.text,
+                attachment=payload.attachments[0] if payload.attachments else None,
+            )
+            return HomeworkSubmissionReceiptModel(
+                homeworkId=payload.homeworkId,
+                state="SUCCESS",
+                submittedAt=datetime.now(UTC).isoformat(),
+                message="Compito inviato tramite gateway.",
+            )
 
     async def justify_absence(
         self,
@@ -169,78 +197,78 @@ class ClassevivaGatewayService:
         if not target_url:
             raise HTTPException(status_code=501, detail="Il tenant non espone un URL utilizzabile per la giustificazione.")
 
-        session = await self._login_portal(credentials)
-        await self._submit_portal_action(
-            session=session,
-            page_url=target_url,
-            direct_url=payload.justifyUrl,
-            keywords=["giustifica", "giustificazione", "justify", "conferma"],
-            text_value=payload.reasonText,
-            attachment=payload.attachment,
-        )
-        return await self.get_absences(credentials, school_year)
+        async with await self._login_portal(credentials) as session:
+            await self._submit_portal_action(
+                session=session,
+                page_url=target_url,
+                direct_url=payload.justifyUrl,
+                keywords=["giustifica", "giustificazione", "justify", "conferma"],
+                text_value=payload.reasonText,
+                attachment=payload.attachment,
+            )
+            return await self.get_absences(credentials, school_year)
 
     async def reply_noticeboard(
         self,
         credentials: GatewayCredentials,
         payload: NoticeboardActionPayload,
     ) -> CommunicationDetailModel:
-        session = await self._login_portal(credentials)
-        detail = payload.detail
-        await self._submit_portal_action(
-            session=session,
-            page_url=detail.replyUrl or detail.portalDetailUrl,
-            direct_url=detail.replyUrl,
-            keywords=["rispondi", "risposta", "reply", "invia"],
-            text_value=payload.text,
-            attachment=None,
-        )
-        detail.replyText = payload.text
-        return detail
+        async with await self._login_portal(credentials) as session:
+            detail = payload.detail
+            await self._submit_portal_action(
+                session=session,
+                page_url=detail.replyUrl or detail.portalDetailUrl,
+                direct_url=detail.replyUrl,
+                keywords=["rispondi", "risposta", "reply", "invia"],
+                text_value=payload.text,
+                attachment=None,
+            )
+            detail.replyText = payload.text
+            return detail
 
     async def join_noticeboard(
         self,
         credentials: GatewayCredentials,
         payload: NoticeboardActionPayload,
     ) -> CommunicationDetailModel:
-        session = await self._login_portal(credentials)
-        detail = payload.detail
-        await self._submit_portal_action(
-            session=session,
-            page_url=detail.joinUrl or detail.portalDetailUrl,
-            direct_url=detail.joinUrl,
-            keywords=["adesione", "aderisci", "join", "partecipa"],
-            text_value=None,
-            attachment=None,
-        )
-        return detail
+        async with await self._login_portal(credentials) as session:
+            detail = payload.detail
+            await self._submit_portal_action(
+                session=session,
+                page_url=detail.joinUrl or detail.portalDetailUrl,
+                direct_url=detail.joinUrl,
+                keywords=["adesione", "aderisci", "join", "partecipa"],
+                text_value=None,
+                attachment=None,
+            )
+            return detail
 
     async def upload_noticeboard(
         self,
         credentials: GatewayCredentials,
         payload: NoticeboardActionPayload,
     ) -> CommunicationDetailModel:
-        session = await self._login_portal(credentials)
-        detail = payload.detail
-        await self._submit_portal_action(
-            session=session,
-            page_url=detail.fileUploadUrl or detail.portalDetailUrl,
-            direct_url=detail.fileUploadUrl,
-            keywords=["carica", "upload", "allega", "file"],
-            text_value=None,
-            attachment=payload.attachment,
-        )
-        return detail
+        async with await self._login_portal(credentials) as session:
+            detail = payload.detail
+            await self._submit_portal_action(
+                session=session,
+                page_url=detail.fileUploadUrl or detail.portalDetailUrl,
+                direct_url=detail.fileUploadUrl,
+                keywords=["carica", "upload", "allega", "file"],
+                text_value=None,
+                attachment=payload.attachment,
+            )
+            return detail
 
     async def get_meetings(self, credentials: GatewayCredentials) -> MeetingSnapshotModel:
-        session = await self._login_portal(credentials)
-        page = await self._discover_portal_page(session, ["colloqui", "ricevimento", "prenot"])
-        if page is None:
-            raise HTTPException(status_code=501, detail="Modulo colloqui non rilevato per il tenant corrente.")
-        snapshot = parse_meetings_snapshot(page[0], page[1])
-        if not snapshot.slots and not snapshot.bookings:
-            raise HTTPException(status_code=501, detail="Modulo colloqui rilevato ma non ancora parsabile in modo affidabile.")
-        return snapshot
+        async with await self._login_portal(credentials) as session:
+            page = await self._discover_portal_page(session, ["colloqui", "ricevimento", "prenot"])
+            if page is None:
+                raise HTTPException(status_code=501, detail="Modulo colloqui non rilevato per il tenant corrente.")
+            snapshot = parse_meetings_snapshot(page[0], page[1])
+            if not snapshot.slots and not snapshot.bookings:
+                raise HTTPException(status_code=501, detail="Modulo colloqui rilevato ma non ancora parsabile in modo affidabile.")
+            return snapshot
 
     async def book_meeting(self, credentials: GatewayCredentials, slot_id: str) -> MeetingBookingModel:
         slot_token = decode_action_token(slot_id)
@@ -248,65 +276,65 @@ class ClassevivaGatewayService:
         if not submit_url:
             raise HTTPException(status_code=501, detail="Slot colloquio non prenotabile dal gateway.")
 
-        session = await self._login_portal(credentials)
-        await self._submit_portal_action(
-            session=session,
-            page_url=submit_url,
-            direct_url=submit_url,
-            keywords=["prenota", "book", "conferma"],
-            text_value=None,
-            attachment=None,
-        )
-        teacher = MeetingTeacherModel(
-            id=slot_token.get("teacherId", "teacher"),
-            name=slot_token.get("teacherName", "Docente"),
-            subject=slot_token.get("subject"),
-        )
-        slot = MeetingSlotModel(
-            id=slot_id,
-            teacherId=teacher.id,
-            date=slot_token.get("date", date.today().isoformat()),
-            startTime=slot_token.get("startTime", "00:00"),
-            endTime=slot_token.get("endTime"),
-            location=slot_token.get("location"),
-            available=False,
-            joinUrl=slot_token.get("joinUrl"),
-        )
-        return MeetingBookingModel(
-            id=encode_action_token(
-                {
-                    "type": "meeting-booking",
-                    "cancelUrl": slot_token.get("cancelUrl"),
-                    "joinUrl": slot_token.get("joinUrl"),
-                    "teacherId": teacher.id,
-                    "teacherName": teacher.name,
-                    "subject": teacher.subject,
-                    "date": slot.date,
-                    "startTime": slot.startTime,
-                    "endTime": slot.endTime,
-                    "location": slot.location,
-                }
-            ),
-            teacher=teacher,
-            slot=slot,
-            status="BOOKED",
-        )
+        async with await self._login_portal(credentials) as session:
+            await self._submit_portal_action(
+                session=session,
+                page_url=submit_url,
+                direct_url=submit_url,
+                keywords=["prenota", "book", "conferma"],
+                text_value=None,
+                attachment=None,
+            )
+            teacher = MeetingTeacherModel(
+                id=slot_token.get("teacherId", "teacher"),
+                name=slot_token.get("teacherName", "Docente"),
+                subject=slot_token.get("subject"),
+            )
+            slot = MeetingSlotModel(
+                id=slot_id,
+                teacherId=teacher.id,
+                date=slot_token.get("date", date.today().isoformat()),
+                startTime=slot_token.get("startTime", "00:00"),
+                endTime=slot_token.get("endTime"),
+                location=slot_token.get("location"),
+                available=False,
+                joinUrl=slot_token.get("joinUrl"),
+            )
+            return MeetingBookingModel(
+                id=encode_action_token(
+                    {
+                        "type": "meeting-booking",
+                        "cancelUrl": slot_token.get("cancelUrl"),
+                        "joinUrl": slot_token.get("joinUrl"),
+                        "teacherId": teacher.id,
+                        "teacherName": teacher.name,
+                        "subject": teacher.subject,
+                        "date": slot.date,
+                        "startTime": slot.startTime,
+                        "endTime": slot.endTime,
+                        "location": slot.location,
+                    }
+                ),
+                teacher=teacher,
+                slot=slot,
+                status="BOOKED",
+            )
 
     async def cancel_meeting(self, credentials: GatewayCredentials, booking_id: str) -> list[MeetingBookingModel]:
         token = decode_action_token(booking_id)
         cancel_url = token.get("cancelUrl")
         if not cancel_url:
             raise HTTPException(status_code=501, detail="Prenotazione non annullabile dal gateway.")
-        session = await self._login_portal(credentials)
-        await self._submit_portal_action(
-            session=session,
-            page_url=cancel_url,
-            direct_url=cancel_url,
-            keywords=["annulla", "cancel", "rimuovi"],
-            text_value=None,
-            attachment=None,
-        )
-        return []
+        async with await self._login_portal(credentials) as session:
+            await self._submit_portal_action(
+                session=session,
+                page_url=cancel_url,
+                direct_url=cancel_url,
+                keywords=["annulla", "cancel", "rimuovi"],
+                text_value=None,
+                attachment=None,
+            )
+            return []
 
     async def join_meeting(self, booking_id: str) -> MeetingJoinLinkModel:
         token = decode_action_token(booking_id)
@@ -491,45 +519,48 @@ class ClassevivaGatewayService:
             follow_redirects=True,
             timeout=20.0,
         )
-        login_page = await client.get(PORTAL_LOGIN_URL)
-        login_page.raise_for_status()
-        soup = BeautifulSoup(login_page.text, "html.parser")
-        form = soup.find("form")
-        if form is None:
+        try:
+            login_page = await client.get(PORTAL_LOGIN_URL)
+            login_page.raise_for_status()
+            soup = BeautifulSoup(login_page.text, "html.parser")
+            form = soup.find("form")
+            if form is None:
+                raise HTTPException(status_code=501, detail="Form di login portale non trovato.")
+            payload = {}
+            for hidden in form.select("input[type=hidden]"):
+                name = hidden.get("name")
+                if name:
+                    payload[name] = hidden.get("value", "")
+            payload[find_login_field(form, ["login", "user", "uid"]) or "login"] = credentials.username
+            payload[find_login_field(form, ["password", "pass"]) or "password"] = credentials.password
+            action = urljoin(str(login_page.url), form.get("action") or "")
+            response = await client.post(action or PORTAL_LOGIN_URL, data=payload)
+            response.raise_for_status()
+        except BaseException:
             await client.aclose()
-            raise HTTPException(status_code=501, detail="Form di login portale non trovato.")
-        payload = {}
-        for hidden in form.select("input[type=hidden]"):
-            name = hidden.get("name")
-            if name:
-                payload[name] = hidden.get("value", "")
-        payload[find_login_field(form, ["login", "user", "uid"]) or "login"] = credentials.username
-        payload[find_login_field(form, ["password", "pass"]) or "password"] = credentials.password
-        action = urljoin(str(login_page.url), form.get("action") or "")
-        response = await client.post(action or PORTAL_LOGIN_URL, data=payload)
-        response.raise_for_status()
+            raise
         return PortalSession(client=client, landing_html=response.text, landing_url=str(response.url))
 
     async def _discover_homework_action(self, credentials: GatewayCredentials, homework: HomeworkModel) -> str | None:
-        session = await self._login_portal(credentials)
-        page = await self._discover_portal_page(session, ["compiti", "homework", "agenda", "lavori"])
-        if page is None:
+        async with await self._login_portal(credentials) as session:
+            page = await self._discover_portal_page(session, ["compiti", "homework", "agenda", "lavori"])
+            if page is None:
+                return None
+            html, base_url = page
+            soup = BeautifulSoup(html, "html.parser")
+            for node in soup.find_all(["a", "button", "form", "tr", "div", "li"]):
+                text = normalize_text(node.get_text(" ", strip=True)).lower()
+                if homework.description and homework.description.lower()[:40] in text:
+                    url = extract_click_target(node, base_url)
+                    if url:
+                        return url
+            for node in soup.find_all(["a", "button"]):
+                text = normalize_text(node.get_text(" ", strip=True)).lower()
+                if any(keyword in text for keyword in ["consegna", "restituisci", "upload", "carica"]):
+                    url = extract_click_target(node, base_url)
+                    if url:
+                        return url
             return None
-        html, base_url = page
-        soup = BeautifulSoup(html, "html.parser")
-        for node in soup.find_all(["a", "button", "form", "tr", "div", "li"]):
-            text = normalize_text(node.get_text(" ", strip=True)).lower()
-            if homework.description and homework.description.lower()[:40] in text:
-                url = extract_click_target(node, base_url)
-                if url:
-                    return url
-        for node in soup.find_all(["a", "button"]):
-            text = normalize_text(node.get_text(" ", strip=True)).lower()
-            if any(keyword in text for keyword in ["consegna", "restituisci", "upload", "carica"]):
-                url = extract_click_target(node, base_url)
-                if url:
-                    return url
-        return None
 
     async def _discover_portal_page(self, session: PortalSession, keywords: list[str]) -> tuple[str, str] | None:
         landing = BeautifulSoup(session.landing_html, "html.parser")
@@ -557,6 +588,8 @@ class ClassevivaGatewayService:
     ) -> None:
         if not page_url and not direct_url:
             raise HTTPException(status_code=501, detail="Azione portale non individuata.")
+        page_url = require_portal_url(page_url) if page_url else None
+        direct_url = require_portal_url(direct_url) if direct_url else None
         for candidate in [url for url in [page_url, direct_url] if url]:
             response = await session.client.get(candidate)
             response.raise_for_status()

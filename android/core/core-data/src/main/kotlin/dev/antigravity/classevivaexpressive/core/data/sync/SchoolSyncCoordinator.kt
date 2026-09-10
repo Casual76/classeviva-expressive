@@ -170,8 +170,11 @@ class SchoolSyncCoordinator @Inject constructor(
     sessionStore.writeSessionSilently(provisional)
     attachSession(provisional)
 
-    val profile = restClient.getProfile()
-    val session = provisional.copy(profile = profile)
+    // La carta dello studente e' un di piu': su alcune scuole risponde 403 e su una rete lenta va
+    // in timeout. Lasciar salire quell'errore faceva fallire un login riuscito, e chi chiama
+    // cancella le credenziali quando il login fallisce: su quelle scuole non si entrava mai.
+    val profile = runCatching { restClient.getProfile() }.getOrNull()
+    val session = if (profile != null) provisional.copy(profile = profile) else provisional
     sessionStore.writeSessionSilently(session)
     attachSession(session)
     refreshAll(force = true)
@@ -878,9 +881,13 @@ class SchoolSyncCoordinator @Inject constructor(
     if (selectedSections.contains(SchoolbooksSection)) {
       if (isCurrentYear) {
         syncYearScoped(operation, SchoolbooksSection, selectedYear, errors) { restClient.getSchoolbooks() }
+      } else if (isPastYear) {
+        // Come per i voti: l'endpoint non conosce l'anno e risponde sempre per quello in corso.
+        // Scrivere una lista vuota nella riga dell'anno passato cancellava per sempre i libri
+        // salvati quando quell'anno era il corrente, e non c'e' modo di riscaricarli.
+        unavailableForYear += SchoolbooksSection
       } else {
         clearYearScoped(operation, SchoolbooksSection, selectedYear, emptyList<SchoolbookCourse>())
-        if (isPastYear) unavailableForYear += SchoolbooksSection
       }
     }
 
@@ -905,11 +912,15 @@ class SchoolSyncCoordinator @Inject constructor(
 
     val completedAt = System.currentTimeMillis()
     if (runCatching { ensureSessionUnchanged(operation) }.isFailure) {
-      return SyncStatus(
+      val aborted = SyncStatus(
         state = SyncState.ERROR,
         message = "Sessione cambiata durante l'aggiornamento; risultati scartati.",
         failedSections = selectedSections.toList(),
       )
+      // Chi guarda le schermate legge questo flusso, non il valore di ritorno: uscendo di qui
+      // senza scriverci dentro, "Sincronizzazione in corso" restava appeso fino al giro dopo.
+      if (publishForegroundStatus) syncStatus.value = aborted
+      return aborted
     }
     recordSyncResults(operation, selectedYear, selectedSections, errors, completedAt)
     val hasSuccessfulSection = selectedSections.any { section -> section !in errors }
@@ -1133,8 +1144,10 @@ class SchoolSyncCoordinator @Inject constructor(
         changeHistoryDao.upsertAll(historyEntries)
       }
       ensureSessionUnchanged(operation)
-      gradeDao.deleteByYear(session.studentId, schoolYear.id)
-      gradeDao.upsertAll(entities)
+      // Cancellare e reinserire in due transazioni distinte fa due cose brutte: se il secondo
+      // passo salta, l'anno resta senza voti, e chi osserva la tabella vede una lista vuota per
+      // un istante a ogni sincronizzazione.
+      gradeDao.replaceByYear(session.studentId, schoolYear.id, entities)
       storeYearScopedValue(
         operation,
         GradesSection,
@@ -1217,8 +1230,7 @@ class SchoolSyncCoordinator @Inject constructor(
         changeHistoryDao.upsertAll(historyEntries)
       }
       ensureSessionUnchanged(operation)
-      agendaDao.deleteByYear(session.studentId, schoolYear.id)
-      agendaDao.upsertAll(entities)
+      agendaDao.replaceByYear(session.studentId, schoolYear.id, entities)
       storeYearScopedValue(
         operation,
         AgendaSection,
@@ -1264,8 +1276,7 @@ class SchoolSyncCoordinator @Inject constructor(
         )
       }
       ensureSessionUnchanged(operation)
-      absenceDao.deleteByYear(session.studentId, schoolYear.id)
-      absenceDao.upsertAll(entities)
+      absenceDao.replaceByYear(session.studentId, schoolYear.id, entities)
       storeYearScopedValue(operation, AbsencesSection, schoolYear, absences)
     }.onFailure { cause ->
       errors.record(AbsencesSection, cause)
@@ -1306,8 +1317,7 @@ class SchoolSyncCoordinator @Inject constructor(
         )
       }
       ensureSessionUnchanged(operation)
-      communicationDao.deleteByYear(session.studentId, schoolYear.id)
-      communicationDao.upsertAll(entities)
+      communicationDao.replaceByYear(session.studentId, schoolYear.id, entities)
       storeYearScopedValue(operation, CommunicationsSection, schoolYear, communications)
     }.onFailure { cause ->
       errors.record(CommunicationsSection, cause)

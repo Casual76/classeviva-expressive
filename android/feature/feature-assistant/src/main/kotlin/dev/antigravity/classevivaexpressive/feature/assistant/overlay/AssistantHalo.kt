@@ -7,6 +7,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -90,7 +91,11 @@ fun AssistantHalo(
   if (presence <= 0.001f) return
   // I colori dell'app, non colori inventati: l'accento e i suoi due poli, che sono quelli che il
   // tema gia' usa per le sette sezioni. L'errore e' l'unico che prende il rosso del tema.
-  val targetColours = remember(accent, secondary, tertiary, mood) { haloColours(accent, secondary, tertiary, mood) }
+  val error = MaterialTheme.colorScheme.error
+  val errorContainer = MaterialTheme.colorScheme.errorContainer
+  val targetColours = remember(accent, secondary, tertiary, error, errorContainer, mood) {
+    haloColours(accent, secondary, tertiary, error, errorContainer, mood)
+  }
   val colours = targetColours.mapIndexed { index, colour ->
     animateColorAsState(targetValue = colour, animationSpec = FluidMotion.smooth(), label = "haloColour$index").value
   }
@@ -99,8 +104,8 @@ fun AssistantHalo(
   }
 }
 
-private fun haloColours(accent: Color, secondary: Color, tertiary: Color, mood: HaloMood): List<Color> = when (mood) {
-  HaloMood.ERROR -> listOf(Color(0xFFFF5A5F), Color(0xFFFF9A3D), Color(0xFFFF5A5F), Color(0xFFFFC46B))
+private fun haloColours(accent: Color, secondary: Color, tertiary: Color, error: Color, errorContainer: Color, mood: HaloMood): List<Color> = when (mood) {
+  HaloMood.ERROR -> listOf(error, errorContainer, error.copy(alpha = 0.9f), errorContainer.copy(alpha = 0.8f))
   HaloMood.DONE -> listOf(accent, secondary.copy(alpha = 0.9f), accent.copy(alpha = 0.9f), tertiary.copy(alpha = 0.8f))
   else -> listOf(accent, secondary, tertiary, accent.copy(alpha = 0.85f))
 }
