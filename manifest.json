@@ -1,7 +1,7 @@
 {
   "app": {
     "id": "classeviva-expressive",
-    "name": "ClasseViva Expressive",
+    "name": "Classeviva Expressive",
     "description": "Client Android nativo per Classeviva con interfaccia disegnata su misura, dashboard scolastica e widget home-screen.",
     "packageName": "dev.antigravity.classevivaexpressive",
     "iconUrl": "",
@@ -15,22 +15,30 @@
       "ref": "main"
     },
     "stable": {
-      "version": "7.10.0",
+      "version": "7.11.0",
       "releaseDate": "2026-09-19",
-      "changelog": "Puoi correggere il tipo di un evento direttamente dal menu a pressione prolungata, scegliendo tra verifica, compito ed evento. La scelta resta salvata anche dopo sincronizzazioni e riavvii. Fluid Engine 1.31.0 verificato.",
-      "releaseTag": "stable-classeviva-expressive-v7.10.0",
-      "apkAsset": "classeviva-expressive-7.10.0.apk",
-      "sizeBytes": 33213191
+      "changelog": "La pillola in basso e gli interruttori sono di vetro vero.\n\nLa barra di navigazione era una capsula di colore piatto con sopra un indicatore\ndi vetro: il pannello se lo costruiva l'app che chiamava la barra, e l'unica che\nlo faceva era quella da cui la barra viene. Adesso la barra si fa il vetro da\nsola, quindi qui arriva quella buona - con la rifrazione sotto l'indicatore, la\nfila di schede che l'indicatore si ricampiona attraverso, e lo stiramento che\nsegue il dito quando lo si trascina.\n\nGli interruttori si trascinano. Il pollice segue il dito lungo la pista, e tenuto\npremuto smette di essere bianco e diventa vetro sopra una copia schiacciata della\npista, con la frangia cromatica sul bordo.\n\nE ogni pannello di vetro ha di nuovo il suo bordo in modalita' chiara. Un bordo\nsi disegna aggiungendo luce, ed e' questo che lo fa leggere come un riflesso\npreso da uno spigolo; su una pagina chiara non c'e' piu' luce da aggiungere,\nquindi ogni superficie finiva dove finiva il suo velo.\n\nFluid Engine 2.0.1. Il salto di maggiore e' grande perche' fino a ieri l'engine\nesisteva in due copie con gli stessi numeri di versione: una da cui pescava\nquesta app e una dove cresceva il vetro nuovo. Da questa versione e' una sola,\nquindi d'ora in poi un aggiornamento dell'engine porta davvero quello che dice.\n\nNessuna modifica ai sorgenti dell'app: tutto arriva dall'engine.",
+      "releaseTag": "stable-classeviva-expressive-v7.11.0",
+      "apkAsset": "classeviva-expressive-7.11.0.apk",
+      "sizeBytes": 33311503
     },
     "beta": {
-      "version": "7.10.0",
+      "version": "7.11.0",
       "releaseDate": "2026-09-19",
-      "changelog": "Puoi correggere il tipo di un evento direttamente dal menu a pressione prolungata, scegliendo tra verifica, compito ed evento. La scelta resta salvata anche dopo sincronizzazioni e riavvii. Fluid Engine 1.31.0 verificato.",
-      "releaseTag": "stable-classeviva-expressive-v7.10.0",
-      "apkAsset": "classeviva-expressive-7.10.0.apk",
-      "sizeBytes": 33213191
+      "changelog": "La pillola in basso e gli interruttori sono di vetro vero.\n\nLa barra di navigazione era una capsula di colore piatto con sopra un indicatore\ndi vetro: il pannello se lo costruiva l'app che chiamava la barra, e l'unica che\nlo faceva era quella da cui la barra viene. Adesso la barra si fa il vetro da\nsola, quindi qui arriva quella buona - con la rifrazione sotto l'indicatore, la\nfila di schede che l'indicatore si ricampiona attraverso, e lo stiramento che\nsegue il dito quando lo si trascina.\n\nGli interruttori si trascinano. Il pollice segue il dito lungo la pista, e tenuto\npremuto smette di essere bianco e diventa vetro sopra una copia schiacciata della\npista, con la frangia cromatica sul bordo.\n\nE ogni pannello di vetro ha di nuovo il suo bordo in modalita' chiara. Un bordo\nsi disegna aggiungendo luce, ed e' questo che lo fa leggere come un riflesso\npreso da uno spigolo; su una pagina chiara non c'e' piu' luce da aggiungere,\nquindi ogni superficie finiva dove finiva il suo velo.\n\nFluid Engine 2.0.1. Il salto di maggiore e' grande perche' fino a ieri l'engine\nesisteva in due copie con gli stessi numeri di versione: una da cui pescava\nquesta app e una dove cresceva il vetro nuovo. Da questa versione e' una sola,\nquindi d'ora in poi un aggiornamento dell'engine porta davvero quello che dice.\n\nNessuna modifica ai sorgenti dell'app: tutto arriva dall'engine.",
+      "releaseTag": "stable-classeviva-expressive-v7.11.0",
+      "apkAsset": "classeviva-expressive-7.11.0.apk",
+      "sizeBytes": 33311503
     },
     "history": [
+      {
+        "version": "7.10.0",
+        "releaseDate": "2026-09-19",
+        "changelog": "Puoi correggere il tipo di un evento direttamente dal menu a pressione prolungata, scegliendo tra verifica, compito ed evento. La scelta resta salvata anche dopo sincronizzazioni e riavvii. Fluid Engine 1.31.0 verificato.",
+        "releaseTag": "stable-classeviva-expressive-v7.10.0",
+        "apkAsset": "classeviva-expressive-7.10.0.apk",
+        "sizeBytes": 33213191
+      },
       {
         "version": "7.9.1",
         "releaseDate": "2026-09-10",
