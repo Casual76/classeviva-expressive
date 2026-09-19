@@ -32,6 +32,8 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.readNotifica
 import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNotification
 import dev.antigravity.classevivaexpressive.core.data.notifications.sendTestNotificationForChannel
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaDao
+import dev.antigravity.classevivaexpressive.core.database.database.AgendaCategoryOverrideDao
+import dev.antigravity.classevivaexpressive.core.database.database.AgendaCategoryOverrideEntity
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaItemEntity
 import dev.antigravity.classevivaexpressive.core.database.database.GradeDao
 import dev.antigravity.classevivaexpressive.core.database.database.GradeEntity
@@ -317,6 +319,11 @@ private val CommunicationsRefreshSections = setOf(CommunicationsSection, NotesSe
 private val MaterialsRefreshSections = setOf(MaterialsSection)
 private val DocumentsRefreshSections = setOf(DocumentsSection, SchoolbooksSection)
 private val StudentScoreRefreshSections = StatsRefreshSections
+private val UserSelectableAgendaCategories = setOf(
+  AgendaCategory.HOMEWORK,
+  AgendaCategory.ASSESSMENT,
+  AgendaCategory.EVENT,
+)
 
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -332,6 +339,7 @@ class SchoolDataRepository @Inject constructor(
   private val changeHistoryDao: ChangeHistoryDao,
   private val gradeDao: GradeDao,
   private val agendaDao: AgendaDao,
+  private val agendaCategoryOverrideDao: AgendaCategoryOverrideDao,
   private val absenceDao: AbsenceDao,
   private val communicationDao: CommunicationDao,
   private val attachmentCacheDao: AttachmentCacheDao,
@@ -600,7 +608,8 @@ class SchoolDataRepository @Inject constructor(
       customEventDao.observeAll().map { entities ->
         entities.map { json.decodeFromString<CustomEvent>(it.payload) }
       },
-    ) { agenda, homeworks, schoolYear, customEvents ->
+      observeAgendaCategoryOverrides(),
+    ) { agenda, homeworks, schoolYear, customEvents, categoryOverrides ->
       val homeworkAgendaKeys = homeworks.map { homework ->
         agendaHomeworkKey(homework.dueDate, homework.subject, homework.description)
       }.toSet()
@@ -608,7 +617,7 @@ class SchoolDataRepository @Inject constructor(
         item.category == AgendaCategory.HOMEWORK &&
           agendaHomeworkKey(item.date, item.subject ?: item.subtitle, item.title) in homeworkAgendaKeys
       }
-      (agendaWithoutHomeworkDuplicates + homeworks.map { homework ->
+      val merged = agendaWithoutHomeworkDuplicates + homeworks.map { homework ->
         AgendaItem(
           id = "homework-${homework.id}",
           title = homework.description,
@@ -637,8 +646,19 @@ class SchoolDataRepository @Inject constructor(
           sharePayload = "${event.title} - ${event.date} ${event.time.orEmpty()}",
           createdAt = event.createdAt,
         )
-      }).sortedBy { "${it.date}-${it.time.orEmpty()}" }
+      }
+      applyAgendaCategoryOverrides(merged, categoryOverrides)
+        .sortedBy { "${it.date}-${it.time.orEmpty()}" }
     }.flowOn(Dispatchers.Default)
+  }
+
+  private fun observeAgendaCategoryOverrides(): Flow<List<AgendaCategoryOverrideEntity>> {
+    return combine(sessionStore.session, schoolYearStore.observeSelectedSchoolYear()) { session, schoolYear ->
+      session to schoolYear
+    }.flatMapLatest { (session, schoolYear) ->
+      val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList())
+      agendaCategoryOverrideDao.observeByYear(studentId, schoolYear.id)
+    }
   }
 
   private fun agendaHomeworkKey(date: String, subject: String?, text: String): String {
@@ -705,6 +725,21 @@ class SchoolDataRepository @Inject constructor(
 
   override suspend fun removeCustomEvent(id: String) {
     customEventDao.deleteById(id)
+  }
+
+  override suspend fun setCategoryOverride(itemId: String, category: AgendaCategory) {
+    require(category in UserSelectableAgendaCategories) { "Unsupported agenda category override: $category" }
+    val session = sessionStore.readCurrentSession() ?: return
+    val schoolYear = schoolYearStore.selectedSchoolYear()
+    agendaCategoryOverrideDao.upsert(
+      AgendaCategoryOverrideEntity(
+        studentId = session.studentId,
+        schoolYearId = schoolYear.id,
+        agendaItemId = itemId,
+        category = category.name,
+        updatedAtEpochMillis = System.currentTimeMillis(),
+      ),
+    )
   }
 
   override suspend fun refreshAgenda(force: Boolean): Result<List<AgendaItem>> = runCatching {
@@ -1594,6 +1629,21 @@ internal fun AgendaItemEntity.toAgendaItem(
   createdAt = createdAt ?: fallbackCreatedAt,
   history = history,
 )
+
+internal fun applyAgendaCategoryOverrides(
+  items: List<AgendaItem>,
+  overrides: List<AgendaCategoryOverrideEntity>,
+): List<AgendaItem> {
+  val categoriesByItemId = overrides.mapNotNull { override ->
+    runCatching { AgendaCategory.valueOf(override.category) }
+      .getOrNull()
+      ?.takeIf { it in UserSelectableAgendaCategories }
+      ?.let { override.agendaItemId to it }
+  }.toMap()
+  return items.map { item ->
+    categoriesByItemId[item.id]?.let { item.copy(category = it) } ?: item
+  }
+}
 
 internal fun AgendaItemEntity.toAgendaItemVersion(recordedAtEpochMillis: Long): AgendaItemVersion = AgendaItemVersion(
   recordedAtEpochMillis = recordedAtEpochMillis,

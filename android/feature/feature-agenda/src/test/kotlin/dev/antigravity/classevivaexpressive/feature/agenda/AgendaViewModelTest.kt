@@ -118,6 +118,17 @@ class AgendaViewModelTest {
     }
   }
 
+  @Test
+  fun setCategory_persistsSelectedOverride() = runTest {
+    every { agendaRepository.observeAgenda() } returns flowOf(emptyList())
+    every { agendaRepository.observeCustomEvents() } returns flowOf(emptyList())
+
+    val vm = buildViewModel()
+    vm.setCategory("agenda-42", AgendaCategory.HOMEWORK)
+
+    coVerify { agendaRepository.setCategoryOverride("agenda-42", AgendaCategory.HOMEWORK) }
+  }
+
   // ─── Refresh ──────────────────────────────────────────────────────────────
 
   @Test

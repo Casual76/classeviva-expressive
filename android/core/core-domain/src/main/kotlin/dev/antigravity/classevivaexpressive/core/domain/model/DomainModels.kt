@@ -908,6 +908,7 @@ interface AgendaRepository {
   fun observeCustomEvents(): Flow<List<CustomEvent>>
   suspend fun addCustomEvent(event: CustomEvent)
   suspend fun removeCustomEvent(id: String)
+  suspend fun setCategoryOverride(itemId: String, category: AgendaCategory)
   suspend fun refreshAgenda(force: Boolean = false): Result<List<AgendaItem>>
 }
 

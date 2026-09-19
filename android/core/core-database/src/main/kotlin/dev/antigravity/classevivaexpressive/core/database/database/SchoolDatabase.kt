@@ -144,6 +144,18 @@ data class AgendaItemEntity(
   val firstSeenAtMs: Long? = null,
 )
 
+@Entity(
+  tableName = "agenda_category_overrides",
+  primaryKeys = ["studentId", "schoolYearId", "agendaItemId"],
+)
+data class AgendaCategoryOverrideEntity(
+  val studentId: String,
+  val schoolYearId: String,
+  val agendaItemId: String,
+  val category: String,
+  val updatedAtEpochMillis: Long,
+)
+
 @Serializable
 @Entity(tableName = "absences")
 data class AbsenceEntity(
@@ -433,6 +445,15 @@ interface AgendaDao {
 }
 
 @Dao
+interface AgendaCategoryOverrideDao {
+  @Query("SELECT * FROM agenda_category_overrides WHERE studentId = :studentId AND schoolYearId = :schoolYearId")
+  fun observeByYear(studentId: String, schoolYearId: String): Flow<List<AgendaCategoryOverrideEntity>>
+
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsert(entity: AgendaCategoryOverrideEntity)
+}
+
+@Dao
 interface AbsenceDao {
   @Query("SELECT * FROM absences WHERE studentId = :studentId AND schoolYearId = :schoolYearId ORDER BY date DESC")
   fun observeByYear(studentId: String, schoolYearId: String): Flow<List<AbsenceEntity>>
@@ -564,6 +585,7 @@ interface AttachmentCacheDao {
     ChangeHistoryEntity::class,
     GradeEntity::class,
     AgendaItemEntity::class,
+    AgendaCategoryOverrideEntity::class,
     AbsenceEntity::class,
     CommunicationEntity::class,
     MaterialEntity::class,
@@ -574,7 +596,7 @@ interface AttachmentCacheDao {
     AssistantMessageEntity::class,
     AssistantRunEntity::class,
   ],
-  version = 12,
+  version = 13,
   exportSchema = true,
   // 11 -> 12 aggiunge solo le tre tabelle dell'assistente: Room la deriva dallo schema esportato.
   autoMigrations = [AutoMigration(from = 11, to = 12)],
@@ -590,6 +612,7 @@ abstract class SchoolDatabase : RoomDatabase() {
   abstract fun changeHistoryDao(): ChangeHistoryDao
   abstract fun gradeDao(): GradeDao
   abstract fun agendaDao(): AgendaDao
+  abstract fun agendaCategoryOverrideDao(): AgendaCategoryOverrideDao
   abstract fun absenceDao(): AbsenceDao
   abstract fun communicationDao(): CommunicationDao
   abstract fun materialDao(): MaterialDao
@@ -751,6 +774,23 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
   }
 }
 
+val MIGRATION_12_13 = object : Migration(12, 13) {
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL(
+      """
+      CREATE TABLE IF NOT EXISTS `agenda_category_overrides` (
+        `studentId` TEXT NOT NULL,
+        `schoolYearId` TEXT NOT NULL,
+        `agendaItemId` TEXT NOT NULL,
+        `category` TEXT NOT NULL,
+        `updatedAtEpochMillis` INTEGER NOT NULL,
+        PRIMARY KEY(`studentId`, `schoolYearId`, `agendaItemId`)
+      )
+      """.trimIndent(),
+    )
+  }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -759,7 +799,7 @@ object DatabaseModule {
   fun provideDatabase(@ApplicationContext context: Context): SchoolDatabase {
     return Room
       .databaseBuilder(context, SchoolDatabase::class.java, "classeviva_expressive_native.db")
-      .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+      .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_12_13)
       .build()
   }
 
@@ -792,6 +832,10 @@ object DatabaseModule {
 
   @Provides
   fun provideAgendaDao(database: SchoolDatabase): AgendaDao = database.agendaDao()
+
+  @Provides
+  fun provideAgendaCategoryOverrideDao(database: SchoolDatabase): AgendaCategoryOverrideDao =
+    database.agendaCategoryOverrideDao()
 
   @Provides
   fun provideAbsenceDao(database: SchoolDatabase): AbsenceDao = database.absenceDao()

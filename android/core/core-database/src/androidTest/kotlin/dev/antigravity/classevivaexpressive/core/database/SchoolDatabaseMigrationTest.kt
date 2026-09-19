@@ -11,6 +11,7 @@ import dev.antigravity.classevivaexpressive.core.database.database.MIGRATION_6_7
 import dev.antigravity.classevivaexpressive.core.database.database.MIGRATION_7_8
 import dev.antigravity.classevivaexpressive.core.database.database.MIGRATION_8_9
 import dev.antigravity.classevivaexpressive.core.database.database.MIGRATION_9_10
+import dev.antigravity.classevivaexpressive.core.database.database.MIGRATION_12_13
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -196,6 +197,19 @@ class SchoolDatabaseMigrationTest {
     assertEquals(1, tableCount(migrated, "documents"))
     assertEquals(0, tableCount(migrated, "snapshot_cache"))
     assertEquals(listOf("studentId", "schoolYearId", "id"), primaryKeyColumns(migrated, "documents"))
+  }
+
+  @Test
+  fun migration12To13_createsScopedAgendaCategoryOverrides() {
+    val db = openDatabase(version = 12)
+
+    MIGRATION_12_13.migrate(db)
+
+    assertTrue(tableExists(db, "agenda_category_overrides"))
+    assertEquals(
+      listOf("studentId", "schoolYearId", "agendaItemId"),
+      primaryKeyColumns(db, "agenda_category_overrides"),
+    )
   }
 
   private fun openDatabase(version: Int): SupportSQLiteDatabase {

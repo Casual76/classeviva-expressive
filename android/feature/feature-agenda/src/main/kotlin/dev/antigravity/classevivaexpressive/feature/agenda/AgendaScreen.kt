@@ -278,6 +278,12 @@ class AgendaViewModel @Inject constructor(
     }
   }
 
+  fun setCategory(itemId: String, category: AgendaCategory) {
+    viewModelScope.launch {
+      agendaRepository.setCategoryOverride(itemId, category)
+    }
+  }
+
   private fun requestRefresh(force: Boolean, showIndicator: Boolean) {
     viewModelScope.launch {
       if (showIndicator) {
@@ -302,6 +308,7 @@ fun AgendaRoute(
   val context = LocalContext.current
   var showDialog by rememberSaveable { mutableStateOf(false) }
   var selectedEntry by remember { mutableStateOf<AgendaEntry?>(null) }
+  var categoryEntry by remember { mutableStateOf<AgendaEntry?>(null) }
   var detailOrigin by remember { mutableStateOf<Rect?>(null) }
   val initialDateValue = remember(initialDate) {
     initialDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
@@ -489,6 +496,11 @@ fun AgendaRoute(
                 },
               ),
               FluidContextAction(
+                label = "Cambia tipo…",
+                icon = Icons.Rounded.EditCalendar,
+                onClick = { categoryEntry = entry },
+              ),
+              FluidContextAction(
                 label = "Condividi",
                 icon = Icons.Rounded.Share,
                 onClick = { shareEntry(context, entry) },
@@ -514,6 +526,45 @@ fun AgendaRoute(
         showDialog = false
       },
     )
+  }
+
+  FluidGlassModalPortal(
+    item = categoryEntry,
+    onDismissRequest = { categoryEntry = null },
+    paneTitle = "Cambia tipo evento",
+  ) { entry ->
+    Column(
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      UserSelectableAgendaCategories.forEach { category ->
+        val selected = entry.category == category
+        FluidListRow(
+          title = categoryLabel(category),
+          subtitle = if (selected) "Tipo attuale" else "Usa questo tipo per l'evento",
+          tone = categoryTone(category),
+          leading = {
+            Icon(
+              imageVector = categoryIcon(category),
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.primary,
+            )
+          },
+          badge = if (selected) {
+            { FluidStatusBadge("ATTUALE", tone = categoryTone(category)) }
+          } else {
+            null
+          },
+          onClick = if (selected) null else {
+            {
+              viewModel.setCategory(entry.id, category)
+              categoryEntry = null
+            }
+          },
+          animatePress = !selected,
+        )
+      }
+    }
   }
 
   FluidGlassModalPortal(
@@ -1098,6 +1149,12 @@ private data class AgendaEntry(
   val history: List<AgendaItemVersion>,
 )
 
+private val UserSelectableAgendaCategories = listOf(
+  AgendaCategory.ASSESSMENT,
+  AgendaCategory.HOMEWORK,
+  AgendaCategory.EVENT,
+)
+
 private fun AgendaUiState.toAgendaEntries(): List<AgendaEntry> = buildList {
   addAll(items.map {
     AgendaEntry(
@@ -1113,22 +1170,6 @@ private fun AgendaUiState.toAgendaEntries(): List<AgendaEntry> = buildList {
       sharePayload = it.sharePayload,
       createdAt = it.createdAt,
       history = it.history,
-    )
-  })
-  addAll(customEvents.map {
-    AgendaEntry(
-      id = it.id,
-      title = it.title,
-      subtitle = it.subject,
-      detail = it.description,
-      subject = it.subject,
-      teacher = null,
-      date = it.date.toLocalDateOrNull(),
-      time = it.time,
-      category = AgendaCategory.CUSTOM,
-      sharePayload = listOfNotNull(it.title, it.subject, it.description).joinToString("\n"),
-      createdAt = it.createdAt,
-      history = emptyList(),
     )
   })
 }.filter { it.date != null }
