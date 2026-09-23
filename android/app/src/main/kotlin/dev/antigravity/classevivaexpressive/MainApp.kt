@@ -935,7 +935,7 @@ internal fun BugReportScreen(
         ) {
           Icon(Icons.Rounded.WarningAmber, contentDescription = null)
           Text(
-            "La segnalazione sarà una segnalazione (issue) pubblica su GitHub e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
+            "La segnalazione sarà pubblica su GitHub e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
             style = MaterialTheme.typography.bodyMedium,
           )
         }
