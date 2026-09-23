@@ -595,9 +595,9 @@ fun CommunicationsRoute(
           FluidNotification(
             id = "communications:${feedback.kind}:${feedback.text.hashCode()}",
             title = when (feedback.kind) {
-              CommunicationsMessageKind.Error -> "Problema nelle comunicazioni"
-              CommunicationsMessageKind.Success -> "Comunicazioni aggiornate"
-              CommunicationsMessageKind.Info -> "Comunicazioni"
+              CommunicationsMessageKind.Error -> "Problema con la bacheca"
+              CommunicationsMessageKind.Success -> "Bacheca aggiornata"
+              CommunicationsMessageKind.Info -> "Bacheca"
             },
             message = feedback.text,
             tone = feedback.kind.toFluidNotificationTone(),
@@ -714,7 +714,7 @@ fun CommunicationsRoute(
   Box(modifier = Modifier.fillMaxSize()) {
     FluidScreen(
     modifier = Modifier.fillMaxWidth(),
-    title = "Comunicazioni",
+    title = "Bacheca",
     ambient = FeatureIdentity.Communications.ambient(),
     subtitle = state.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,

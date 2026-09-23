@@ -425,7 +425,7 @@ fun ProfessorsRoute(
   var professorOrigin by remember { mutableStateOf<Rect?>(null) }
 
   FluidScreen(
-    title = "Professori",
+    title = "Docenti",
     ambient = FeatureIdentity.People.ambient(),
     subtitle = "Presenza, rigore e valutazioni per i tuoi docenti — solo i docenti ufficiali della classe.",
     onBack = onBack,
@@ -522,10 +522,10 @@ fun ProfessorDetailRoute(
   val professor = state.professors.firstOrNull { it.teacherName == teacherName }
 
   if (professor == null) {
-    FluidScreen(title = "Dettaglio professore", modifier = modifier, onBack = onBack) {
+    FluidScreen(title = "Dettaglio docente", modifier = modifier, onBack = onBack) {
       item(key = "professor-detail-missing") {
         FluidEmptyState(
-          title = "Professore non disponibile",
+          title = "Docente non disponibile",
           detail = "Il profilo potrebbe non essere ancora stato ricostruito dai dati sincronizzati.",
         )
       }
@@ -546,7 +546,7 @@ fun ProfessorDetailRoute(
   }
 
   FluidContainerScaffold(
-    title = "Dettaglio professore",
+    title = "Dettaglio docente",
     modifier = modifier,
     onBack = onBack,
     hero = {
