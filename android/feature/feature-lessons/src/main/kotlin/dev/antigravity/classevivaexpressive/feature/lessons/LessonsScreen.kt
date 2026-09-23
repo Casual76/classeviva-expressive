@@ -70,11 +70,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.accentVividColors
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberMinuteTicker
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MinuteSpan
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectBlock
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectMark
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.subjectPalette
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridCell
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridDay
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridEvent
@@ -847,8 +848,9 @@ private fun TimetableBlockRow(
         else -> "Ricorrenza ${(primary.confidence * 100).toInt()}% · ${countLabel(primary.sampleCount, "settimana", "settimane")}"
       },
     ).joinToString(" / "),
-    tone = kind.tone(),
-    leading = { Icon(Icons.Rounded.School, contentDescription = null) },
+    // La piastrella porta il colore della materia, sul segno; lo stato dello slot lo dice il badge.
+    tone = FluidTone.Neutral,
+    leading = { SubjectMark(primary.subject) },
     onClick = onConfirm,
     // Era un onLongClick che apriva la modifica senza dirlo. Il menu dice entrambe le cose che
     // questa riga sa fare, e il tap resta la piu' frequente.
@@ -866,9 +868,9 @@ private fun TimetableBlockRow(
         ),
       )
     },
-    // Badge e tono escono dalla stessa espressione: prima erano due `when` paralleli con soglie
-    // diverse (0.8 e 0.6 per il colore, 0.75 per l'etichetta), e a confidenza 0.78 la riga si
-    // contraddiceva da sola dicendo "STABILE" in verde su un tono blu.
+    // Etichetta e colore del badge escono dalla stessa espressione: prima erano due `when` paralleli
+    // con soglie diverse (0.8 e 0.6 per il colore, 0.75 per l'etichetta), e a confidenza 0.78 la
+    // riga si contraddiceva da sola dicendo "STABILE" in verde su un tono blu.
     badge = { FluidStatusBadge(kind.badgeLabel(block), tone = kind.tone()) },
     animatePress = true,
     modifier = modifier,
@@ -1230,9 +1232,8 @@ internal data class SlotBlock(
 /**
  * La lezione in corso adesso, se ce n'e' una.
  *
- * Il colore e' quello dell'accento: non e' un allarme, e' il "sei qui" della sezione — la stessa
- * ricetta della fascia piu' alta dei voti, perche' e' il colore con cui l'app dice "questo e' il
- * fatto che conta adesso".
+ * Il colore e' quello della materia: la card sta da sola in cima alla pagina, e il colore che dice
+ * "sei qui" e' lo stesso del blocco che nella settimana dice "storia".
  *
  * [now] e' una lambda e non un valore: il `derivedStateOf` la legge dentro il blocco derivato, e
  * cosi' la card si ricompone solo quando cambia il *risultato*, non a ogni battito del minuto.
@@ -1248,7 +1249,7 @@ private fun LiveLessonCard(
   val live by remember(blocks) { derivedStateOf { liveSlot(blocks, now()) } }
   val current = live ?: return
 
-  FluidVividCard(colors = accentVividColors(), modifier = modifier) {
+  FluidVividCard(colors = subjectPalette().vivid(current.block.primary.subject), modifier = modifier) {
     Text(
       text = "ADESSO",
       style = FluidTextStyles.uppercaseCaption,
