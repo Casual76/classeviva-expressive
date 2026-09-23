@@ -246,7 +246,12 @@ class SchoolSyncCoordinator @Inject constructor(
       sections = setOf(AbsencesSection),
     )
     if (status.state == SyncState.PARTIAL) {
-      throw ClassevivaNetworkException("Impossibile aggiornare le assenze. Verificare la connessione.")
+      // Il motivo vero, quando il livello di rete l'ha scritto: "verificare la connessione" detto a
+      // chi e' connesso e vede aggiornarsi tutto il resto non aiuta nessuno a capire cosa non va.
+      throw ClassevivaNetworkException(
+        status.message?.takeIf(String::isNotBlank)
+          ?: "Impossibile aggiornare le assenze. Verificare la connessione.",
+      )
     }
     val effectiveYear = schoolYearStore.observeSelectedSchoolYear().first()
     readYearScopedValue(operation, AbsencesSection, effectiveYear, emptyList<AbsenceRecord>())
