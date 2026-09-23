@@ -207,7 +207,18 @@ class CommunicationsViewModel @Inject constructor(
     communicationsRepository.observeNotes(),
     selectedCommunication,
   ) { communications, notes, communication ->
-    Triple(communications, notes, communication)
+    // Il dettaglio e' una copia presa quando si apre, e aprirlo la segna letta: l'elenco lo
+    // sapeva subito ("LETTA", zero da leggere), il dettaglio no, e continuava a offrire "Segna
+    // come letta" accanto a una circolare gia' letta. Lo stato di lettura si prende dall'elenco.
+    val reconciled = communication?.let { detail ->
+      val listed = communications.firstOrNull { it.id == detail.communication.id }
+      if (listed != null && listed.read && !detail.communication.read) {
+        detail.copy(communication = detail.communication.copy(read = true))
+      } else {
+        detail
+      }
+    }
+    Triple(communications, notes, reconciled)
   }
 
   val state = combine(
