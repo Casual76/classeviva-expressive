@@ -864,7 +864,9 @@ private fun AgendaEntryRow(
   FluidListRow(
     title = entry.title,
     subtitle = entry.subject ?: entry.subtitle,
-    eyebrow = entry.time ?: categoryLabel(entry.category),
+    // L'ora, quando c'e'. Il genere lo dice gia' il badge a destra: senza ora l'occhiello ripeteva
+    // «Compito» due volte sulla stessa riga.
+    eyebrow = entry.time?.takeIf(String::isNotBlank),
     meta = buildList {
       entry.createdAtLabel()?.let { add("Aggiunto: $it") }
       entry.modifiedAtLabel()?.let { add("Modificato: $it") }
