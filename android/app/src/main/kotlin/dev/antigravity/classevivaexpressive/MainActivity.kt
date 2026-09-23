@@ -10,12 +10,13 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
   private val incomingIntents = MutableSharedFlow<android.content.Intent>(replay = 1, extraBufferCapacity = 1)
+  private val refreshRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
-      MainApp(incomingIntents = incomingIntents)
+      MainApp(incomingIntents = incomingIntents, refreshRequests = refreshRequests)
     }
     incomingIntents.tryEmit(intent)
   }
@@ -34,6 +35,21 @@ class MainActivity : ComponentActivity() {
       return true
     }
     return super.onKeyUp(keyCode, event)
+  }
+
+  /**
+   * Ctrl+R (e F5) aggiornano la pagina che si sta guardando, il gesto di tirarla giu' per chi ha la
+   * tastiera attaccata. Sul tasto premuto e non su quello rilasciato, come nei browser: la risposta
+   * arriva quando il dito scende. Tenuto premuto non si ripete.
+   */
+  override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
+    val refresh = keyCode == android.view.KeyEvent.KEYCODE_F5 ||
+      (keyCode == android.view.KeyEvent.KEYCODE_R && event.isCtrlPressed)
+    if (refresh) {
+      if (event.repeatCount == 0) refreshRequests.tryEmit(Unit)
+      return true
+    }
+    return super.onKeyDown(keyCode, event)
   }
 
   override fun onNewIntent(intent: android.content.Intent) {

@@ -412,6 +412,8 @@ private fun routeExitTransition(
 fun MainApp(
   viewModel: MainViewModel = hiltViewModel(),
   incomingIntents: Flow<Intent> = emptyFlow(),
+  /** Ctrl+R da una tastiera fisica: aggiorna la pagina davanti, come tirarla giu'. */
+  refreshRequests: Flow<Unit> = emptyFlow(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val notificationHostState = rememberFluidNotificationHostState()
@@ -460,6 +462,9 @@ fun MainApp(
 
   ClassevivaExpressiveTheme(settings = uiState.settings) {
     val chromeController = rememberFluidChromeController()
+    LaunchedEffect(chromeController, refreshRequests) {
+      refreshRequests.collect { chromeController.refreshFront() }
+    }
     CompositionLocalProvider(
       LocalFluidNotificationHostState provides notificationHostState,
       LocalFluidGlassModalHostState provides glassModalHostState,
