@@ -111,6 +111,8 @@ import kotlinx.coroutines.withContext
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
+import dev.antigravity.fluidengine.ui.fluid.FluidAlert
 import dev.antigravity.fluidengine.ui.fluid.FluidColorDot
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
@@ -383,6 +385,27 @@ fun SettingsRoute(
   // riga accesa resta quella da cui si e' arrivati.
   val highlightedSection = if (paneSection == SettingsSection.Diagnostics) SettingsSection.Notifications else paneSection
   val context = LocalContext.current
+  // Disconnettersi toglie la sessione e le credenziali salvate: per rientrare servono di nuovo
+  // codice e password. Un tocco solo, su un tasto grande, era troppo poco.
+  var confirmLogout by rememberSaveable { mutableStateOf(false) }
+  if (confirmLogout) {
+    FluidAlert(
+      onDismissRequest = { confirmLogout = false },
+      title = "Disconnettere questo dispositivo?",
+      message = "I dati scaricati su questo dispositivo vengono cancellati, e per rientrare serviranno di nuovo codice utente e password.",
+      actions = listOf(
+        FluidAlertAction("Annulla", { confirmLogout = false }),
+        FluidAlertAction(
+          "Disconnetti",
+          {
+            confirmLogout = false
+            viewModel.logout()
+          },
+          FluidAlertAction.Emphasis.Destructive,
+        ),
+      ),
+    )
+  }
   val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
     viewModel.refresh()
   }
@@ -563,8 +586,9 @@ fun SettingsRoute(
         item {
           FluidButton(
             text = "Disconnetti questo dispositivo",
-            onClick = viewModel::logout,
-            style = FluidButtonStyle.Filled,
+            onClick = { confirmLogout = true },
+            // Rosso e non pieno: uscire non e' l'azione per cui si apre questa pagina.
+            style = FluidButtonStyle.Destructive,
             fillWidth = true,
           )
         }
