@@ -1,5 +1,7 @@
 package dev.antigravity.classevivaexpressive
 
+import dev.antigravity.fluidengine.ui.fluid.FluidAmbientSurface
+import dev.antigravity.fluidengine.ui.fluid.fluidReadingWidth
 import dev.antigravity.fluidengine.ui.fluid.FluidColumnSection
 import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
 import dev.antigravity.fluidengine.ui.fluid.fluidColumns
@@ -638,20 +640,24 @@ internal fun LoginScreen(
   }
 
   val systemBars = WindowInsets.systemBars.asPaddingValues()
+  // La prima pagina che si vede ha lo stesso fondale di quella che viene dopo, invece del grigio
+  // piatto; e su uno schermo largo il modulo e' una colonna in mezzo, non due campi lunghi quanto
+  // la finestra.
+  FluidAmbientSurface(ambient = FeatureIdentity.Overview.ambient()) {
   LazyColumn(
-    modifier = Modifier.fillMaxSize(),
+    modifier = Modifier.fillMaxSize().fluidReadingWidth(max = LoginMaxWidth),
     contentPadding = PaddingValues(
       start = 24.dp,
       end = 24.dp,
       top = systemBars.calculateTopPadding() + 28.dp,
       bottom = systemBars.calculateBottomPadding() + 28.dp,
     ),
-    verticalArrangement = Arrangement.spacedBy(20.dp),
+    verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
   ) {
     item {
       FluidHeroCard(
         title = "Classeviva Expressive",
-        subtitle = "Material 3 ufficiale per registro, agenda, voti e bacheca, tutta in Kotlin e Compose.",
+        subtitle = "Accedi con le credenziali del registro Classeviva.",
         trailing = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
       )
     }
@@ -718,14 +724,12 @@ internal fun LoginScreen(
         )
       }
     }
-    item {
-      FluidEmptyState(
-        title = "Autofill Compose",
-        detail = "I campi credenziali espongono i content type ufficiali di Compose per username, email e password.",
-      )
-    }
+  }
   }
 }
+
+/** Quanto e' largo il modulo di accesso su uno schermo largo: quello di un telefono comodo. */
+private val LoginMaxWidth = 480.dp
 
 /**
  * The app shell: screen content edge to edge, with a floating tab bar over it.
