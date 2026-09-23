@@ -1182,7 +1182,7 @@ private fun CommunicationDetailContent(
           title = attachment.name,
           // Una riga sola: dentro un pop-up ogni riga di spiegazione spinge il contenuto vero
           // fuori dallo schermo, e "come funziona la cache" non e' una cosa da leggere ogni volta.
-          subtitle = if (hasUrl) "Tocca per aprire" else "Non disponibile in API",
+          subtitle = if (hasUrl) "Tocca per aprire" else "Non scaricabile dall'app",
           tone = if (hasUrl) FluidTone.Info else FluidTone.Neutral,
           leading = {
             Icon(Icons.Rounded.AttachFile, contentDescription = null)

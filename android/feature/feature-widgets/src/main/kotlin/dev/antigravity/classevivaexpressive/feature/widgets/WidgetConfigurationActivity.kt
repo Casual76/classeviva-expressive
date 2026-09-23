@@ -140,14 +140,14 @@ private fun WidgetConfigurationScreen(
           label = "Compiti",
           options = listOf(1, 3, 7),
           selected = preferences.homeworkDays,
-          valueLabel = { "$it giorni" },
+          valueLabel = { if (it == 1) "1 giorno" else "$it giorni" },
           onSelected = { onPreferencesChange(preferences.copy(homeworkDays = it)) },
         )
         SegmentedSetting(
           label = "Verifiche",
           options = listOf(7, 14, 30),
           selected = preferences.assessmentDays,
-          valueLabel = { "$it giorni" },
+          valueLabel = { if (it == 1) "1 giorno" else "$it giorni" },
           onSelected = { onPreferencesChange(preferences.copy(assessmentDays = it)) },
         )
       }

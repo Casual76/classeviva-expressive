@@ -51,7 +51,7 @@ fun AssistantConsentRoute(
     item {
       ConsentCard(
         "Le tue domande (scritte, o trascritte dalla voce) e i dati del registro che servono per rispondere: i voti e le medie, i compiti e l'agenda, l'orario, il testo delle comunicazioni e degli allegati che chiedi di leggere, le assenze. " +
-          "Nome, classe e scuola vengono inclusi, cosi' le risposte suonano tue.",
+          "Nome, classe e scuola vengono inclusi, così le risposte suonano tue.",
       )
     }
     item { FluidSectionHeader(title = "Verso chi") }

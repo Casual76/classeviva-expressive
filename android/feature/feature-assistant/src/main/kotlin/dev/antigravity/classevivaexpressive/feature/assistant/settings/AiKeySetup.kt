@@ -68,7 +68,7 @@ object ProviderGuides {
   fun steps(provider: ProviderId): List<String> = when (provider) {
     ProviderId.GROQ -> listOf(
       "Apri console.groq.com e accedi (o crea un account gratuito).",
-      "Nel menu' scegli API Keys e premi Create API Key.",
+      "Nel menu scegli API Keys e premi Create API Key.",
       "Dai un nome alla chiave e copiala: comincia con gsk_.",
       "Incollala qui sotto e premi Verifica.",
     )

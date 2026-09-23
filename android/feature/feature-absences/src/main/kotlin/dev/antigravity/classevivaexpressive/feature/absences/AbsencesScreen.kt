@@ -296,7 +296,7 @@ fun AbsencesRoute(
               if (history.isEmpty()) {
                 FluidEmptyState(
                   title = "Nessuna registrazione disponibile",
-                  detail = "Quando le API ufficiali sincronizzano presenze e uscite, qui trovi una cronologia leggibile.",
+                  detail = "Quando il registro pubblica assenze, ritardi e uscite, li trovi qui in ordine.",
                 )
               } else {
                 FluidGlassGroup(history.take(20)) { absence ->
@@ -332,7 +332,7 @@ fun AbsencesRoute(
         item {
           FluidEmptyState(
             title = "Nessuna registrazione disponibile",
-            detail = "Quando le API ufficiali sincronizzano presenze e uscite, qui trovi una cronologia leggibile.",
+            detail = "Quando il registro pubblica assenze, ritardi e uscite, li trovi qui in ordine.",
           )
         }
       } else {
@@ -463,7 +463,7 @@ private fun AbsenceRow(
       when {
         absence.justified -> "Stato già confermato."
         absence.canJustify -> "Tocca per inviare la giustificazione."
-        else -> "Nessun endpoint ufficiale disponibile per la giustificazione."
+        else -> "La scuola non permette di giustificare dall'app."
       }
     },
     tone = absenceTone(absence),

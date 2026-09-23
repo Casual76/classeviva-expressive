@@ -1017,8 +1017,8 @@ internal fun calculateRequiredGradeMessage(
   val required = if (currentWeight == 0.0) targetAverage else (targetAverage * (currentWeight + 1.0)) - weightedSum
 
   return when {
-    required > 10.0 -> "Lontano dal target"
-    required <= 0.0 -> "Target sicuro"
+    required > 10.0 -> "Lontano dall'obiettivo"
+    required <= 0.0 -> "Obiettivo al sicuro"
     currentAverage != null && currentAverage >= targetAverage -> "Soglia sicura: ${required.coerceAtLeast(1.0).format1()}"
     else -> "Serve almeno ${required.coerceAtLeast(1.0).format1()}"
   }
@@ -1045,7 +1045,7 @@ private fun buildSubjectRows(
       meta = listOfNotNull(
         numeric.takeLast(2).mapNotNull { it.numericValue?.format1() }.joinToString(" / ").ifBlank { null },
         goalMessage,
-      ).joinToString(" / ").ifBlank { "Nessun trend" },
+      ).joinToString(" / ").ifBlank { "Nessun andamento" },
       target = goal?.targetAverage,
     )
   }.sortedBy { it.subject }

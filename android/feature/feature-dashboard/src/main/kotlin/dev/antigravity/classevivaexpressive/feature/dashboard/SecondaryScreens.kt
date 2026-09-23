@@ -428,7 +428,7 @@ fun MeetingsRoute(
         icon = Icons.Rounded.Groups,
         trailing = {
           if (state.bookings.isNotEmpty()) {
-            VividBadge("${state.bookings.size} PRENOTATI")
+            VividBadge(if (state.bookings.size == 1) "1 PRENOTATO" else "${state.bookings.size} PRENOTATI")
           }
         },
       )
@@ -452,7 +452,7 @@ fun MeetingsRoute(
           title = booking.teacher.name,
           subtitle = booking.slot.meetingSlotLabel(),
           eyebrow = booking.teacher.subject ?: "Colloquio",
-          meta = booking.bookingPosition?.let { "Posizione: $it" } ?: booking.status,
+          meta = booking.bookingPosition?.let { "Posizione: $it" },
           tone = FluidTone.Success,
           onClick = { meetingOrigin = rowBounds; viewModel.selectBooking(booking) },
           badge = { FluidStatusBadge("PRENOTATO", tone = FluidTone.Success) },
@@ -542,7 +542,7 @@ fun MeetingsRoute(
     item = state.selectedSlot,
     onDismissRequest = viewModel::dismissSelection,
     origin = { meetingOrigin },
-    paneTitle = "Disponibilita colloquio",
+    paneTitle = "Disponibilità colloquio",
   ) { slot ->
     val teacher = teachersById[slot.teacherId]
     Column(
@@ -573,12 +573,20 @@ fun MeetingsRoute(
 
 private fun MeetingSlot.meetingSlotLabel(): String {
   return listOfNotNull(
-    date.takeIf(String::isNotBlank),
+    // Il giorno detto per esteso: dal portale arriva in ISO, e "2026-10-05" in mezzo a una riga
+    // italiana era l'unica data grezza della pagina.
+    date.takeIf(String::isNotBlank)?.let { raw ->
+      runCatching {
+        java.time.LocalDate.parse(raw.take(10))
+          .format(java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM", java.util.Locale.ITALIAN))
+          .replaceFirstChar { it.uppercase() }
+      }.getOrDefault(raw)
+    },
     buildString {
       append(startTime)
       endTime?.takeIf(String::isNotBlank)?.let { append(" - $it") }
     }.takeIf(String::isNotBlank),
-  ).joinToString(" / ")
+  ).joinToString(" · ")
 }
 
 private fun Context.openUrl(url: String) {
@@ -1812,14 +1820,14 @@ class StudentScoreViewModel @Inject constructor(
   fun importPayload(payload: String) = viewModelScope.launch {
     studentScoreRepository.importPayload(payload)
       .onSuccess { comparison -> extras.update { it.copy(importResult = comparison) } }
-      .onFailure { e -> extras.update { it.copy(lastMessage = e.message ?: "Payload non valido") } }
+      .onFailure { e -> extras.update { it.copy(lastMessage = e.message ?: "Dati non validi") } }
   }
 
   fun exportPayload(onPayload: (String) -> Unit) = viewModelScope.launch {
     extras.update { it.copy(isExporting = true) }
     studentScoreRepository.exportCurrentPayload()
       .onSuccess { onPayload(it) }
-      .onFailure { e -> extras.update { it.copy(lastMessage = e.message ?: "Export non riuscito") } }
+      .onFailure { e -> extras.update { it.copy(lastMessage = e.message ?: "Esportazione non riuscita") } }
     extras.update { it.copy(isExporting = false) }
   }
 
@@ -1906,7 +1914,7 @@ fun StudentScoreRoute(
           leading = { Icon(Icons.Rounded.Share, contentDescription = null,) },
         )
         FluidButton(
-          text = "Importa da clipboard",
+          text = "Importa dagli appunti",
           onClick = {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             val text = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""

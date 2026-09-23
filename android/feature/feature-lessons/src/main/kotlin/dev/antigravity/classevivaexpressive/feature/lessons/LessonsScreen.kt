@@ -430,7 +430,7 @@ fun LessonsRoute(
       contentMaxWidth = FluidColumnsDefaults.WideContentMaxWidth,
       metrics = metrics,
       ambient = FeatureIdentity.Lessons.ambient(),
-      subtitle = "Template settimanale stabile e storico delle lezioni svolte in una sola vista.",
+      subtitle = "L'orario della settimana e le lezioni svolte, in un'unica vista.",
       onBack = onBack,
       actions = {
         // Un tasto solo, con dentro tutti i verbi: toccato aggiorna, tenuto premuto offre anche il
@@ -538,7 +538,7 @@ fun LessonsRoute(
           if (state.canImportOfficialTimetable) {
             item(key = "lessons:template:official-import", contentType = LessonsContentType.ImportAction) {
               FluidButton(
-                text = "Importa Orario Ufficiale 4F",
+                text = "Importa orario ufficiale 4F",
                 onClick = viewModel::importOfficialTimetable,
                 style = FluidButtonStyle.Filled,
                 fillWidth = true,
@@ -580,7 +580,7 @@ fun LessonsRoute(
           if (state.canImportOfficialTimetable) {
             item(key = "lessons:template:official-import", contentType = LessonsContentType.ImportAction) {
               FluidButton(
-                text = "Importa Orario Ufficiale 4F",
+                text = "Importa orario ufficiale 4F",
                 onClick = viewModel::importOfficialTimetable,
                 style = FluidButtonStyle.Filled,
                 fillWidth = true,

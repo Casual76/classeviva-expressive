@@ -137,8 +137,8 @@ private enum class SettingsSection(val title: String, val subtitle: String) {
   Notifications("Notifiche e sync", "Preferenze essenziali e stato"),
   Data("Dati e backup", "Esporta o ripristina i dati locali"),
   Assistant("Assistente IA", "Chiavi, modelli, voce e privacy"),
-  About("Informazioni e aggiornamenti", "Versione, update e funzionalità"),
-  Diagnostics("Diagnostica avanzata", "Canali Android, test e stato runtime"),
+  About("Informazioni e aggiornamenti", "Versione, aggiornamenti e funzionalità"),
+  Diagnostics("Diagnostica avanzata", "Canali di notifica, test e stato dell'app"),
 }
 
 data class SettingsUiState(
@@ -596,9 +596,9 @@ fun SettingsRoute(
         }
         item {
           SettingToggleRow(
-            title = "Dynamic Color nativo",
+            title = "Colori dinamici",
             subtitle = if (dynamicColorSupported) {
-              "Usa subito la palette del sistema; disattivandolo torna Classeviva."
+              "Usa subito i colori del sistema; disattivandolo tornano quelli di Classeviva."
             } else {
               "Richiede Android 12 o versioni successive."
             },
@@ -936,19 +936,19 @@ private fun RuntimeStateCard(
       verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
       FluidStatusBadge(
-        label = if (notificationsEnabled) "APP ON" else "APP OFF",
+        label = if (notificationsEnabled) "APP ATTIVA" else "APP SPENTA",
         tone = if (notificationsEnabled) FluidTone.Success else FluidTone.Warning,
       )
       FluidStatusBadge(
-        label = if (runtimeState.permissionGranted) "PERMESSO OK" else "PERMESSO KO",
+        label = if (runtimeState.permissionGranted) "PERMESSO CONCESSO" else "PERMESSO NEGATO",
         tone = if (runtimeState.permissionGranted) FluidTone.Success else FluidTone.Warning,
       )
       FluidStatusBadge(
-        label = if (runtimeState.appNotificationsEnabled) "OS ON" else "OS OFF",
+        label = if (runtimeState.appNotificationsEnabled) "SISTEMA ATTIVO" else "SISTEMA SPENTO",
         tone = if (runtimeState.appNotificationsEnabled) FluidTone.Success else FluidTone.Warning,
       )
       FluidStatusBadge(
-        label = if (periodicSyncEnabled) "SYNC ON" else "SYNC OFF",
+        label = if (periodicSyncEnabled) "SYNC ATTIVA" else "SYNC SPENTA",
         tone = if (periodicSyncEnabled) FluidTone.Success else FluidTone.Warning,
       )
     }
@@ -957,7 +957,7 @@ private fun RuntimeStateCard(
       style = MaterialTheme.typography.bodyMedium
     )
     Text(
-      "Impostazioni App (OS): ${if (runtimeState.appNotificationsEnabled) "Abilitate" else "Disabilitate"}",
+      "Notifiche di sistema: ${if (runtimeState.appNotificationsEnabled) "Abilitate" else "Disabilitate"}",
       style = MaterialTheme.typography.bodyMedium
     )
     Text(
@@ -1078,7 +1078,7 @@ private fun AccentPicker(
         color = dynamicColor,
         selected = resolvedAccentMode == AccentMode.DYNAMIC,
         onClick = onSelectDynamic,
-        label = "Dynamic Color",
+        label = "Colori di sistema",
       )
     }
     expressiveAccentPresets.forEach { preset ->

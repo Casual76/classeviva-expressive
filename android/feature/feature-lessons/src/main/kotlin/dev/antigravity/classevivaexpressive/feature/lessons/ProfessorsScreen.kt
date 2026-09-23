@@ -706,7 +706,7 @@ private fun ProfessorDetailContent(
           FluidMetricTile(
             label = "Voti/lezione",
             value = "%.2f".format(prof.evaluationDensity),
-            detail = "Densita valutativa.",
+            detail = "Densità valutativa.",
             modifier = Modifier.weight(1f),
             tone = FluidTone.Info,
             glass = true,
