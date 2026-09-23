@@ -1459,7 +1459,7 @@ fun DocumentsRoute(
         icon = Icons.AutoMirrored.Rounded.MenuBook,
         trailing = {
           if (state.schoolbookCourses.isNotEmpty()) {
-            VividBadge("${state.schoolbookCourses.size} CORSI")
+            VividBadge(if (state.schoolbookCourses.size == 1) "1 CORSO" else "${state.schoolbookCourses.size} CORSI")
           }
         },
       )

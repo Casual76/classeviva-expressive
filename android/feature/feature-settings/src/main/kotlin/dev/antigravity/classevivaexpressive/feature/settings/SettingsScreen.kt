@@ -1,5 +1,7 @@
 package dev.antigravity.classevivaexpressive.feature.settings
 
+import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -709,7 +711,8 @@ fun SettingsRoute(
         }
         if (state.capabilities.isNotEmpty()) {
           item { FluidSectionHeader(title = "Funzionalità disponibili") }
-          items(state.capabilities, key = { it.feature.name }) { capability -> CapabilityRow(capability) }
+          // Un gruppo, come ogni altro elenco dell'app: erano righe sciolte appoggiate sul fondale.
+          fluidGlassGroups(state.capabilities, key = "settings:capabilities") { capability -> CapabilityRow(capability) }
         }
         // Le opere di terze parti che il Fluid Engine porta dentro l'APK. L'Apache-2.0 del vetro e
         // la OFL di Inter chiedono che l'avviso viaggi con la distribuzione: un file di licenza in
@@ -1187,12 +1190,51 @@ private fun CapabilityRow(capability: FeatureCapability) {
     else -> FluidTone.Success
   }
   FluidListRow(
-    title = capability.feature.name.replace('_', ' '),
+    title = capability.feature.displayName(),
     subtitle = capability.detail ?: "Nessun dettaglio disponibile.",
-    eyebrow = capability.label.ifBlank { "Capability" },
+    eyebrow = capability.label.ifBlank { null },
     tone = tone,
-    badge = { FluidStatusBadge(capability.mode.name.replace('_', ' '), tone = tone) },
+    badge = { FluidStatusBadge(capability.mode.displayName(), tone = tone) },
   )
+}
+
+/**
+ * Il nome di una funzione del registro come lo dice una persona. Erano i nomi dell'enum —
+ * "LOGIN SESSION", "NOTICEBOARD UPLOAD" — cioe' il codice mostrato come testo.
+ */
+internal fun RegistroFeature.displayName(): String = when (this) {
+  RegistroFeature.LOGIN_SESSION -> "Accesso e sessione"
+  RegistroFeature.PROFILE -> "Profilo"
+  RegistroFeature.GRADES -> "Voti"
+  RegistroFeature.PERIODS -> "Periodi"
+  RegistroFeature.SUBJECTS -> "Materie"
+  RegistroFeature.AGENDA -> "Agenda"
+  RegistroFeature.HOMEWORKS -> "Compiti"
+  RegistroFeature.LESSONS -> "Lezioni"
+  RegistroFeature.ABSENCES -> "Assenze"
+  RegistroFeature.ABSENCE_JUSTIFICATIONS -> "Giustificazioni"
+  RegistroFeature.NOTICEBOARD -> "Bacheca"
+  RegistroFeature.NOTICEBOARD_REPLY -> "Risposte in bacheca"
+  RegistroFeature.NOTICEBOARD_JOIN -> "Adesioni in bacheca"
+  RegistroFeature.NOTICEBOARD_UPLOAD -> "Allegati in bacheca"
+  RegistroFeature.NOTES -> "Note disciplinari"
+  RegistroFeature.MATERIALS -> "Didattica"
+  RegistroFeature.DOCUMENTS -> "Documenti"
+  RegistroFeature.SCHOOLBOOKS -> "Libri"
+  RegistroFeature.MEETINGS -> "Colloqui"
+  RegistroFeature.NOTIFICATIONS -> "Notifiche"
+  RegistroFeature.PREVIOUS_SCHOOL_YEAR -> "Anni precedenti"
+  RegistroFeature.SPORTELLO -> "Sportello"
+  RegistroFeature.QUESTIONNAIRES -> "Questionari"
+}
+
+/** Da dove arriva: il registro ufficiale, il portale web, il gateway, o la scuola. */
+internal fun FeatureCapabilityMode.displayName(): String = when (this) {
+  FeatureCapabilityMode.DIRECT_REST -> "REGISTRO"
+  FeatureCapabilityMode.DIRECT_PORTAL -> "PORTALE"
+  FeatureCapabilityMode.GATEWAY -> "GATEWAY"
+  FeatureCapabilityMode.TENANT_OPTIONAL -> "DIPENDE DALLA SCUOLA"
+  FeatureCapabilityMode.UNSUPPORTED -> "NON DISPONIBILE"
 }
 
 /**

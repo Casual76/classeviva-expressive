@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.nearDayLabel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -573,7 +574,7 @@ fun ProfessorDetailRoute(
         FluidSectionHeader("Probabili assenze recenti")
         professor.absenceDays.takeLast(5).forEach { date ->
           FluidListRow(
-            title = date,
+            title = nearDayLabel(date).replaceFirstChar { it.uppercase() },
             subtitle = "Giorno tipico senza lezione registrata.",
             tone = FluidTone.Warning,
             badge = { FluidStatusBadge("ASSENTE", tone = FluidTone.Warning) },
@@ -679,7 +680,7 @@ private fun ProfessorDetailContent(
         item { FluidSectionHeader("Probabili assenze recenti") }
         fluidGlassGroups(prof.absenceDays.takeLast(5)) { date ->
           FluidListRow(
-            title = date,
+            title = nearDayLabel(date).replaceFirstChar { it.uppercase() },
             subtitle = "Giorno tipico senza lezione registrata.",
             tone = FluidTone.Warning,
             badge = { FluidStatusBadge("ASSENTE", tone = FluidTone.Warning) },
