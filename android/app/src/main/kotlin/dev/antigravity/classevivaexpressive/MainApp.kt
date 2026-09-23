@@ -916,6 +916,8 @@ internal fun BugReportScreen(
   FluidScreen(
     title = "Segnala un problema",
     subtitle = "Controlla cosa verrà condiviso prima di aprire GitHub.",
+    // Il fondale di "Altro", da cui si arriva: era l'unica pagina grigia dell'app insieme al login.
+    ambient = FeatureIdentity.Settings.ambient(),
     onBack = onBack,
     itemSpacing = 12.dp,
   ) {
