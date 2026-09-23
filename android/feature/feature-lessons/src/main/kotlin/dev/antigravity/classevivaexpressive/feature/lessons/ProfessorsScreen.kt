@@ -409,6 +409,12 @@ private fun DayOfWeek.shortLabel(): String = when (this) {
 fun ProfessorsRoute(
   onBack: (() -> Unit)? = null,
   onOpenProfessor: ((String) -> Unit)? = null,
+  /**
+   * L'elemento mostrato nel pannello accanto, su uno schermo largo: la sua riga si accende e le
+   * frecce spariscono, perche' toccare una riga li' sceglie cosa mostrare invece di aprire.
+   */
+  selectedId: String? = null,
+  inPane: Boolean = false,
   viewModel: ProfessorsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -483,6 +489,8 @@ fun ProfessorsRoute(
             professorOrigin = rowBounds
             if (onOpenProfessor != null) onOpenProfessor(prof.teacherName) else viewModel.selectProfessor(prof)
           },
+          selected = inPane && prof.teacherName == selectedId,
+          disclosure = !inPane,
           badge = { FluidStatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
           animatePress = true,
         )
@@ -504,7 +512,7 @@ fun ProfessorsRoute(
 @Composable
 fun ProfessorDetailRoute(
   teacherName: String,
-  onBack: () -> Unit,
+  onBack: (() -> Unit)?,
   modifier: Modifier = Modifier,
   viewModel: ProfessorsViewModel = hiltViewModel(),
 ) {

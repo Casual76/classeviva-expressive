@@ -609,6 +609,12 @@ private fun Context.openResource(
 fun MaterialsRoute(
   onBack: (() -> Unit)? = null,
   onOpenMaterial: ((String) -> Unit)? = null,
+  /**
+   * L'elemento mostrato nel pannello accanto, su uno schermo largo: la sua riga si accende e le
+   * frecce spariscono, perche' toccare una riga li' sceglie cosa mostrare invece di aprire.
+   */
+  selectedId: String? = null,
+  inPane: Boolean = false,
   viewModel: MaterialsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -692,6 +698,8 @@ fun MaterialsRoute(
               materialOrigin = rowBounds
               if (onOpenMaterial != null) onOpenMaterial(item.id) else selectedItem = item
             },
+            selected = inPane && item.id == selectedId,
+            disclosure = !inPane,
             badge = {
               FluidStatusBadge(item.materialBadgeLabel(), tone = item.materialTone())
             },
@@ -793,7 +801,7 @@ fun MaterialsRoute(
 @Composable
 fun MaterialDetailRoute(
   itemId: String,
-  onBack: () -> Unit,
+  onBack: (() -> Unit)?,
   modifier: Modifier = Modifier,
   viewModel: MaterialsViewModel = hiltViewModel(),
 ) {
@@ -982,6 +990,12 @@ fun HomeworkRoute(
   initialHomeworkId: String? = null,
   onBack: (() -> Unit)? = null,
   onOpenHomework: ((String) -> Unit)? = null,
+  /**
+   * L'elemento mostrato nel pannello accanto, su uno schermo largo: la sua riga si accende e le
+   * frecce spariscono, perche' toccare una riga li' sceglie cosa mostrare invece di aprire.
+   */
+  selectedId: String? = null,
+  inPane: Boolean = false,
   viewModel: HomeworkViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -1038,8 +1052,8 @@ fun HomeworkRoute(
         var rowBounds by remember { mutableStateOf<Rect?>(null) }
         FluidListRow(
           modifier = Modifier.fluidExpandOrigin { rowBounds = it },
-          title = item.subject,
-          subtitle = item.description,
+          title = item.subject.ifBlank { item.description },
+          subtitle = if (item.subject.isBlank()) "" else item.description,
           eyebrow = "COMPITO",
           meta = item.homeworkMeta(),
           tone = homeworkDue(item.dueDate, homeworkToday).tone(),
@@ -1047,6 +1061,8 @@ fun HomeworkRoute(
             homeworkOrigin = rowBounds
             if (onOpenHomework != null) onOpenHomework(item.id) else viewModel.selectHomework(item)
           },
+          selected = inPane && item.id == selectedId,
+          disclosure = !inPane,
           badge = {
             if (item.history.isNotEmpty()) {
               FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
@@ -1114,7 +1130,7 @@ fun HomeworkRoute(
         }
         if (hw.dueDate.isNotBlank()) {
           Text(
-            text = "Scadenza: ${hw.dueDate}",
+            text = "Scadenza: ${hw.dueDate.homeworkDueLabel()}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
@@ -1127,7 +1143,7 @@ fun HomeworkRoute(
 @Composable
 fun HomeworkDetailRoute(
   homeworkId: String,
-  onBack: () -> Unit,
+  onBack: (() -> Unit)?,
   modifier: Modifier = Modifier,
   viewModel: HomeworkViewModel = hiltViewModel(),
 ) {
@@ -1162,10 +1178,12 @@ fun HomeworkDetailRoute(
     onBack = onBack,
     hero = {
       FluidListRow(
-        title = homework.subject,
-        subtitle = homework.description,
+        title = homework.subject.ifBlank { homework.description },
+        subtitle = if (homework.subject.isBlank()) "" else homework.description,
         eyebrow = "COMPITO",
-        meta = homework.homeworkMeta(),
+        // Le date stanno una volta sola, sotto, per esteso: nella testata ripetevano la riga
+        // "Aggiunto / Scadenza" che il corpo scrive subito dopo.
+        meta = null,
         tone = homeworkDue(homework.dueDate, LocalDate.now()).tone(),
         badge = {
           if (homework.history.isNotEmpty()) FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
@@ -1177,15 +1195,20 @@ fun HomeworkDetailRoute(
     },
     secondary = {
       if (state.isLoadingDetail) FluidIndeterminateBar(Modifier.fillMaxWidth())
-      Text(
-        text = detail?.fullText?.takeIf(String::isNotBlank) ?: homework.description,
-        style = MaterialTheme.typography.bodyLarge,
-      )
+      val body = detail?.fullText?.takeIf(String::isNotBlank) ?: homework.description
+      // Senza materia la testata mostra gia' la consegna come titolo: ripeterla identica subito
+      // sotto era leggere due volte la stessa frase.
+      if (homework.subject.isNotBlank() || body.trim() != homework.description.trim()) {
+        Text(
+          text = body,
+          style = MaterialTheme.typography.bodyLarge,
+        )
+      }
       detail?.assignedDate?.let { Text("Aggiunto: ${it.homeworkCreatedAtLabel()}") }
       homework.modifiedAtLabel()?.let { Text("Modificato: $it") }
       detail?.teacher?.takeIf(String::isNotBlank)?.let { Text("Docente: $it") }
       homework.notes?.takeIf(String::isNotBlank)?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-      homework.dueDate.takeIf(String::isNotBlank)?.let { Text("Scadenza: $it") }
+      homework.dueDate.takeIf(String::isNotBlank)?.let { Text("Scadenza: ${it.homeworkDueLabel()}") }
     },
   )
 }
@@ -1367,6 +1390,12 @@ class DocumentsViewModel @Inject constructor(
 fun DocumentsRoute(
   onBack: (() -> Unit)? = null,
   onOpenDocument: ((String) -> Unit)? = null,
+  /**
+   * L'elemento mostrato nel pannello accanto, su uno schermo largo: la sua riga si accende e le
+   * frecce spariscono, perche' toccare una riga li' sceglie cosa mostrare invece di aprire.
+   */
+  selectedId: String? = null,
+  inPane: Boolean = false,
   viewModel: DocumentsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -1470,6 +1499,8 @@ fun DocumentsRoute(
               documentOrigin = rowBounds
               if (onOpenDocument != null) onOpenDocument(doc.id) else viewModel.openDocument(doc)
             },
+            selected = inPane && doc.id == selectedId,
+            disclosure = !inPane,
             badge = { FluidStatusBadge(doc.documentBadgeLabel(), tone = doc.documentTone()) },
             animatePress = true,
           )
@@ -1599,7 +1630,7 @@ fun DocumentsRoute(
 @Composable
 fun DocumentDetailRoute(
   documentId: String,
-  onBack: () -> Unit,
+  onBack: (() -> Unit)?,
   modifier: Modifier = Modifier,
   viewModel: DocumentsViewModel = hiltViewModel(),
 ) {

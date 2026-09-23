@@ -1497,10 +1497,24 @@ private fun AuthenticatedApp(
         }
         composable("materials") { entry ->
           FluidRouteMotionHost(this@composable) {
-            MaterialsRoute(
-              onBack = navController::navigateUp,
-              onOpenMaterial = { itemId ->
-                navigateRoute("material-detail/${Uri.encode(itemId)}")
+            val materialsViewModel: MaterialsViewModel = hiltViewModel()
+            AdaptiveListDetail(
+              ambient = FeatureIdentity.Materials.ambient(),
+              emptyTitle = "Nessun materiale aperto",
+              emptyMessage = "Scegli un file o un link dall'elenco per vederlo qui.",
+              emptyIcon = Icons.Rounded.FolderCopy,
+              onOpenPage = { itemId -> navigateRoute("material-detail/${Uri.encode(itemId)}") },
+              list = { inPane, selectedId, onOpen ->
+                MaterialsRoute(
+                  onBack = navController::navigateUp,
+                  onOpenMaterial = onOpen,
+                  selectedId = selectedId,
+                  inPane = inPane,
+                  viewModel = materialsViewModel,
+                )
+              },
+              detail = { itemId, onClose ->
+                MaterialDetailRoute(itemId = itemId, onBack = null, viewModel = materialsViewModel)
               },
             )
           }
@@ -1544,11 +1558,25 @@ private fun AuthenticatedApp(
             navigateRoute(route = "homework-detail/${Uri.encode(homeworkId)}")
           }
           FluidRouteMotionHost(this@composable) {
-            HomeworkRoute(
-              initialHomeworkId = null,
-              onBack = navController::navigateUp,
-              onOpenHomework = { homeworkId ->
-                navigateRoute("homework-detail/${Uri.encode(homeworkId)}")
+            val homeworkViewModel: HomeworkViewModel = hiltViewModel()
+            AdaptiveListDetail(
+              ambient = FeatureIdentity.Homework.ambient(),
+              emptyTitle = "Nessun compito aperto",
+              emptyMessage = "Scegli un compito dall'elenco per leggerne consegna e scadenza qui.",
+              emptyIcon = Icons.AutoMirrored.Rounded.Assignment,
+              onOpenPage = { homeworkId -> navigateRoute("homework-detail/${Uri.encode(homeworkId)}") },
+              list = { inPane, selectedId, onOpen ->
+                HomeworkRoute(
+                  initialHomeworkId = null,
+                  onBack = navController::navigateUp,
+                  onOpenHomework = onOpen,
+                  selectedId = selectedId,
+                  inPane = inPane,
+                  viewModel = homeworkViewModel,
+                )
+              },
+              detail = { homeworkId, onClose ->
+                HomeworkDetailRoute(homeworkId = homeworkId, onBack = null, viewModel = homeworkViewModel)
               },
             )
           }
@@ -1569,10 +1597,24 @@ private fun AuthenticatedApp(
         }
         composable("documents") { entry ->
           FluidRouteMotionHost(this@composable) {
-            DocumentsRoute(
-              onBack = navController::navigateUp,
-              onOpenDocument = { documentId ->
-                navigateRoute("document-detail/${Uri.encode(documentId)}")
+            val documentsViewModel: DocumentsViewModel = hiltViewModel()
+            AdaptiveListDetail(
+              ambient = FeatureIdentity.Documents.ambient(),
+              emptyTitle = "Nessun documento aperto",
+              emptyMessage = "Scegli una pagella o un documento dall'elenco per vederlo qui.",
+              emptyIcon = Icons.AutoMirrored.Rounded.LibraryBooks,
+              onOpenPage = { documentId -> navigateRoute("document-detail/${Uri.encode(documentId)}") },
+              list = { inPane, selectedId, onOpen ->
+                DocumentsRoute(
+                  onBack = navController::navigateUp,
+                  onOpenDocument = onOpen,
+                  selectedId = selectedId,
+                  inPane = inPane,
+                  viewModel = documentsViewModel,
+                )
+              },
+              detail = { documentId, onClose ->
+                DocumentDetailRoute(documentId = documentId, onBack = null, viewModel = documentsViewModel)
               },
             )
           }
@@ -1634,10 +1676,24 @@ private fun AuthenticatedApp(
         }
         composable("professors") { entry ->
           FluidRouteMotionHost(this@composable) {
-            ProfessorsRoute(
-              onBack = navController::navigateUp,
-              onOpenProfessor = { teacherName ->
-                navigateRoute("professor-detail/${Uri.encode(teacherName)}")
+            val professorsViewModel: ProfessorsViewModel = hiltViewModel()
+            AdaptiveListDetail(
+              ambient = FeatureIdentity.People.ambient(),
+              emptyTitle = "Nessun docente aperto",
+              emptyMessage = "Scegli un docente dall'elenco per vederne materie, voti e presenza qui.",
+              emptyIcon = Icons.Rounded.CoPresent,
+              onOpenPage = { teacherName -> navigateRoute("professor-detail/${Uri.encode(teacherName)}") },
+              list = { inPane, selectedId, onOpen ->
+                ProfessorsRoute(
+                  onBack = navController::navigateUp,
+                  onOpenProfessor = onOpen,
+                  selectedId = selectedId,
+                  inPane = inPane,
+                  viewModel = professorsViewModel,
+                )
+              },
+              detail = { teacherName, onClose ->
+                ProfessorDetailRoute(teacherName = teacherName, onBack = null, viewModel = professorsViewModel)
               },
             )
           }
