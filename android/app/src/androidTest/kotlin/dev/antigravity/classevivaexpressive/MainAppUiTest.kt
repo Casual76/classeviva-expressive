@@ -1,5 +1,8 @@
 package dev.antigravity.classevivaexpressive
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
@@ -244,7 +247,7 @@ class MainAppUiTest {
   }
 
   @Test
-  fun railAt600dp_darkTheme_fontScale13_andDisabledMotion_remainsUsable() {
+  fun bottomBarAt600dp_darkTheme_fontScale13_andDisabledMotion_remainsUsable() {
     withSystemAnimatorScale(0f) {
       composeRule.setContent {
         NavigationTestHarness(
@@ -264,12 +267,41 @@ class MainAppUiTest {
 
       val homeBounds = composeRule.onNodeWithTag("top_level_home").fetchSemanticsNode().boundsInRoot
       val boardBounds = composeRule.onNodeWithTag("top_level_communications").fetchSemanticsNode().boundsInRoot
-      assertTrue("La rail a 600 dp deve disporre i tab in verticale", boardBounds.top > homeBounds.bottom)
+      // Il rail del tablet non esiste piu': a 600 dp la navigazione e' la stessa pillola del
+      // telefono, in orizzontale e raccolta a sinistra, dalla parte del pollice.
+      assertTrue("A 600 dp i tab stanno in fila, non in colonna", boardBounds.left > homeBounds.right)
+      assertTrue("A 600 dp la pillola sta a sinistra", homeBounds.left < 300.dp.value * composeRule.density.density)
 
       composeRule.onNodeWithContentDescription("Bacheca").performClick()
       composeRule.onNodeWithTag("route_communications").assertIsDisplayed()
       composeRule.onNodeWithTag("top_level_communications").assertIsSelected()
     }
+  }
+
+  @Test
+  fun listDetail_twoPanesOnlyWhenBothFit() {
+    var width by mutableStateOf(1280.dp)
+    composeRule.setContent {
+      ClassevivaExpressiveTheme(settings = AppSettings(dynamicColorEnabled = false)) {
+        Box(modifier = Modifier.requiredWidth(width).requiredHeight(800.dp)) {
+          FluidListDetailScaffold(
+            ambient = null,
+            list = { twoPane -> TestRoute(tag = if (twoPane) "list_two" else "list_one", label = "Elenco") },
+            detail = { TestRoute(tag = "detail", label = "Dettaglio") },
+          )
+        }
+      }
+    }
+
+    // Tablet in orizzontale: elenco e dettaglio affiancati.
+    composeRule.onNodeWithTag("list_two").assertIsDisplayed()
+    composeRule.onNodeWithTag("detail").assertIsDisplayed()
+
+    // Tablet in verticale o finestra divisa: una pagina sola, e il dettaglio non esiste.
+    width = 800.dp
+    composeRule.waitForIdle()
+    composeRule.onNodeWithTag("list_one").assertIsDisplayed()
+    composeRule.onNodeWithTag("detail").assertDoesNotExist()
   }
 
   @Test
