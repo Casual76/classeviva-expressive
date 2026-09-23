@@ -23,14 +23,22 @@
       "sizeBytes": 33327875
     },
     "beta": {
-      "version": "7.11.3",
-      "releaseDate": "2026-09-19",
-      "changelog": "Rifiniture alla barra e agli interruttori usciti con le due versioni precedenti.\n\nTrascinando l'indicatore lungo la barra restava indietro rispetto al dito, e lo scarto cresceva a ogni scheda attraversata. Il calcolo che trasforma il movimento in posizione usava una larghezza di scheda misurata prima che la barra si adattasse allo schermo. Adesso l'indicatore sta sotto il dito per tutta la corsa.\n\nCambiando scheda il movimento dell'indicatore si vedeva a meta': partiva e poi ricompariva gia' a tre quarti di strada. L'animazione e' a tempo, e comporre la pagina nuova tiene il telefono occupato abbastanza da saltarne i fotogrammi centrali. Adesso il viaggio si fa per intero e la pagina comincia a caricarsi quando l'indicatore arriva.\n\nToccare una scheda fa lo stesso effetto di trascinarla: l'indicatore diventa vetro mentre si sposta, invece di scivolare come una pastiglia colorata.\n\nGli interruttori si trascinano di nuovo, oltre che toccare. Nella 7.11.2 rispondevano solo al tocco: chi li trascinava vedeva il pomello tornare indietro da solo.\n\nE la barra, quando si ripiega scorrendo, si raccoglie a sinistra invece che al centro, dove il pollice la raggiunge, con l'icona centrata nel tasto.\n\nFluid Engine 2.3.2.",
-      "releaseTag": "stable-classeviva-expressive-v7.11.3",
-      "apkAsset": "classeviva-expressive-7.11.3.apk",
-      "sizeBytes": 33327875
+      "version": "7.12.0",
+      "releaseDate": "2026-09-23",
+      "changelog": "Tablet: l'app usa tutto lo schermo.\n- In orizzontale Bacheca, Agenda, Impostazioni, Compiti, Didattica, Documenti e Docenti mostrano l'elenco e il dettaglio affiancati, su un fondale solo.\n- Home, Voti, Assenze e Altro si dispongono in colonne; l'Orario e le lezioni svolte mostrano la settimana intera, con la lezione in corso accesa.\n- Il widget nelle celle larghe mostra gli impegni su due colonne. Esc dalla tastiera torna indietro.\n\nCorrezioni per tutti:\n- Colloqui, conferme di lettura e pagelle tornano a funzionare: il portale Classeviva aveva cambiato l'accesso.\n- Assenze: niente più \"verificare la connessione\" a inizio anno.\n- Torna il + per aggiungere un evento in Agenda; i compiti da consegnare vengono prima degli scaduti.\n- Campi su più righe dove servono, date leggibili, testi senza gergo tecnico, \"Bacheca\" e \"Docenti\" chiamati sempre allo stesso modo.",
+      "releaseTag": "beta-classeviva-expressive-v7.12.0",
+      "apkAsset": "classeviva-expressive-7.12.0.apk",
+      "sizeBytes": 33393401
     },
     "history": [
+      {
+        "version": "7.11.3",
+        "releaseDate": "2026-09-19",
+        "changelog": "Rifiniture alla barra e agli interruttori usciti con le due versioni precedenti.\n\nTrascinando l'indicatore lungo la barra restava indietro rispetto al dito, e lo scarto cresceva a ogni scheda attraversata. Il calcolo che trasforma il movimento in posizione usava una larghezza di scheda misurata prima che la barra si adattasse allo schermo. Adesso l'indicatore sta sotto il dito per tutta la corsa.\n\nCambiando scheda il movimento dell'indicatore si vedeva a meta': partiva e poi ricompariva gia' a tre quarti di strada. L'animazione e' a tempo, e comporre la pagina nuova tiene il telefono occupato abbastanza da saltarne i fotogrammi centrali. Adesso il viaggio si fa per intero e la pagina comincia a caricarsi quando l'indicatore arriva.\n\nToccare una scheda fa lo stesso effetto di trascinarla: l'indicatore diventa vetro mentre si sposta, invece di scivolare come una pastiglia colorata.\n\nGli interruttori si trascinano di nuovo, oltre che toccare. Nella 7.11.2 rispondevano solo al tocco: chi li trascinava vedeva il pomello tornare indietro da solo.\n\nE la barra, quando si ripiega scorrendo, si raccoglie a sinistra invece che al centro, dove il pollice la raggiunge, con l'icona centrata nel tasto.\n\nFluid Engine 2.3.2.",
+        "releaseTag": "stable-classeviva-expressive-v7.11.3",
+        "apkAsset": "classeviva-expressive-7.11.3.apk",
+        "sizeBytes": 33327875
+      },
       {
         "version": "7.11.2",
         "releaseDate": "2026-09-19",
