@@ -370,7 +370,10 @@ fun AgendaRoute(
 
   // Gli impegni del giorno scelto: sotto il calendario su un telefono, nel pannello accanto su
   // uno schermo largo. Scritti una volta sola, cosi' le due pagine non possono divergere.
-  val dayEntries: LazyListScope.(List<AgendaEntry>) -> Unit = { dayList ->
+  // `inPane`: accanto al calendario un impegno si apre come pop-up dalla sua riga invece di
+  // spingere una pagina intera — la pagina, larga quanto il tablet, avrebbe coperto il calendario
+  // da cui lo si era scelto.
+  val dayEntries: LazyListScope.(List<AgendaEntry>, Boolean) -> Unit = { dayList, inPane ->
     if (dayList.isEmpty()) {
       item {
         FluidEmptyState(
@@ -386,7 +389,7 @@ fun AgendaRoute(
           modifier = Modifier.fluidExpandOrigin { rowBounds = it },
           onClick = {
             detailOrigin = rowBounds
-            if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
+            if (onOpenEntry != null && !inPane) onOpenEntry(entry.id) else selectedEntry = entry
           },
           // Era un onLongClick che condivideva e basta, senza dirlo: la stessa pressione ora
           // apre un menu che dice cosa sa fare.
@@ -398,7 +401,7 @@ fun AgendaRoute(
                 icon = categoryIcon(entry.category),
                 onClick = {
                   detailOrigin = rowBounds
-                  if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
+                  if (onOpenEntry != null && !inPane) onOpenEntry(entry.id) else selectedEntry = entry
                 },
               ),
               FluidContextAction(
@@ -548,7 +551,7 @@ fun AgendaRoute(
       item { FluidSectionHeader(formatDayHeader(selectedDate)) }
     }
 
-    if (!twoPane) dayEntries(selectedDayEntries)
+    if (!twoPane) dayEntries(selectedDayEntries, false)
   }
     },
     detail = {
@@ -569,7 +572,7 @@ fun AgendaRoute(
         ) {
           // Il giorno che questa pagina ha ricevuto, non quello scelto adesso: durante il passaggio
           // fra due giorni ciascuna pagina tiene i propri impegni.
-          dayEntries(dayItems)
+          dayEntries(dayItems, true)
         }
       }
     },
