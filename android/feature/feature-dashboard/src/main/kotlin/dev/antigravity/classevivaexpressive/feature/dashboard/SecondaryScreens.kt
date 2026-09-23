@@ -1429,6 +1429,7 @@ fun DocumentsRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   var selectedTab by rememberSaveable { mutableStateOf("Documenti") }
+  val bookCount = remember(state.schoolbookCourses) { state.schoolbookCourses.sumOf { it.books.size } }
   val selectedRefreshError = if (selectedTab == "Documenti") {
     state.documentsRefreshError
   } else {
@@ -1465,14 +1466,15 @@ fun DocumentsRoute(
       FeatureHero(
         identity = FeatureIdentity.Documents,
         eyebrow = "Archivio scolastico",
-        value = state.documents.size.toString(),
-        label = if (state.documents.size == 1) "documento" else "documenti",
-        icon = Icons.AutoMirrored.Rounded.MenuBook,
-        trailing = {
-          if (state.schoolbookCourses.isNotEmpty()) {
-            VividBadge(if (state.schoolbookCourses.size == 1) "1 CORSO" else "${state.schoolbookCourses.size} CORSI")
-          }
+        // La fascia conta quello che la scheda sotto mostra: sui libri diceva "0 documenti", e il
+        // numero dei corsi stava in un'etichetta sopra il disegno della fascia.
+        value = (if (selectedTab == "Libri") bookCount else state.documents.size).toString(),
+        label = when {
+          selectedTab == "Libri" -> if (bookCount == 1) "libro adottato" else "libri adottati"
+          state.documents.size == 1 -> "documento"
+          else -> "documenti"
         },
+        icon = Icons.AutoMirrored.Rounded.MenuBook,
       )
     }
     if (state.initialLoading && state.documents.isEmpty() && state.schoolbookCourses.isEmpty()) {
