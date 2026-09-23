@@ -626,6 +626,21 @@ fun LessonsRoute(
           }
         }
 
+        weekAtOnce -> {
+          item(key = "lessons:history:week", contentType = LessonsContentType.WeekNavigator) {
+            WeekNavigator(
+              weekStart = currentWeekStart,
+              weekOffset = weekOffset,
+              onPrevious = { changeWeek(weekOffset - 1) },
+              onNext = { if (weekOffset < 0) changeWeek(weekOffset + 1) },
+              onToday = { changeWeek(0) },
+            )
+          }
+          item(key = "lessons:history:week-grid", contentType = LessonsContentType.TimetableRow) {
+            WeekHistoryGrid(sections = historySections, today = LocalDate.now())
+          }
+        }
+
         else -> {
           item(key = "lessons:history:week", contentType = LessonsContentType.WeekNavigator) {
             WeekNavigator(
@@ -949,6 +964,87 @@ private fun WeekTimetableCell(
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
     )
+  }
+}
+
+private val weekGridDayFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d", italianLocale)
+
+/**
+ * Le lezioni svolte della settimana, un giorno per colonna: la stessa forma dell'orario, cosi' le
+ * due schede si leggono allo stesso modo. Ogni cella dice ora, materia e argomento; una lezione
+ * senza firma e senza argomento resta velata, perche' e' un buco del registro e non una lezione.
+ */
+@Composable
+private fun WeekHistoryGrid(
+  sections: List<HistoryDaySection>,
+  today: LocalDate,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    sections.forEach { section ->
+      val isToday = section.date == today
+      Column(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Text(
+          // Il giorno e il numero bastano: il mese e' quello della settimana, scritto sopra.
+          text = section.date.format(weekGridDayFormatter).replaceFirstChar(Char::uppercase),
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = if (isToday) FontWeight.Bold else FontWeight.SemiBold,
+          color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        if (section.lessons.isEmpty()) {
+          Text(
+            text = "Nessuna lezione",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+          )
+        } else {
+          FluidListGroup(glass = true) {
+            section.lessons.forEachIndexed { index, lesson ->
+              if (index > 0) FluidListDivider()
+              val recorded = lesson.isSigned || !lesson.topic.isNullOrBlank()
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .semantics(mergeDescendants = true) {}
+                  .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+              ) {
+                Text(
+                  text = lesson.timeRangeLabel(),
+                  style = MaterialTheme.typography.labelMedium,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                  text = lesson.subject,
+                  style = MaterialTheme.typography.titleSmall,
+                  fontWeight = FontWeight.SemiBold,
+                  color = if (recorded) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                  maxLines = 2,
+                  overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                  text = lesson.topic?.takeIf(String::isNotBlank)
+                    ?: if (lesson.isSigned) "Argomento non inserito" else "Non firmata",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  maxLines = 3,
+                  overflow = TextOverflow.Ellipsis,
+                )
+              }
+            }
+          }
+        }
+      }
+    }
   }
 }
 
