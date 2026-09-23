@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Assignment
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -314,6 +315,8 @@ fun AgendaRoute(
   var selectedEntry by remember { mutableStateOf<AgendaEntry?>(null) }
   var categoryEntry by remember { mutableStateOf<AgendaEntry?>(null) }
   var detailOrigin by remember { mutableStateOf<Rect?>(null) }
+  // Il tasto "+" della barra: il modulo nasce da li' e ci ritorna.
+  var addOrigin by remember { mutableStateOf<Rect?>(null) }
   val initialDateValue = remember(initialDate) {
     initialDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
   }
@@ -430,6 +433,14 @@ fun AgendaRoute(
     titleFacets = titleFacets,
     actions = {
       FluidSyncAction(status = state.syncStatus.toFluid(), onRetry = viewModel::refresh)
+      // Era un pulsante flottante, sparito col ridisegno di agosto insieme a tutti gli altri: il
+      // modulo e' rimasto nel codice per un mese senza una strada per arrivarci.
+      FluidBarAction(
+        icon = Icons.Rounded.Add,
+        contentDescription = "Nuovo evento",
+        onClick = { showDialog = true },
+        modifier = Modifier.fluidExpandOrigin { addOrigin = it },
+      )
       FluidBarAction(
         icon = Icons.Rounded.Refresh,
         contentDescription = "Aggiorna",
@@ -569,9 +580,11 @@ fun AgendaRoute(
   FluidGlassModalPortal(
     visible = showDialog,
     onDismissRequest = { showDialog = false },
+    origin = { addOrigin },
     paneTitle = "Nuovo evento",
   ) {
     AddEventContent(
+      initialDate = selectedDate,
       onDismiss = { showDialog = false },
       onSave = { title, description, subject, date, time ->
         viewModel.addCustomEvent(title, description, subject, date, time)
@@ -1036,11 +1049,14 @@ private fun InfoLine(
 private fun AddEventContent(
   onDismiss: () -> Unit,
   onSave: (title: String, description: String, subject: String, date: String, time: String?) -> Unit,
+  // Il giorno scelto nel calendario: chi apre il modulo da un giorno sta aggiungendo qualcosa a
+  // quel giorno, non a oggi.
+  initialDate: LocalDate = LocalDate.now(),
 ) {
   var title by rememberSaveable { mutableStateOf("") }
   var description by rememberSaveable { mutableStateOf("") }
   var subject by rememberSaveable { mutableStateOf("") }
-  var date by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+  var date by rememberSaveable { mutableStateOf(initialDate.toString()) }
   var time by rememberSaveable { mutableStateOf("") }
   var showDatePicker by rememberSaveable { mutableStateOf(false) }
   var showTimePicker by rememberSaveable { mutableStateOf(false) }
@@ -1082,10 +1098,8 @@ private fun AddEventContent(
             ?.format(eventDateFormatter)
             ?.replaceFirstChar { it.uppercase() }
             ?: date,
-          eyebrow = "DatePicker",
           tone = FluidTone.Primary,
           onClick = { showDatePicker = true },
-          badge = { FluidStatusBadge("SELEZIONA", tone = FluidTone.Primary) },
           animatePress = true,
         )
       }
@@ -1093,10 +1107,8 @@ private fun AddEventContent(
         FluidListRow(
           title = "Ora",
           subtitle = if (time.isBlank()) "Opzionale" else time,
-          eyebrow = "TimePicker",
           tone = FluidTone.Info,
           onClick = { showTimePicker = true },
-          badge = { FluidStatusBadge(if (time.isBlank()) "OPZIONALE" else "IMPOSTATA", tone = FluidTone.Info) },
           animatePress = true,
         )
       }

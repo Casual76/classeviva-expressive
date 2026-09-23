@@ -1011,6 +1011,31 @@ fun HomeworkRoute(
     }
   }
 
+  val homeworkRow: @Composable (Homework) -> Unit = { item ->
+    var rowBounds by remember { mutableStateOf<Rect?>(null) }
+    FluidListRow(
+      modifier = Modifier.fluidExpandOrigin { rowBounds = it },
+      title = item.subject.ifBlank { item.description },
+      subtitle = if (item.subject.isBlank()) "" else item.description,
+      eyebrow = "COMPITO",
+      meta = item.homeworkMeta(),
+      tone = homeworkDue(item.dueDate, homeworkToday).tone(),
+      onClick = {
+        homeworkOrigin = rowBounds
+        if (onOpenHomework != null) onOpenHomework(item.id) else viewModel.selectHomework(item)
+      },
+      selected = inPane && item.id == selectedId,
+      disclosure = !inPane,
+      badge = {
+        if (item.history.isNotEmpty()) {
+          FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
+        }
+        val due = homeworkDue(item.dueDate, homeworkToday)
+        FluidStatusBadge(due.badgeLabel(item.dueDate, homeworkToday), tone = due.tone())
+      },
+    )
+  }
+
   FluidScreen(
     title = "Compiti",
     ambient = FeatureIdentity.Homework.ambient(),
@@ -1048,29 +1073,22 @@ fun HomeworkRoute(
         }
       }
     } else {
-      fluidGlassGroups(state.homeworks) { item ->
-        var rowBounds by remember { mutableStateOf<Rect?>(null) }
-        FluidListRow(
-          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
-          title = item.subject.ifBlank { item.description },
-          subtitle = if (item.subject.isBlank()) "" else item.description,
-          eyebrow = "COMPITO",
-          meta = item.homeworkMeta(),
-          tone = homeworkDue(item.dueDate, homeworkToday).tone(),
-          onClick = {
-            homeworkOrigin = rowBounds
-            if (onOpenHomework != null) onOpenHomework(item.id) else viewModel.selectHomework(item)
-          },
-          selected = inPane && item.id == selectedId,
-          disclosure = !inPane,
-          badge = {
-            if (item.history.isNotEmpty()) {
-              FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
-            }
-            val due = homeworkDue(item.dueDate, homeworkToday)
-            FluidStatusBadge(due.badgeLabel(item.dueDate, homeworkToday), tone = due.tone())
-          },
-        )
+      // Prima quello che c'e' ancora da fare, dalla consegna piu' vicina; poi lo scaduto, dal piu'
+      // recente. In ordine di data semplice la pagina si apriva sul compito piu' vecchio dell'anno.
+      val (pending, overdue) = state.homeworks.partition {
+        homeworkDue(it.dueDate, homeworkToday) != HomeworkDue.Overdue
+      }
+      if (pending.isNotEmpty()) {
+        item(key = "homework:pending-header") { FluidSectionHeader("Da consegnare") }
+        fluidGlassGroups(pending.sortedBy { it.dueDate.ifBlank { "9999" } }, key = "homework:pending") { item ->
+          homeworkRow(item)
+        }
+      }
+      if (overdue.isNotEmpty()) {
+        item(key = "homework:overdue-header") { FluidSectionHeader("Scaduti") }
+        fluidGlassGroups(overdue.sortedByDescending { it.dueDate }, key = "homework:overdue") { item ->
+          homeworkRow(item)
+        }
       }
     }
   }
