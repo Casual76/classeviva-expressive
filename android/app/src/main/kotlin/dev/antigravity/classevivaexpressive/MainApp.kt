@@ -1888,7 +1888,7 @@ private fun MoreHubScreen(
   val peopleActions = listOf(
     MoreHubAction("Note disciplinari", "Note e sanzioni del registro.", "Bacheca", FluidTone.Danger, Icons.Rounded.Report, onOpenNotes),
     MoreHubAction("Assenze", "Assenze, ritardi e uscite.", "Presenze", FluidTone.Warning, Icons.Rounded.EventBusy, onOpenAbsences),
-    MoreHubAction("Colloqui", "Disponibilità e prenotazioni.", "Docenti", FluidTone.Info, Icons.Rounded.Forum, onOpenMeetings),
+    MoreHubAction("Colloqui", "Disponibilità e prenotazioni.", "Incontri", FluidTone.Info, Icons.Rounded.Forum, onOpenMeetings),
     MoreHubAction("Docenti", "Presenza, valutazioni e materie di ognuno.", "Classe", FluidTone.Neutral, Icons.Rounded.CoPresent, onOpenProfessors),
   )
 

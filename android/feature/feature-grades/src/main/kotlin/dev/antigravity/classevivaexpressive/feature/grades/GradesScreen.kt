@@ -444,21 +444,27 @@ fun GradesRoute(
       }
     }
 
-    if (metrics.columns() > 1 && state.periods.isNotEmpty()) {
+    // Un periodo solo non si sceglie: il selettore era una pastiglia sola, gia' accesa, che
+    // ripeteva il nome scritto nella fascia sopra. Compare quando c'e' davvero un'alternativa.
+    val choosablePeriods = state.periods.size > 1
+    if (metrics.columns() > 1) {
       // Largo, i due selettori stanno su una riga: stirati da bordo a bordo erano due barre lunghe
-      // come la pagina per due o tre parole ciascuna.
+      // come la pagina per due o tre parole ciascuna. Con un periodo solo le schede restano a
+      // meta' riga, allineate alla colonna di sinistra.
       item {
         Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(14.dp),
           verticalAlignment = Alignment.CenterVertically,
         ) {
-          Box(modifier = Modifier.weight(1f)) {
-            PeriodSelector(
-              periods = state.periods,
-              selectedCode = effectivePeriodCode,
-              onSelect = viewModel::selectPeriod,
-            )
+          if (choosablePeriods) {
+            Box(modifier = Modifier.weight(1f)) {
+              PeriodSelector(
+                periods = state.periods,
+                selectedCode = effectivePeriodCode,
+                onSelect = viewModel::selectPeriod,
+              )
+            }
           }
           Box(modifier = Modifier.weight(1f)) {
             FluidPillTabs(
@@ -467,10 +473,11 @@ fun GradesRoute(
               onSelect = { selectedTab = it },
             )
           }
+          if (!choosablePeriods) Spacer(modifier = Modifier.weight(1f))
         }
       }
     } else {
-      if (state.periods.isNotEmpty()) {
+      if (choosablePeriods) {
         item {
           PeriodSelector(
             periods = state.periods,
@@ -488,7 +495,7 @@ fun GradesRoute(
         )
       }
     }
-    
+
     if (periodUnseen.isNotEmpty()) {
       item {
         FluidQuickAction(
@@ -504,7 +511,11 @@ fun GradesRoute(
           item {
             FluidEmptyState(
               title = "Nessun voto in questo periodo",
-              detail = "Seleziona un altro periodo oppure attendi la sincronizzazione dei dati.",
+              detail = if (choosablePeriods) {
+                "Scegli un altro periodo, o torna quando i docenti avranno registrato i primi voti."
+              } else {
+                "Compariranno qui appena i docenti li registrano."
+              },
             )
           }
         } else {
@@ -560,10 +571,18 @@ fun GradesRoute(
       TAB_SUBJECTS -> {
         if (subjectRows.isEmpty()) {
           item {
-            FluidEmptyState(
-              title = "Mancano voti numerici",
-              detail = "Le medie per materia vengono calcolate solo in presenza di valutazioni con valore decimale.",
-            )
+            // Senza nessun voto il motivo non e' che mancano quelli numerici: non c'e' niente.
+            if (filteredGrades.isEmpty()) {
+              FluidEmptyState(
+                title = "Nessun voto in questo periodo",
+                detail = "Le medie per materia compaiono con i primi voti.",
+              )
+            } else {
+              FluidEmptyState(
+                title = "Mancano voti numerici",
+                detail = "Le medie per materia vengono calcolate solo in presenza di valutazioni con valore decimale.",
+              )
+            }
           }
         } else {
           // La media di una materia e' un voto come gli altri: stessa card, stesso colore, stessa

@@ -199,7 +199,7 @@ fun AbsencesRoute(
     // l'urgenza di questa sezione e' un fatto sulla sezione, non una decorazione del riquadro in
     // cima.
     ambient = FeatureIdentity.Attendance.ambient(urgent = pending.isNotEmpty()),
-    subtitle = "Situazione sintetica, giustificazioni pendenti e cronologia ordinata.",
+    subtitle = "Cosa c'è da giustificare e tutto quello che è già stato registrato.",
     onBack = onBack,
     actions = {
       FluidBarAction(
@@ -279,7 +279,7 @@ fun AbsencesRoute(
               if (pending.isEmpty()) {
                 FluidEmptyState(
                   title = "Nessuna giustificazione in sospeso",
-                  detail = "Assenze, ritardi e uscite risultano già allineati con lo stato corrente.",
+                  detail = "Assenze, ritardi e uscite sono tutti a posto.",
                 )
               } else {
                 FluidGlassGroup(pending) { absence ->
@@ -316,7 +316,7 @@ fun AbsencesRoute(
         item {
           FluidEmptyState(
             title = "Nessuna giustificazione in sospeso",
-            detail = "Assenze, ritardi e uscite risultano già allineati con lo stato corrente.",
+            detail = "Assenze, ritardi e uscite sono tutti a posto.",
           )
         }
       } else {
