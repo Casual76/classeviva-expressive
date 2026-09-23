@@ -840,6 +840,7 @@ fun MaterialDetailRoute(
   }
 
   FluidContainerScaffold(
+    ambient = FeatureIdentity.Materials.ambient(),
     title = "Dettaglio materiale",
     modifier = modifier,
     onBack = onBack,
@@ -1200,6 +1201,7 @@ fun HomeworkDetailRoute(
 
   val detail = state.selectedDetail?.takeIf { it.homework.id == homeworkId }
   FluidContainerScaffold(
+    ambient = FeatureIdentity.Homework.ambient(),
     title = "Dettaglio compito",
     modifier = modifier,
     onBack = onBack,
@@ -1689,6 +1691,7 @@ fun DocumentDetailRoute(
   }
 
   FluidContainerScaffold(
+    ambient = FeatureIdentity.Documents.ambient(),
     title = "Dettaglio documento",
     modifier = modifier,
     onBack = onBack,

@@ -690,6 +690,7 @@ fun GradeDetailRoute(
   }
 
   FluidContainerScaffold(
+    ambient = FeatureIdentity.Grades.ambient(),
     title = "Dettaglio voto",
     modifier = modifier,
     onBack = onBack,

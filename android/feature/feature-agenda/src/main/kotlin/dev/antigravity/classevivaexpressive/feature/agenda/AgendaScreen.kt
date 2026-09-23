@@ -1323,6 +1323,7 @@ fun AgendaDetailRoute(
   }
 
   FluidContainerScaffold(
+    ambient = FeatureIdentity.Agenda.ambient(),
     title = "Dettaglio agenda",
     modifier = modifier,
     onBack = onBack,

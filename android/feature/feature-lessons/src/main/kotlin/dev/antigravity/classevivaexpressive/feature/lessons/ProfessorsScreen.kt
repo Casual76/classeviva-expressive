@@ -522,7 +522,7 @@ fun ProfessorDetailRoute(
   val professor = state.professors.firstOrNull { it.teacherName == teacherName }
 
   if (professor == null) {
-    FluidScreen(title = "Dettaglio docente", modifier = modifier, onBack = onBack) {
+    FluidScreen(title = "Dettaglio docente", ambient = FeatureIdentity.People.ambient(), modifier = modifier, onBack = onBack) {
       item(key = "professor-detail-missing") {
         FluidEmptyState(
           title = "Docente non disponibile",
@@ -546,6 +546,7 @@ fun ProfessorDetailRoute(
   }
 
   FluidContainerScaffold(
+    ambient = FeatureIdentity.People.ambient(),
     title = "Dettaglio docente",
     modifier = modifier,
     onBack = onBack,
