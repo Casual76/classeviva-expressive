@@ -245,6 +245,71 @@ class PortalClientNetworkTest {
     }
   }
 
+  @Test
+  fun portalLogin_fallsBackToAuthApiWhenLoginPageRedirectsToSpid() = runBlocking {
+    // La pagina di login rimanda all'accesso SPID su un altro dominio: il form non arriva mai.
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(302)
+        .addHeader("Location", "https://eid.example.invalid/spid/start"),
+    )
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "application/json")
+        .addHeader("Set-Cookie", "PHPSESSID=api-session; Path=/; HttpOnly")
+        .setBody("""{"data":{"auth":{"loggedIn":true,"verified":true}}}"""),
+    )
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "application/pdf")
+        .setBody("pdf-after-api-login"),
+    )
+
+    portalClient.openSchoolReport(
+      viewUrl = server.url("/reports/view?id=demo").toString(),
+      confirmUrl = null,
+    ).use { download ->
+      assertEquals("pdf-after-api-login", download.byteStream().bufferedReader().readText())
+    }
+
+    assertEquals("/login", server.takeRequest().path)
+    val apiRequest = server.takeRequest()
+    assertEquals("POST", apiRequest.method)
+    assertEquals("/auth-p7/app/default/AuthApi4.php?a=aLoginPwd", apiRequest.path)
+    val form = apiRequest.body.readUtf8()
+    assertTrue(form.contains("uid=student-demo"))
+    assertTrue(form.contains("pwd=password-demo"))
+    val reportRequest = server.takeRequest()
+    assertTrue(reportRequest.getHeader("Cookie").orEmpty().contains("PHPSESSID=api-session"))
+  }
+
+  @Test
+  fun portalLogin_reportsRejectedCredentialsFromAuthApi() = runBlocking {
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(302)
+        .addHeader("Location", "https://eid.example.invalid/spid/start"),
+    )
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "application/json")
+        .setBody("""{"data":{"auth":{"loggedIn":false,"errors":["credenziali"]}}}"""),
+    )
+
+    try {
+      portalClient.openSchoolReport(
+        viewUrl = server.url("/reports/view?id=demo").toString(),
+        confirmUrl = null,
+      ).close()
+      fail("Expected ClassevivaNetworkException")
+    } catch (exception: ClassevivaNetworkException) {
+      assertEquals("Il portale ha rifiutato l'accesso.", exception.message)
+    }
+  }
+
   private fun enqueuePortalLogin(cookieValue: String = "session-demo") {
     server.enqueue(
       MockResponse()

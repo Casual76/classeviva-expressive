@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.network.client
 
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStorage
+import dev.antigravity.classevivaexpressive.core.datastore.StoredCredentials
 import dev.antigravity.classevivaexpressive.core.domain.model.AttachmentPayload
 import dev.antigravity.classevivaexpressive.core.domain.model.PortalCookieDto
 import java.io.Closeable
@@ -36,7 +37,16 @@ private const val PortalLoginUrl = "https://web.spaggiari.eu/home/app/default/lo
 private const val PortalBaseUrl = "https://web.spaggiari.eu"
 private const val PortalNoticeboardUrl = "$PortalBaseUrl/sif/app/default/bacheca_personale.php"
 private const val PortalUserAgent = "CVVS/std/4.1.7 Android/10"
-const val PortalMeetingsUrl = "https://web.spaggiari.eu/fml/app/default/colloqui.php"
+private const val PortalAuthApiPath = "/auth-p7/app/default/AuthApi4.php"
+private const val PortalAuthApiLoginQuery = "a=aLoginPwd"
+private val PortalLoggedInPattern = Regex("\"loggedIn\"\\s*:\\s*true")
+// Era colloqui.php, che dal 2026 risponde 404: la pagina vera e' quella che il menu del portale
+// linka, anche per gli studenti. Serve anche al tasto "Apri portale colloqui".
+const val PortalMeetingsUrl = "https://web.spaggiari.eu/fml/app/default/genitori_colloqui.php"
+private const val PortalMeetingsPath = "/fml/app/default/genitori_colloqui.php"
+
+/** Il menu del portale per uno studente: la pagina da cui partono tutti i link, a sessione aperta. */
+private const val PortalMenuPath = "/home/app/default/menu_webinfoschool_studenti.php"
 
 class NetworkDocumentStream internal constructor(
   private val body: ResponseBody,
@@ -212,51 +222,104 @@ class PortalClient private constructor(
       ?: throw ClassevivaNetworkException("Credenziali non disponibili per il portale.")
 
     withContext(Dispatchers.IO) {
-      val loginHtml = portalHttpClient.newCall(
-        Request.Builder()
-          .url(portalLoginUrl)
-          .header("User-Agent", PortalUserAgent)
-          .build()
-      ).execute().use { loginPageResponse ->
-        if (!loginPageResponse.isSuccessful || !isPortalOrigin(loginPageResponse.request.url)) {
-          throw ClassevivaNetworkException("Pagina di login portale non raggiungibile.")
-        }
-        loginPageResponse.body?.string()
-          ?: throw ClassevivaNetworkException("Pagina di login portale non raggiungibile.")
-      }
-
-      val doc = Jsoup.parse(loginHtml, portalLoginUrl)
-      val form = doc.selectFirst("form")
-        ?: throw ClassevivaNetworkException("Form di login portale non trovato.")
-
-      val formAction = form.absUrl("action").takeIf(String::isNotBlank) ?: portalLoginUrl
-      val formActionUrl = formAction.toHttpUrlOrNull()
-        ?.takeIf(::isPortalOrigin)
-        ?: throw ClassevivaNetworkException("Form di login esterno al portale Classeviva.")
-
-      val formBody = FormBody.Builder()
-      form.select("input[type=hidden]").forEach { input ->
-        val name = input.attr("name").takeIf(String::isNotBlank) ?: return@forEach
-        formBody.add(name, input.attr("value"))
-      }
-      val usernameField = findLoginField(form, listOf("login", "user", "uid")) ?: "login"
-      val passwordField = findLoginField(form, listOf("password", "pass")) ?: "password"
-      formBody.add(usernameField, credentials.username)
-      formBody.add(passwordField, credentials.password)
-
-      portalHttpClient.newCall(
-        Request.Builder()
-          .url(formActionUrl)
-          .header("User-Agent", PortalUserAgent)
-          .post(formBody.build())
-          .build()
-      ).execute().use { loginResponse ->
-        if (!loginResponse.isSuccessful || !isPortalOrigin(loginResponse.request.url)) {
-          throw ClassevivaNetworkException("Accesso al portale non riuscito (${loginResponse.code}).")
-        }
+      // Due strade, nell'ordine. La pagina di login col suo form e' quella di sempre; dal settembre
+      // 2026 pero' il portale rimanda chi si presenta come l'app ufficiale all'accesso SPID, su un
+      // altro dominio, e il form non arriva mai — il motivo per cui colloqui, conferme di lettura e
+      // tutto il resto del portale fallivano con "errore di rete". La seconda strada e' quella che il
+      // sito stesso usa dietro al suo form: AuthApi4, che risponde in JSON e lascia il cookie.
+      val legacy = runCatching { loginWithPortalForm(credentials) }
+      if (legacy.isSuccess && hasUsablePortalSessionCookie()) return@withContext
+      runCatching { loginWithAuthApi(credentials) }.onFailure { apiFailure ->
+        // Se falliscono tutte e due, vale il motivo della strada nuova quando e' leggibile.
+        throw (apiFailure as? ClassevivaNetworkException)
+          ?: legacy.exceptionOrNull()
+          ?: apiFailure
       }
       if (!hasUsablePortalSessionCookie()) {
         throw ClassevivaNetworkException("Il portale non ha creato una sessione valida.")
+      }
+    }
+  }
+
+  private fun loginWithPortalForm(credentials: StoredCredentials) {
+    val loginHtml = portalHttpClient.newCall(
+      Request.Builder()
+        .url(portalLoginUrl)
+        .header("User-Agent", PortalUserAgent)
+        .build()
+    ).execute().use { loginPageResponse ->
+      if (!loginPageResponse.isSuccessful || !isPortalOrigin(loginPageResponse.request.url)) {
+        throw ClassevivaNetworkException("Pagina di login portale non raggiungibile.")
+      }
+      loginPageResponse.body?.string()
+        ?: throw ClassevivaNetworkException("Pagina di login portale non raggiungibile.")
+    }
+
+    val doc = Jsoup.parse(loginHtml, portalLoginUrl)
+    // Il form con la password, non il primo: la pagina di login del browser apre con quello della
+    // lingua, e mandare le credenziali li' non autentica niente.
+    val form = doc.select("form").firstOrNull { candidate ->
+      candidate.selectFirst("input[type=password], input[name=password]") != null
+    } ?: throw ClassevivaNetworkException("Form di login portale non trovato.")
+
+    val formAction = form.absUrl("action").takeIf(String::isNotBlank) ?: portalLoginUrl
+    val formActionUrl = formAction.toHttpUrlOrNull()
+      ?.takeIf(::isPortalOrigin)
+      ?: throw ClassevivaNetworkException("Form di login esterno al portale Classeviva.")
+
+    val formBody = FormBody.Builder()
+    form.select("input[type=hidden]").forEach { input ->
+      val name = input.attr("name").takeIf(String::isNotBlank) ?: return@forEach
+      formBody.add(name, input.attr("value"))
+    }
+    val usernameField = findLoginField(form, listOf("login", "user", "uid")) ?: "login"
+    val passwordField = findLoginField(form, listOf("password", "pass")) ?: "password"
+    formBody.add(usernameField, credentials.username)
+    formBody.add(passwordField, credentials.password)
+
+    portalHttpClient.newCall(
+      Request.Builder()
+        .url(formActionUrl)
+        .header("User-Agent", PortalUserAgent)
+        .post(formBody.build())
+        .build()
+    ).execute().use { loginResponse ->
+      if (!loginResponse.isSuccessful || !isPortalOrigin(loginResponse.request.url)) {
+        throw ClassevivaNetworkException("Accesso al portale non riuscito (${loginResponse.code}).")
+      }
+    }
+  }
+
+  /**
+   * L'accesso che fa il sito: `AuthApi4.php?a=aLoginPwd` con codice utente e password, risposta in
+   * JSON con `loggedIn`, e il cookie di sessione nel cookie jar del portale.
+   */
+  private fun loginWithAuthApi(credentials: StoredCredentials) {
+    val url = portalOrigin.newBuilder()
+      .encodedPath(PortalAuthApiPath)
+      .encodedQuery(PortalAuthApiLoginQuery)
+      .build()
+    val body = FormBody.Builder()
+      .add("cid", "")
+      .add("uid", credentials.username)
+      .add("pwd", credentials.password)
+      .add("pin", "")
+      .add("target", "")
+      .build()
+    portalHttpClient.newCall(
+      Request.Builder()
+        .url(url)
+        .header("User-Agent", PortalUserAgent)
+        .header("X-Requested-With", "XMLHttpRequest")
+        .post(body)
+        .build()
+    ).execute().use { response ->
+      if (!response.isSuccessful) {
+        throw ClassevivaNetworkException("Accesso al portale non riuscito (${response.code}).")
+      }
+      val payload = response.body?.string().orEmpty()
+      if (!PortalLoggedInPattern.containsMatchIn(payload)) {
+        throw ClassevivaNetworkException("Il portale ha rifiutato l'accesso.")
       }
     }
   }
@@ -489,7 +552,32 @@ class PortalClient private constructor(
 
   suspend fun getMeetingsPageHtml(): Pair<String, String>? = withContext(Dispatchers.IO) {
     ensurePortalSession()
-    discoverPortalPage(listOf("colloqui", "ricevimento", "prenot"))
+    // L'indirizzo diretto prima della ricerca fra i link: la ricerca parte dalla pagina di login,
+    // che chi si presenta come l'app ufficiale rimanda all'accesso SPID anche da autenticato, e
+    // cosi' il portale sembrava irraggiungibile. La pagina dei colloqui ha un indirizzo suo.
+    fetchPortalPage(PortalMeetingsPath)
+      ?: runCatching { discoverPortalPage(listOf("colloqui", "ricevimento", "prenot")) }.getOrNull()
+  }
+
+  /**
+   * Una pagina del portale per indirizzo, o null se non e' una pagina del portale autenticato: un
+   * rimando al login o fuori dall'origine, una risposta d'errore. Non lancia: chi chiama ha sempre
+   * un'altra strada, e un null e' un'assenza, non un guasto da mostrare.
+   */
+  private fun fetchPortalPage(path: String): Pair<String, String>? {
+    val url = portalOrigin.newBuilder().encodedPath(path).query(null).build()
+    return runCatching {
+      portalHttpClient.newCall(
+        Request.Builder().url(url).header("User-Agent", PortalUserAgent).build(),
+      ).execute().use { response ->
+        val finalUrl = response.request.url
+        if (!response.isSuccessful || !isPortalOrigin(finalUrl) || "login" in finalUrl.encodedPath) {
+          return@use null
+        }
+        val html = response.body?.string()?.takeIf(String::isNotBlank) ?: return@use null
+        html to finalUrl.toString()
+      }
+    }.getOrNull()
   }
 
   suspend fun getNoticeboardDetail(pageUrl: String): PortalNoticeboardDetail? = withContext(Dispatchers.IO) {
@@ -536,11 +624,15 @@ class PortalClient private constructor(
   }
 
   private suspend fun discoverPortalPage(keywords: List<String>): Pair<String, String>? {
-    val landingResponse = portalHttpClient.newCall(
-      Request.Builder().url(PortalLoginUrl).header("User-Agent", PortalUserAgent).build()
-    ).execute()
-    val landingHtml = landingResponse.body?.string() ?: return null
-    val landingUrl = landingResponse.request.url.toString()
+    // Si parte dal menu, non dalla pagina di login: da autenticati il login rimanda chi si presenta
+    // come l'app ufficiale all'accesso SPID, fuori dal portale, e la ricerca finiva prima di cominciare.
+    val (landingHtml, landingUrl) = fetchPortalPage(PortalMenuPath) ?: run {
+      val landingResponse = portalHttpClient.newCall(
+        Request.Builder().url(PortalLoginUrl).header("User-Agent", PortalUserAgent).build()
+      ).execute()
+      val html = landingResponse.body?.string() ?: return null
+      html to landingResponse.request.url.toString()
+    }
     val doc = Jsoup.parse(landingHtml, landingUrl)
 
     if (soupMatches(doc, keywords)) return landingHtml to landingUrl
