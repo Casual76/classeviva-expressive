@@ -1,5 +1,10 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
+import dev.antigravity.fluidengine.ui.fluid.fluidRowPressable
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -413,10 +418,16 @@ fun LessonsRoute(
   val historySection = historySections.firstOrNull { it.date.toString() == selectedHistoryDayKey }
     ?: historySections.firstOrNull()
 
+  val metrics = rememberFluidScreenMetrics()
+
   Box(modifier = modifier.fillMaxSize()) {
     FluidScreen(
       modifier = Modifier.fillMaxSize(),
       title = "Orario",
+      // Largo abbastanza, l'orario e' una settimana intera sotto gli occhi invece di un giorno alla
+      // volta coi tasti: e' la forma che ha sul diario, e quella in cui lo si cerca.
+      contentMaxWidth = FluidColumnsDefaults.WideContentMaxWidth,
+      metrics = metrics,
       ambient = FeatureIdentity.Lessons.ambient(),
       subtitle = "Template settimanale stabile e storico delle lezioni svolte in una sola vista.",
       onBack = onBack,
@@ -512,8 +523,40 @@ fun LessonsRoute(
         )
       }
 
-      when (selectedTab) {
-        TAB_TIMETABLE -> {
+      val weekAtOnce = metrics.columns() >= FluidColumnsDefaults.MaxColumns
+      when {
+        selectedTab == TAB_TIMETABLE && weekAtOnce -> {
+          item(key = "lessons:template:instruction", contentType = LessonsContentType.Instruction) {
+            Text(
+              text = "Tocca uno slot per confermarlo · Tieni premuto per modificarlo.",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(horizontal = 4.dp),
+            )
+          }
+          if (state.canImportOfficialTimetable) {
+            item(key = "lessons:template:official-import", contentType = LessonsContentType.ImportAction) {
+              FluidButton(
+                text = "Importa Orario Ufficiale 4F",
+                onClick = viewModel::importOfficialTimetable,
+                style = FluidButtonStyle.Filled,
+                fillWidth = true,
+                leading = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
+              )
+            }
+          }
+          item(key = "lessons:template:week", contentType = LessonsContentType.TimetableRow) {
+            WeekTimetableGrid(
+              sections = templateSections,
+              timetable = state.timetableTemplate,
+              today = LocalDate.now().dayOfWeek,
+              onConfirm = { block, bounds -> slotOrigin = bounds; viewModel.startConfirming(block.primary) },
+              onEdit = { block, bounds -> slotOrigin = bounds; viewModel.startEditing(block.primary) },
+            )
+          }
+        }
+
+        selectedTab == TAB_TIMETABLE -> {
           item(key = "lessons:template:selector", contentType = LessonsContentType.DaySelector) {
             FluidPillTabs(
               options = templateDayLabels,
@@ -583,7 +626,7 @@ fun LessonsRoute(
           }
         }
 
-        TAB_HISTORY -> {
+        else -> {
           item(key = "lessons:history:week", contentType = LessonsContentType.WeekNavigator) {
             WeekNavigator(
               weekStart = currentWeekStart,
@@ -803,6 +846,110 @@ private fun TimetableBlockRow(
     animatePress = true,
     modifier = modifier,
   )
+}
+
+/**
+ * La settimana intera, un giorno per colonna: l'orario come sta sul diario.
+ *
+ * Una colonna e' un gruppo di vetro con uno slot per riga, e la riga e' compatta — ora, materia,
+ * aula — perche' in sei colonne non c'e' posto per badge e spiegazioni: quelli restano nella vista
+ * per giorno, dove la riga e' larga quanto la pagina. Il giorno di oggi ha la testata nell'accento;
+ * i gesti sono gli stessi della riga lunga, tocco per confermare e pressione per modificare, e lo
+ * slot toccato e' l'ancora da cui si apre il pannello.
+ */
+@Composable
+private fun WeekTimetableGrid(
+  sections: List<TimetableDaySection>,
+  timetable: TimetableTemplate,
+  today: DayOfWeek,
+  onConfirm: (SlotBlock, Rect?) -> Unit,
+  onEdit: (SlotBlock, Rect?) -> Unit,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    sections.forEach { section ->
+      val isToday = section.day == today
+      Column(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Text(
+          text = section.day.longLabel(),
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = if (isToday) FontWeight.Bold else FontWeight.SemiBold,
+          color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        if (section.blocks.isEmpty()) {
+          Text(
+            text = "Nessuno slot",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+          )
+        } else {
+          FluidListGroup(glass = true) {
+            section.blocks.forEachIndexed { index, block ->
+              if (index > 0) FluidListDivider()
+              WeekTimetableCell(
+                block = block,
+                timetable = timetable,
+                onConfirm = onConfirm,
+                onEdit = onEdit,
+              )
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun WeekTimetableCell(
+  block: SlotBlock,
+  timetable: TimetableTemplate,
+  onConfirm: (SlotBlock, Rect?) -> Unit,
+  onEdit: (SlotBlock, Rect?) -> Unit,
+) {
+  var bounds by remember { mutableStateOf<Rect?>(null) }
+  val room = block.allSlots.mapNotNull { it.room?.trim()?.takeIf(String::isNotBlank) }.firstOrNull()
+  val kind = slotKind(block, timetable)
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .fluidExpandOrigin { bounds = it }
+      .fluidRowPressable(
+        onClick = { onConfirm(block, bounds) },
+        onLongClick = { onEdit(block, bounds) },
+      )
+      .semantics(mergeDescendants = true) {}
+      .padding(horizontal = 12.dp, vertical = 10.dp),
+    verticalArrangement = Arrangement.spacedBy(2.dp),
+  ) {
+    Text(
+      text = block.timeRangeLabel(),
+      style = MaterialTheme.typography.labelMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+      text = block.displaySubject,
+      style = MaterialTheme.typography.titleSmall,
+      fontWeight = FontWeight.SemiBold,
+      maxLines = 3,
+      overflow = TextOverflow.Ellipsis,
+    )
+    Text(
+      text = listOfNotNull(room, kind.badgeLabel(block).lowercase().replaceFirstChar(Char::uppercase))
+        .joinToString(" · "),
+      style = MaterialTheme.typography.labelSmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+  }
 }
 
 @Composable
