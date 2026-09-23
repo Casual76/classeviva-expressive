@@ -300,6 +300,16 @@ class SchoolSettingsRepository @Inject constructor(
   override suspend fun ignoreStableUpdateVersion(version: String) {
     settingsStore.update { it.copy(ignoredStableUpdateVersion = version) }
   }
+
+  override suspend fun setSubjectColor(key: String, argb: Int?) {
+    settingsStore.update {
+      it.copy(subjectColors = if (argb == null) it.subjectColors - key else it.subjectColors + (key to argb))
+    }
+  }
+
+  override suspend fun resetSubjectColors() {
+    settingsStore.update { it.copy(subjectColors = emptyMap()) }
+  }
 }
 
 private val DashboardRefreshSections = setOf(

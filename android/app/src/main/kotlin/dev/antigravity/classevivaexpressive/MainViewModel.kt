@@ -367,7 +367,7 @@ class MainViewModel @Inject constructor(
       authError.value = null
       authRepository.login(username.trim(), password)
         .onFailure {
-          authError.value = it.message ?: "Login fallito. Controlla le credenziali."
+          authError.value = it.message ?: "Accesso non riuscito. Controlla le credenziali."
         }
       isAuthenticating.value = false
     }

@@ -17,6 +17,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaViewMode
+import dev.antigravity.classevivaexpressive.core.domain.model.ViewPreferencesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationPreferences
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearFallbackEvent
@@ -60,9 +62,35 @@ private val SettingsNotificationsLiveTimetableKey = booleanPreferencesKey("notif
 private val SettingsPeriodicSyncKey = booleanPreferencesKey("periodic_sync")
 private val SettingsNetworkConfigKey = stringPreferencesKey("network_config")
 private val SettingsIgnoredStableUpdateVersionKey = stringPreferencesKey("ignored_stable_update_version")
+private val SettingsSubjectColorsKey = stringPreferencesKey("subject_colors")
 private val SelectedSchoolYearKey = stringPreferencesKey("selected_school_year")
 private val SchoolYearFallbackEventsKey = stringPreferencesKey("school_year_fallback_events")
 private val TimetableTemplatesKey = stringPreferencesKey("timetable_templates")
+private val AgendaViewModeKey = stringPreferencesKey("agenda_view_mode")
+
+/** Le preferenze di vista, in un file loro: vedi [ViewPreferencesRepository]. */
+@Singleton
+class ViewPreferencesStore internal constructor(
+  private val dataStore: DataStore<Preferences>,
+) : ViewPreferencesRepository {
+  constructor(@ApplicationContext context: Context) : this(
+    dataStore = PreferenceDataStoreFactory.create(
+      produceFile = { context.preferencesDataStoreFile("classeviva_view.preferences_pb") },
+    ),
+  )
+
+  override fun observeAgendaViewMode(): Flow<AgendaViewMode> = dataStore.data
+    .map { prefs ->
+      prefs[AgendaViewModeKey]
+        ?.let { stored -> runCatching { AgendaViewMode.valueOf(stored) }.getOrNull() }
+        ?: AgendaViewMode.MONTH
+    }
+    .distinctUntilChanged()
+
+  override suspend fun setAgendaViewMode(mode: AgendaViewMode) {
+    dataStore.edit { prefs -> prefs[AgendaViewModeKey] = mode.name }
+  }
+}
 
 @Singleton
 class SettingsStore internal constructor(
@@ -117,6 +145,9 @@ class SettingsStore internal constructor(
       periodicSyncEnabled = prefs[SettingsPeriodicSyncKey] ?: true,
       networkConfig = networkConfig,
       ignoredStableUpdateVersion = prefs[SettingsIgnoredStableUpdateVersionKey] ?: "",
+      subjectColors = prefs[SettingsSubjectColorsKey]
+        ?.let { stored -> runCatching { json.decodeFromString<Map<String, Int>>(stored) }.getOrNull() }
+        ?: emptyMap(),
     )
   }
 
@@ -138,6 +169,12 @@ class SettingsStore internal constructor(
     this[SettingsPeriodicSyncKey] = next.periodicSyncEnabled
     this[SettingsNetworkConfigKey] = json.encodeToString(next.networkConfig)
     this[SettingsIgnoredStableUpdateVersionKey] = next.ignoredStableUpdateVersion
+    // Nessuna scelta, nessuna chiave: chi non ha mai toccato un colore ha il file di prima.
+    if (next.subjectColors.isEmpty()) {
+      remove(SettingsSubjectColorsKey)
+    } else {
+      this[SettingsSubjectColorsKey] = json.encodeToString(next.subjectColors)
+    }
   }
 
   suspend fun readSettings(): AppSettings = settings.first()
@@ -449,5 +486,13 @@ object StoresModule {
   @Provides
   @Singleton
   fun provideSessionStorage(sessionStore: SessionStore): SessionStorage = sessionStore
+
+  @Provides
+  @Singleton
+  fun provideViewPreferencesStore(@ApplicationContext context: Context): ViewPreferencesStore =
+    ViewPreferencesStore(context)
+
+  @Provides
+  fun provideViewPreferences(store: ViewPreferencesStore): ViewPreferencesRepository = store
 
 }

@@ -1,5 +1,7 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.nearDayLabel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -409,6 +411,12 @@ private fun DayOfWeek.shortLabel(): String = when (this) {
 fun ProfessorsRoute(
   onBack: (() -> Unit)? = null,
   onOpenProfessor: ((String) -> Unit)? = null,
+  /**
+   * L'elemento mostrato nel pannello accanto, su uno schermo largo: la sua riga si accende e le
+   * frecce spariscono, perche' toccare una riga li' sceglie cosa mostrare invece di aprire.
+   */
+  selectedId: String? = null,
+  inPane: Boolean = false,
   viewModel: ProfessorsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -417,7 +425,7 @@ fun ProfessorsRoute(
   var professorOrigin by remember { mutableStateOf<Rect?>(null) }
 
   FluidScreen(
-    title = "Professori",
+    title = "Docenti",
     ambient = FeatureIdentity.People.ambient(),
     subtitle = "Presenza, rigore e valutazioni per i tuoi docenti — solo i docenti ufficiali della classe.",
     onBack = onBack,
@@ -473,7 +481,7 @@ fun ProfessorsRoute(
           subtitle = prof.subjects.joinToString(", ").ifBlank { "Materia non specificata" },
           eyebrow = "Presenza ${(prof.presenceRate * 100).toInt()}%",
           meta = buildString {
-            if (prof.gradeCount > 0) append("${prof.gradeCount} voti")
+            if (prof.gradeCount > 0) append(countLabel(prof.gradeCount, "voto", "voti"))
             prof.averageGrade?.let { append(" · media %.1f".format(it)) }
             if (prof.gradeCount == 0) append("Nessun voto assegnato")
           },
@@ -483,6 +491,8 @@ fun ProfessorsRoute(
             professorOrigin = rowBounds
             if (onOpenProfessor != null) onOpenProfessor(prof.teacherName) else viewModel.selectProfessor(prof)
           },
+          selected = inPane && prof.teacherName == selectedId,
+          disclosure = !inPane,
           badge = { FluidStatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
           animatePress = true,
         )
@@ -504,7 +514,7 @@ fun ProfessorsRoute(
 @Composable
 fun ProfessorDetailRoute(
   teacherName: String,
-  onBack: () -> Unit,
+  onBack: (() -> Unit)?,
   modifier: Modifier = Modifier,
   viewModel: ProfessorsViewModel = hiltViewModel(),
 ) {
@@ -512,10 +522,10 @@ fun ProfessorDetailRoute(
   val professor = state.professors.firstOrNull { it.teacherName == teacherName }
 
   if (professor == null) {
-    FluidScreen(title = "Dettaglio professore", modifier = modifier, onBack = onBack) {
+    FluidScreen(title = "Dettaglio docente", ambient = FeatureIdentity.People.ambient(), modifier = modifier, onBack = onBack) {
       item(key = "professor-detail-missing") {
         FluidEmptyState(
-          title = "Professore non disponibile",
+          title = "Docente non disponibile",
           detail = "Il profilo potrebbe non essere ancora stato ricostruito dai dati sincronizzati.",
         )
       }
@@ -536,7 +546,8 @@ fun ProfessorDetailRoute(
   }
 
   FluidContainerScaffold(
-    title = "Dettaglio professore",
+    ambient = FeatureIdentity.People.ambient(),
+    title = "Dettaglio docente",
     modifier = modifier,
     onBack = onBack,
     hero = {
@@ -544,7 +555,7 @@ fun ProfessorDetailRoute(
         title = professor.teacherName,
         subtitle = professor.subjects.joinToString(", ").ifBlank { "Materia non specificata" },
         eyebrow = "Presenza ${(professor.presenceRate * 100).toInt()}%",
-        meta = if (professor.gradeCount > 0) "${professor.gradeCount} voti" else "Nessun voto assegnato",
+        meta = if (professor.gradeCount > 0) countLabel(professor.gradeCount, "voto", "voti") else "Nessun voto assegnato",
         tone = presenceTone,
         leading = { Icon(Icons.Rounded.Person, contentDescription = null) },
         badge = { FluidStatusBadge(professor.strictnessLabel.uppercase(), tone = strictnessTone) },
@@ -565,7 +576,7 @@ fun ProfessorDetailRoute(
         FluidSectionHeader("Probabili assenze recenti")
         professor.absenceDays.takeLast(5).forEach { date ->
           FluidListRow(
-            title = date,
+            title = nearDayLabel(date).replaceFirstChar { it.uppercase() },
             subtitle = "Giorno tipico senza lezione registrata.",
             tone = FluidTone.Warning,
             badge = { FluidStatusBadge("ASSENTE", tone = FluidTone.Warning) },
@@ -594,7 +605,7 @@ fun ProfessorDetailRoute(
       FluidSectionHeader("Dossier")
       FluidListRow(
         title = professor.funNickname,
-        subtitle = "${professor.longestPresenceStreakWeeks} settimane consecutive · ${professor.subjects.size} materie monitorate.",
+        subtitle = "${countLabel(professor.longestPresenceStreakWeeks, "settimana consecutiva", "settimane consecutive")} · ${countLabel(professor.subjects.size, "materia monitorata", "materie monitorate")}.",
         tone = FluidTone.Success,
         badge = { FluidStatusBadge("PROFILO", tone = FluidTone.Success) },
       )
@@ -671,7 +682,7 @@ private fun ProfessorDetailContent(
         item { FluidSectionHeader("Probabili assenze recenti") }
         fluidGlassGroups(prof.absenceDays.takeLast(5)) { date ->
           FluidListRow(
-            title = date,
+            title = nearDayLabel(date).replaceFirstChar { it.uppercase() },
             subtitle = "Giorno tipico senza lezione registrata.",
             tone = FluidTone.Warning,
             badge = { FluidStatusBadge("ASSENTE", tone = FluidTone.Warning) },
@@ -697,7 +708,7 @@ private fun ProfessorDetailContent(
           FluidMetricTile(
             label = "Voti/lezione",
             value = "%.2f".format(prof.evaluationDensity),
-            detail = "Densita valutativa.",
+            detail = "Densità valutativa.",
             modifier = Modifier.weight(1f),
             tone = FluidTone.Info,
             glass = true,
@@ -779,9 +790,9 @@ private fun ProfessorDetailContent(
           title = prof.funNickname,
           subtitle = buildString {
             append("Classificazione segreta basata su ")
-            append("${prof.actualDays} giorni di osservazione, ")
+            append("${countLabel(prof.actualDays, "giorno", "giorni")} di osservazione, ")
             append("${prof.gradeCount} valutazioni e ")
-            append("${prof.subjects.size} materie monitorate.")
+            append("${countLabel(prof.subjects.size, "materia monitorata", "materie monitorate")}.")
           },
           tone = FluidTone.Success,
           badge = { FluidStatusBadge("TOP SECRET", tone = FluidTone.Success) },

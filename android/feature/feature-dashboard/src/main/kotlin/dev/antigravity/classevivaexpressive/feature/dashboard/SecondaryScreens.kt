@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeDateLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.VividBadge
@@ -405,7 +406,7 @@ fun MeetingsRoute(
   FluidScreen(
     title = "Colloqui",
     ambient = FeatureIdentity.Meetings.ambient(),
-    subtitle = "Prenotazioni e disponibilita dei docenti.",
+    subtitle = "Prenotazioni e disponibilità dei docenti.",
     onBack = onBack,
     actions = {
       FluidBarAction(
@@ -427,7 +428,7 @@ fun MeetingsRoute(
         icon = Icons.Rounded.Groups,
         trailing = {
           if (state.bookings.isNotEmpty()) {
-            VividBadge("${state.bookings.size} PRENOTATI")
+            VividBadge(if (state.bookings.size == 1) "1 PRENOTATO" else "${state.bookings.size} PRENOTATI")
           }
         },
       )
@@ -451,7 +452,7 @@ fun MeetingsRoute(
           title = booking.teacher.name,
           subtitle = booking.slot.meetingSlotLabel(),
           eyebrow = booking.teacher.subject ?: "Colloquio",
-          meta = booking.bookingPosition?.let { "Posizione: $it" } ?: booking.status,
+          meta = booking.bookingPosition?.let { "Posizione: $it" },
           tone = FluidTone.Success,
           onClick = { meetingOrigin = rowBounds; viewModel.selectBooking(booking) },
           badge = { FluidStatusBadge("PRENOTATO", tone = FluidTone.Success) },
@@ -484,7 +485,7 @@ fun MeetingsRoute(
       item {
         FluidEmptyState(
           title = "Nessun colloquio disponibile",
-          detail = "Le prenotazioni e le disponibilita compariranno qui dopo la sincronizzazione o quando il portale le espone.",
+          detail = "Quando i docenti aprono i ricevimenti li trovi qui, insieme ai colloqui che hai prenotato.",
         )
       }
       item {
@@ -541,7 +542,7 @@ fun MeetingsRoute(
     item = state.selectedSlot,
     onDismissRequest = viewModel::dismissSelection,
     origin = { meetingOrigin },
-    paneTitle = "Disponibilita colloquio",
+    paneTitle = "Disponibilità colloquio",
   ) { slot ->
     val teacher = teachersById[slot.teacherId]
     Column(
@@ -572,12 +573,20 @@ fun MeetingsRoute(
 
 private fun MeetingSlot.meetingSlotLabel(): String {
   return listOfNotNull(
-    date.takeIf(String::isNotBlank),
+    // Il giorno detto per esteso: dal portale arriva in ISO, e "2026-10-05" in mezzo a una riga
+    // italiana era l'unica data grezza della pagina.
+    date.takeIf(String::isNotBlank)?.let { raw ->
+      runCatching {
+        java.time.LocalDate.parse(raw.take(10))
+          .format(java.time.format.DateTimeFormatter.ofPattern("EEEE d MMMM", java.util.Locale.ITALIAN))
+          .replaceFirstChar { it.uppercase() }
+      }.getOrDefault(raw)
+    },
     buildString {
       append(startTime)
       endTime?.takeIf(String::isNotBlank)?.let { append(" - $it") }
     }.takeIf(String::isNotBlank),
-  ).joinToString(" / ")
+  ).joinToString(" · ")
 }
 
 private fun Context.openUrl(url: String) {
@@ -609,6 +618,12 @@ private fun Context.openResource(
 fun MaterialsRoute(
   onBack: (() -> Unit)? = null,
   onOpenMaterial: ((String) -> Unit)? = null,
+  /**
+   * L'elemento mostrato nel pannello accanto, su uno schermo largo: la sua riga si accende e le
+   * frecce spariscono, perche' toccare una riga li' sceglie cosa mostrare invece di aprire.
+   */
+  selectedId: String? = null,
+  inPane: Boolean = false,
   viewModel: MaterialsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -686,12 +701,14 @@ fun MaterialsRoute(
             title = item.title,
             subtitle = item.teacherName,
             eyebrow = item.folderName,
-            meta = item.sharedAt,
+            meta = item.sharedAt.takeIf(String::isNotBlank)?.let { "Condiviso il ${gradeDateLabel(it.take(10))}" },
             tone = item.materialTone(),
             onClick = {
               materialOrigin = rowBounds
               if (onOpenMaterial != null) onOpenMaterial(item.id) else selectedItem = item
             },
+            selected = inPane && item.id == selectedId,
+            disclosure = !inPane,
             badge = {
               FluidStatusBadge(item.materialBadgeLabel(), tone = item.materialTone())
             },
@@ -793,7 +810,7 @@ fun MaterialsRoute(
 @Composable
 fun MaterialDetailRoute(
   itemId: String,
-  onBack: () -> Unit,
+  onBack: (() -> Unit)?,
   modifier: Modifier = Modifier,
   viewModel: MaterialsViewModel = hiltViewModel(),
 ) {
@@ -823,6 +840,7 @@ fun MaterialDetailRoute(
   }
 
   FluidContainerScaffold(
+    ambient = FeatureIdentity.Materials.ambient(),
     title = "Dettaglio materiale",
     modifier = modifier,
     onBack = onBack,
@@ -831,7 +849,7 @@ fun MaterialDetailRoute(
         title = item.title,
         subtitle = item.teacherName,
         eyebrow = item.folderName,
-        meta = item.sharedAt,
+        meta = item.sharedAt.takeIf(String::isNotBlank)?.let { "Condiviso il ${gradeDateLabel(it.take(10))}" },
         tone = item.materialTone(),
         badge = { FluidStatusBadge(item.materialBadgeLabel(), tone = item.materialTone()) },
         animatePress = false,
@@ -982,6 +1000,12 @@ fun HomeworkRoute(
   initialHomeworkId: String? = null,
   onBack: (() -> Unit)? = null,
   onOpenHomework: ((String) -> Unit)? = null,
+  /**
+   * L'elemento mostrato nel pannello accanto, su uno schermo largo: la sua riga si accende e le
+   * frecce spariscono, perche' toccare una riga li' sceglie cosa mostrare invece di aprire.
+   */
+  selectedId: String? = null,
+  inPane: Boolean = false,
   viewModel: HomeworkViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -995,6 +1019,31 @@ fun HomeworkRoute(
     if (!initialHomeworkId.isNullOrBlank() && state.selectedHomework?.id != initialHomeworkId) {
       state.homeworks.firstOrNull { it.id == initialHomeworkId }?.let(viewModel::selectHomework)
     }
+  }
+
+  val homeworkRow: @Composable (Homework) -> Unit = { item ->
+    var rowBounds by remember { mutableStateOf<Rect?>(null) }
+    FluidListRow(
+      modifier = Modifier.fluidExpandOrigin { rowBounds = it },
+      title = item.subject.ifBlank { item.description },
+      subtitle = if (item.subject.isBlank()) "" else item.description,
+      eyebrow = "COMPITO",
+      meta = item.homeworkMeta(),
+      tone = homeworkDue(item.dueDate, homeworkToday).tone(),
+      onClick = {
+        homeworkOrigin = rowBounds
+        if (onOpenHomework != null) onOpenHomework(item.id) else viewModel.selectHomework(item)
+      },
+      selected = inPane && item.id == selectedId,
+      disclosure = !inPane,
+      badge = {
+        if (item.history.isNotEmpty()) {
+          FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
+        }
+        val due = homeworkDue(item.dueDate, homeworkToday)
+        FluidStatusBadge(due.badgeLabel(item.dueDate, homeworkToday), tone = due.tone())
+      },
+    )
   }
 
   FluidScreen(
@@ -1034,27 +1083,22 @@ fun HomeworkRoute(
         }
       }
     } else {
-      fluidGlassGroups(state.homeworks) { item ->
-        var rowBounds by remember { mutableStateOf<Rect?>(null) }
-        FluidListRow(
-          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
-          title = item.subject,
-          subtitle = item.description,
-          eyebrow = "COMPITO",
-          meta = item.homeworkMeta(),
-          tone = homeworkDue(item.dueDate, homeworkToday).tone(),
-          onClick = {
-            homeworkOrigin = rowBounds
-            if (onOpenHomework != null) onOpenHomework(item.id) else viewModel.selectHomework(item)
-          },
-          badge = {
-            if (item.history.isNotEmpty()) {
-              FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
-            }
-            val due = homeworkDue(item.dueDate, homeworkToday)
-            FluidStatusBadge(due.badgeLabel(item.dueDate, homeworkToday), tone = due.tone())
-          },
-        )
+      // Prima quello che c'e' ancora da fare, dalla consegna piu' vicina; poi lo scaduto, dal piu'
+      // recente. In ordine di data semplice la pagina si apriva sul compito piu' vecchio dell'anno.
+      val (pending, overdue) = state.homeworks.partition {
+        homeworkDue(it.dueDate, homeworkToday) != HomeworkDue.Overdue
+      }
+      if (pending.isNotEmpty()) {
+        item(key = "homework:pending-header") { FluidSectionHeader("Da consegnare") }
+        fluidGlassGroups(pending.sortedBy { it.dueDate.ifBlank { "9999" } }, key = "homework:pending") { item ->
+          homeworkRow(item)
+        }
+      }
+      if (overdue.isNotEmpty()) {
+        item(key = "homework:overdue-header") { FluidSectionHeader("Scaduti") }
+        fluidGlassGroups(overdue.sortedByDescending { it.dueDate }, key = "homework:overdue") { item ->
+          homeworkRow(item)
+        }
       }
     }
   }
@@ -1114,7 +1158,7 @@ fun HomeworkRoute(
         }
         if (hw.dueDate.isNotBlank()) {
           Text(
-            text = "Scadenza: ${hw.dueDate}",
+            text = "Scadenza: ${hw.dueDate.homeworkDueLabel()}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
@@ -1127,7 +1171,7 @@ fun HomeworkRoute(
 @Composable
 fun HomeworkDetailRoute(
   homeworkId: String,
-  onBack: () -> Unit,
+  onBack: (() -> Unit)?,
   modifier: Modifier = Modifier,
   viewModel: HomeworkViewModel = hiltViewModel(),
 ) {
@@ -1157,15 +1201,18 @@ fun HomeworkDetailRoute(
 
   val detail = state.selectedDetail?.takeIf { it.homework.id == homeworkId }
   FluidContainerScaffold(
+    ambient = FeatureIdentity.Homework.ambient(),
     title = "Dettaglio compito",
     modifier = modifier,
     onBack = onBack,
     hero = {
       FluidListRow(
-        title = homework.subject,
-        subtitle = homework.description,
+        title = homework.subject.ifBlank { homework.description },
+        subtitle = if (homework.subject.isBlank()) "" else homework.description,
         eyebrow = "COMPITO",
-        meta = homework.homeworkMeta(),
+        // Le date stanno una volta sola, sotto, per esteso: nella testata ripetevano la riga
+        // "Aggiunto / Scadenza" che il corpo scrive subito dopo.
+        meta = null,
         tone = homeworkDue(homework.dueDate, LocalDate.now()).tone(),
         badge = {
           if (homework.history.isNotEmpty()) FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
@@ -1177,15 +1224,20 @@ fun HomeworkDetailRoute(
     },
     secondary = {
       if (state.isLoadingDetail) FluidIndeterminateBar(Modifier.fillMaxWidth())
-      Text(
-        text = detail?.fullText?.takeIf(String::isNotBlank) ?: homework.description,
-        style = MaterialTheme.typography.bodyLarge,
-      )
+      val body = detail?.fullText?.takeIf(String::isNotBlank) ?: homework.description
+      // Senza materia la testata mostra gia' la consegna come titolo: ripeterla identica subito
+      // sotto era leggere due volte la stessa frase.
+      if (homework.subject.isNotBlank() || body.trim() != homework.description.trim()) {
+        Text(
+          text = body,
+          style = MaterialTheme.typography.bodyLarge,
+        )
+      }
       detail?.assignedDate?.let { Text("Aggiunto: ${it.homeworkCreatedAtLabel()}") }
       homework.modifiedAtLabel()?.let { Text("Modificato: $it") }
       detail?.teacher?.takeIf(String::isNotBlank)?.let { Text("Docente: $it") }
       homework.notes?.takeIf(String::isNotBlank)?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-      homework.dueDate.takeIf(String::isNotBlank)?.let { Text("Scadenza: $it") }
+      homework.dueDate.takeIf(String::isNotBlank)?.let { Text("Scadenza: ${it.homeworkDueLabel()}") }
     },
   )
 }
@@ -1367,10 +1419,17 @@ class DocumentsViewModel @Inject constructor(
 fun DocumentsRoute(
   onBack: (() -> Unit)? = null,
   onOpenDocument: ((String) -> Unit)? = null,
+  /**
+   * L'elemento mostrato nel pannello accanto, su uno schermo largo: la sua riga si accende e le
+   * frecce spariscono, perche' toccare una riga li' sceglie cosa mostrare invece di aprire.
+   */
+  selectedId: String? = null,
+  inPane: Boolean = false,
   viewModel: DocumentsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   var selectedTab by rememberSaveable { mutableStateOf("Documenti") }
+  val bookCount = remember(state.schoolbookCourses) { state.schoolbookCourses.sumOf { it.books.size } }
   val selectedRefreshError = if (selectedTab == "Documenti") {
     state.documentsRefreshError
   } else {
@@ -1407,14 +1466,15 @@ fun DocumentsRoute(
       FeatureHero(
         identity = FeatureIdentity.Documents,
         eyebrow = "Archivio scolastico",
-        value = state.documents.size.toString(),
-        label = if (state.documents.size == 1) "documento" else "documenti",
-        icon = Icons.AutoMirrored.Rounded.MenuBook,
-        trailing = {
-          if (state.schoolbookCourses.isNotEmpty()) {
-            VividBadge("${state.schoolbookCourses.size} CORSI")
-          }
+        // La fascia conta quello che la scheda sotto mostra: sui libri diceva "0 documenti", e il
+        // numero dei corsi stava in un'etichetta sopra il disegno della fascia.
+        value = (if (selectedTab == "Libri") bookCount else state.documents.size).toString(),
+        label = when {
+          selectedTab == "Libri" -> if (bookCount == 1) "libro adottato" else "libri adottati"
+          state.documents.size == 1 -> "documento"
+          else -> "documenti"
         },
+        icon = Icons.AutoMirrored.Rounded.MenuBook,
       )
     }
     if (state.initialLoading && state.documents.isEmpty() && state.schoolbookCourses.isEmpty()) {
@@ -1470,6 +1530,8 @@ fun DocumentsRoute(
               documentOrigin = rowBounds
               if (onOpenDocument != null) onOpenDocument(doc.id) else viewModel.openDocument(doc)
             },
+            selected = inPane && doc.id == selectedId,
+            disclosure = !inPane,
             badge = { FluidStatusBadge(doc.documentBadgeLabel(), tone = doc.documentTone()) },
             animatePress = true,
           )
@@ -1599,7 +1661,7 @@ fun DocumentsRoute(
 @Composable
 fun DocumentDetailRoute(
   documentId: String,
-  onBack: () -> Unit,
+  onBack: (() -> Unit)?,
   modifier: Modifier = Modifier,
   viewModel: DocumentsViewModel = hiltViewModel(),
 ) {
@@ -1631,6 +1693,7 @@ fun DocumentDetailRoute(
   }
 
   FluidContainerScaffold(
+    ambient = FeatureIdentity.Documents.ambient(),
     title = "Dettaglio documento",
     modifier = modifier,
     onBack = onBack,
@@ -1762,14 +1825,14 @@ class StudentScoreViewModel @Inject constructor(
   fun importPayload(payload: String) = viewModelScope.launch {
     studentScoreRepository.importPayload(payload)
       .onSuccess { comparison -> extras.update { it.copy(importResult = comparison) } }
-      .onFailure { e -> extras.update { it.copy(lastMessage = e.message ?: "Payload non valido") } }
+      .onFailure { e -> extras.update { it.copy(lastMessage = e.message ?: "Dati non validi") } }
   }
 
   fun exportPayload(onPayload: (String) -> Unit) = viewModelScope.launch {
     extras.update { it.copy(isExporting = true) }
     studentScoreRepository.exportCurrentPayload()
       .onSuccess { onPayload(it) }
-      .onFailure { e -> extras.update { it.copy(lastMessage = e.message ?: "Export non riuscito") } }
+      .onFailure { e -> extras.update { it.copy(lastMessage = e.message ?: "Esportazione non riuscita") } }
     extras.update { it.copy(isExporting = false) }
   }
 
@@ -1856,7 +1919,7 @@ fun StudentScoreRoute(
           leading = { Icon(Icons.Rounded.Share, contentDescription = null,) },
         )
         FluidButton(
-          text = "Importa da clipboard",
+          text = "Importa dagli appunti",
           onClick = {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
             val text = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""

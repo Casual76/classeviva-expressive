@@ -18,6 +18,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -127,6 +128,28 @@ class CommunicationsViewModelTest {
   }
 
   // ─── Apertura dettaglio comunicazione ─────────────────────────────────────
+
+  @Test
+  fun openCommunication_detailFollowsReadStateOfTheList() = runTest {
+    // Aprirla la segna letta: l'elenco lo sa, il dettaglio preso all'apertura no.
+    val listed = MutableStateFlow(listOf(buildCommunication()))
+    every { communicationsRepository.observeCommunications() } returns listed
+    every { communicationsRepository.observeNotes() } returns flowOf(emptyList())
+    coEvery { communicationsRepository.getCommunicationDetail("c1", "CIR") } returns
+      Result.success(buildDetail(buildCommunication()))
+
+    val vm = buildViewModel()
+
+    vm.state.test {
+      awaitItem()
+      vm.openCommunication("c1", "CIR")
+      assertEquals(false, expectMostRecentItem().selectedCommunication?.communication?.read)
+      listed.value = listOf(buildCommunication().copy(read = true))
+      assertEquals(true, awaitItem().selectedCommunication?.communication?.read)
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
 
   @Test
   fun openCommunication_setsSelectedCommunicationInState() = runTest {

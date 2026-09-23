@@ -870,6 +870,12 @@ data class AppSettings(
   val periodicSyncEnabled: Boolean = true,
   val networkConfig: NetworkConfig = NetworkConfig(),
   val ignoredStableUpdateVersion: String = "",
+  /**
+   * I colori scelti per le materie, per famiglia ([SubjectKeys]) e in ARGB. Solo le scelte: una
+   * famiglia assente ha il colore di default, cosi' un default che cambia arriva anche a chi non ha
+   * mai toccato niente.
+   */
+  val subjectColors: Map<String, Int> = emptyMap(),
 ) {
   val notificationsEnabled: Boolean
     get() = notificationPreferences.enabled
@@ -1049,6 +1055,24 @@ data class AppBackupImportSummary(
   val skippedForeignStudentGrades: Int = 0,
 )
 
+/** Come si guarda l'agenda: il mese intero o la settimana sulle ore. */
+enum class AgendaViewMode {
+  MONTH,
+  WEEK,
+}
+
+/**
+ * Le preferenze di vista: come una pagina si e' lasciata l'ultima volta.
+ *
+ * Separate da [AppSettings] di proposito: non sono impostazioni che si scelgono, sono il segno di
+ * come si e' usata l'app. Non vanno nel backup (una settimana ripristinata su un telefono non ha
+ * dove mostrarsi) e cambiarle non deve far riemettere il tema a tutta l'app.
+ */
+interface ViewPreferencesRepository {
+  fun observeAgendaViewMode(): Flow<AgendaViewMode>
+  suspend fun setAgendaViewMode(mode: AgendaViewMode)
+}
+
 interface SettingsRepository {
   fun observeSettings(): Flow<AppSettings>
   fun observeNotificationRuntimeState(): Flow<NotificationRuntimeState>
@@ -1067,6 +1091,10 @@ interface SettingsRepository {
   suspend fun updateGatewayBaseUrl(url: String)
   suspend fun refreshLiveTimetable()
   suspend fun ignoreStableUpdateVersion(version: String)
+
+  /** Il colore di una famiglia di materie; null la riporta al default. */
+  suspend fun setSubjectColor(key: String, argb: Int?)
+  suspend fun resetSubjectColors()
 }
 
 @Serializable

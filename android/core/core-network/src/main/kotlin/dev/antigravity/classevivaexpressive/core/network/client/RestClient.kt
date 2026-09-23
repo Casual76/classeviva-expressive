@@ -34,6 +34,15 @@ private val NoticeboardAttachmentIndexedUrl = Regex("""(.*/noticeboard/attach/[^
 open class ClassevivaNetworkException(message: String, cause: Throwable? = null) : IOException(message, cause)
 
 /**
+ * Se l'errore e' un 404 del registro, e non un altro guasto con lo stesso tipo.
+ *
+ * Risale la catena delle cause: attraversando un confine di coroutine l'eccezione puo' arrivare
+ * ricopiata, con l'originale — quello che porta l'`HttpException` — come causa.
+ */
+internal fun ClassevivaNetworkException.isHttpNotFound(): Boolean =
+  generateSequence<Throwable>(this) { it.cause }.take(8).any { it is HttpException && it.code() == 404 }
+
+/**
  * Classeviva refuses every request for a school year the school has not opened yet, answering 422
  * with `school year not started yet`. It is not a failure so much as an instruction: read last year
  * instead. Typed separately so the sync layer can act on it rather than just reporting it.
@@ -153,17 +162,30 @@ class ClassevivaRestClient @Inject constructor(
 
   suspend fun getAbsences(startDate: String, endDate: String): List<dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord> = withContext(Dispatchers.IO) {
     val session = requireSession()
-    apiCall {
-      extractArray(
-        apiService.getAbsencesInRange(
-          studentId = session.studentId,
-          begin = toApiDateParam(startDate),
-          end = toApiDateParam(endDate),
-        ).toPayload(),
-        "events",
-        "absences",
-        "items",
-      ).map(::normalizeAbsence)
+    try {
+      apiCall {
+        extractArray(
+          apiService.getAbsencesInRange(
+            studentId = session.studentId,
+            begin = toApiDateParam(startDate),
+            end = toApiDateParam(endDate),
+          ).toPayload(),
+          "events",
+          "absences",
+          "items",
+        ).map(::normalizeAbsence)
+      }
+    } catch (exception: ClassevivaNetworkException) {
+      // Il registro risponde 404 all'intervallo quando nell'anno non c'e' ancora nessun evento — a
+      // settembre, cioe' per settimane — invece di una lista vuota. L'elenco completo e' l'unico
+      // modo di distinguere "niente da mostrare" da "risorsa davvero sparita": se anche quello e'
+      // 404, non ci sono assenze; se risponde, si tiene la parte dentro l'intervallo.
+      if (!exception.isHttpNotFound()) throw exception
+      try {
+        getAbsences().filter { absence -> absence.date.take(10) in startDate.take(10)..endDate.take(10) }
+      } catch (fallback: ClassevivaNetworkException) {
+        if (fallback.isHttpNotFound()) emptyList() else throw fallback
+      }
     }
   }
 

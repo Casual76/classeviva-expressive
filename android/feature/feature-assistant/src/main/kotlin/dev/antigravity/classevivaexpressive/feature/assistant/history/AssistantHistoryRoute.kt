@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.assistant.history
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
@@ -47,7 +48,7 @@ fun AssistantHistoryRoute(
 
   FluidScreen(
     title = "Assistente",
-    subtitle = if (items.isEmpty()) "Le conversazioni restano qui, sul telefono." else "${items.size} conversazioni, sul telefono.",
+    subtitle = if (items.isEmpty()) "Le conversazioni restano qui, sul telefono." else "${countLabel(items.size, "conversazione", "conversazioni")}, sul telefono.",
     ambient = FeatureIdentity.Settings.ambient(),
     onBack = onBack,
     itemSpacing = 12.dp,

@@ -560,6 +560,48 @@ class RestClientNetworkTest {
   }
 
   @Test
+  fun getAbsencesInRange_404FallsBackToFullListInsideRange() = runBlocking {
+    setActiveSession(token = "token-abs", studentId = "312345")
+    server.enqueue(MockResponse().setResponseCode(404).setBody("""{ "error": "not found" }"""))
+    server.enqueue(
+      MockResponse().setResponseCode(200).setBody(
+        """{ "events": [
+          { "evtId": 1, "evtCode": "ABA0", "evtDate": "2026-09-21" },
+          { "evtId": 2, "evtCode": "ABA0", "evtDate": "2025-05-10" }
+        ] }""",
+      ),
+    )
+
+    val absences = restClient.getAbsences("2026-09-01", "2027-08-31")
+
+    assertEquals(listOf("2026-09-21"), absences.map { it.date })
+    assertTrue(server.takeRequest().path.orEmpty().contains("/absences/details/20260901/20270831"))
+    assertEquals("/rest/v1/students/312345/absences/details", server.takeRequest().path)
+  }
+
+  @Test
+  fun getAbsencesInRange_404OnBothMeansNoAbsences() = runBlocking {
+    setActiveSession(token = "token-abs-empty", studentId = "312345")
+    server.enqueue(MockResponse().setResponseCode(404).setBody("""{ "error": "not found" }"""))
+    server.enqueue(MockResponse().setResponseCode(404).setBody("""{ "error": "not found" }"""))
+
+    assertEquals(emptyList<Any>(), restClient.getAbsences("2026-09-01", "2027-08-31"))
+  }
+
+  @Test
+  fun getAbsencesInRange_otherErrorsStillFail() = runBlocking {
+    setActiveSession(token = "token-abs-500", studentId = "312345")
+    server.enqueue(MockResponse().setResponseCode(500).setBody("""{ "error": "boom" }"""))
+
+    try {
+      restClient.getAbsences("2026-09-01", "2027-08-31")
+      fail("Expected ClassevivaNetworkException")
+    } catch (exception: ClassevivaNetworkException) {
+      assertTrue(exception.message.orEmpty().contains("500"))
+    }
+  }
+
+  @Test
   fun getProfile_maps404ToDomainError() = runBlocking {
     setActiveSession(token = "token-404", studentId = "312345")
     server.enqueue(MockResponse().setResponseCode(404).setBody("""{ "error": "not found" }"""))

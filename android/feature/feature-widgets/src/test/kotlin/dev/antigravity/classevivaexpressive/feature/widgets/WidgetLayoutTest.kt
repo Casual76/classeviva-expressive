@@ -68,4 +68,22 @@ class WidgetLayoutTest {
 
     assertEquals(WidgetMetrics.MaxRows, layout.rowLimit)
   }
+
+  @Test
+  fun `a tablet-wide cell puts the rows on two columns`() {
+    val phone = resolveWidgetLayout(DpSize(300.dp, 300.dp), hasCounters = false)
+    val tablet = resolveWidgetLayout(DpSize(460.dp, 300.dp), hasCounters = false)
+
+    assertEquals(1, phone.columns)
+    assertEquals(2, tablet.columns)
+    assertEquals(tablet.rowLimit * 2, tablet.totalRows)
+  }
+
+  @Test
+  fun `a wide but short cell stays one column`() {
+    val layout = resolveWidgetLayout(DpSize(460.dp, 110.dp), hasCounters = false)
+
+    assertTrue(layout.compact)
+    assertEquals(1, layout.columns)
+  }
 }

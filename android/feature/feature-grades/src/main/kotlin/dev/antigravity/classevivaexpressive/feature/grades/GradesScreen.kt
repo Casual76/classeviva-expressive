@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.grades
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -86,6 +87,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.fluidGridItems
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
 import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
 import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
@@ -323,9 +327,15 @@ fun GradesRoute(
     buildGradesFacets(state.grades, state.seenGradeIds)
   }
 
+  val metrics = rememberFluidScreenMetrics()
+
   FluidScreen(
     modifier = modifier,
     title = "Voti",
+    // Su uno schermo largo i voti stanno in griglia: una colonna di card vivide larga undici
+    // centimetri e' una fila di bandiere, due o tre affiancate sono un quadro dell'anno.
+    contentMaxWidth = FluidColumnsDefaults.WideContentMaxWidth,
+    metrics = metrics,
     ambient = FeatureIdentity.Grades.ambient(),
     subtitle = state.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
@@ -434,24 +444,58 @@ fun GradesRoute(
       }
     }
 
-    if (state.periods.isNotEmpty()) {
+    // Un periodo solo non si sceglie: il selettore era una pastiglia sola, gia' accesa, che
+    // ripeteva il nome scritto nella fascia sopra. Compare quando c'e' davvero un'alternativa.
+    val choosablePeriods = state.periods.size > 1
+    if (metrics.columns() > 1) {
+      // Largo, i due selettori stanno su una riga: stirati da bordo a bordo erano due barre lunghe
+      // come la pagina per due o tre parole ciascuna. Con un periodo solo le schede restano a
+      // meta' riga, allineate alla colonna di sinistra.
       item {
-        PeriodSelector(
-          periods = state.periods,
-          selectedCode = effectivePeriodCode,
-          onSelect = viewModel::selectPeriod,
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(14.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          if (choosablePeriods) {
+            Box(modifier = Modifier.weight(1f)) {
+              PeriodSelector(
+                periods = state.periods,
+                selectedCode = effectivePeriodCode,
+                onSelect = viewModel::selectPeriod,
+              )
+            }
+          }
+          Box(modifier = Modifier.weight(1f)) {
+            FluidPillTabs(
+              options = listOf(TAB_RECENT, TAB_SUBJECTS),
+              selected = selectedTab,
+              onSelect = { selectedTab = it },
+            )
+          }
+          if (!choosablePeriods) Spacer(modifier = Modifier.weight(1f))
+        }
+      }
+    } else {
+      if (choosablePeriods) {
+        item {
+          PeriodSelector(
+            periods = state.periods,
+            selectedCode = effectivePeriodCode,
+            onSelect = viewModel::selectPeriod,
+          )
+        }
+      }
+
+      item {
+        FluidPillTabs(
+          options = listOf(TAB_RECENT, TAB_SUBJECTS),
+          selected = selectedTab,
+          onSelect = { selectedTab = it },
         )
       }
     }
-    
-    item {
-      FluidPillTabs(
-        options = listOf(TAB_RECENT, TAB_SUBJECTS),
-        selected = selectedTab,
-        onSelect = { selectedTab = it },
-      )
-    }
-    
+
     if (periodUnseen.isNotEmpty()) {
       item {
         FluidQuickAction(
@@ -467,14 +511,22 @@ fun GradesRoute(
           item {
             FluidEmptyState(
               title = "Nessun voto in questo periodo",
-              detail = "Seleziona un altro periodo oppure attendi la sincronizzazione dei dati.",
+              detail = if (choosablePeriods) {
+                "Scegli un altro periodo, o torna quando i docenti avranno registrato i primi voti."
+              } else {
+                "Compariranno qui appena i docenti li registrano."
+              },
             )
           }
         } else {
           // Card separate, non righe in un gruppo: il colore della fascia E' l'informazione, e la
           // superficie intera lo porta. Superfici piccole e opache — il tetto texture che impone
           // fluidGlassGroups alle liste su vetro qui non e' in gioco.
-          items(recentGrades, key = Grade::id) { grade ->
+          fluidGridItems(
+            items = recentGrades,
+            columns = metrics.columns(minColumn = FluidColumnsDefaults.MinCard),
+            key = Grade::id,
+          ) { grade ->
             var rowBounds by remember { mutableStateOf<Rect?>(null) }
             val unseen = !state.seenGradeIds.contains(grade.id)
             val readableDate = remember(grade.date) { grade.date.toReadableDate() }
@@ -519,16 +571,28 @@ fun GradesRoute(
       TAB_SUBJECTS -> {
         if (subjectRows.isEmpty()) {
           item {
-            FluidEmptyState(
-              title = "Mancano voti numerici",
-              detail = "Le medie per materia vengono calcolate solo in presenza di valutazioni con valore decimale.",
-            )
+            // Senza nessun voto il motivo non e' che mancano quelli numerici: non c'e' niente.
+            if (filteredGrades.isEmpty()) {
+              FluidEmptyState(
+                title = "Nessun voto in questo periodo",
+                detail = "Le medie per materia compaiono con i primi voti.",
+              )
+            } else {
+              FluidEmptyState(
+                title = "Mancano voti numerici",
+                detail = "Le medie per materia vengono calcolate solo in presenza di valutazioni con valore decimale.",
+              )
+            }
           }
         } else {
           // La media di una materia e' un voto come gli altri: stessa card, stesso colore, stessa
           // scala. Erano righe grigie con una pill, cioe' il vecchio vocabolario sopravvissuto in
           // una scheda sola.
-          items(subjectRows, key = SubjectRow::subject) { row ->
+          fluidGridItems(
+            items = subjectRows,
+            columns = metrics.columns(minColumn = FluidColumnsDefaults.MinCard),
+            key = SubjectRow::subject,
+          ) { row ->
             var rowBounds by remember { mutableStateOf<Rect?>(null) }
             GradeCard(
               valueLabel = row.average?.format2() ?: "--",
@@ -645,6 +709,7 @@ fun GradeDetailRoute(
   }
 
   FluidContainerScaffold(
+    ambient = FeatureIdentity.Grades.ambient(),
     title = "Dettaglio voto",
     modifier = modifier,
     onBack = onBack,
@@ -973,8 +1038,8 @@ internal fun calculateRequiredGradeMessage(
   val required = if (currentWeight == 0.0) targetAverage else (targetAverage * (currentWeight + 1.0)) - weightedSum
 
   return when {
-    required > 10.0 -> "Lontano dal target"
-    required <= 0.0 -> "Target sicuro"
+    required > 10.0 -> "Lontano dall'obiettivo"
+    required <= 0.0 -> "Obiettivo al sicuro"
     currentAverage != null && currentAverage >= targetAverage -> "Soglia sicura: ${required.coerceAtLeast(1.0).format1()}"
     else -> "Serve almeno ${required.coerceAtLeast(1.0).format1()}"
   }
@@ -995,13 +1060,13 @@ private fun buildSubjectRows(
       subject = subject,
       average = average,
       detail = buildString {
-        append("${items.size} voti")
+        append(countLabel(items.size, "voto", "voti"))
         goal?.let { append(" / target ${it.targetAverage.format1()}") }
       },
       meta = listOfNotNull(
         numeric.takeLast(2).mapNotNull { it.numericValue?.format1() }.joinToString(" / ").ifBlank { null },
         goalMessage,
-      ).joinToString(" / ").ifBlank { "Nessun trend" },
+      ).joinToString(" / ").ifBlank { "Nessun andamento" },
       target = goal?.targetAverage,
     )
   }.sortedBy { it.subject }

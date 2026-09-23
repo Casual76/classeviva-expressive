@@ -1,5 +1,10 @@
 package dev.antigravity.classevivaexpressive.feature.absences
 
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnSection
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.fluidColumns
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FluidGlassGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -183,14 +188,18 @@ fun AbsencesRoute(
     }
   }
 
+  val metrics = rememberFluidScreenMetrics()
+
   FluidScreen(
     modifier = modifier,
     title = "Assenze",
+    contentMaxWidth = FluidColumnsDefaults.WideContentMaxWidth,
+    metrics = metrics,
     // Rosso sotto la pagina quando c'e' qualcosa da giustificare, esattamente come l'intestazione:
     // l'urgenza di questa sezione e' un fatto sulla sezione, non una decorazione del riquadro in
     // cima.
     ambient = FeatureIdentity.Attendance.ambient(urgent = pending.isNotEmpty()),
-    subtitle = "Situazione sintetica, giustificazioni pendenti e cronologia ordinata.",
+    subtitle = "Cosa c'è da giustificare e tutto quello che è già stato registrato.",
     onBack = onBack,
     actions = {
       FluidBarAction(
@@ -257,36 +266,82 @@ fun AbsencesRoute(
         FluidIndeterminateBar(modifier = Modifier.fillMaxWidth())
       }
     }
-    item { FluidSectionHeader("Da giustificare") }
-    if (pending.isEmpty()) {
-      item {
-        FluidEmptyState(
-          title = "Nessuna giustificazione in sospeso",
-          detail = "Assenze, ritardi e uscite risultano già allineati con lo stato corrente.",
-        )
-      }
+    val columns = metrics.columns(maxColumns = 2)
+    if (columns > 1) {
+      // Largo, quello che aspetta un gesto e la cronologia stanno affiancati: a sinistra cosa fare,
+      // a destra cosa e' gia' successo.
+      fluidColumns(
+        key = "absences:columns",
+        columns = columns,
+        sections = listOf(
+          FluidColumnSection(key = "absences:pending-section") {
+            AbsencesSection("Da giustificare") {
+              if (pending.isEmpty()) {
+                FluidEmptyState(
+                  title = "Nessuna giustificazione in sospeso",
+                  detail = "Assenze, ritardi e uscite sono tutti a posto.",
+                )
+              } else {
+                FluidGlassGroup(pending) { absence ->
+                  AbsenceRow(
+                    absence = absence,
+                    onJustify = { viewModel.requestJustification(absence) },
+                  )
+                }
+              }
+            }
+          },
+          FluidColumnSection(key = "absences:history-section") {
+            AbsencesSection("Storico") {
+              if (history.isEmpty()) {
+                FluidEmptyState(
+                  title = "Nessuna registrazione disponibile",
+                  detail = "Quando il registro pubblica assenze, ritardi e uscite, li trovi qui in ordine.",
+                )
+              } else {
+                FluidGlassGroup(history.take(20)) { absence ->
+                  AbsenceRow(
+                    absence = absence,
+                    onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
+                  )
+                }
+              }
+            }
+          },
+        ),
+      )
     } else {
-      fluidGlassGroups(pending) { absence ->
-        AbsenceRow(
-          absence = absence,
-          onJustify = { viewModel.requestJustification(absence) },
-        )
+      item { FluidSectionHeader("Da giustificare") }
+      if (pending.isEmpty()) {
+        item {
+          FluidEmptyState(
+            title = "Nessuna giustificazione in sospeso",
+            detail = "Assenze, ritardi e uscite sono tutti a posto.",
+          )
+        }
+      } else {
+        fluidGlassGroups(pending) { absence ->
+          AbsenceRow(
+            absence = absence,
+            onJustify = { viewModel.requestJustification(absence) },
+          )
+        }
       }
-    }
-    item { FluidSectionHeader("Storico") }
-    if (history.isEmpty()) {
-      item {
-        FluidEmptyState(
-          title = "Nessuna registrazione disponibile",
-          detail = "Quando le API ufficiali sincronizzano presenze e uscite, qui trovi una cronologia leggibile.",
-        )
-      }
-    } else {
-      fluidGlassGroups(history.take(20)) { absence ->
-        AbsenceRow(
-          absence = absence,
-          onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
-        )
+      item { FluidSectionHeader("Storico") }
+      if (history.isEmpty()) {
+        item {
+          FluidEmptyState(
+            title = "Nessuna registrazione disponibile",
+            detail = "Quando il registro pubblica assenze, ritardi e uscite, li trovi qui in ordine.",
+          )
+        }
+      } else {
+        fluidGlassGroups(history.take(20)) { absence ->
+          AbsenceRow(
+            absence = absence,
+            onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
+          )
+        }
       }
     }
     if (!state.lastMessage.isNullOrBlank()) {
@@ -319,6 +374,14 @@ fun AbsencesRoute(
         )
       },
     )
+  }
+}
+
+@Composable
+private fun AbsencesSection(title: String, content: @Composable () -> Unit) {
+  Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    FluidSectionHeader(title)
+    content()
   }
 }
 
@@ -400,7 +463,7 @@ private fun AbsenceRow(
       when {
         absence.justified -> "Stato già confermato."
         absence.canJustify -> "Tocca per inviare la giustificazione."
-        else -> "Nessun endpoint ufficiale disponibile per la giustificazione."
+        else -> "La scuola non permette di giustificare dall'app."
       }
     },
     tone = absenceTone(absence),
@@ -443,9 +506,10 @@ internal fun badgeLabel(type: AbsenceType): String {
 
 internal fun hoursLabel(type: AbsenceType, hour: Int): String {
   return when (type) {
-    AbsenceType.ABSENCE -> "Ora $hour"
-    AbsenceType.LATE -> "Ingresso alla $hour"
-    AbsenceType.EXIT -> "Uscita alla $hour"
+    // L'ora di lezione, non l'ora dell'orologio: "Ingresso alla 3" si leggeva come le tre.
+    AbsenceType.ABSENCE -> "${hour}ª ora"
+    AbsenceType.LATE -> "Ingresso alla ${hour}ª ora"
+    AbsenceType.EXIT -> "Uscita alla ${hour}ª ora"
   }
 }
 

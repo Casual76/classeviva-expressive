@@ -61,11 +61,10 @@ class PortalClientNetworkTest {
       assertEquals("sanitized-pdf-placeholder", it.byteStream().bufferedReader().readText())
     }
 
-    val loginPageRequest = server.takeRequest()
-    val loginSubmitRequest = server.takeRequest()
+    val loginRequest = server.takeRequest()
     val reportRequest = server.takeRequest()
-    assertEquals("/login", loginPageRequest.path)
-    assertEquals("POST", loginSubmitRequest.method)
+    assertEquals("POST", loginRequest.method)
+    assertEquals("/auth-p7/app/default/AuthApi4.php?a=aLoginPwd", loginRequest.path)
     assertEquals("/reports/view?id=demo", reportRequest.path)
     assertTrue(reportRequest.getHeader("Cookie").orEmpty().contains("PHPSESSID=session-demo"))
   }
@@ -89,7 +88,6 @@ class PortalClientNetworkTest {
       assertEquals("confirm-pdf", download.byteStream().bufferedReader().readText())
     }
 
-    server.takeRequest()
     server.takeRequest()
     assertEquals("/reports/confirm?id=demo", server.takeRequest().path)
   }
@@ -118,7 +116,6 @@ class PortalClientNetworkTest {
       assertEquals("confirmed-pdf", download.byteStream().bufferedReader().readText())
     }
 
-    server.takeRequest()
     server.takeRequest()
     assertEquals("/reports/view?id=demo", server.takeRequest().path)
     assertEquals("/reports/confirm?id=demo", server.takeRequest().path)
@@ -150,7 +147,6 @@ class PortalClientNetworkTest {
 
       assertEquals(0, hostileServer.requestCount)
       server.takeRequest()
-      server.takeRequest()
       assertEquals("/reports/view?id=demo", server.takeRequest().path)
       assertEquals("/reports/confirm?id=demo", server.takeRequest().path)
     } finally {
@@ -178,7 +174,6 @@ class PortalClientNetworkTest {
       }
 
       assertEquals(0, hostileServer.requestCount)
-      server.takeRequest()
       server.takeRequest()
       assertEquals("/reports/confirm?id=demo", server.takeRequest().path)
     } finally {
@@ -214,9 +209,9 @@ class PortalClientNetworkTest {
       assertEquals("fresh-session-pdf", download.byteStream().bufferedReader().readText())
     }
 
-    val requests = List(7) { server.takeRequest() }
+    val requests = List(5) { server.takeRequest() }
     assertEquals(
-      listOf("/login", "/session", "/reports/view?id=demo", "/reports/confirm?id=demo", "/login", "/session", "/reports/view?id=demo"),
+      listOf(PortalLoginApiPath, "/reports/view?id=demo", "/reports/confirm?id=demo", PortalLoginApiPath, "/reports/view?id=demo"),
       requests.map { it.path },
     )
     assertTrue(requests.last().getHeader("Cookie").orEmpty().contains("PHPSESSID=session-fresh"))
@@ -245,7 +240,101 @@ class PortalClientNetworkTest {
     }
   }
 
+  @Test
+  fun portalLogin_usesAuthApiWithoutTouchingTheLoginPage() = runBlocking {
+    // La pagina di login rimanda all'accesso SPID su un altro dominio: si entra da AuthApi.
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "application/json")
+        .addHeader("Set-Cookie", "PHPSESSID=api-session; Path=/; HttpOnly")
+        .setBody("""{"data":{"auth":{"loggedIn":true,"verified":true}}}"""),
+    )
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "application/pdf")
+        .setBody("pdf-after-api-login"),
+    )
+
+    portalClient.openSchoolReport(
+      viewUrl = server.url("/reports/view?id=demo").toString(),
+      confirmUrl = null,
+    ).use { download ->
+      assertEquals("pdf-after-api-login", download.byteStream().bufferedReader().readText())
+    }
+
+    val apiRequest = server.takeRequest()
+    assertEquals("POST", apiRequest.method)
+    assertEquals(PortalLoginApiPath, apiRequest.path)
+    val form = apiRequest.body.readUtf8()
+    assertTrue(form.contains("uid=student-demo"))
+    assertTrue(form.contains("pwd=password-demo"))
+    val reportRequest = server.takeRequest()
+    assertEquals("/reports/view?id=demo", reportRequest.path)
+    assertTrue(reportRequest.getHeader("Cookie").orEmpty().contains("PHPSESSID=api-session"))
+  }
+
+  @Test
+  fun portalLogin_fallsBackToLoginFormWhenAuthApiIsMissing() = runBlocking {
+    server.enqueue(MockResponse().setResponseCode(404))
+    enqueueLoginForm(cookieValue = "form-session")
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "application/pdf")
+        .setBody("pdf-after-form-login"),
+    )
+
+    portalClient.openSchoolReport(
+      viewUrl = server.url("/reports/view?id=demo").toString(),
+      confirmUrl = null,
+    ).use { download ->
+      assertEquals("pdf-after-form-login", download.byteStream().bufferedReader().readText())
+    }
+
+    assertEquals(
+      listOf(PortalLoginApiPath, "/login", "/session", "/reports/view?id=demo"),
+      List(4) { server.takeRequest().path },
+    )
+  }
+
+  @Test
+  fun portalLogin_reportsRejectedCredentialsFromAuthApi() = runBlocking {
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "application/json")
+        .setBody("""{"data":{"auth":{"loggedIn":false,"errors":["credenziali"]}}}"""),
+    )
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(302)
+        .addHeader("Location", "https://eid.example.invalid/spid/start"),
+    )
+
+    try {
+      portalClient.openSchoolReport(
+        viewUrl = server.url("/reports/view?id=demo").toString(),
+        confirmUrl = null,
+      ).close()
+      fail("Expected ClassevivaNetworkException")
+    } catch (exception: ClassevivaNetworkException) {
+      assertEquals("Il portale ha rifiutato l'accesso.", exception.message)
+    }
+  }
+
   private fun enqueuePortalLogin(cookieValue: String = "session-demo") {
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "application/json")
+        .addHeader("Set-Cookie", "PHPSESSID=$cookieValue; Path=/; HttpOnly")
+        .setBody("""{"data":{"auth":{"loggedIn":true}}}"""),
+    )
+  }
+
+  private fun enqueueLoginForm(cookieValue: String) {
     server.enqueue(
       MockResponse()
         .setResponseCode(200)
@@ -291,3 +380,5 @@ class PortalClientNetworkTest {
     }
   }
 }
+
+private const val PortalLoginApiPath = "/auth-p7/app/default/AuthApi4.php?a=aLoginPwd"

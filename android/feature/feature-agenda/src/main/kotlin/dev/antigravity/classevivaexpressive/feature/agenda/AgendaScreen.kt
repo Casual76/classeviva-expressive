@@ -1,5 +1,7 @@
 package dev.antigravity.classevivaexpressive.feature.agenda
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import android.content.Intent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -17,9 +19,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Assignment
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -67,13 +71,40 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.dangerVividColors
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectBlock
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridDay
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridEvent
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridLayer
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.WeekTimeGrid
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberMinuteTicker
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberTimeGridMinuteHeight
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.timeGridRange
+import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
+import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.draw.clip
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaViewMode
+import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
+import dev.antigravity.classevivaexpressive.core.domain.model.ViewPreferencesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.CustomEvent
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.widthIn
+import java.time.temporal.TemporalAdjusters
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
+import dev.antigravity.fluidengine.ui.fluid.fluidRowPressable
+import dev.antigravity.fluidengine.ui.theme.FluidPillTabs
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalDensity
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -87,6 +118,7 @@ import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -101,6 +133,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
+import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
+import dev.antigravity.fluidengine.ui.fluid.FluidListDetailSizes
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
@@ -224,12 +259,16 @@ data class AgendaUiState(
   val customEvents: List<CustomEvent> = emptyList(),
   val isRefreshing: Boolean = false,
   val syncStatus: SyncStatus = SyncStatus(),
+  /** L'ultima vista scelta, ricordata fra un'apertura e l'altra. Si mostra solo se c'e' posto. */
+  val weekMode: Boolean = false,
 )
 
 @HiltViewModel
 class AgendaViewModel @Inject constructor(
   private val agendaRepository: AgendaRepository,
   private val dashboardRepository: DashboardRepository,
+  private val viewPreferences: ViewPreferencesRepository,
+  lessonsRepository: LessonsRepository,
 ) : ViewModel() {
   private val isRefreshing = MutableStateFlow(false)
 
@@ -238,14 +277,29 @@ class AgendaViewModel @Inject constructor(
     agendaRepository.observeCustomEvents(),
     isRefreshing,
     dashboardRepository.observeDashboard(),
-  ) { items, customEvents, refreshing, dashboard ->
+    viewPreferences.observeAgendaViewMode(),
+  ) { items, customEvents, refreshing, dashboard, viewMode ->
     AgendaUiState(
       items = items,
       customEvents = customEvents,
       isRefreshing = refreshing,
       syncStatus = dashboard.syncStatus,
+      weekMode = viewMode == AgendaViewMode.WEEK,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgendaUiState())
+
+  /**
+   * L'orario della settimana, sotto gli impegni nella vista Settimana. Raccolto solo dalla
+   * settimana: il mese e il dettaglio di un impegno non lo pagano.
+   */
+  val timetable: StateFlow<TimetableTemplate> = lessonsRepository.observeTimetableTemplate()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TimetableTemplate())
+
+  fun setWeekMode(week: Boolean) {
+    viewModelScope.launch {
+      viewPreferences.setAgendaViewMode(if (week) AgendaViewMode.WEEK else AgendaViewMode.MONTH)
+    }
+  }
 
   init {
     requestRefresh(force = false, showIndicator = false)
@@ -310,6 +364,8 @@ fun AgendaRoute(
   var selectedEntry by remember { mutableStateOf<AgendaEntry?>(null) }
   var categoryEntry by remember { mutableStateOf<AgendaEntry?>(null) }
   var detailOrigin by remember { mutableStateOf<Rect?>(null) }
+  // Il tasto "+" della barra: il modulo nasce da li' e ci ritorna.
+  var addOrigin by remember { mutableStateOf<Rect?>(null) }
   val initialDateValue = remember(initialDate) {
     initialDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: LocalDate.now()
   }
@@ -326,6 +382,20 @@ fun AgendaRoute(
   }
   val monthEntriesByDate = remember(entriesByDate, selectedMonth) {
     entriesByDate.filterKeys { YearMonth.from(it) == selectedMonth }
+  }
+  val monthCommitments = remember(monthEntriesByDate) {
+    monthEntriesByDate.values.sumOf { day -> day.count { it.category != AgendaCategory.LESSON } }
+  }
+  // La settimana, su uno schermo largo abbastanza da darle sette colonne leggibili. La scelta si
+  // salva e torna alla prossima apertura; quella appena fatta vale subito, senza aspettare il disco.
+  var weekModeOverride by rememberSaveable { mutableStateOf<Boolean?>(null) }
+  val weekMode = weekModeOverride ?: state.weekMode
+  val weekDays = remember(selectedDate) {
+    val monday = selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    (0L..6L).map(monday::plusDays)
+  }
+  val weekCommitments = remember(entriesByDate, weekDays) {
+    weekDays.sumOf { day -> entriesByDate[day].orEmpty().count { it.category != AgendaCategory.LESSON } }
   }
   val selectedDayEntries = remember(entriesByDate, selectedDate) {
     entriesByDate[selectedDate].orEmpty()
@@ -358,14 +428,90 @@ fun AgendaRoute(
     upcomingAssessment(state.items, facetToday)
   }
 
+  // Gli impegni del giorno scelto: sotto il calendario su un telefono, nel pannello accanto su
+  // uno schermo largo. Scritti una volta sola, cosi' le due pagine non possono divergere.
+  // `inPane`: accanto al calendario un impegno si apre come pop-up dalla sua riga invece di
+  // spingere una pagina intera — la pagina, larga quanto il tablet, avrebbe coperto il calendario
+  // da cui lo si era scelto.
+  val dayEntries: LazyListScope.(List<AgendaEntry>, Boolean) -> Unit = { dayList, inPane ->
+    if (dayList.isEmpty()) {
+      item {
+        FluidEmptyState(
+          title = "Nulla di pianificato",
+          detail = "Non ci sono compiti, verifiche o eventi per questa data.",
+        )
+      }
+    } else {
+      fluidGlassGroups(dayList) { entry ->
+        var rowBounds by remember { mutableStateOf<Rect?>(null) }
+        AgendaEntryRow(
+          entry = entry,
+          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
+          onClick = {
+            detailOrigin = rowBounds
+            if (onOpenEntry != null && !inPane) onOpenEntry(entry.id) else selectedEntry = entry
+          },
+          // Era un onLongClick che condivideva e basta, senza dirlo: la stessa pressione ora
+          // apre un menu che dice cosa sa fare.
+          onLongClick = null,
+          contextActions = {
+            listOf(
+              FluidContextAction(
+                label = "Dettagli",
+                icon = categoryIcon(entry.category),
+                onClick = {
+                  detailOrigin = rowBounds
+                  if (onOpenEntry != null && !inPane) onOpenEntry(entry.id) else selectedEntry = entry
+                },
+              ),
+              FluidContextAction(
+                label = "Cambia tipo…",
+                icon = Icons.Rounded.EditCalendar,
+                onClick = { categoryEntry = entry },
+              ),
+              FluidContextAction(
+                label = "Condividi",
+                icon = Icons.Rounded.Share,
+                onClick = { shareEntry(context, entry) },
+              ),
+            )
+          },
+        )
+      }
+    }
+  }
+
+  // Su uno schermo largo il mese sta a sinistra, largo, e il giorno scelto accanto: e' il contrario
+  // di un elenco+dettaglio qualunque, perche' qui la cosa che vuole spazio e' il calendario, e il
+  // giorno e' una colonna di impegni.
+  BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+  // Sette colonne strette spezzano le parole a meta' ("Romantici-smo"): la settimana si offre solo
+  // quando ogni giorno ha una colonna da ~130 dp, di piu' col testo grande, e ruotando o stringendo
+  // la finestra si torna al mese senza perdere la scelta. Un tablet in verticale resta sul mese.
+  val weekCapable = maxWidth >= AgendaWeekMinWidth * LocalDensity.current.fontScale
+  val showWeek = weekMode && weekCapable
+  FluidListDetailScaffold(
+    ambient = FeatureIdentity.Agenda.ambient(),
+    // La settimana e' gia' il dettaglio di sette giorni: prende tutta la larghezza, senza il
+    // pannello accanto. Lo stesso elenco, spostato e non ricomposto, quindi niente salti.
+    sizes = if (showWeek) AgendaWeekSizes else AgendaPaneSizes,
+    list = { twoPane ->
   FluidScreen(
-    modifier = modifier,
     title = "Agenda",
+    contentMaxWidth = if (showWeek) FluidColumnsDefaults.WideContentMaxWidth else FluidScreenDefaults.ContentMaxWidth,
     ambient = FeatureIdentity.Agenda.ambient(),
     subtitle = state.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
     actions = {
       FluidSyncAction(status = state.syncStatus.toFluid(), onRetry = viewModel::refresh)
+      // Era un pulsante flottante, sparito col ridisegno di agosto insieme a tutti gli altri: il
+      // modulo e' rimasto nel codice per un mese senza una strada per arrivarci.
+      FluidBarAction(
+        icon = Icons.Rounded.Add,
+        contentDescription = "Nuovo evento",
+        onClick = { showDialog = true },
+        modifier = Modifier.fluidExpandOrigin { addOrigin = it },
+      )
       FluidBarAction(
         icon = Icons.Rounded.Refresh,
         contentDescription = "Aggiorna",
@@ -383,19 +529,35 @@ fun AgendaRoute(
         FluidSyncNotice(status = state.syncStatus.toFluid(), onRetry = viewModel::refresh)
       }
     }
-    item {
+    // Il primo fatto della pagina quando c'e', e assente quando non c'e' niente da dire. Rosso
+    // perche' e' la stessa famiglia del tono delle verifiche e del segno che portano nel calendario.
+    val heroBand: @Composable () -> Unit = {
       FeatureHero(
         identity = FeatureIdentity.Agenda,
-        eyebrow = selectedMonth.format(calendarHeaderFormatter).replaceFirstChar { it.uppercase() },
-        value = selectedDayEntries.size.toString(),
-        label = if (selectedDayEntries.size == 1) "impegno nel giorno" else "impegni nel giorno",
+        // Le date della settimana le dice gia' la testata con le frecce, subito sotto.
+        eyebrow = if (showWeek) {
+          if (facetToday in weekDays) "Questa settimana" else "Settimana"
+        } else {
+          selectedMonth.format(calendarHeaderFormatter).replaceFirstChar { it.uppercase() }
+        },
+        // Accanto c'e' gia' il giorno con i suoi impegni contati nella testata: la fascia allora
+        // conta il mese, che e' la cosa che il calendario sotto mostra.
+        value = when {
+          showWeek -> weekCommitments
+          twoPane -> monthCommitments
+          else -> selectedDayEntries.size
+        }.toString(),
+        label = when {
+          showWeek -> if (weekCommitments == 1) "impegno nella settimana" else "impegni nella settimana"
+          twoPane -> if (monthCommitments == 1) "impegno nel mese" else "impegni nel mese"
+          selectedDayEntries.size == 1 -> "impegno nel giorno"
+          else -> "impegni nel giorno"
+        },
         icon = Icons.Rounded.CalendarMonth,
       )
     }
-    // Il primo fatto della pagina quando c'e', e assente quando non c'e' niente da dire. Rosso
-    // perche' e' la stessa famiglia del tono delle verifiche e del segno che portano nel calendario.
-    nextAssessment?.let { assessment ->
-      item(key = "agenda:next-assessment") {
+    val assessmentCard: (@Composable () -> Unit)? = nextAssessment?.let { assessment ->
+      {
         FluidVividCard(
           colors = dangerVividColors(),
           onClick = { selectedDateText = assessment.date.toString() },
@@ -439,6 +601,71 @@ fun AgendaRoute(
         }
       }
     }
+    if ((twoPane || showWeek) && assessmentCard != null) {
+      // Accanto al calendario la colonna e' larga il doppio di un telefono: la fascia e la prossima
+      // verifica stanno sulla stessa riga, e il mese intero entra senza scorrere.
+      item(key = "agenda:header-row") {
+        Row(
+          modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          Box(modifier = Modifier.weight(1f).fillMaxHeight()) { heroBand() }
+          Box(modifier = Modifier.weight(1f).fillMaxHeight()) { assessmentCard() }
+        }
+      }
+    } else {
+      item { heroBand() }
+      if (assessmentCard != null) {
+        item(key = "agenda:next-assessment") { assessmentCard() }
+      }
+    }
+    if (weekCapable) {
+      item(key = "agenda:mode") {
+        Box(modifier = Modifier.widthIn(max = 360.dp)) {
+          FluidPillTabs(
+            options = listOf(AgendaModeMonth, AgendaModeWeek),
+            selected = if (showWeek) AgendaModeWeek else AgendaModeMonth,
+            onSelect = {
+              val week = it == AgendaModeWeek
+              weekModeOverride = week
+              viewModel.setWeekMode(week)
+            },
+          )
+        }
+      }
+    }
+    if (showWeek) {
+      item(key = "agenda:week-header") {
+        PeriodHeader(
+          label = weekRangeLabel(weekDays.first(), weekDays.last()),
+          previousLabel = "Settimana precedente",
+          nextLabel = "Settimana successiva",
+          onPrevious = {
+            val previous = selectedDate.minusWeeks(1)
+            selectedDateText = previous.toString()
+            selectedMonthText = YearMonth.from(previous).toString()
+          },
+          onNext = {
+            val next = selectedDate.plusWeeks(1)
+            selectedDateText = next.toString()
+            selectedMonthText = YearMonth.from(next).toString()
+          },
+        )
+      }
+      item(key = "agenda:week-grid") {
+        // Raccolto qui e non in cima: il mese e il dettaglio di un impegno non pagano l'orario.
+        val timetable by viewModel.timetable.collectAsStateWithLifecycle()
+        WeekAgendaGrid(
+          days = weekDays,
+          entriesByDate = entriesByDate,
+          timetable = timetable,
+          onOpen = { entry, origin ->
+            detailOrigin = origin
+            selectedEntry = entry
+          },
+        )
+      }
+    } else {
     item {
       MonthHeader(
         month = selectedMonth,
@@ -462,54 +689,38 @@ fun AgendaRoute(
         onSelectDate = { selectedDateText = it.toString() },
       )
     }
-    item { Spacer(modifier = Modifier.height(8.dp)) }
-    item { FluidSectionHeader(formatDayHeader(selectedDate)) }
-
-    if (selectedDayEntries.isEmpty()) {
-      item {
-        FluidEmptyState(
-          title = "Nulla di pianificato",
-          detail = "Non ci sono compiti, verifiche o eventi per questa data.",
-        )
-      }
-    } else {
-      fluidGlassGroups(selectedDayEntries) { entry ->
-        var rowBounds by remember { mutableStateOf<Rect?>(null) }
-        AgendaEntryRow(
-          entry = entry,
-          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
-          onClick = {
-            detailOrigin = rowBounds
-            if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
-          },
-          // Era un onLongClick che condivideva e basta, senza dirlo: la stessa pressione ora
-          // apre un menu che dice cosa sa fare.
-          onLongClick = null,
-          contextActions = {
-            listOf(
-              FluidContextAction(
-                label = "Dettagli",
-                icon = categoryIcon(entry.category),
-                onClick = {
-                  detailOrigin = rowBounds
-                  if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
-                },
-              ),
-              FluidContextAction(
-                label = "Cambia tipo…",
-                icon = Icons.Rounded.EditCalendar,
-                onClick = { categoryEntry = entry },
-              ),
-              FluidContextAction(
-                label = "Condividi",
-                icon = Icons.Rounded.Share,
-                onClick = { shareEntry(context, entry) },
-              ),
-            )
-          },
-        )
-      }
+    if (!twoPane) {
+      item { Spacer(modifier = Modifier.height(8.dp)) }
+      item { FluidSectionHeader(formatDayHeader(selectedDate)) }
     }
+
+    if (!twoPane) dayEntries(selectedDayEntries, false)
+    }
+  }
+    },
+    detail = {
+      FluidDetailContent(
+        item = selectedDate,
+        order = { it.toEpochDay().toInt() },
+      ) { date ->
+        val dayItems = entriesByDate[date].orEmpty().filter { it.category != AgendaCategory.LESSON }
+        FluidScreen(
+          title = formatPaneDayHeader(date),
+          subtitle = when (dayItems.size) {
+            0 -> "Nessun impegno"
+            1 -> "Un impegno"
+            else -> "${dayItems.size} impegni"
+          },
+          ambient = FeatureIdentity.Agenda.ambient(),
+          itemSpacing = 12.dp,
+        ) {
+          // Il giorno che questa pagina ha ricevuto, non quello scelto adesso: durante il passaggio
+          // fra due giorni ciascuna pagina tiene i propri impegni.
+          dayEntries(dayItems, true)
+        }
+      }
+    },
+  )
   }
 
   // Portali, non sheet: dichiarati sempre e visibili a comando, cosi' l'uscita non si smonta
@@ -517,9 +728,11 @@ fun AgendaRoute(
   FluidGlassModalPortal(
     visible = showDialog,
     onDismissRequest = { showDialog = false },
+    origin = { addOrigin },
     paneTitle = "Nuovo evento",
   ) {
     AddEventContent(
+      initialDate = selectedDate,
       onDismiss = { showDialog = false },
       onSave = { title, description, subject, date, time ->
         viewModel.addCustomEvent(title, description, subject, date, time)
@@ -587,6 +800,26 @@ private fun MonthHeader(
   onNext: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  PeriodHeader(
+    label = month.format(calendarHeaderFormatter).replaceFirstChar { it.uppercase() },
+    previousLabel = "Mese precedente",
+    nextLabel = "Mese successivo",
+    onPrevious = onPrevious,
+    onNext = onNext,
+    modifier = modifier,
+  )
+}
+
+/** Il periodo mostrato con le frecce per spostarsi: il mese, o la settimana. */
+@Composable
+private fun PeriodHeader(
+  label: String,
+  previousLabel: String,
+  nextLabel: String,
+  onPrevious: () -> Unit,
+  onNext: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
   // Le stesse frecce di vetro con cui si cambia settimana in Lezioni: erano IconButton di Material
   // da 40dp, cioe' un altro materiale e un bersaglio sotto i 48dp minimi.
   val emptyBackdrop = rememberEmptyGlassBackdrop()
@@ -599,12 +832,12 @@ private fun MonthHeader(
     FluidGlassIconButton(onClick = onPrevious, backdrop = backdrop) {
       Icon(
         imageVector = Icons.Rounded.ChevronLeft,
-        contentDescription = "Mese precedente",
+        contentDescription = previousLabel,
         tint = MaterialTheme.colorScheme.primary,
       )
     }
     Text(
-      text = month.format(calendarHeaderFormatter).replaceFirstChar { it.uppercase() },
+      text = label,
       style = MaterialTheme.typography.titleMedium,
       color = MaterialTheme.colorScheme.onBackground,
       fontWeight = FontWeight.SemiBold,
@@ -612,12 +845,206 @@ private fun MonthHeader(
     FluidGlassIconButton(onClick = onNext, backdrop = backdrop) {
       Icon(
         imageVector = Icons.Rounded.ChevronRight,
-        contentDescription = "Mese successivo",
+        contentDescription = nextLabel,
         tint = MaterialTheme.colorScheme.primary,
       )
     }
   }
 }
+
+/**
+ * La settimana sulle ore, una colonna per giorno, con le lezioni dell'orario sotto e gli impegni
+ * sopra.
+ *
+ * E' la vista che su un tablet il mese non sa dare: il mese dice *quando* c'e' qualcosa (i segni
+ * nelle celle), la settimana dice *cosa* e *a che ora* — la verifica di storia sta sull'ora di storia
+ * del martedi', col colore della materia dietro. Quello che non ha un'ora ne' una lezione a cui
+ * agganciarsi sta nella fascia in cima al suo giorno. Le colonne vuote restano: una settimana e'
+ * sette giorni anche quando la domenica non ha niente, e toglierle spostava i giorni sotto l'occhio.
+ */
+@Composable
+private fun WeekAgendaGrid(
+  days: List<LocalDate>,
+  entriesByDate: Map<LocalDate, List<AgendaEntry>>,
+  timetable: TimetableTemplate,
+  onOpen: (AgendaEntry, Rect?) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val today = rememberCurrentDate()
+  val nowState = rememberMinuteTicker()
+  val layout = remember(days, entriesByDate, timetable) {
+    weekAgendaLayout(days, entriesByDate, timetable.slotsByDay())
+  }
+  val range = remember(layout) { timeGridRange(layout.events.map { it.span }) }
+  val shortest = remember(layout) { layout.events.minOfOrNull { it.span.minutes } ?: 60 }
+  val minuteHeight = rememberTimeGridMinuteHeight(range, shortest)
+  WeekTimeGrid(
+    days = days.map { day ->
+      TimeGridDay(
+        label = "${day.format(weekdayShortFormatter).replaceFirstChar { it.uppercase() }} ${day.dayOfMonth}",
+        isToday = day == today,
+      )
+    },
+    events = layout.events,
+    range = range,
+    minuteHeight = minuteHeight,
+    modifier = modifier,
+    todayIndex = days.indexOf(today).takeIf { it >= 0 },
+    nowMinute = { nowState.value.let { it.hour * 60 + it.minute } },
+    allDay = if (layout.allDay.any { it.isNotEmpty() }) {
+      { day -> layout.allDay[day].forEach { entry -> AgendaGridChip(entry, compact = true, onOpen = onOpen) } }
+    } else {
+      null
+    },
+  ) { event, cell ->
+    when (val item = event.value) {
+      is AgendaGridItem.Lesson -> SubjectBlock(
+        subject = item.band.subject,
+        faint = true,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 8.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+      ) {
+        Text(
+          text = item.band.subject.asReadableSubject(),
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+      is AgendaGridItem.Entry -> AgendaGridChip(
+        entry = item.entry,
+        compact = cell.compact,
+        onOpen = onOpen,
+        modifier = Modifier.fillMaxSize(),
+      )
+    }
+  }
+}
+
+private sealed interface AgendaGridItem {
+  data class Lesson(val band: LessonBand) : AgendaGridItem
+  data class Entry(val entry: AgendaEntry) : AgendaGridItem
+}
+
+private class WeekAgendaLayout(
+  val events: List<TimeGridEvent<AgendaGridItem>>,
+  val allDay: List<List<AgendaEntry>>,
+)
+
+private fun weekAgendaLayout(
+  days: List<LocalDate>,
+  entriesByDate: Map<LocalDate, List<AgendaEntry>>,
+  slotsByDay: Map<DayOfWeek, List<TemplateSlot>>,
+): WeekAgendaLayout {
+  val events = mutableListOf<TimeGridEvent<AgendaGridItem>>()
+  val allDay = days.mapIndexed { index, day ->
+    val bands = lessonBands(slotsByDay[day.dayOfWeek].orEmpty())
+    bands.forEach { band ->
+      events += TimeGridEvent(
+        key = "lesson:$index:${band.span.start}",
+        day = index,
+        span = band.span,
+        layer = TimeGridLayer.Background,
+        value = AgendaGridItem.Lesson(band),
+      )
+    }
+    val entries = entriesByDate[day].orEmpty().filter { it.category != AgendaCategory.LESSON }
+    val placements = placeAgendaDay(
+      entries.map { AgendaPlacementInput(it.id, it.subject, it.teacher, it.time, it.title) },
+      bands,
+    )
+    entries.zip(placements).mapNotNull { (entry, placement) ->
+      val span = placement.span ?: return@mapNotNull entry
+      events += TimeGridEvent(key = "entry:${entry.id}", day = index, span = span, value = AgendaGridItem.Entry(entry))
+      null
+    }
+  }
+  return WeekAgendaLayout(events, allDay)
+}
+
+/**
+ * Un impegno nella settimana: pieno del colore del suo genere, come il segno nelle celle del mese,
+ * perche' sta da solo sopra la lezione. Toccarlo apre il pop-up dalla sua superficie.
+ */
+@Composable
+private fun AgendaGridChip(
+  entry: AgendaEntry,
+  compact: Boolean,
+  onOpen: (AgendaEntry, Rect?) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  var bounds by remember { mutableStateOf<Rect?>(null) }
+  val colors = FluidVividColors.from(categoryMarkColor(entry.category))
+  val shape = ContinuousCornerShape(FluidRadius.Control)
+  CompositionLocalProvider(LocalContentColor provides colors.content) {
+    Column(
+      modifier = modifier
+        .fillMaxWidth()
+        .fluidExpandOrigin { bounds = it }
+        .clip(shape)
+        .background(colors.start)
+        .fluidRowPressable(
+          onClick = { onOpen(entry, bounds) },
+          shape = shape,
+          highlightColor = colors.content.copy(alpha = 0.12f),
+        )
+        .semantics(mergeDescendants = true) {}
+        .padding(horizontal = 8.dp, vertical = 5.dp),
+      verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+      val secondary = colors.content.copy(alpha = 0.8f)
+      if (!compact) {
+        Text(
+          text = listOfNotNull(entry.time?.takeIf { it.isNotBlank() && it != "00:00" }, categoryLabel(entry.category))
+            .joinToString(" · "),
+          style = MaterialTheme.typography.labelSmall,
+          color = secondary,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
+      Text(
+        text = entry.title,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = if (compact) 1 else 3,
+        overflow = TextOverflow.Ellipsis,
+      )
+      if (!compact) {
+        entry.subject?.takeIf { it.isNotBlank() && !entry.title.contains(it, ignoreCase = true) }?.let { subject ->
+          Text(
+            text = subject.asReadableSubject(),
+            style = MaterialTheme.typography.labelSmall,
+            color = secondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
+      }
+    }
+  }
+}
+
+/** Lo stesso colore dei segni nelle celle del mese, cosi' un compito e' dello stesso colore ovunque. */
+@Composable
+private fun categoryMarkColor(category: AgendaCategory): Color = when (category) {
+  AgendaCategory.EVENT, AgendaCategory.CUSTOM -> MaterialTheme.colorScheme.tertiary
+  AgendaCategory.HOMEWORK -> MaterialTheme.colorScheme.secondary
+  AgendaCategory.ASSESSMENT -> MaterialTheme.colorScheme.error
+  AgendaCategory.LESSON -> MaterialTheme.colorScheme.outline
+}
+
+/** "21 – 27 settembre", o "28 settembre – 4 ottobre" quando la settimana scavalca il mese. */
+private fun weekRangeLabel(start: LocalDate, end: LocalDate): String =
+  if (start.month == end.month) {
+    "${start.dayOfMonth} – ${end.format(dayMonthFormatter)}"
+  } else {
+    "${start.format(dayMonthFormatter)} – ${end.format(dayMonthFormatter)}"
+  }
+
+private val dayMonthFormatter = DateTimeFormatter.ofPattern("d MMMM", italianLocale)
+private val weekdayShortFormatter = DateTimeFormatter.ofPattern("EEE", italianLocale)
 
 @Composable
 private fun MonthGrid(
@@ -776,7 +1203,9 @@ private fun AgendaEntryRow(
   FluidListRow(
     title = entry.title,
     subtitle = entry.subject ?: entry.subtitle,
-    eyebrow = entry.time ?: categoryLabel(entry.category),
+    // L'ora, quando c'e'. Il genere lo dice gia' il badge a destra: senza ora l'occhiello ripeteva
+    // «Compito» due volte sulla stessa riga.
+    eyebrow = entry.time?.takeIf(String::isNotBlank),
     meta = buildList {
       entry.createdAtLabel()?.let { add("Aggiunto: $it") }
       entry.modifiedAtLabel()?.let { add("Modificato: $it") }
@@ -818,14 +1247,17 @@ private fun AgendaDetailContent(
       contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
       verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+      // Ogni fatto una volta. Il genere stava nell'occhiello e di nuovo nel badge, la data sotto il
+      // titolo e di nuovo in "Data evento", la materia nel sottotitolo e di nuovo in "Materia"; e
+      // senza materia il sottotitolo diceva "Agenda", cioe' dove si era gia'.
+      val headerSubtitle = entry.subject?.takeIf(String::isNotBlank) ?: entry.subtitle
       item {
         FluidListRow(
           title = entry.title,
-          subtitle = entry.subject ?: entry.subtitle.ifBlank { "Agenda" },
+          subtitle = headerSubtitle,
           eyebrow = categoryLabel(entry.category),
-          meta = entry.eventDateLabel(),
           tone = categoryTone(entry.category),
-          badge = { FluidStatusBadge(categoryLabel(entry.category), tone = categoryTone(entry.category)) },
+          disclosure = false,
         )
       }
       item {
@@ -837,7 +1269,7 @@ private fun AgendaDetailContent(
           entry.modifiedAtLabel()?.let { modifiedAt ->
             InfoLine(label = "Modificato", value = modifiedAt)
           }
-          entry.subject?.takeIf(String::isNotBlank)?.let { subject ->
+          entry.subject?.takeIf { it.isNotBlank() && it != headerSubtitle }?.let { subject ->
             InfoLine(label = "Materia", value = subject)
           }
           entry.teacher?.takeIf(String::isNotBlank)?.let { teacher ->
@@ -845,20 +1277,24 @@ private fun AgendaDetailContent(
           }
         }
       }
-      item { FluidListDivider() }
-      item {
-        FluidCard(highlighted = true, glass = true) {
-          Text(
-            text = "Dettagli",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.SemiBold,
-          )
-          Text(
-            text = entry.detail?.takeIf(String::isNotBlank) ?: "Nessuna descrizione completa disponibile.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-          )
+      // I dettagli solo quando ci sono: una scheda intera per dire che non c'e' niente da leggere
+      // era la cosa piu' grande del pop-up.
+      entry.detail?.takeIf { it.isNotBlank() && it != entry.title }?.let { detail ->
+        item { FluidListDivider() }
+        item {
+          FluidCard(highlighted = true, glass = true) {
+            Text(
+              text = "Dettagli",
+              style = MaterialTheme.typography.labelLarge,
+              color = MaterialTheme.colorScheme.primary,
+              fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+              text = detail,
+              style = MaterialTheme.typography.bodyLarge,
+              color = MaterialTheme.colorScheme.onSurface,
+            )
+          }
         }
       }
       item {
@@ -984,11 +1420,14 @@ private fun InfoLine(
 private fun AddEventContent(
   onDismiss: () -> Unit,
   onSave: (title: String, description: String, subject: String, date: String, time: String?) -> Unit,
+  // Il giorno scelto nel calendario: chi apre il modulo da un giorno sta aggiungendo qualcosa a
+  // quel giorno, non a oggi.
+  initialDate: LocalDate = LocalDate.now(),
 ) {
   var title by rememberSaveable { mutableStateOf("") }
   var description by rememberSaveable { mutableStateOf("") }
   var subject by rememberSaveable { mutableStateOf("") }
-  var date by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+  var date by rememberSaveable { mutableStateOf(initialDate.toString()) }
   var time by rememberSaveable { mutableStateOf("") }
   var showDatePicker by rememberSaveable { mutableStateOf(false) }
   var showTimePicker by rememberSaveable { mutableStateOf(false) }
@@ -1030,10 +1469,8 @@ private fun AddEventContent(
             ?.format(eventDateFormatter)
             ?.replaceFirstChar { it.uppercase() }
             ?: date,
-          eyebrow = "DatePicker",
           tone = FluidTone.Primary,
           onClick = { showDatePicker = true },
-          badge = { FluidStatusBadge("SELEZIONA", tone = FluidTone.Primary) },
           animatePress = true,
         )
       }
@@ -1041,10 +1478,8 @@ private fun AddEventContent(
         FluidListRow(
           title = "Ora",
           subtitle = if (time.isBlank()) "Opzionale" else time,
-          eyebrow = "TimePicker",
           tone = FluidTone.Info,
           onClick = { showTimePicker = true },
-          badge = { FluidStatusBadge(if (time.isBlank()) "OPZIONALE" else "IMPOSTATA", tone = FluidTone.Info) },
           animatePress = true,
         )
       }
@@ -1234,6 +1669,7 @@ fun AgendaDetailRoute(
   }
 
   FluidContainerScaffold(
+    ambient = FeatureIdentity.Agenda.ambient(),
     title = "Dettaglio agenda",
     modifier = modifier,
     onBack = onBack,
@@ -1295,6 +1731,32 @@ private fun categoryIcon(category: AgendaCategory): ImageVector {
     AgendaCategory.CUSTOM -> Icons.Rounded.EditCalendar
   }
 }
+
+/**
+ * Le misure dell'agenda su uno schermo largo: il calendario e' l'elenco, e prende la parte larga.
+ * Un mese su sette colonne da cinquanta punti e' un francobollo; da cento e' un calendario.
+ */
+private const val AgendaModeMonth = "Mese"
+private const val AgendaModeWeek = "Settimana"
+private val AgendaWeekMinWidth = 940.dp
+
+/** In settimana il pannello accanto non c'e': un dettaglio che non entra mai. */
+private val AgendaWeekSizes = FluidListDetailSizes(detailMin = 100_000.dp)
+
+private val AgendaPaneSizes = FluidListDetailSizes(
+  listMin = 520.dp,
+  listMax = 760.dp,
+  listFraction = 0.58f,
+  detailMin = 400.dp,
+)
+
+/** Il giorno come titolo del pannello: senza l'anno quando e' quello in corso, che a 34 punti pesa. */
+private fun formatPaneDayHeader(date: LocalDate): String {
+  val formatter = if (date.year == LocalDate.now().year) paneDayFormatter else eventDateFormatter
+  return date.format(formatter).replaceFirstChar { it.uppercase() }
+}
+
+private val paneDayFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", italianLocale)
 
 private fun formatDayHeader(date: LocalDate): String {
   return date.format(eventDateFormatter).replaceFirstChar { it.uppercase() }

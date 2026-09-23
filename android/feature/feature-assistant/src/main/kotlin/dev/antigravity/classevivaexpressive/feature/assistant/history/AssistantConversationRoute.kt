@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.assistant.history
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -181,9 +182,9 @@ private fun AssistantBubble(
     }
     when {
       text.isNotBlank() -> MarkdownBody(text)
-      message.status == MessageStatus.FAILED -> Text(message.failureKind?.let { AssistantTexts.failure(it) } ?: "Qualcosa e' andato storto.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+      message.status == MessageStatus.FAILED -> Text(message.failureKind?.let { AssistantTexts.failure(it) } ?: "Qualcosa è andato storto.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
       message.status == MessageStatus.CANCELLED -> Text("Fermata prima della risposta.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      live == null -> Text("Interrotta: l'app si e' chiusa prima della risposta.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      live == null -> Text("Interrotta: l'app si è chiusa prima della risposta.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     if (message.status == MessageStatus.FAILED && text.isNotBlank()) {
       Spacer(Modifier.height(6.dp))
@@ -267,7 +268,7 @@ fun telemetry(run: AssistantRun): String = buildList {
   if (provider != null || models.isNotEmpty()) add(listOfNotNull(provider, models.joinToString(", ").takeIf { it.isNotEmpty() }).joinToString(" "))
   run.costUsd?.takeIf { it > 0.0 }?.let { add(String.format(Locale.getDefault(), "%.4f $", it)) }
   run.durationMillis?.let { add("${it / 1000} s") }
-  if (run.tools.isNotEmpty()) add("${run.tools.size} strumenti")
+  if (run.tools.isNotEmpty()) add(countLabel(run.tools.size, "strumento", "strumenti"))
   if (run.outcome != "ok") add(run.outcome)
 }.joinToString(" · ")
 

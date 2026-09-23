@@ -89,7 +89,7 @@ class AssistantNotifications @Inject constructor(@ApplicationContext private val
     val text = result.answer?.let { firstLines(it) } ?: failureText(result.failure ?: FailureKind.UNKNOWN)
     val notification = NotificationCompat.Builder(context, CHANNEL_ID)
       .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
-      .setContentTitle(if (result.answer != null) "Risposta pronta" else "L'assistente si e' fermato")
+      .setContentTitle(if (result.answer != null) "Risposta pronta" else "L'assistente si è fermato")
       .setContentText(text)
       .setStyle(NotificationCompat.BigTextStyle().bigText(text).setSummaryText(result.question.take(80)))
       .setAutoCancel(true)
@@ -117,12 +117,12 @@ class AssistantNotifications @Inject constructor(@ApplicationContext private val
         RegistroToolGroup.DIDATTICA.statusKey -> "Cerco fra i materiali…"
         RegistroToolGroup.APP.statusKey -> "Agisco nell'app…"
         "more_tools" -> "Mi serve dell'altro…"
-        "deep_model" -> "Passo al modello piu' capace…"
-        else -> if (state.tier == ModelTier.DEEP) "Analizzo con calma: puo' volerci un po'…" else "Penso…"
+        "deep_model" -> "Passo al modello più capace…"
+        else -> if (state.tier == ModelTier.DEEP) "Analizzo con calma: può volerci un po'…" else "Penso…"
       }
       if (state.tier == ModelTier.DEEP && state.statusKey == "thinking") base else if (state.tier == ModelTier.DEEP) "$base (modello profondo)" else base
     }
-    is AssistantState.WaitingRateLimit -> "Il servizio e' al limite: riprovo fra ${state.secondsLeft} s"
+    is AssistantState.WaitingRateLimit -> "Il servizio è al limite: riprovo fra ${state.secondsLeft} s"
     is AssistantState.SwitchingProvider -> "Cambio servizio…"
     is AssistantState.Answering -> "Rispondo…"
     is AssistantState.AwaitingConfirmation -> "Aspetto la tua conferma nell'app"
@@ -134,15 +134,15 @@ class AssistantNotifications @Inject constructor(@ApplicationContext private val
 
   fun failureText(kind: FailureKind): String = when (kind) {
     FailureKind.NO_KEYS -> "Nessuna chiave verificata: apri le impostazioni dell'assistente."
-    FailureKind.UNAUTHORIZED -> "La chiave non e' piu' valida: controllala nelle impostazioni."
-    FailureKind.RATE_LIMITED -> "Il servizio e' al limite di richieste: riprova fra poco."
+    FailureKind.UNAUTHORIZED -> "La chiave non è più valida: controllala nelle impostazioni."
+    FailureKind.RATE_LIMITED -> "Il servizio è al limite di richieste: riprova fra poco."
     FailureKind.NETWORK -> "Niente rete."
-    FailureKind.TIMEOUT -> "Ci ha messo troppo: riprova con una domanda piu' semplice."
+    FailureKind.TIMEOUT -> "Ci ha messo troppo: riprova con una domanda più semplice."
     FailureKind.BLOCKED -> "Il servizio ha rifiutato la richiesta."
     FailureKind.PROVIDER -> "Il servizio ha risposto con un errore."
-    FailureKind.MICROPHONE -> "Il microfono non e' disponibile."
+    FailureKind.MICROPHONE -> "Il microfono non è disponibile."
     FailureKind.TRANSCRIPTION -> "Non sono riuscito a trascrivere."
-    FailureKind.UNKNOWN -> "Qualcosa e' andato storto."
+    FailureKind.UNKNOWN -> "Qualcosa è andato storto."
   }
 
   private fun firstLines(answer: String): String = answer.lineSequence().filter { it.isNotBlank() }.take(4).joinToString("\n").take(400)

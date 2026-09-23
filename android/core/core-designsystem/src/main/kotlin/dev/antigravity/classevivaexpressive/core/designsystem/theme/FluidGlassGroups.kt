@@ -114,3 +114,25 @@ fun <T> LazyListScope.fluidGlassGroups(
  * si legge e il frame d'ingresso dentro il bilancio.
  */
 private const val FluidGlassGroupMaxRows = 8
+
+/**
+ * Le stesse righe in un pannello solo, fuori da una lista pigra: per una sezione breve che sta in
+ * una colonna ([dev.antigravity.fluidengine.ui.fluid.fluidColumns]) accanto ad altre.
+ *
+ * Senza spezzare: e' fatto per le sezioni di un cruscotto, che hanno quattro o sei righe. Un elenco
+ * lungo resta in [fluidGlassGroups].
+ */
+@Composable
+fun <T> FluidGlassGroup(
+  items: List<T>,
+  modifier: Modifier = Modifier,
+  row: @Composable (T) -> Unit,
+) {
+  if (items.isEmpty()) return
+  FluidListGroup(glass = true, modifier = modifier) {
+    items.forEachIndexed { index, value ->
+      if (index > 0) FluidListDivider()
+      row(value)
+    }
+  }
+}

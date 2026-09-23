@@ -45,11 +45,11 @@ fun ProviderOrderList(
       if (index > 0) FluidListDivider()
       FluidListRow(
         title = provider.label,
-        subtitle = if (index == 0) "Primo a rispondere" else "Riserva, se il precedente e' al limite o non risponde",
+        subtitle = if (index == 0) "Primo a rispondere" else "Riserva, se il precedente è al limite o non risponde",
         badge = {
           Row {
             ArrowButton(Icons.Rounded.KeyboardArrowUp, "Sposta su", enabled = index > 0) { move(index, index - 1) }
-            ArrowButton(Icons.Rounded.KeyboardArrowDown, "Sposta giu'", enabled = index < visible.lastIndex) { move(index, index + 1) }
+            ArrowButton(Icons.Rounded.KeyboardArrowDown, "Sposta giù", enabled = index < visible.lastIndex) { move(index, index + 1) }
           }
         },
       )

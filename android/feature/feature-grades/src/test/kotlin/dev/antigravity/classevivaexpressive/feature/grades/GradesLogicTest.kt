@@ -58,7 +58,7 @@ class GradesLogicTest {
     )
 
     assertEquals("Serve almeno 9,0", calculateRequiredGradeMessage(weightedGrades, 7.0))
-    assertEquals("Lontano dal target", calculateRequiredGradeMessage(impossibleGrades, 9.0))
+    assertEquals("Lontano dall'obiettivo", calculateRequiredGradeMessage(impossibleGrades, 9.0))
   }
 
   @Test
@@ -78,7 +78,7 @@ class GradesLogicTest {
       Grade(id = "2", subject = "Storia", valueLabel = "9", numericValue = 9.0, date = "2026-03-10", type = "Orale", weight = 1.0),
     )
 
-    assertEquals("Target sicuro", calculateRequiredGradeMessage(grades, 6.0))
+    assertEquals("Obiettivo al sicuro", calculateRequiredGradeMessage(grades, 6.0))
   }
 
   @Test

@@ -7,6 +7,9 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.CustomEvent
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaViewMode
+import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.ViewPreferencesRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -31,14 +34,17 @@ class AgendaViewModelTest {
   private val testDispatcher = UnconfinedTestDispatcher(TestCoroutineScheduler())
   private val agendaRepository = mockk<AgendaRepository>(relaxed = true)
   private val dashboardRepository = mockk<DashboardRepository>(relaxed = true)
+  private val viewPreferences = mockk<ViewPreferencesRepository>(relaxed = true)
+  private val lessonsRepository = mockk<LessonsRepository>(relaxed = true)
 
   @Before fun setUp() {
     Dispatchers.setMain(testDispatcher)
     every { dashboardRepository.observeDashboard() } returns flowOf(DashboardSnapshot())
+    every { viewPreferences.observeAgendaViewMode() } returns flowOf(AgendaViewMode.MONTH)
   }
   @After fun tearDown() { Dispatchers.resetMain() }
 
-  private fun buildViewModel() = AgendaViewModel(agendaRepository, dashboardRepository)
+  private fun buildViewModel() = AgendaViewModel(agendaRepository, dashboardRepository, viewPreferences, lessonsRepository)
 
   // ─── Caricamento voci agenda ──────────────────────────────────────────────
 
@@ -154,5 +160,25 @@ class AgendaViewModelTest {
     testDispatcher.scheduler.advanceUntilIdle()
 
     assertTrue(!vm.state.value.isRefreshing)
+  }
+
+  // ─── Vista ricordata ──────────────────────────────────────────────────────
+
+  @Test
+  fun rememberedWeek_isExposedAsWeekMode() = runTest {
+    every { agendaRepository.observeAgenda() } returns flowOf(emptyList())
+    every { agendaRepository.observeCustomEvents() } returns flowOf(emptyList())
+    every { viewPreferences.observeAgendaViewMode() } returns flowOf(AgendaViewMode.WEEK)
+
+    buildViewModel().state.test {
+      assertTrue(awaitItem().weekMode)
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
+  @Test
+  fun choosingTheWeek_isSaved() = runTest {
+    buildViewModel().setWeekMode(true)
+    coVerify { viewPreferences.setAgendaViewMode(AgendaViewMode.WEEK) }
   }
 }

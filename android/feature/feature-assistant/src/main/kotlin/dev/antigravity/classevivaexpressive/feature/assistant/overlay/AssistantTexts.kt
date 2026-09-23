@@ -15,7 +15,7 @@ object AssistantTexts {
     val base = when (key) {
       "thinking" -> if (tier == ModelTier.DEEP) "Analizzo con calma…" else "Penso…"
       "more_tools" -> "Mi serve dell'altro…"
-      "deep_model" -> "Passo al modello piu' capace…"
+      "deep_model" -> "Passo al modello più capace…"
       RegistroToolGroup.VOTI.statusKey -> "Guardo i voti…"
       RegistroToolGroup.AGENDA.statusKey -> "Guardo l'agenda…"
       RegistroToolGroup.ORARIO.statusKey -> "Guardo l'orario…"
@@ -31,15 +31,15 @@ object AssistantTexts {
 
   fun failure(kind: FailureKind, retryAfterSec: Int? = null): String = when (kind) {
     FailureKind.NO_KEYS -> "Nessuna chiave verificata: apri le impostazioni dell'assistente."
-    FailureKind.UNAUTHORIZED -> "La chiave non e' piu' valida: controllala nelle impostazioni."
-    FailureKind.RATE_LIMITED -> if (retryAfterSec != null) "Il servizio e' al limite: riprova fra $retryAfterSec s." else "Il servizio e' al limite di richieste: riprova fra poco."
+    FailureKind.UNAUTHORIZED -> "La chiave non è più valida: controllala nelle impostazioni."
+    FailureKind.RATE_LIMITED -> if (retryAfterSec != null) "Il servizio è al limite: riprova fra $retryAfterSec s." else "Il servizio è al limite di richieste: riprova fra poco."
     FailureKind.NETWORK -> "Niente rete."
-    FailureKind.TIMEOUT -> "Ci ha messo troppo: riprova con una domanda piu' semplice."
+    FailureKind.TIMEOUT -> "Ci ha messo troppo: riprova con una domanda più semplice."
     FailureKind.BLOCKED -> "Il servizio ha rifiutato la richiesta."
     FailureKind.PROVIDER -> "Il servizio ha risposto con un errore."
-    FailureKind.MICROPHONE -> "Il microfono non e' disponibile: chiudi l'app che lo sta usando."
+    FailureKind.MICROPHONE -> "Il microfono non è disponibile: chiudi l'app che lo sta usando."
     FailureKind.TRANSCRIPTION -> "Non sono riuscito a trascrivere: riprova."
-    FailureKind.UNKNOWN -> "Qualcosa e' andato storto."
+    FailureKind.UNKNOWN -> "Qualcosa è andato storto."
   }
 
   fun statusLine(state: AssistantState): String? = when (state) {
@@ -50,7 +50,7 @@ object AssistantTexts {
       val base = status(state.statusKey, state.tier)
       if (state.statusExtra > 0) "$base (+${state.statusExtra})" else base
     }
-    is AssistantState.WaitingRateLimit -> "${state.provider.label} e' al limite: riprovo fra ${state.secondsLeft} s"
+    is AssistantState.WaitingRateLimit -> "${state.provider.label} è al limite: riprovo fra ${state.secondsLeft} s"
     is AssistantState.SwitchingProvider -> "Passo a ${state.to.label}…"
     is AssistantState.Answering -> "Rispondo…"
     is AssistantState.AwaitingConfirmation -> "Serve una conferma"

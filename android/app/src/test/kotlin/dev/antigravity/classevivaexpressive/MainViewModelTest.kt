@@ -349,6 +349,13 @@ private class FakeSettingsRepository(
   override suspend fun ignoreStableUpdateVersion(version: String) {
     settings.value = settings.value.copy(ignoredStableUpdateVersion = version)
   }
+  override suspend fun setSubjectColor(key: String, argb: Int?) {
+    val colors = settings.value.subjectColors
+    settings.value = settings.value.copy(subjectColors = if (argb == null) colors - key else colors + (key to argb))
+  }
+  override suspend fun resetSubjectColors() {
+    settings.value = settings.value.copy(subjectColors = emptyMap())
+  }
 }
 
 private class FakeSchoolYearRepository(

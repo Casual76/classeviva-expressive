@@ -38,17 +38,17 @@ class AbsencesLogicTest {
 
   @Test
   fun hoursLabel_returnsIngressoLabelForLate() {
-    assertEquals("Ingresso alla 2", hoursLabel(AbsenceType.LATE, 2))
+    assertEquals("Ingresso alla 2ª ora", hoursLabel(AbsenceType.LATE, 2))
   }
 
   @Test
   fun hoursLabel_returnsUscitaLabelForExit() {
-    assertEquals("Uscita alla 4", hoursLabel(AbsenceType.EXIT, 4))
+    assertEquals("Uscita alla 4ª ora", hoursLabel(AbsenceType.EXIT, 4))
   }
 
   @Test
   fun hoursLabel_returnsOraLabelForAbsence() {
-    assertEquals("Ora 1", hoursLabel(AbsenceType.ABSENCE, 1))
+    assertEquals("1ª ora", hoursLabel(AbsenceType.ABSENCE, 1))
   }
 
   // ─── absenceTone ──────────────────────────────────────────────────────────

@@ -144,7 +144,7 @@ private fun GradeCardFlag(unseen: Boolean, edited: Boolean) {
  * stringa, cosi' un nome gia' scritto bene non viene toccato e nessun acronimo isolato viene
  * rovinato per sbaglio.
  */
-internal fun String.asReadableSubject(): String {
+fun String.asReadableSubject(): String {
   if (isBlank()) return this
   if (any { it.isLowerCase() }) return this
   val lowered = lowercase()

@@ -1,5 +1,8 @@
 package dev.antigravity.classevivaexpressive.feature.settings
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
+import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -77,6 +80,25 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.classevivaBrandAccent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveAccentPresets
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectBlock
+import androidx.compose.material.icons.rounded.Palette
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectSwatchDot
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectSwatches
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.subjectPalette
+import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.Subject
+import dev.antigravity.classevivaexpressive.core.domain.model.SubjectKeys
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
+import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
+import androidx.compose.runtime.key
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.flow.StateFlow
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
 import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupImportSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupRepository
@@ -108,9 +130,13 @@ import kotlinx.coroutines.withContext
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
+import dev.antigravity.fluidengine.ui.fluid.FluidAlert
 import dev.antigravity.fluidengine.ui.fluid.FluidColorDot
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
+import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.fluid.fluidLicensesSection
@@ -133,9 +159,59 @@ private enum class SettingsSection(val title: String, val subtitle: String) {
   Notifications("Notifiche e sync", "Preferenze essenziali e stato"),
   Data("Dati e backup", "Esporta o ripristina i dati locali"),
   Assistant("Assistente IA", "Chiavi, modelli, voce e privacy"),
-  About("Informazioni e aggiornamenti", "Versione, update e funzionalità"),
-  Diagnostics("Diagnostica avanzata", "Canali Android, test e stato runtime"),
+  About("Informazioni e aggiornamenti", "Versione, aggiornamenti e funzionalità"),
+  Diagnostics("Diagnostica avanzata", "Canali di notifica, test e stato dell'app"),
+  SubjectColors("Colori delle materie", "Il colore di ogni materia in orario, agenda e home"),
 }
+
+/**
+ * La sezione da cui si arriva a questa. Le figlie non hanno una riga nell'indice: si aprono da una
+ * riga dentro la madre, e mentre sono aperte la riga accesa nell'indice resta quella della madre.
+ */
+private val SettingsSection.parent: SettingsSection?
+  get() = when (this) {
+    SettingsSection.Diagnostics -> SettingsSection.Notifications
+    SettingsSection.SubjectColors -> SettingsSection.Appearance
+    else -> null
+  }
+
+/** Una famiglia di materie nella sezione dei colori: la chiave salvata e il nome da mostrare. */
+data class SubjectColorRow(val key: String, val label: String)
+
+/**
+ * Le materie che hanno senso qui: quelle del registro e quelle dell'orario, una riga per famiglia.
+ *
+ * Prima che il registro abbia mai sincronizzato non c'e' niente da elencare, e una pagina vuota
+ * direbbe "non ci sono colori"; restano allora le famiglie con un default scelto apposta.
+ */
+internal fun subjectColorRows(subjects: List<Subject>, timetableSubjects: List<String>): List<SubjectColorRow> {
+  val named = subjects.sortedBy { it.order }.map { it.description } + timetableSubjects
+  val rows = LinkedHashMap<String, SubjectColorRow>()
+  named.forEach { name ->
+    val key = SubjectKeys.keyOf(name) ?: return@forEach
+    rows.getOrPut(key) {
+      SubjectColorRow(key, SubjectKeys.familyLabel(key) ?: name.substringBefore(" / ").trim().asReadableSubject())
+    }
+  }
+  if (rows.isEmpty()) {
+    DefaultSubjectFamilies.forEach { key -> rows[key] = SubjectColorRow(key, SubjectKeys.familyLabel(key).orEmpty()) }
+  }
+  return rows.values.toList()
+}
+
+private val DefaultSubjectFamilies = listOf(
+  SubjectKeys.Italiano,
+  SubjectKeys.Storia,
+  SubjectKeys.Filosofia,
+  SubjectKeys.Inglese,
+  SubjectKeys.Matematica,
+  SubjectKeys.Fisica,
+  SubjectKeys.Scienze,
+  SubjectKeys.Informatica,
+  SubjectKeys.Arte,
+  SubjectKeys.Motorie,
+  SubjectKeys.Religione,
+)
 
 data class SettingsUiState(
   val settings: AppSettings = AppSettings(),
@@ -157,6 +233,8 @@ class SettingsViewModel @Inject constructor(
   private val capabilityResolver: CapabilityResolver,
   private val appBackupRepository: AppBackupRepository,
   @param:ApplicationContext private val applicationContext: Context,
+  gradesRepository: GradesRepository,
+  lessonsRepository: LessonsRepository,
 ) : ViewModel() {
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isRefreshing = MutableStateFlow(false)
@@ -203,6 +281,14 @@ class SettingsViewModel @Inject constructor(
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
+  /** Raccolto solo dentro la sezione dei colori: fuori di li' l'orario non serve a nessuno. */
+  val subjectRows: StateFlow<List<SubjectColorRow>> = combine(
+    gradesRepository.observeSubjects(),
+    lessonsRepository.observeTimetableTemplate(),
+  ) { subjects, timetable ->
+    subjectColorRows(subjects, timetable.slots.map { it.subject })
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
   init {
     refresh(showIndicator = false)
   }
@@ -239,6 +325,14 @@ class SettingsViewModel @Inject constructor(
 
   fun setAmoled(enabled: Boolean) {
     viewModelScope.launch { settingsRepository.setAmoledEnabled(enabled) }
+  }
+
+  fun setSubjectColor(key: String, argb: Int?) {
+    viewModelScope.launch { settingsRepository.setSubjectColor(key, argb) }
+  }
+
+  fun resetSubjectColors() {
+    viewModelScope.launch { settingsRepository.resetSubjectColors() }
   }
 
   fun setNotifications(enabled: Boolean) {
@@ -368,7 +462,40 @@ fun SettingsRoute(
   val assistantState by assistantViewModel.state.collectAsStateWithLifecycle()
   var sectionName by rememberSaveable { mutableStateOf<String?>(null) }
   val section = sectionName?.let { name -> SettingsSection.entries.firstOrNull { it.name == name } }
+  // Su uno schermo largo l'indice sta a sinistra e la sezione accanto, come nelle impostazioni di
+  // sistema di un tablet: una sezione e' sempre aperta, e all'inizio e' la prima.
+  // Salvato, non solo ricordato: tornando alla pagina il primo fotogramma sa gia' se c'e' il pannello,
+  // e una cosa gia' scelta non passa per il pop-up del telefono prima di finire accanto.
+  var twoPane by rememberSaveable { mutableStateOf(false) }
+  val paneSection = section ?: SettingsSection.Account
+  // Diagnostica e i colori delle materie non hanno una riga loro nell'indice: mentre sono aperte
+  // la riga accesa resta quella da cui si e' arrivati.
+  val highlightedSection = paneSection.parent ?: paneSection
+  val subjectRows by viewModel.subjectRows.collectAsStateWithLifecycle()
+  var editingSubject by remember { mutableStateOf<SubjectColorRow?>(null) }
+  var editingOrigin by remember { mutableStateOf<Rect?>(null) }
   val context = LocalContext.current
+  // Disconnettersi toglie la sessione e le credenziali salvate: per rientrare servono di nuovo
+  // codice e password. Un tocco solo, su un tasto grande, era troppo poco.
+  var confirmLogout by rememberSaveable { mutableStateOf(false) }
+  if (confirmLogout) {
+    FluidAlert(
+      onDismissRequest = { confirmLogout = false },
+      title = "Disconnettere questo dispositivo?",
+      message = "I dati scaricati su questo dispositivo vengono cancellati, e per rientrare serviranno di nuovo codice utente e password.",
+      actions = listOf(
+        FluidAlertAction("Annulla", { confirmLogout = false }),
+        FluidAlertAction(
+          "Disconnetti",
+          {
+            confirmLogout = false
+            viewModel.logout()
+          },
+          FluidAlertAction.Emphasis.Destructive,
+        ),
+      ),
+    )
+  }
   val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
     viewModel.refresh()
   }
@@ -409,7 +536,7 @@ fun SettingsRoute(
     }
   }
 
-  PredictiveBackHandler(enabled = section != null) { progress ->
+  PredictiveBackHandler(enabled = section != null && !twoPane) { progress ->
     val activeSection = section ?: return@PredictiveBackHandler
     try {
       progress.collect { backEvent ->
@@ -449,41 +576,21 @@ fun SettingsRoute(
     }
   }
 
-  // A settings section is a real child pane. It uses the same opaque lateral stack as route
-  // navigation, so a paused transition never leaves two readable pages blended together.
-  sectionTransition.AnimatedContent(
-    modifier = modifier.fillMaxSize(),
-    transitionSpec = {
-      val opening = targetState != null
-      val transform = if (opening) {
-        slideInHorizontally(
-          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-          initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = true) },
-        ) togetherWith slideOutHorizontally(
-          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-          targetOffsetX = { width -> settingsPaneExitOffset(width, opening = true) },
-        )
-      } else {
-        slideInHorizontally(
-          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-          initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = false) },
-        ) togetherWith slideOutHorizontally(
-          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-          targetOffsetX = { width -> settingsPaneExitOffset(width, opening = false) },
-        )
-      }
-      // While popping, the root must remain physically behind the travelling opaque child. Giving
-      // the target a negative z-index also covers restored-process cases where the child did not
-      // previously acquire the opening transition's positive z-index.
-      transform.targetContentZIndex = settingsPaneTargetZIndex(opening)
-      transform.using(SizeTransform(clip = true))
-    },
-  ) { section ->
+  val settingsPage: @Composable (SettingsSection?, Boolean) -> Unit = { section, paneMode ->
     FluidScreen(
       title = section?.title ?: "Impostazioni",
       ambient = FeatureIdentity.Settings.ambient(),
       subtitle = section?.subtitle ?: "Tutto ciò che serve, senza il muro di opzioni.",
-      onBack = if (section != null || onBack != null) navigateBack else null,
+      onBack = when {
+        !paneMode -> if (section != null || onBack != null) navigateBack else null
+        // Nel pannello una figlia torna alla madre da cui si apre; l'indice torna dove si era
+        // venuti; le altre sezioni non hanno un indietro, perche' l'indice e' gia' accanto.
+        section?.parent != null -> {
+          { sectionName = section.parent?.name }
+        }
+        section == null -> onBack
+        else -> null
+      },
       actions = {
         if (section == SettingsSection.Diagnostics) {
           FluidBarAction(
@@ -509,7 +616,7 @@ fun SettingsRoute(
         }
         item {
           FluidListGroup(glass = true) {
-            val destinations = SettingsSection.entries.filterNot { it == SettingsSection.Diagnostics }
+            val destinations = SettingsSection.entries.filter { it.parent == null }
             destinations.forEachIndexed { index, destination ->
               FluidListRow(
                 title = destination.title,
@@ -519,6 +626,8 @@ fun SettingsRoute(
                   (!state.runtimeState.permissionGranted || !state.runtimeState.appNotificationsEnabled)
                 ) FluidTone.Warning else FluidTone.Neutral,
                 onClick = { sectionName = destination.name },
+                selected = paneMode && destination == highlightedSection,
+                disclosure = !paneMode,
                 badge = {
                   if (destination == SettingsSection.Notifications) {
                     FluidStatusBadge(
@@ -567,8 +676,9 @@ fun SettingsRoute(
         item {
           FluidButton(
             text = "Disconnetti questo dispositivo",
-            onClick = viewModel::logout,
-            style = FluidButtonStyle.Filled,
+            onClick = { confirmLogout = true },
+            // Rosso e non pieno: uscire non e' l'azione per cui si apre questa pagina.
+            style = FluidButtonStyle.Destructive,
             fillWidth = true,
           )
         }
@@ -603,9 +713,9 @@ fun SettingsRoute(
         }
         item {
           SettingToggleRow(
-            title = "Dynamic Color nativo",
+            title = "Colori dinamici",
             subtitle = if (dynamicColorSupported) {
-              "Usa subito la palette del sistema; disattivandolo torna Classeviva."
+              "Usa subito i colori del sistema; disattivandolo tornano quelli di Classeviva."
             } else {
               "Richiede Android 12 o versioni successive."
             },
@@ -621,6 +731,51 @@ fun SettingsRoute(
             checked = state.settings.amoledEnabled,
             onCheckedChange = viewModel::setAmoled,
           )
+        }
+        item { FluidSectionHeader(title = "Materie") }
+        item {
+          FluidListGroup(glass = true) {
+            FluidListRow(
+              title = SettingsSection.SubjectColors.title,
+              subtitle = SettingsSection.SubjectColors.subtitle,
+              leading = { Icon(Icons.Rounded.Palette, contentDescription = null) },
+              onClick = { sectionName = SettingsSection.SubjectColors.name },
+            )
+          }
+        }
+      }
+
+      if (section == SettingsSection.SubjectColors) {
+        item {
+          val palette = subjectPalette()
+          FluidListGroup(glass = true) {
+            subjectRows.forEachIndexed { index, row ->
+              key(row.key) {
+              var bounds by remember { mutableStateOf<Rect?>(null) }
+              FluidListRow(
+                title = row.label,
+                subtitle = if (palette.isOverridden(row.key)) "Personalizzato" else "Predefinito",
+                modifier = Modifier.fluidExpandOrigin { bounds = it },
+                leading = { SubjectSwatchDot(palette.baseForKey(row.key), size = 18.dp) },
+                onClick = {
+                  editingOrigin = bounds
+                  editingSubject = row
+                },
+              )
+              }
+              if (index != subjectRows.lastIndex) FluidListDivider()
+            }
+          }
+        }
+        if (state.settings.subjectColors.isNotEmpty()) {
+          item {
+            FluidButton(
+              text = "Ripristina tutti i colori",
+              onClick = viewModel::resetSubjectColors,
+              style = FluidButtonStyle.Tinted,
+              fillWidth = true,
+            )
+          }
         }
       }
 
@@ -718,7 +873,8 @@ fun SettingsRoute(
         }
         if (state.capabilities.isNotEmpty()) {
           item { FluidSectionHeader(title = "Funzionalità disponibili") }
-          items(state.capabilities, key = { it.feature.name }) { capability -> CapabilityRow(capability) }
+          // Un gruppo, come ogni altro elenco dell'app: erano righe sciolte appoggiate sul fondale.
+          fluidGlassGroups(state.capabilities, key = "settings:capabilities") { capability -> CapabilityRow(capability) }
         }
         // Le opere di terze parti che il Fluid Engine porta dentro l'APK. L'Apache-2.0 del vetro e
         // la OFL di Inter chiedono che l'avviso viaggi con la distribuzione: un file di licenza in
@@ -780,12 +936,134 @@ fun SettingsRoute(
         }
       }
 
-      state.lastMessage?.let { message ->
-        item {
-          FluidInlineMessage(message = message, title = "Impostazioni", onDismiss = viewModel::clearMessage)
+      // Su due pannelli il messaggio sta una volta sola, nella sezione che l'ha prodotto: l'indice
+      // accanto lo ripeteva identico.
+      if (!paneMode || section != null) {
+        state.lastMessage?.let { message ->
+          item {
+            FluidInlineMessage(message = message, title = "Impostazioni", onDismiss = viewModel::clearMessage)
+          }
         }
       }
     }
+  }
+
+  FluidListDetailScaffold(
+    ambient = FeatureIdentity.Settings.ambient(),
+    modifier = modifier,
+    list = { isTwoPane ->
+      if (twoPane != isTwoPane) twoPane = isTwoPane
+      if (isTwoPane) {
+        settingsPage(null, true)
+      } else {
+        // A settings section is a real child pane. It uses the same opaque lateral stack as route
+        // navigation, so a paused transition never leaves two readable pages blended together.
+        sectionTransition.AnimatedContent(
+          modifier = Modifier.fillMaxSize(),
+          transitionSpec = {
+            val opening = targetState != null
+            val transform = if (opening) {
+              slideInHorizontally(
+                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+                initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = true) },
+              ) togetherWith slideOutHorizontally(
+                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+                targetOffsetX = { width -> settingsPaneExitOffset(width, opening = true) },
+              )
+            } else {
+              slideInHorizontally(
+                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+                initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = false) },
+              ) togetherWith slideOutHorizontally(
+                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+                targetOffsetX = { width -> settingsPaneExitOffset(width, opening = false) },
+              )
+            }
+            // While popping, the root must remain physically behind the travelling opaque child. Giving
+            // the target a negative z-index also covers restored-process cases where the child did not
+            // previously acquire the opening transition's positive z-index.
+            transform.targetContentZIndex = settingsPaneTargetZIndex(opening)
+            transform.using(SizeTransform(clip = true))
+          },
+        ) { section ->
+          settingsPage(section, false)
+        }
+      }
+    },
+    detail = {
+      FluidDetailContent(item = paneSection, order = { it.ordinal }) { shown ->
+        settingsPage(shown, true)
+      }
+    },
+  )
+
+  // Dichiarato sempre, visibile a comando, come ogni pop-up che nasce da una riga.
+  FluidGlassModalPortal(
+    item = editingSubject,
+    onDismissRequest = { editingSubject = null },
+    origin = { editingOrigin },
+    paneTitle = "Colore della materia",
+  ) { row ->
+    SubjectColorPicker(
+      row = row,
+      onSelect = { color -> viewModel.setSubjectColor(row.key, color.toArgb()) },
+      onReset = { viewModel.setSubjectColor(row.key, null) },
+    )
+  }
+}
+
+/**
+ * Il colore di una materia: l'anteprima di un blocco dell'orario, perche' un colore si sceglie per
+ * come verra' letto e non per come sta in un pallino, e sotto i colori possibili.
+ *
+ * Ogni tocco si applica subito, come l'accento: non c'e' un "Salva", c'e' solo da chiudere.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SubjectColorPicker(
+  row: SubjectColorRow,
+  onSelect: (Color) -> Unit,
+  onReset: () -> Unit,
+) {
+  val palette = subjectPalette()
+  val current = palette.baseForKey(row.key)
+  // All'anteprima basta un nome qualunque della famiglia: la palette risolve per chiave.
+  val sample = SubjectKeys.familyLabel(row.key) ?: row.label
+  Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    SubjectBlock(subject = sample, modifier = Modifier.fillMaxWidth()) {
+      Text(text = "8:00 – 9:00", style = MaterialTheme.typography.labelMedium)
+      Text(text = row.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    }
+    FlowRow(
+      modifier = Modifier.selectableGroup(),
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+      SubjectSwatches.forEach { swatch ->
+        FluidColorDot(
+          color = swatch.color,
+          selected = swatch.color == current,
+          onClick = { onSelect(swatch.color) },
+          label = swatch.label,
+          // Il bianco e l'avorio sul fondo chiaro: senza contorno il pallino non c'e'.
+          modifier = if (palette.needsOutline(swatch.color)) {
+            Modifier.drawWithContent {
+              drawContent()
+              drawCircle(color = palette.outline, radius = 15.dp.toPx(), style = Stroke(width = 1.dp.toPx()))
+            }
+          } else {
+            Modifier
+          },
+        )
+      }
+    }
+    FluidButton(
+      text = "Ripristina predefinito",
+      onClick = onReset,
+      style = FluidButtonStyle.Tinted,
+      enabled = palette.isOverridden(row.key),
+      fillWidth = true,
+    )
   }
 }
 
@@ -889,19 +1167,19 @@ private fun RuntimeStateCard(
       verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
       FluidStatusBadge(
-        label = if (notificationsEnabled) "APP ON" else "APP OFF",
+        label = if (notificationsEnabled) "APP ATTIVA" else "APP SPENTA",
         tone = if (notificationsEnabled) FluidTone.Success else FluidTone.Warning,
       )
       FluidStatusBadge(
-        label = if (runtimeState.permissionGranted) "PERMESSO OK" else "PERMESSO KO",
+        label = if (runtimeState.permissionGranted) "PERMESSO CONCESSO" else "PERMESSO NEGATO",
         tone = if (runtimeState.permissionGranted) FluidTone.Success else FluidTone.Warning,
       )
       FluidStatusBadge(
-        label = if (runtimeState.appNotificationsEnabled) "OS ON" else "OS OFF",
+        label = if (runtimeState.appNotificationsEnabled) "SISTEMA ATTIVO" else "SISTEMA SPENTO",
         tone = if (runtimeState.appNotificationsEnabled) FluidTone.Success else FluidTone.Warning,
       )
       FluidStatusBadge(
-        label = if (periodicSyncEnabled) "SYNC ON" else "SYNC OFF",
+        label = if (periodicSyncEnabled) "SYNC ATTIVA" else "SYNC SPENTA",
         tone = if (periodicSyncEnabled) FluidTone.Success else FluidTone.Warning,
       )
     }
@@ -910,7 +1188,7 @@ private fun RuntimeStateCard(
       style = MaterialTheme.typography.bodyMedium
     )
     Text(
-      "Impostazioni App (OS): ${if (runtimeState.appNotificationsEnabled) "Abilitate" else "Disabilitate"}",
+      "Notifiche di sistema: ${if (runtimeState.appNotificationsEnabled) "Abilitate" else "Disabilitate"}",
       style = MaterialTheme.typography.bodyMedium
     )
     Text(
@@ -1031,7 +1309,7 @@ private fun AccentPicker(
         color = dynamicColor,
         selected = resolvedAccentMode == AccentMode.DYNAMIC,
         onClick = onSelectDynamic,
-        label = "Dynamic Color",
+        label = "Colori di sistema",
       )
     }
     expressiveAccentPresets.forEach { preset ->
@@ -1147,12 +1425,51 @@ private fun CapabilityRow(capability: FeatureCapability) {
     else -> FluidTone.Success
   }
   FluidListRow(
-    title = capability.feature.name.replace('_', ' '),
+    title = capability.feature.displayName(),
     subtitle = capability.detail ?: "Nessun dettaglio disponibile.",
-    eyebrow = capability.label.ifBlank { "Capability" },
+    eyebrow = capability.label.ifBlank { null },
     tone = tone,
-    badge = { FluidStatusBadge(capability.mode.name.replace('_', ' '), tone = tone) },
+    badge = { FluidStatusBadge(capability.mode.displayName(), tone = tone) },
   )
+}
+
+/**
+ * Il nome di una funzione del registro come lo dice una persona. Erano i nomi dell'enum —
+ * "LOGIN SESSION", "NOTICEBOARD UPLOAD" — cioe' il codice mostrato come testo.
+ */
+internal fun RegistroFeature.displayName(): String = when (this) {
+  RegistroFeature.LOGIN_SESSION -> "Accesso e sessione"
+  RegistroFeature.PROFILE -> "Profilo"
+  RegistroFeature.GRADES -> "Voti"
+  RegistroFeature.PERIODS -> "Periodi"
+  RegistroFeature.SUBJECTS -> "Materie"
+  RegistroFeature.AGENDA -> "Agenda"
+  RegistroFeature.HOMEWORKS -> "Compiti"
+  RegistroFeature.LESSONS -> "Lezioni"
+  RegistroFeature.ABSENCES -> "Assenze"
+  RegistroFeature.ABSENCE_JUSTIFICATIONS -> "Giustificazioni"
+  RegistroFeature.NOTICEBOARD -> "Bacheca"
+  RegistroFeature.NOTICEBOARD_REPLY -> "Risposte in bacheca"
+  RegistroFeature.NOTICEBOARD_JOIN -> "Adesioni in bacheca"
+  RegistroFeature.NOTICEBOARD_UPLOAD -> "Allegati in bacheca"
+  RegistroFeature.NOTES -> "Note disciplinari"
+  RegistroFeature.MATERIALS -> "Didattica"
+  RegistroFeature.DOCUMENTS -> "Documenti"
+  RegistroFeature.SCHOOLBOOKS -> "Libri"
+  RegistroFeature.MEETINGS -> "Colloqui"
+  RegistroFeature.NOTIFICATIONS -> "Notifiche"
+  RegistroFeature.PREVIOUS_SCHOOL_YEAR -> "Anni precedenti"
+  RegistroFeature.SPORTELLO -> "Sportello"
+  RegistroFeature.QUESTIONNAIRES -> "Questionari"
+}
+
+/** Da dove arriva: il registro ufficiale, il portale web, il gateway, o la scuola. */
+internal fun FeatureCapabilityMode.displayName(): String = when (this) {
+  FeatureCapabilityMode.DIRECT_REST -> "REGISTRO"
+  FeatureCapabilityMode.DIRECT_PORTAL -> "PORTALE"
+  FeatureCapabilityMode.GATEWAY -> "GATEWAY"
+  FeatureCapabilityMode.TENANT_OPTIONAL -> "DIPENDE DALLA SCUOLA"
+  FeatureCapabilityMode.UNSUPPORTED -> "NON DISPONIBILE"
 }
 
 /**
@@ -1169,14 +1486,14 @@ private fun CapabilityRow(capability: FeatureCapability) {
 internal fun AppBackupImportSummary.describe(): String {
   val parts = buildList {
     if (settingsImported) add("impostazioni")
-    if (timetableTemplates > 0) add("$timetableTemplates orari")
+    if (timetableTemplates > 0) add(countLabel(timetableTemplates, "orario", "orari"))
     if (subjectGoals > 0) add(plural(subjectGoals, "obiettivo", "obiettivi"))
     if (customEvents > 0) add(plural(customEvents, "evento", "eventi"))
     if (grades > 0) {
       val years = gradeSchoolYears.takeIf { it.isNotEmpty() }?.joinToString(", ")
       add(plural(grades, "voto", "voti") + if (years != null) " ($years)" else "")
     }
-    if (seenGrades > 0) add("$seenGrades già visti")
+    if (seenGrades > 0) add(countLabel(seenGrades, "già visto", "già visti"))
     if (scoreSnapshots > 0) add(plural(scoreSnapshots, "punteggio", "punteggi"))
   }
   if (parts.isEmpty()) return "Backup importato, ma non conteneva dati da ripristinare."

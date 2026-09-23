@@ -1,7 +1,10 @@
 package dev.antigravity.classevivaexpressive.core.designsystem.theme
 
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.fluidengine.foundation.EngineSettings
@@ -79,8 +82,16 @@ fun ClassevivaExpressiveTheme(
     settings = settings.toEngine(),
     brand = BrandAccent,
     presets = expressiveAccentPresets,
-    content = content,
-  )
+  ) {
+    // I colori delle materie seguono il tema e le scelte salvate: risolti una volta qui, letti da
+    // ogni schermata senza che nessuna debba sapere dove stanno le impostazioni.
+    val scheme = MaterialTheme.colorScheme
+    val isDark = isDarkAppearance()
+    val subjects = remember(settings.subjectColors, isDark, scheme.surface, scheme.onSurface) {
+      SubjectPalette(settings.subjectColors, isDark, scheme.surface, scheme.onSurface)
+    }
+    CompositionLocalProvider(LocalSubjectPalette provides subjects, content = content)
+  }
 }
 
 /**

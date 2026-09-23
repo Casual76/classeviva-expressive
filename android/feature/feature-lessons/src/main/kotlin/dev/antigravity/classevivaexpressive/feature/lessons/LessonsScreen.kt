@@ -1,5 +1,12 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
+import androidx.compose.foundation.background
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
+import dev.antigravity.fluidengine.ui.fluid.fluidRowPressable
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
@@ -63,9 +70,19 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.accentVividColors
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberMinuteTicker
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.MinuteSpan
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectBlock
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectRowIcon
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.subjectPalette
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridCell
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridDay
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridEvent
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.WeekTimeGrid
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberTimeGridMinuteHeight
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.timeGridRange
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
@@ -413,12 +430,18 @@ fun LessonsRoute(
   val historySection = historySections.firstOrNull { it.date.toString() == selectedHistoryDayKey }
     ?: historySections.firstOrNull()
 
+  val metrics = rememberFluidScreenMetrics()
+
   Box(modifier = modifier.fillMaxSize()) {
     FluidScreen(
       modifier = Modifier.fillMaxSize(),
       title = "Orario",
+      // Largo abbastanza, l'orario e' una settimana intera sotto gli occhi invece di un giorno alla
+      // volta coi tasti: e' la forma che ha sul diario, e quella in cui lo si cerca.
+      contentMaxWidth = FluidColumnsDefaults.WideContentMaxWidth,
+      metrics = metrics,
       ambient = FeatureIdentity.Lessons.ambient(),
-      subtitle = "Template settimanale stabile e storico delle lezioni svolte in una sola vista.",
+      subtitle = "L'orario della settimana e le lezioni svolte, in un'unica vista.",
       onBack = onBack,
       actions = {
         // Un tasto solo, con dentro tutti i verbi: toccato aggiorna, tenuto premuto offre anche il
@@ -512,8 +535,41 @@ fun LessonsRoute(
         )
       }
 
-      when (selectedTab) {
-        TAB_TIMETABLE -> {
+      val weekAtOnce = metrics.columns() >= FluidColumnsDefaults.MaxColumns
+      when {
+        selectedTab == TAB_TIMETABLE && weekAtOnce -> {
+          item(key = "lessons:template:instruction", contentType = LessonsContentType.Instruction) {
+            Text(
+              text = "Tocca uno slot per confermarlo · Tieni premuto per modificarlo.",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(horizontal = 4.dp),
+            )
+          }
+          if (state.canImportOfficialTimetable) {
+            item(key = "lessons:template:official-import", contentType = LessonsContentType.ImportAction) {
+              FluidButton(
+                text = "Importa orario ufficiale 4F",
+                onClick = viewModel::importOfficialTimetable,
+                style = FluidButtonStyle.Filled,
+                fillWidth = true,
+                leading = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
+              )
+            }
+          }
+          item(key = "lessons:template:week", contentType = LessonsContentType.TimetableRow) {
+            WeekTimetableGrid(
+              sections = templateSections,
+              timetable = state.timetableTemplate,
+              today = LocalDate.now().dayOfWeek,
+              now = { nowState.value.toLocalTime() },
+              onConfirm = { block, bounds -> slotOrigin = bounds; viewModel.startConfirming(block.primary) },
+              onEdit = { block, bounds -> slotOrigin = bounds; viewModel.startEditing(block.primary) },
+            )
+          }
+        }
+
+        selectedTab == TAB_TIMETABLE -> {
           item(key = "lessons:template:selector", contentType = LessonsContentType.DaySelector) {
             FluidPillTabs(
               options = templateDayLabels,
@@ -535,7 +591,7 @@ fun LessonsRoute(
           if (state.canImportOfficialTimetable) {
             item(key = "lessons:template:official-import", contentType = LessonsContentType.ImportAction) {
               FluidButton(
-                text = "Importa Orario Ufficiale 4F",
+                text = "Importa orario ufficiale 4F",
                 onClick = viewModel::importOfficialTimetable,
                 style = FluidButtonStyle.Filled,
                 fillWidth = true,
@@ -583,7 +639,22 @@ fun LessonsRoute(
           }
         }
 
-        TAB_HISTORY -> {
+        weekAtOnce -> {
+          item(key = "lessons:history:week", contentType = LessonsContentType.WeekNavigator) {
+            WeekNavigator(
+              weekStart = currentWeekStart,
+              weekOffset = weekOffset,
+              onPrevious = { changeWeek(weekOffset - 1) },
+              onNext = { if (weekOffset < 0) changeWeek(weekOffset + 1) },
+              onToday = { changeWeek(0) },
+            )
+          }
+          item(key = "lessons:history:week-grid", contentType = LessonsContentType.TimetableRow) {
+            WeekHistoryGrid(sections = historySections, today = LocalDate.now())
+          }
+        }
+
+        else -> {
           item(key = "lessons:history:week", contentType = LessonsContentType.WeekNavigator) {
             WeekNavigator(
               weekStart = currentWeekStart,
@@ -764,7 +835,7 @@ private fun TimetableBlockRow(
   val isOfficial = timetable.isOfficial
   val kind = slotKind(block, timetable)
   FluidListRow(
-    title = block.displaySubject,
+    title = block.displaySubject.asReadableSubject(),
     subtitle = primary.teacher ?: "Docente non specificato",
     eyebrow = block.timeRangeLabel(),
     meta = listOfNotNull(
@@ -774,11 +845,12 @@ private fun TimetableBlockRow(
         isOverridden -> "Modificato manualmente"
         isOfficial -> "Importato da orario ufficiale"
         block.isMulti -> "Blocco ${block.allSlots.size}h · ${(primary.confidence * 100).toInt()}%"
-        else -> "Ricorrenza ${(primary.confidence * 100).toInt()}% · ${primary.sampleCount} settimane"
+        else -> "Ricorrenza ${(primary.confidence * 100).toInt()}% · ${countLabel(primary.sampleCount, "settimana", "settimane")}"
       },
     ).joinToString(" / "),
-    tone = kind.tone(),
-    leading = { Icon(Icons.Rounded.School, contentDescription = null) },
+    // La piastrella porta il colore della materia, sul segno; lo stato dello slot lo dice il badge.
+    tone = FluidTone.Neutral,
+    leading = { SubjectRowIcon(primary.subject) },
     onClick = onConfirm,
     // Era un onLongClick che apriva la modifica senza dirlo. Il menu dice entrambe le cose che
     // questa riga sa fare, e il tap resta la piu' frequente.
@@ -796,13 +868,199 @@ private fun TimetableBlockRow(
         ),
       )
     },
-    // Badge e tono escono dalla stessa espressione: prima erano due `when` paralleli con soglie
-    // diverse (0.8 e 0.6 per il colore, 0.75 per l'etichetta), e a confidenza 0.78 la riga si
-    // contraddiceva da sola dicendo "STABILE" in verde su un tono blu.
+    // Etichetta e colore del badge escono dalla stessa espressione: prima erano due `when` paralleli
+    // con soglie diverse (0.8 e 0.6 per il colore, 0.75 per l'etichetta), e a confidenza 0.78 la
+    // riga si contraddiceva da sola dicendo "STABILE" in verde su un tono blu.
     badge = { FluidStatusBadge(kind.badgeLabel(block), tone = kind.tone()) },
     animatePress = true,
     modifier = modifier,
   )
+}
+
+/**
+ * La settimana intera sulle ore: un giorno per colonna, ogni lezione alta quanto dura e piena del
+ * colore della sua materia, come l'orario di carta attaccato al diario. Le ore sono a sinistra, la
+ * lezione in corso ha un anello e la riga di adesso attraversa la colonna di oggi.
+ *
+ * I gesti sono gli stessi della riga lunga: tocco per confermare, pressione per modificare, e il
+ * blocco toccato e' l'ancora da cui si apre il pannello. Badge e spiegazioni restano nella vista per
+ * giorno, dove la riga e' larga quanto la pagina.
+ */
+@Composable
+private fun WeekTimetableGrid(
+  sections: List<TimetableDaySection>,
+  timetable: TimetableTemplate,
+  today: DayOfWeek,
+  now: () -> LocalTime,
+  onConfirm: (SlotBlock, Rect?) -> Unit,
+  onEdit: (SlotBlock, Rect?) -> Unit,
+) {
+  val events = remember(sections) { timetableGridEvents(sections) }
+  val range = remember(events) { timeGridRange(events.map { it.span }) }
+  val shortest = remember(events) { events.minOfOrNull { it.span.minutes } ?: 60 }
+  val minuteHeight = rememberTimeGridMinuteHeight(range, shortest)
+  WeekTimeGrid(
+    days = sections.map { TimeGridDay(label = it.day.longLabel(), isToday = it.day == today) },
+    events = events,
+    range = range,
+    minuteHeight = minuteHeight,
+    todayIndex = sections.indexOfFirst { it.day == today }.takeIf { it >= 0 },
+    nowMinute = { now().let { it.hour * 60 + it.minute } },
+  ) { event, cell ->
+    WeekTimetableCell(
+      block = event.value,
+      cell = cell,
+      timetable = timetable,
+      isToday = sections[event.day].day == today,
+      now = now,
+      onConfirm = onConfirm,
+      onEdit = onEdit,
+    )
+  }
+}
+
+/** I blocchi della settimana come eventi della griglia: un blocco senza ora leggibile non ha posto. */
+internal fun timetableGridEvents(sections: List<TimetableDaySection>): List<TimeGridEvent<SlotBlock>> =
+  sections.flatMapIndexed { dayIndex, section ->
+    section.blocks.mapNotNull { block ->
+      block.span()?.let { span ->
+        TimeGridEvent(key = "${section.day}:${block.primary.time}", day = dayIndex, span = span, value = block)
+      }
+    }
+  }
+
+@Composable
+private fun WeekTimetableCell(
+  block: SlotBlock,
+  cell: TimeGridCell,
+  timetable: TimetableTemplate,
+  isToday: Boolean,
+  now: () -> LocalTime,
+  onConfirm: (SlotBlock, Rect?) -> Unit,
+  onEdit: (SlotBlock, Rect?) -> Unit,
+) {
+  var bounds by remember { mutableStateOf<Rect?>(null) }
+  // Letto dentro il derivato: il minuto che passa ricompone la cella solo quando cambia la risposta.
+  val live by remember(block, isToday) { derivedStateOf { isToday && block.contains(now()) } }
+  val room = block.allSlots.mapNotNull { it.room?.trim()?.takeIf(String::isNotBlank) }.firstOrNull()
+  val kind = slotKind(block, timetable)
+  SubjectBlock(
+    // Il colore e' della prima materia del blocco, come il titolo: mai del nome unito.
+    subject = block.primary.subject,
+    modifier = Modifier
+      .fillMaxSize()
+      .fluidExpandOrigin { bounds = it }
+      .semantics(mergeDescendants = true) {},
+    live = live,
+    onClick = { onConfirm(block, bounds) },
+    onLongClick = { onEdit(block, bounds) },
+  ) {
+    val secondary = LocalContentColor.current.copy(alpha = 0.78f)
+    Text(
+      text = block.timeRangeLabel(),
+      style = MaterialTheme.typography.labelSmall,
+      color = secondary,
+      maxLines = 1,
+    )
+    Text(
+      text = block.displaySubject.asReadableSubject(),
+      style = MaterialTheme.typography.titleSmall,
+      fontWeight = FontWeight.SemiBold,
+      maxLines = if (cell.compact) 1 else 3,
+      overflow = TextOverflow.Ellipsis,
+    )
+    if (!cell.compact) {
+      Text(
+        text = listOfNotNull(room, kind.badgeLabel(block).lowercase().replaceFirstChar(Char::uppercase))
+          .joinToString(" · "),
+        style = MaterialTheme.typography.labelSmall,
+        color = secondary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
+  }
+}
+
+private val weekGridDayFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d", italianLocale)
+
+/**
+ * Le lezioni svolte della settimana, un giorno per colonna: la stessa forma dell'orario, cosi' le
+ * due schede si leggono allo stesso modo. Ogni cella dice ora, materia e argomento; una lezione
+ * senza firma e senza argomento resta velata, perche' e' un buco del registro e non una lezione.
+ */
+@Composable
+private fun WeekHistoryGrid(
+  sections: List<HistoryDaySection>,
+  today: LocalDate,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    sections.forEach { section ->
+      val isToday = section.date == today
+      Column(
+        modifier = Modifier.weight(1f),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Text(
+          // Il giorno e il numero bastano: il mese e' quello della settimana, scritto sopra.
+          text = section.date.format(weekGridDayFormatter).replaceFirstChar(Char::uppercase),
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = if (isToday) FontWeight.Bold else FontWeight.SemiBold,
+          color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        if (section.lessons.isEmpty()) {
+          Text(
+            text = "Nessuna lezione",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+          )
+        } else {
+          FluidListGroup(glass = true) {
+            section.lessons.forEachIndexed { index, lesson ->
+              if (index > 0) FluidListDivider()
+              val recorded = lesson.isSigned || !lesson.topic.isNullOrBlank()
+              Column(
+                modifier = Modifier
+                  .fillMaxWidth()
+                  .semantics(mergeDescendants = true) {}
+                  .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+              ) {
+                Text(
+                  text = lesson.timeRangeLabel(),
+                  style = MaterialTheme.typography.labelMedium,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                  text = lesson.subject,
+                  style = MaterialTheme.typography.titleSmall,
+                  fontWeight = FontWeight.SemiBold,
+                  color = if (recorded) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                  maxLines = 2,
+                  overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                  text = lesson.topic?.takeIf(String::isNotBlank)
+                    ?: if (lesson.isSigned) "Argomento non inserito" else "Non firmata",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  maxLines = 3,
+                  overflow = TextOverflow.Ellipsis,
+                )
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 @Composable
@@ -939,23 +1197,43 @@ internal data class SlotBlock(
   val isMulti: Boolean get() = extra.isNotEmpty()
   val displaySubject: String = allSlots.map { it.subject }.distinct().joinToString(" / ")
 
-  fun timeRangeLabel(): String {
-    val start = runCatching { LocalTime.parse(primary.time) }.getOrNull() ?: return primary.time
+  private fun start(): LocalTime? = runCatching { LocalTime.parse(primary.time) }.getOrNull()
+
+  /** La fine dell'ultimo slot, o l'inizio piu' la somma delle durate: una regola sola per tutti. */
+  private fun end(start: LocalTime): LocalTime {
     val lastSlot = extra.lastOrNull() ?: primary
-    val end = lastSlot.endTime
+    return lastSlot.endTime
       ?.takeIf(String::isNotBlank)
       ?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
       ?: start.plusMinutes(allSlots.sumOf { it.durationMinutes }.toLong())
-    return "${start.format(timeFormatter)} - ${end.format(timeFormatter)}"
+  }
+
+  /** Se [time] cade dentro il blocco: e' la lezione in corso. */
+  fun contains(time: LocalTime): Boolean {
+    val start = start() ?: return false
+    return !time.isBefore(start) && time.isBefore(end(start))
+  }
+
+  fun timeRangeLabel(): String {
+    val start = start() ?: return primary.time
+    return "${start.format(timeFormatter)} - ${end(start).format(timeFormatter)}"
+  }
+
+  /** Il blocco in minuti dalla mezzanotte, per la settimana sulle ore; null senza un'ora leggibile. */
+  fun span(): MinuteSpan? {
+    val start = start() ?: return null
+    val from = start.toSecondOfDay() / 60
+    val to = end(start).toSecondOfDay() / 60
+    // Un orario sbagliato che finisce prima di cominciare occupa comunque un'ora, invece di sparire.
+    return MinuteSpan(from, if (to > from) to else from + 60)
   }
 }
 
 /**
  * La lezione in corso adesso, se ce n'e' una.
  *
- * Il colore e' quello dell'accento: non e' un allarme, e' il "sei qui" della sezione — la stessa
- * ricetta della fascia piu' alta dei voti, perche' e' il colore con cui l'app dice "questo e' il
- * fatto che conta adesso".
+ * Il colore e' quello della materia: la card sta da sola in cima alla pagina, e il colore che dice
+ * "sei qui" e' lo stesso del blocco che nella settimana dice "storia".
  *
  * [now] e' una lambda e non un valore: il `derivedStateOf` la legge dentro il blocco derivato, e
  * cosi' la card si ricompone solo quando cambia il *risultato*, non a ogni battito del minuto.
@@ -971,7 +1249,7 @@ private fun LiveLessonCard(
   val live by remember(blocks) { derivedStateOf { liveSlot(blocks, now()) } }
   val current = live ?: return
 
-  FluidVividCard(colors = accentVividColors(), modifier = modifier) {
+  FluidVividCard(colors = subjectPalette().vivid(current.block.primary.subject), modifier = modifier) {
     Text(
       text = "ADESSO",
       style = FluidTextStyles.uppercaseCaption,

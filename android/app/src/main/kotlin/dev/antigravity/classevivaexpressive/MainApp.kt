@@ -1,5 +1,14 @@
 package dev.antigravity.classevivaexpressive
 
+import dev.antigravity.fluidengine.ui.fluid.FluidAmbientSurface
+import dev.antigravity.fluidengine.ui.fluid.fluidReadingWidth
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnSection
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.fluidColumns
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
+import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -403,6 +412,8 @@ private fun routeExitTransition(
 fun MainApp(
   viewModel: MainViewModel = hiltViewModel(),
   incomingIntents: Flow<Intent> = emptyFlow(),
+  /** Le scorciatoie di una tastiera fisica: vedi [KeyboardShortcut]. */
+  shortcuts: Flow<KeyboardShortcut> = emptyFlow(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val notificationHostState = rememberFluidNotificationHostState()
@@ -451,6 +462,9 @@ fun MainApp(
 
   ClassevivaExpressiveTheme(settings = uiState.settings) {
     val chromeController = rememberFluidChromeController()
+    LaunchedEffect(chromeController, shortcuts) {
+      shortcuts.collect { if (it == KeyboardShortcut.Refresh) chromeController.refreshFront() }
+    }
     CompositionLocalProvider(
       LocalFluidNotificationHostState provides notificationHostState,
       LocalFluidGlassModalHostState provides glassModalHostState,
@@ -477,6 +491,7 @@ fun MainApp(
                 onCheckForUpdates = { viewModel.checkUpdate() },
                 onClearUpdateCheckMessage = viewModel::clearUpdateCheckMessage,
                 incomingIntents = incomingIntents,
+                shortcuts = shortcuts,
               )
             }
           }
@@ -631,20 +646,24 @@ internal fun LoginScreen(
   }
 
   val systemBars = WindowInsets.systemBars.asPaddingValues()
+  // La prima pagina che si vede ha lo stesso fondale di quella che viene dopo, invece del grigio
+  // piatto; e su uno schermo largo il modulo e' una colonna in mezzo, non due campi lunghi quanto
+  // la finestra.
+  FluidAmbientSurface(ambient = FeatureIdentity.Overview.ambient()) {
   LazyColumn(
-    modifier = Modifier.fillMaxSize(),
+    modifier = Modifier.fillMaxSize().fluidReadingWidth(max = LoginMaxWidth),
     contentPadding = PaddingValues(
       start = 24.dp,
       end = 24.dp,
       top = systemBars.calculateTopPadding() + 28.dp,
       bottom = systemBars.calculateBottomPadding() + 28.dp,
     ),
-    verticalArrangement = Arrangement.spacedBy(20.dp),
+    verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
   ) {
     item {
       FluidHeroCard(
         title = "Classeviva Expressive",
-        subtitle = "Material 3 ufficiale per registro, agenda, voti e bacheca, tutta in Kotlin e Compose.",
+        subtitle = "Accedi con le credenziali del registro Classeviva.",
         trailing = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
       )
     }
@@ -711,14 +730,12 @@ internal fun LoginScreen(
         )
       }
     }
-    item {
-      FluidEmptyState(
-        title = "Autofill Compose",
-        detail = "I campi credenziali espongono i content type ufficiali di Compose per username, email e password.",
-      )
-    }
+  }
   }
 }
+
+/** Quanto e' largo il modulo di accesso su uno schermo largo: quello di un telefono comodo. */
+private val LoginMaxWidth = 480.dp
 
 /**
  * The app shell: screen content edge to edge, with a floating tab bar over it.
@@ -905,6 +922,8 @@ internal fun BugReportScreen(
   FluidScreen(
     title = "Segnala un problema",
     subtitle = "Controlla cosa verrà condiviso prima di aprire GitHub.",
+    // Il fondale di "Altro", da cui si arriva: era l'unica pagina grigia dell'app insieme al login.
+    ambient = FeatureIdentity.Settings.ambient(),
     onBack = onBack,
     itemSpacing = 12.dp,
   ) {
@@ -922,7 +941,7 @@ internal fun BugReportScreen(
         ) {
           Icon(Icons.Rounded.WarningAmber, contentDescription = null)
           Text(
-            "La segnalazione sarà una issue GitHub pubblica e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
+            "La segnalazione sarà pubblica su GitHub e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
             style = MaterialTheme.typography.bodyMedium,
           )
         }
@@ -971,7 +990,7 @@ internal fun BugReportScreen(
       }
     }
     if (copied) {
-      item { Text("Report copiato negli appunti.", color = MaterialTheme.colorScheme.primary) }
+      item { Text("Segnalazione copiata negli appunti.", color = MaterialTheme.colorScheme.primary) }
     }
     item {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1133,6 +1152,7 @@ private fun AuthenticatedApp(
   onCheckForUpdates: () -> Unit,
   onClearUpdateCheckMessage: () -> Unit,
   incomingIntents: Flow<Intent>,
+  shortcuts: Flow<KeyboardShortcut> = emptyFlow(),
 ) {
   val navController = rememberNavController()
   val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -1171,6 +1191,19 @@ private fun AuthenticatedApp(
     val origin = touchOrigin.origin
     navController.navigateTopLevel(targetRoute)
     navController.currentBackStackEntry?.savedStateHandle?.writeExpandMotion(origin)
+  }
+
+  // Ctrl+1…5: le cinque sezioni della barra, nell'ordine in cui stanno — come le schede di un
+  // browser. Sulla sezione in cui si e' gia', come toccare di nuovo la sua scheda: torna in cima.
+  LaunchedEffect(navController, shortcuts) {
+    shortcuts.collect { shortcut ->
+      val index = (shortcut as? KeyboardShortcut.Section)?.index ?: return@collect
+      val destination = topLevelDestinations.getOrNull(index) ?: return@collect
+      val current = navController.currentDestination?.hierarchy
+        ?.mapNotNull { it.route?.substringBefore("?") }
+        ?.firstOrNull { it in topLevelRoutes }
+      if (current == destination.baseRoute) scrollToTop.request() else navigateTopLevelRoute(destination.navigateRoute)
+    }
   }
 
   LaunchedEffect(navController, incomingIntents) {
@@ -1490,10 +1523,29 @@ private fun AuthenticatedApp(
         }
         composable("materials") { entry ->
           FluidRouteMotionHost(this@composable) {
-            MaterialsRoute(
-              onBack = navController::navigateUp,
-              onOpenMaterial = { itemId ->
-                navigateRoute("material-detail/${Uri.encode(itemId)}")
+            val materialsViewModel: MaterialsViewModel = hiltViewModel()
+            val paneRequest by entry.savedStateHandle
+              .getStateFlow<String?>(PaneOpenRequestKey, null)
+              .collectAsStateWithLifecycle()
+            AdaptiveListDetail(
+              openRequest = paneRequest,
+              onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
+              ambient = FeatureIdentity.Materials.ambient(),
+              emptyTitle = "Nessun materiale aperto",
+              emptyMessage = "Scegli un file o un link dall'elenco per vederlo qui.",
+              emptyIcon = Icons.Rounded.FolderCopy,
+              onOpenPage = { itemId -> navigateRoute("material-detail/${Uri.encode(itemId)}") },
+              list = { inPane, selectedId, onOpen ->
+                MaterialsRoute(
+                  onBack = navController::navigateUp,
+                  onOpenMaterial = onOpen,
+                  selectedId = selectedId,
+                  inPane = inPane,
+                  viewModel = materialsViewModel,
+                )
+              },
+              detail = { itemId, onClose ->
+                MaterialDetailRoute(itemId = itemId, onBack = null, viewModel = materialsViewModel)
               },
             )
           }
@@ -1505,11 +1557,20 @@ private fun AuthenticatedApp(
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val materialsViewModel: MaterialsViewModel = hiltViewModel(parentEntry)
           FluidRouteMotionHost(this@composable) {
-            MaterialDetailRoute(
-              itemId = entry.arguments?.getString("itemId").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = materialsViewModel,
-            )
+            val detailId = entry.arguments?.getString("itemId").orEmpty()
+            PaneAwareDetail(
+              id = detailId,
+              onWide = { id ->
+                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+                navController.popBackStack()
+              },
+            ) {
+              MaterialDetailRoute(
+                itemId = entry.arguments?.getString("itemId").orEmpty(),
+                onBack = { navController.popBackStack() },
+                viewModel = materialsViewModel,
+              )
+            }
           }
         }
         composable(
@@ -1531,17 +1592,37 @@ private fun AuthenticatedApp(
             .getStateFlow<String?>(ConsumedHomeworkRequestKey, null)
             .collectAsStateWithLifecycle()
           val pendingHomeworkId = pendingHomeworkRequest(requestedHomeworkId, consumedHomeworkId)
-          LaunchedEffect(pendingHomeworkId) {
-            val homeworkId = pendingHomeworkId ?: return@LaunchedEffect
-            entry.savedStateHandle[ConsumedHomeworkRequestKey] = homeworkId
-            navigateRoute(route = "homework-detail/${Uri.encode(homeworkId)}")
-          }
           FluidRouteMotionHost(this@composable) {
-            HomeworkRoute(
-              initialHomeworkId = null,
-              onBack = navController::navigateUp,
-              onOpenHomework = { homeworkId ->
-                navigateRoute("homework-detail/${Uri.encode(homeworkId)}")
+            val homeworkViewModel: HomeworkViewModel = hiltViewModel()
+            val paneRequest by entry.savedStateHandle
+              .getStateFlow<String?>(PaneOpenRequestKey, null)
+              .collectAsStateWithLifecycle()
+            AdaptiveListDetail(
+              ambient = FeatureIdentity.Homework.ambient(),
+              emptyTitle = "Nessun compito aperto",
+              emptyMessage = "Scegli un compito dall'elenco per leggerne consegna e scadenza qui.",
+              emptyIcon = Icons.AutoMirrored.Rounded.Assignment,
+              onOpenPage = { homeworkId -> navigateRoute("homework-detail/${Uri.encode(homeworkId)}") },
+              openRequest = paneRequest ?: pendingHomeworkId,
+              onOpenRequestConsumed = { homeworkId ->
+                if (homeworkId == paneRequest) {
+                  entry.savedStateHandle[PaneOpenRequestKey] = null
+                } else {
+                  entry.savedStateHandle[ConsumedHomeworkRequestKey] = homeworkId
+                }
+              },
+              list = { inPane, selectedId, onOpen ->
+                HomeworkRoute(
+                  initialHomeworkId = null,
+                  onBack = navController::navigateUp,
+                  onOpenHomework = onOpen,
+                  selectedId = selectedId,
+                  inPane = inPane,
+                  viewModel = homeworkViewModel,
+                )
+              },
+              detail = { homeworkId, onClose ->
+                HomeworkDetailRoute(homeworkId = homeworkId, onBack = null, viewModel = homeworkViewModel)
               },
             )
           }
@@ -1553,19 +1634,47 @@ private fun AuthenticatedApp(
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val homeworkViewModel: HomeworkViewModel = hiltViewModel(parentEntry)
           FluidRouteMotionHost(this@composable) {
-            HomeworkDetailRoute(
-              homeworkId = entry.arguments?.getString("homeworkId").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = homeworkViewModel,
-            )
+            val detailId = entry.arguments?.getString("homeworkId").orEmpty()
+            PaneAwareDetail(
+              id = detailId,
+              onWide = { id ->
+                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+                navController.popBackStack()
+              },
+            ) {
+              HomeworkDetailRoute(
+                homeworkId = entry.arguments?.getString("homeworkId").orEmpty(),
+                onBack = { navController.popBackStack() },
+                viewModel = homeworkViewModel,
+              )
+            }
           }
         }
         composable("documents") { entry ->
           FluidRouteMotionHost(this@composable) {
-            DocumentsRoute(
-              onBack = navController::navigateUp,
-              onOpenDocument = { documentId ->
-                navigateRoute("document-detail/${Uri.encode(documentId)}")
+            val documentsViewModel: DocumentsViewModel = hiltViewModel()
+            val paneRequest by entry.savedStateHandle
+              .getStateFlow<String?>(PaneOpenRequestKey, null)
+              .collectAsStateWithLifecycle()
+            AdaptiveListDetail(
+              openRequest = paneRequest,
+              onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
+              ambient = FeatureIdentity.Documents.ambient(),
+              emptyTitle = "Nessun documento aperto",
+              emptyMessage = "Scegli una pagella o un documento dall'elenco per vederlo qui.",
+              emptyIcon = Icons.AutoMirrored.Rounded.LibraryBooks,
+              onOpenPage = { documentId -> navigateRoute("document-detail/${Uri.encode(documentId)}") },
+              list = { inPane, selectedId, onOpen ->
+                DocumentsRoute(
+                  onBack = navController::navigateUp,
+                  onOpenDocument = onOpen,
+                  selectedId = selectedId,
+                  inPane = inPane,
+                  viewModel = documentsViewModel,
+                )
+              },
+              detail = { documentId, onClose ->
+                DocumentDetailRoute(documentId = documentId, onBack = null, viewModel = documentsViewModel)
               },
             )
           }
@@ -1577,11 +1686,20 @@ private fun AuthenticatedApp(
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val documentsViewModel: DocumentsViewModel = hiltViewModel(parentEntry)
           FluidRouteMotionHost(this@composable) {
-            DocumentDetailRoute(
-              documentId = entry.arguments?.getString("documentId").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = documentsViewModel,
-            )
+            val detailId = entry.arguments?.getString("documentId").orEmpty()
+            PaneAwareDetail(
+              id = detailId,
+              onWide = { id ->
+                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+                navController.popBackStack()
+              },
+            ) {
+              DocumentDetailRoute(
+                documentId = entry.arguments?.getString("documentId").orEmpty(),
+                onBack = { navController.popBackStack() },
+                viewModel = documentsViewModel,
+              )
+            }
           }
         }
         composable(
@@ -1627,10 +1745,29 @@ private fun AuthenticatedApp(
         }
         composable("professors") { entry ->
           FluidRouteMotionHost(this@composable) {
-            ProfessorsRoute(
-              onBack = navController::navigateUp,
-              onOpenProfessor = { teacherName ->
-                navigateRoute("professor-detail/${Uri.encode(teacherName)}")
+            val professorsViewModel: ProfessorsViewModel = hiltViewModel()
+            val paneRequest by entry.savedStateHandle
+              .getStateFlow<String?>(PaneOpenRequestKey, null)
+              .collectAsStateWithLifecycle()
+            AdaptiveListDetail(
+              openRequest = paneRequest,
+              onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
+              ambient = FeatureIdentity.People.ambient(),
+              emptyTitle = "Nessun docente aperto",
+              emptyMessage = "Scegli un docente dall'elenco per vederne materie, voti e presenza qui.",
+              emptyIcon = Icons.Rounded.CoPresent,
+              onOpenPage = { teacherName -> navigateRoute("professor-detail/${Uri.encode(teacherName)}") },
+              list = { inPane, selectedId, onOpen ->
+                ProfessorsRoute(
+                  onBack = navController::navigateUp,
+                  onOpenProfessor = onOpen,
+                  selectedId = selectedId,
+                  inPane = inPane,
+                  viewModel = professorsViewModel,
+                )
+              },
+              detail = { teacherName, onClose ->
+                ProfessorDetailRoute(teacherName = teacherName, onBack = null, viewModel = professorsViewModel)
               },
             )
           }
@@ -1642,11 +1779,20 @@ private fun AuthenticatedApp(
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val professorsViewModel: ProfessorsViewModel = hiltViewModel(parentEntry)
           FluidRouteMotionHost(this@composable) {
-            ProfessorDetailRoute(
-              teacherName = entry.arguments?.getString("teacherName").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = professorsViewModel,
-            )
+            val detailId = entry.arguments?.getString("teacherName").orEmpty()
+            PaneAwareDetail(
+              id = detailId,
+              onWide = { id ->
+                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+                navController.popBackStack()
+              },
+            ) {
+              ProfessorDetailRoute(
+                teacherName = entry.arguments?.getString("teacherName").orEmpty(),
+                onBack = { navController.popBackStack() },
+                viewModel = professorsViewModel,
+              )
+            }
           }
         }
         composable(
@@ -1755,52 +1901,82 @@ private fun MoreHubScreen(
     MoreHubAction("Documenti e libri", "Pagelle, documenti e testi adottati.", "Archivio", FluidTone.Info, Icons.AutoMirrored.Rounded.LibraryBooks, onOpenDocuments),
   )
   val peopleActions = listOf(
-    MoreHubAction("Note disciplinari", "Note e sanzioni del registro.", "Comunicazioni", FluidTone.Danger, Icons.Rounded.Report, onOpenNotes),
+    MoreHubAction("Note disciplinari", "Note e sanzioni del registro.", "Bacheca", FluidTone.Danger, Icons.Rounded.Report, onOpenNotes),
     MoreHubAction("Assenze", "Assenze, ritardi e uscite.", "Presenze", FluidTone.Warning, Icons.Rounded.EventBusy, onOpenAbsences),
-    MoreHubAction("Colloqui", "Disponibilità e prenotazioni.", "Docenti", FluidTone.Info, Icons.Rounded.Forum, onOpenMeetings),
-    MoreHubAction("Professori", "Contatti e andamento per docente.", "Docenti", FluidTone.Neutral, Icons.Rounded.CoPresent, onOpenProfessors),
+    MoreHubAction("Colloqui", "Disponibilità e prenotazioni.", "Incontri", FluidTone.Info, Icons.Rounded.Forum, onOpenMeetings),
+    MoreHubAction("Docenti", "Presenza, valutazioni e materie di ognuno.", "Classe", FluidTone.Neutral, Icons.Rounded.CoPresent, onOpenProfessors),
   )
 
+  val metrics = rememberFluidScreenMetrics()
   FluidScreen(
     title = "Altro",
     subtitle = "Strumenti del registro, raccolti per ciò che devi fare.",
+    // Era l'unica scheda senza fondale: le altre quattro hanno la loro lavata di colore e il loro
+    // motivo, e passando ad "Altro" la pagina diventava grigia come un'altra app. Il tono e' quello
+    // della casa, perche' qui non c'e' una sezione: c'e' l'indice di tutte.
+    ambient = FeatureIdentity.Settings.ambient(),
+    contentMaxWidth = FluidColumnsDefaults.WideContentMaxWidth,
+    metrics = metrics,
   ) {
-    item { FluidSectionHeader("Registro") }
-    item { MoreHubActionGroup(registerActions) }
-    item { FluidSectionHeader("Persone e presenza") }
-    item { MoreHubActionGroup(peopleActions) }
-    item { FluidSectionHeader("App") }
-    item {
-      FluidListGroup(glass = true) {
-        if (onOpenAssistant != null) {
-          FluidListRow(
-            title = "Assistente",
-            subtitle = "Le conversazioni salvate, da rileggere o continuare.",
-            eyebrow = "IA",
-            tone = FluidTone.Primary,
-            leading = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
-            onClick = onOpenAssistant,
-          )
-          FluidListDivider()
-        }
-        FluidListRow(
-          title = "Segnala un problema",
-          subtitle = "Issue GitHub pubblica con diagnostica minima modificabile.",
-          eyebrow = "Feedback",
-          tone = FluidTone.Info,
-          leading = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
-          onClick = onOpenBugReport,
-        )
-        FluidListDivider()
-        FluidListRow(
-          title = "Impostazioni",
-          subtitle = "Account, aspetto, notifiche, dati e aggiornamenti.",
-          eyebrow = "Profilo",
-          leading = { Icon(Icons.Rounded.Settings, contentDescription = null) },
-          onClick = onOpenSettings,
-        )
-      }
-    }
+    fluidColumns(
+      key = "more:columns",
+      columns = metrics.columns(),
+      sections = listOf(
+        FluidColumnSection(key = "more:register") {
+          MoreHubSection("Registro") { MoreHubActionGroup(registerActions) }
+        },
+        FluidColumnSection(key = "more:people") {
+          MoreHubSection("Persone e presenza") { MoreHubActionGroup(peopleActions) }
+        },
+        FluidColumnSection(key = "more:app") {
+          MoreHubSection("App") {
+            FluidListGroup(glass = true) {
+              if (onOpenAssistant != null) {
+                FluidListRow(
+                  title = "Assistente",
+                  subtitle = "Le conversazioni salvate, da rileggere o continuare.",
+                  eyebrow = "IA",
+                  tone = FluidTone.Primary,
+                  leading = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
+                  onClick = onOpenAssistant,
+                )
+                FluidListDivider()
+              }
+              FluidListRow(
+                title = "Segnala un problema",
+                subtitle = "Una segnalazione pubblica su GitHub, con una diagnostica che puoi rivedere.",
+                eyebrow = "Feedback",
+                tone = FluidTone.Info,
+                leading = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
+                onClick = onOpenBugReport,
+              )
+              FluidListDivider()
+              FluidListRow(
+                title = "Impostazioni",
+                subtitle = "Account, aspetto, notifiche, dati e aggiornamenti.",
+                eyebrow = "Profilo",
+                leading = { Icon(Icons.Rounded.Settings, contentDescription = null) },
+                onClick = onOpenSettings,
+              )
+            }
+          }
+        },
+      ),
+    )
+  }
+}
+
+/**
+ * Una sezione dell'indice: la testata e il suo gruppo, in un blocco solo.
+ *
+ * Sul telefono sono un item ciascuna, come prima; in colonne stanno insieme, e la testata non puo'
+ * finire in cima a una colonna col suo gruppo in fondo a un'altra.
+ */
+@Composable
+private fun MoreHubSection(title: String, content: @Composable () -> Unit) {
+  Column(verticalArrangement = Arrangement.spacedBy(FluidScreenDefaults.ItemSpacing)) {
+    FluidSectionHeader(title)
+    content()
   }
 }
 
@@ -1819,4 +1995,13 @@ private fun MoreHubActionGroup(actions: List<MoreHubAction>) {
       if (index != actions.lastIndex) FluidListDivider()
     }
   }
+}
+
+/** Cosa chiede una tastiera fisica, dall'Activity che riceve i tasti alla navigazione che risponde. */
+sealed interface KeyboardShortcut {
+  /** Ctrl+R, F5: aggiorna la pagina davanti. */
+  data object Refresh : KeyboardShortcut
+
+  /** Ctrl+1…5: la sezione della barra in quella posizione, da zero. */
+  data class Section(val index: Int) : KeyboardShortcut
 }

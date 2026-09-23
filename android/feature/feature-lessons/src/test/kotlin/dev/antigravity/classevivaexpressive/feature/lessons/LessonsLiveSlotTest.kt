@@ -90,4 +90,26 @@ class LessonsLiveSlotTest {
     val block = SlotBlock(primary = slot("08:00", confidence = 0.1f, confirmed = true))
     assertEquals(SlotKind.Confirmed, slotKind(block, TimetableTemplate(isOfficial = true)))
   }
+
+  @Test
+  fun weekGrid_placesEachBlockInItsDayColumn_untilItsLastSlotEnds() {
+    val merged = SlotBlock(primary = slot("08:00", "09:00"), extra = listOf(slot("09:00", "10:00")))
+    val events = timetableGridEvents(
+      listOf(
+        TimetableDaySection(java.time.DayOfWeek.MONDAY, emptyList()),
+        TimetableDaySection(java.time.DayOfWeek.TUESDAY, listOf(merged)),
+      ),
+    )
+    assertEquals(1, events.size)
+    assertEquals(1, events.single().day)
+    assertEquals(8 * 60, events.single().span.start)
+    assertEquals(10 * 60, events.single().span.end)
+  }
+
+  @Test
+  fun span_withoutEndTime_usesTheDuration() {
+    val span = SlotBlock(primary = slot("11:10", durationMinutes = 50)).span()
+    assertEquals(11 * 60 + 10, span?.start)
+    assertEquals(12 * 60, span?.end)
+  }
 }
