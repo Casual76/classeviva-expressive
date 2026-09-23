@@ -23,14 +23,22 @@
       "sizeBytes": 33409784
     },
     "beta": {
-      "version": "7.13.0",
+      "version": "7.14.0",
       "releaseDate": "2026-09-23",
-      "changelog": "Tablet: l'app usa tutto lo schermo.\n- In orizzontale Bacheca, Agenda, Impostazioni, Compiti, Didattica, Documenti e Docenti mostrano l'elenco e il dettaglio affiancati, su un fondale solo. Ruotando, la cosa aperta resta aperta e gli elenchi restano dove li avevi lasciati.\n- Agenda: accanto al Mese c'e' la vista Settimana, con i sette giorni in colonna e tutti i loro impegni.\n- Home, Voti, Assenze e Altro si dispongono in colonne; l'Orario e le lezioni svolte mostrano la settimana intera, con la lezione in corso accesa.\n- Il widget nelle celle larghe mostra gli impegni su due colonne.\n- Con una tastiera: Ctrl+R (o F5) aggiorna, Ctrl+1…5 aprono le sezioni, Esc torna indietro, e si vede sempre dove si e'. L'elenco completo tenendo premuto il tasto Meta.\n\nCorrezioni per tutti:\n- Colloqui, conferme di lettura e pagelle tornano a funzionare: il portale Classeviva aveva cambiato l'accesso.\n- Assenze: niente piu' \"verificare la connessione\" a inizio anno.\n- Torna il + per aggiungere un evento in Agenda; i compiti da consegnare vengono prima degli scaduti.\n- Bacheca: una circolare gia' letta non propone piu' \"Segna come letta\".\n- Disconnettersi chiede conferma.\n- Campi su piu' righe dove servono, date leggibili, pop-up senza ripetizioni, testi senza gergo tecnico, \"Bacheca\" e \"Docenti\" chiamati sempre allo stesso modo.",
-      "releaseTag": "stable-classeviva-expressive-v7.13.0",
-      "apkAsset": "classeviva-expressive-7.13.0.apk",
-      "sizeBytes": 33409784
+      "changelog": "Tablet: la home e' nuova — a sinistra la lezione in corso col colore della materia e le lezioni di oggi, a destra voti, impegni e bacheca. Orario e Agenda in vista Settimana sono ora sulle ore: ogni lezione alta quanto dura, e in agenda verifiche e compiti stanno sull'ora della loro materia. L'agenda ricorda se l'hai lasciata su Mese o Settimana. Ogni materia ha un colore, personalizzabile da Impostazioni > Aspetto > Colori delle materie.",
+      "releaseTag": "beta-classeviva-expressive-v7.14.0",
+      "apkAsset": "classeviva-expressive-7.14.0.apk",
+      "sizeBytes": 33475330
     },
     "history": [
+      {
+        "version": "7.13.0",
+        "releaseDate": "2026-09-23",
+        "changelog": "Tablet: l'app usa tutto lo schermo.\n- In orizzontale Bacheca, Agenda, Impostazioni, Compiti, Didattica, Documenti e Docenti mostrano l'elenco e il dettaglio affiancati, su un fondale solo. Ruotando, la cosa aperta resta aperta e gli elenchi restano dove li avevi lasciati.\n- Agenda: accanto al Mese c'e' la vista Settimana, con i sette giorni in colonna e tutti i loro impegni.\n- Home, Voti, Assenze e Altro si dispongono in colonne; l'Orario e le lezioni svolte mostrano la settimana intera, con la lezione in corso accesa.\n- Il widget nelle celle larghe mostra gli impegni su due colonne.\n- Con una tastiera: Ctrl+R (o F5) aggiorna, Ctrl+1…5 aprono le sezioni, Esc torna indietro, e si vede sempre dove si e'. L'elenco completo tenendo premuto il tasto Meta.\n\nCorrezioni per tutti:\n- Colloqui, conferme di lettura e pagelle tornano a funzionare: il portale Classeviva aveva cambiato l'accesso.\n- Assenze: niente piu' \"verificare la connessione\" a inizio anno.\n- Torna il + per aggiungere un evento in Agenda; i compiti da consegnare vengono prima degli scaduti.\n- Bacheca: una circolare gia' letta non propone piu' \"Segna come letta\".\n- Disconnettersi chiede conferma.\n- Campi su piu' righe dove servono, date leggibili, pop-up senza ripetizioni, testi senza gergo tecnico, \"Bacheca\" e \"Docenti\" chiamati sempre allo stesso modo.",
+        "releaseTag": "stable-classeviva-expressive-v7.13.0",
+        "apkAsset": "classeviva-expressive-7.13.0.apk",
+        "sizeBytes": 33409784
+      },
       {
         "version": "7.12.1",
         "releaseDate": "2026-09-23",
