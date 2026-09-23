@@ -1503,10 +1503,21 @@ private fun detectsUploadIntent(detail: CommunicationDetail): Boolean {
   )
 }
 
+/**
+ * Se la circolare chiede qualcosa: firmare, rispondere, aderire, caricare un file.
+ *
+ * Scaricare un allegato non e' una richiesta: contarlo come azione metteva "AZIONE" in arancio su
+ * ogni circolare con un PDF, cioe' su quasi tutte, e il badge che deve saltare all'occhio non diceva
+ * piu' niente.
+ */
+internal fun Communication.asksSomething(): Boolean =
+  needsAck || needsReply || needsJoin || needsFile ||
+    actions.any { it.type != NoticeboardActionType.DOWNLOAD }
+
 internal fun communicationTone(communication: Communication): FluidTone {
   return when {
     !communication.read -> FluidTone.Danger
-    communication.actions.isNotEmpty() -> FluidTone.Warning
+    communication.asksSomething() -> FluidTone.Warning
     else -> FluidTone.Neutral
   }
 }
@@ -1514,7 +1525,7 @@ internal fun communicationTone(communication: Communication): FluidTone {
 internal fun communicationBadgeLabel(communication: Communication): String {
   return when {
     !communication.read -> "NUOVA"
-    communication.actions.isNotEmpty() -> "AZIONE"
+    communication.asksSomething() -> "AZIONE"
     else -> "LETTA"
   }
 }
