@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Assignment
@@ -101,6 +102,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
+import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
+import dev.antigravity.fluidengine.ui.fluid.FluidListDetailSizes
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
@@ -327,6 +331,9 @@ fun AgendaRoute(
   val monthEntriesByDate = remember(entriesByDate, selectedMonth) {
     entriesByDate.filterKeys { YearMonth.from(it) == selectedMonth }
   }
+  val monthCommitments = remember(monthEntriesByDate) {
+    monthEntriesByDate.values.sumOf { day -> day.count { it.category != AgendaCategory.LESSON } }
+  }
   val selectedDayEntries = remember(entriesByDate, selectedDate) {
     entriesByDate[selectedDate].orEmpty()
       .filter { it.category != AgendaCategory.LESSON }
@@ -358,8 +365,65 @@ fun AgendaRoute(
     upcomingAssessment(state.items, facetToday)
   }
 
-  FluidScreen(
+  // Gli impegni del giorno scelto: sotto il calendario su un telefono, nel pannello accanto su
+  // uno schermo largo. Scritti una volta sola, cosi' le due pagine non possono divergere.
+  val dayEntries: LazyListScope.(List<AgendaEntry>) -> Unit = { dayList ->
+    if (dayList.isEmpty()) {
+      item {
+        FluidEmptyState(
+          title = "Nulla di pianificato",
+          detail = "Non ci sono compiti, verifiche o eventi per questa data.",
+        )
+      }
+    } else {
+      fluidGlassGroups(dayList) { entry ->
+        var rowBounds by remember { mutableStateOf<Rect?>(null) }
+        AgendaEntryRow(
+          entry = entry,
+          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
+          onClick = {
+            detailOrigin = rowBounds
+            if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
+          },
+          // Era un onLongClick che condivideva e basta, senza dirlo: la stessa pressione ora
+          // apre un menu che dice cosa sa fare.
+          onLongClick = null,
+          contextActions = {
+            listOf(
+              FluidContextAction(
+                label = "Dettagli",
+                icon = categoryIcon(entry.category),
+                onClick = {
+                  detailOrigin = rowBounds
+                  if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
+                },
+              ),
+              FluidContextAction(
+                label = "Cambia tipo…",
+                icon = Icons.Rounded.EditCalendar,
+                onClick = { categoryEntry = entry },
+              ),
+              FluidContextAction(
+                label = "Condividi",
+                icon = Icons.Rounded.Share,
+                onClick = { shareEntry(context, entry) },
+              ),
+            )
+          },
+        )
+      }
+    }
+  }
+
+  // Su uno schermo largo il mese sta a sinistra, largo, e il giorno scelto accanto: e' il contrario
+  // di un elenco+dettaglio qualunque, perche' qui la cosa che vuole spazio e' il calendario, e il
+  // giorno e' una colonna di impegni.
+  FluidListDetailScaffold(
+    ambient = FeatureIdentity.Agenda.ambient(),
     modifier = modifier,
+    sizes = AgendaPaneSizes,
+    list = { twoPane ->
+  FluidScreen(
     title = "Agenda",
     ambient = FeatureIdentity.Agenda.ambient(),
     subtitle = state.syncStatus.lastSyncLabel(),
@@ -387,8 +451,14 @@ fun AgendaRoute(
       FeatureHero(
         identity = FeatureIdentity.Agenda,
         eyebrow = selectedMonth.format(calendarHeaderFormatter).replaceFirstChar { it.uppercase() },
-        value = selectedDayEntries.size.toString(),
-        label = if (selectedDayEntries.size == 1) "impegno nel giorno" else "impegni nel giorno",
+        // Accanto c'e' gia' il giorno con i suoi impegni contati nella testata: la fascia allora
+        // conta il mese, che e' la cosa che il calendario sotto mostra.
+        value = (if (twoPane) monthCommitments else selectedDayEntries.size).toString(),
+        label = when {
+          twoPane -> if (monthCommitments == 1) "impegno nel mese" else "impegni nel mese"
+          selectedDayEntries.size == 1 -> "impegno nel giorno"
+          else -> "impegni nel giorno"
+        },
         icon = Icons.Rounded.CalendarMonth,
       )
     }
@@ -462,55 +532,37 @@ fun AgendaRoute(
         onSelectDate = { selectedDateText = it.toString() },
       )
     }
-    item { Spacer(modifier = Modifier.height(8.dp)) }
-    item { FluidSectionHeader(formatDayHeader(selectedDate)) }
-
-    if (selectedDayEntries.isEmpty()) {
-      item {
-        FluidEmptyState(
-          title = "Nulla di pianificato",
-          detail = "Non ci sono compiti, verifiche o eventi per questa data.",
-        )
-      }
-    } else {
-      fluidGlassGroups(selectedDayEntries) { entry ->
-        var rowBounds by remember { mutableStateOf<Rect?>(null) }
-        AgendaEntryRow(
-          entry = entry,
-          modifier = Modifier.fluidExpandOrigin { rowBounds = it },
-          onClick = {
-            detailOrigin = rowBounds
-            if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
-          },
-          // Era un onLongClick che condivideva e basta, senza dirlo: la stessa pressione ora
-          // apre un menu che dice cosa sa fare.
-          onLongClick = null,
-          contextActions = {
-            listOf(
-              FluidContextAction(
-                label = "Dettagli",
-                icon = categoryIcon(entry.category),
-                onClick = {
-                  detailOrigin = rowBounds
-                  if (onOpenEntry != null) onOpenEntry(entry.id) else selectedEntry = entry
-                },
-              ),
-              FluidContextAction(
-                label = "Cambia tipo…",
-                icon = Icons.Rounded.EditCalendar,
-                onClick = { categoryEntry = entry },
-              ),
-              FluidContextAction(
-                label = "Condividi",
-                icon = Icons.Rounded.Share,
-                onClick = { shareEntry(context, entry) },
-              ),
-            )
-          },
-        )
-      }
+    if (!twoPane) {
+      item { Spacer(modifier = Modifier.height(8.dp)) }
+      item { FluidSectionHeader(formatDayHeader(selectedDate)) }
     }
+
+    if (!twoPane) dayEntries(selectedDayEntries)
   }
+    },
+    detail = {
+      FluidDetailContent(
+        item = selectedDate,
+        order = { it.toEpochDay().toInt() },
+      ) { date ->
+        val dayItems = entriesByDate[date].orEmpty().filter { it.category != AgendaCategory.LESSON }
+        FluidScreen(
+          title = formatPaneDayHeader(date),
+          subtitle = when (dayItems.size) {
+            0 -> "Nessun impegno"
+            1 -> "Un impegno"
+            else -> "${dayItems.size} impegni"
+          },
+          ambient = FeatureIdentity.Agenda.ambient(),
+          itemSpacing = 12.dp,
+        ) {
+          // Il giorno che questa pagina ha ricevuto, non quello scelto adesso: durante il passaggio
+          // fra due giorni ciascuna pagina tiene i propri impegni.
+          dayEntries(dayItems)
+        }
+      }
+    },
+  )
 
   // Portali, non sheet: dichiarati sempre e visibili a comando, cosi' l'uscita non si smonta
   // insieme alla condizione che li mostrava.
@@ -1295,6 +1347,25 @@ private fun categoryIcon(category: AgendaCategory): ImageVector {
     AgendaCategory.CUSTOM -> Icons.Rounded.EditCalendar
   }
 }
+
+/**
+ * Le misure dell'agenda su uno schermo largo: il calendario e' l'elenco, e prende la parte larga.
+ * Un mese su sette colonne da cinquanta punti e' un francobollo; da cento e' un calendario.
+ */
+private val AgendaPaneSizes = FluidListDetailSizes(
+  listMin = 520.dp,
+  listMax = 760.dp,
+  listFraction = 0.58f,
+  detailMin = 400.dp,
+)
+
+/** Il giorno come titolo del pannello: senza l'anno quando e' quello in corso, che a 34 punti pesa. */
+private fun formatPaneDayHeader(date: LocalDate): String {
+  val formatter = if (date.year == LocalDate.now().year) paneDayFormatter else eventDateFormatter
+  return date.format(formatter).replaceFirstChar { it.uppercase() }
+}
+
+private val paneDayFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", italianLocale)
 
 private fun formatDayHeader(date: LocalDate): String {
   return date.format(eventDateFormatter).replaceFirstChar { it.uppercase() }

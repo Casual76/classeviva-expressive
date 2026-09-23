@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -17,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.Draw
 import androidx.compose.material.icons.rounded.Forum
@@ -78,6 +80,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
+import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
+import dev.antigravity.fluidengine.ui.fluid.FluidDetailPlaceholder
+import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
 import dev.antigravity.fluidengine.ui.fluid.FluidNotification
@@ -686,7 +691,20 @@ fun CommunicationsRoute(
     buildCommunicationsFacets(state.communications, state.notes)
   }
 
-  Box(modifier = modifier) {
+  // Su uno schermo largo la circolare si legge accanto all'elenco invece che in un pop-up sopra:
+  // lo decide lo scaffold misurando, e lo sa anche il resto della pagina — le righe mostrano quale
+  // e' aperta, e i pop-up restano spenti finche' c'e' un pannello a fare il loro lavoro.
+  var twoPane by remember { mutableStateOf(false) }
+  val onUpload: (CommunicationDetail) -> Unit = { current ->
+    pendingUploadDetail = current
+    uploadLauncher.launch(arrayOf("*/*"))
+  }
+  FluidListDetailScaffold(
+    ambient = FeatureIdentity.Communications.ambient(),
+    modifier = modifier,
+    list = { isTwoPane ->
+  if (twoPane != isTwoPane) twoPane = isTwoPane
+  Box(modifier = Modifier.fillMaxSize()) {
     FluidScreen(
     modifier = Modifier.fillMaxWidth(),
     title = "Comunicazioni",
@@ -824,6 +842,9 @@ fun CommunicationsRoute(
                 detailOrigin = rowBounds
                 viewModel.openCommunication(communication.pubId, communication.evtCode)
               },
+              selected = twoPane &&
+                state.selectedCommunication?.communication?.id == communication.id,
+              disclosure = !twoPane,
               // La pressione lunga dice cosa sa fare: aprire, firmare senza aprire (quando il
               // registro chiede la conferma), andare dritti agli allegati, segnare come letta,
               // condividere. Le voci condizionali compaiono solo quando l'azione esiste davvero:
@@ -943,6 +964,8 @@ fun CommunicationsRoute(
                 detailOrigin = rowBounds
                 viewModel.openNote(note.id, note.categoryCode)
               },
+              selected = twoPane && state.selectedNote?.note?.id == note.id,
+              disclosure = !twoPane,
               contextActions = {
                 listOf(
                   FluidContextAction(
@@ -969,6 +992,25 @@ fun CommunicationsRoute(
     }
   }
   }
+    },
+    detail = {
+      CommunicationsDetailPane(
+        state = state,
+        order = { item ->
+          when (item) {
+            is CommunicationsPaneItem.Board ->
+              filteredCommunications.indexOfFirst { it.id == item.detail.communication.id }
+            is CommunicationsPaneItem.NoteItem ->
+              state.notes.indexOfFirst { it.id == item.detail.note.id }
+            null -> null
+          }?.takeIf { it >= 0 }
+        },
+        viewModel = viewModel,
+        context = context,
+        onUpload = onUpload,
+      )
+    },
+  )
 
   // Il dettaglio esisteva tre volte — una rotta, uno sheet inline, un terzo sheet per le azioni.
   // Ora e' questo portale e basta: dichiarato qui, accanto allo stato che legge, e disegnato alla
@@ -980,7 +1022,7 @@ fun CommunicationsRoute(
   // frame della chiusura le sue catture erano gia' null, quindi il testo spariva di colpo mentre lo
   // scrim restava a sfumare da solo.
   FluidGlassModalPortal(
-    item = state.selectedCommunication,
+    item = state.selectedCommunication.takeIf { !twoPane },
     onDismissRequest = viewModel::dismissDetail,
     origin = { detailOrigin },
     paneTitle = "Dettaglio comunicazione",
@@ -990,15 +1032,12 @@ fun CommunicationsRoute(
       isSubmittingAction = state.isSubmittingAction,
       viewModel = viewModel,
       context = context,
-      onUpload = { current ->
-        pendingUploadDetail = current
-        uploadLauncher.launch(arrayOf("*/*"))
-      },
+      onUpload = onUpload,
     )
   }
 
   FluidGlassModalPortal(
-    item = state.selectedNote,
+    item = state.selectedNote.takeIf { !twoPane },
     onDismissRequest = viewModel::dismissDetail,
     origin = { detailOrigin },
     paneTitle = "Dettaglio nota",
@@ -1040,15 +1079,22 @@ private fun CommunicationDetailContent(
   viewModel: CommunicationsViewModel,
   context: Context,
   onUpload: (CommunicationDetail) -> Unit,
+  // Dentro il pannello di dettaglio scorre la pagina che lo contiene, con i suoi margini: il corpo
+  // non deve scorrere per conto suo ne' aggiungerne altri.
+  inPane: Boolean = false,
 ) {
   var replyDraft by rememberSaveable(detail.communication.id, detail.replyText) {
     mutableStateOf(detail.replyText.orEmpty())
   }
   Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .verticalScroll(rememberScrollState())
-      .padding(horizontal = 24.dp, vertical = 20.dp),
+    modifier = if (inPane) {
+      Modifier.fillMaxWidth()
+    } else {
+      Modifier
+        .fillMaxWidth()
+        .verticalScroll(rememberScrollState())
+        .padding(horizontal = 24.dp, vertical = 20.dp)
+    },
     verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
     Text(
@@ -1062,15 +1108,19 @@ private fun CommunicationDetailContent(
       }.getOrDefault(detail.communication.date)
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-      Text(
-        text = detail.communication.sender,
-        style = MaterialTheme.typography.labelLarge,
-      )
+      // Nel pannello mittente e categoria sono gia' la testata della pagina: ripeterli qui sotto
+      // faceva leggere «Scuola» due volte in quattro righe.
+      if (!inPane) {
+        Text(
+          text = detail.communication.sender,
+          style = MaterialTheme.typography.labelLarge,
+        )
+      }
       Text(
         text = formattedDate,
         style = MaterialTheme.typography.bodySmall,
       )
-      if (!detail.communication.category.isNullOrBlank()) {
+      if (!inPane && !detail.communication.category.isNullOrBlank()) {
         FluidStatusBadge(label = detail.communication.category!!, tone = FluidTone.Info)
       }
       if (!detail.communication.read) {
@@ -1167,6 +1217,107 @@ private fun CommunicationDetailContent(
     // Niente pulsante "Chiudi": un pop-up che tiene la pagina visibile dietro di se' si chiude
     // come ci si aspetta — toccando la pagina, o con back. Un pulsantone pieno in fondo diceva
     // "questa e' una schermata", che e' esattamente cio' che il modale non e'.
+  }
+}
+
+/** Quello che il pannello di dettaglio sta mostrando: una circolare o una nota. */
+private sealed interface CommunicationsPaneItem {
+  val key: String
+
+  data class Board(val detail: CommunicationDetail) : CommunicationsPaneItem {
+    override val key: String get() = "board:${detail.communication.id}"
+  }
+
+  data class NoteItem(val detail: NoteDetail) : CommunicationsPaneItem {
+    override val key: String get() = "note:${detail.note.id}"
+  }
+}
+
+/**
+ * Il pannello destro della bacheca su uno schermo largo: la circolare o la nota scelta, in una
+ * pagina vera con la sua barra, oppure l'invito a sceglierne una.
+ *
+ * Il titolo grande e' il *genere* della cosa, non il suo oggetto: l'oggetto di una circolare e' una
+ * frase di due righe, e a 34 punti diventerebbe un titolo troncato. Sta subito sotto, intero, dove
+ * si legge.
+ */
+@Composable
+private fun CommunicationsDetailPane(
+  state: CommunicationsUiState,
+  order: (CommunicationsPaneItem?) -> Int?,
+  viewModel: CommunicationsViewModel,
+  context: Context,
+  onUpload: (CommunicationDetail) -> Unit,
+) {
+  val item: CommunicationsPaneItem? = state.selectedCommunication?.let(CommunicationsPaneItem::Board)
+    ?: state.selectedNote?.let(CommunicationsPaneItem::NoteItem)
+  FluidDetailContent(
+    item = item,
+    key = { it?.key },
+    order = order,
+  ) { shown ->
+    when (shown) {
+      null -> FluidDetailPlaceholder(
+        title = "Nessuna comunicazione aperta",
+        message = "Scegli una circolare o una nota dall'elenco per leggerla qui.",
+        icon = Icons.Rounded.Forum,
+      )
+      is CommunicationsPaneItem.Board -> FluidScreen(
+        title = shown.detail.communication.category?.takeIf { it.isNotBlank() } ?: "Circolare",
+        subtitle = shown.detail.communication.sender.ifBlank { "Bacheca scuola" },
+        ambient = FeatureIdentity.Communications.ambient(),
+        actions = {
+          FluidBarAction(
+            icon = Icons.Rounded.Share,
+            contentDescription = "Condividi",
+            onClick = { shareCommunication(context, shown.detail.communication) },
+          )
+          FluidBarAction(
+            icon = Icons.Rounded.Close,
+            contentDescription = "Chiudi",
+            onClick = viewModel::dismissDetail,
+          )
+        },
+      ) {
+        item(key = shown.key) {
+          CommunicationDetailContent(
+            detail = shown.detail,
+            isSubmittingAction = state.isSubmittingAction,
+            viewModel = viewModel,
+            context = context,
+            onUpload = onUpload,
+            inPane = true,
+          )
+        }
+      }
+      is CommunicationsPaneItem.NoteItem -> FluidScreen(
+        title = shown.detail.note.categoryLabel.ifBlank { "Nota" },
+        subtitle = shown.detail.note.date.toReadableDate(),
+        ambient = FeatureIdentity.Communications.ambient(),
+        actions = {
+          FluidBarAction(
+            icon = Icons.Rounded.Share,
+            contentDescription = "Condividi",
+            onClick = { shareNote(context, shown.detail.note) },
+          )
+          FluidBarAction(
+            icon = Icons.Rounded.Close,
+            contentDescription = "Chiudi",
+            onClick = viewModel::dismissDetail,
+          )
+        },
+      ) {
+        item(key = shown.key) {
+          Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(
+              text = shown.detail.note.title.ifBlank { shown.detail.note.categoryLabel },
+              style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(shown.detail.content)
+          }
+        }
+      }
+    }
   }
 }
 
