@@ -18,7 +18,16 @@ internal data class WidgetLayout(
   val rowLimit: Int,
   val showSyncLine: Boolean,
   val showCounters: Boolean,
-)
+  /**
+   * Quante colonne di righe. Due solo su una cella larga quanto quelle di un tablet: li' una colonna
+   * sola lascia righe lunghe mezzo schermo con il titolo a sinistra e il niente a destra, e le
+   * righe in piu' — il riepilogo ne ha fino a otto — stanno affiancate invece di essere tagliate.
+   */
+  val columns: Int = 1,
+) {
+  /** Quante righe si mostrano in tutto: [rowLimit] per colonna. */
+  val totalRows: Int get() = rowLimit * columns
+}
 
 internal object WidgetMetrics {
   /** A two-line row: 15sp title over a 12sp subtitle, plus the padding around them. */
@@ -37,6 +46,9 @@ internal object WidgetMetrics {
 
   /** Beyond four rows a home-screen widget stops being glanceable. */
   const val MaxRows: Int = 4
+
+  /** Da questa larghezza le righe stanno su due colonne: la cella di un widget largo su un tablet. */
+  val TwoColumnWidth: Dp = 440.dp
 }
 
 /**
@@ -67,5 +79,6 @@ internal fun resolveWidgetLayout(size: DpSize, hasCounters: Boolean): WidgetLayo
     rowLimit = rowLimit,
     showSyncLine = !compact,
     showCounters = showCounters,
+    columns = if (!compact && size.width >= WidgetMetrics.TwoColumnWidth) 2 else 1,
   )
 }

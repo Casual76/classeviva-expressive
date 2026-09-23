@@ -65,6 +65,11 @@ class SchoolOverviewWidget : GlanceAppWidget() {
       DpSize(260.dp, 180.dp),
       DpSize(300.dp, 240.dp),
       DpSize(300.dp, 300.dp),
+      // Le celle larghe di un tablet: senza, il widget piu' grande veniva disegnato a 300 dp e
+      // stirato, con quattro righe dove ce ne stanno otto.
+      DpSize(460.dp, 180.dp),
+      DpSize(460.dp, 240.dp),
+      DpSize(460.dp, 300.dp),
     ),
   )
 
@@ -164,7 +169,7 @@ private fun SchoolOverviewWidgetContent(
           layout = layout,
         )
         WidgetStatus.CONTENT -> {
-          val rows = model.upcoming.take(layout.rowLimit)
+          val rows = model.upcoming.take(layout.totalRows)
           if (rows.isEmpty()) {
             MessageCard(
               icon = R.drawable.ic_widget_event,
@@ -174,6 +179,16 @@ private fun SchoolOverviewWidgetContent(
               palette = palette,
               layout = layout,
             )
+          } else if (layout.columns > 1 && rows.size > layout.rowLimit) {
+            // In ordine di lettura per colonne: i primi impegni a sinistra, dall'alto.
+            Row(modifier = GlanceModifier.fillMaxWidth()) {
+              rows.chunked(layout.rowLimit).forEachIndexed { index, column ->
+                if (index > 0) Spacer(GlanceModifier.width(WidgetMetrics.Gap))
+                Box(modifier = GlanceModifier.defaultWeight()) {
+                  UpcomingGroup(context = context, items = column, palette = palette, layout = layout)
+                }
+              }
+            }
           } else {
             UpcomingGroup(
               context = context,
