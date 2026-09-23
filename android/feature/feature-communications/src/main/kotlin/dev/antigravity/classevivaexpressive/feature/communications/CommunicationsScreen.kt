@@ -1510,9 +1510,20 @@ private fun detectsUploadIntent(detail: CommunicationDetail): Boolean {
  * ogni circolare con un PDF, cioe' su quasi tutte, e il badge che deve saltare all'occhio non diceva
  * piu' niente.
  */
-internal fun Communication.asksSomething(): Boolean =
-  needsAck || needsReply || needsJoin || needsFile ||
-    actions.any { it.type != NoticeboardActionType.DOWNLOAD }
+internal fun Communication.asksSomething(): Boolean {
+  // Una circolare letta ha gia' avuto la sua presa visione: e' la stessa regola del dettaglio
+  // (`shouldShowAcknowledgeAction`), che dopo la lettura non offre piu' la conferma. Senza, la firma
+  // richiesta teneva "AZIONE" acceso per sempre su circolari su cui non c'era piu' niente da fare.
+  val pendingAck = needsAck && !read
+  return pendingAck || needsReply || needsJoin || needsFile ||
+    actions.any { action ->
+      when (action.type) {
+        NoticeboardActionType.DOWNLOAD -> false
+        NoticeboardActionType.ACKNOWLEDGE -> !read
+        else -> true
+      }
+    }
+}
 
 internal fun communicationTone(communication: Communication): FluidTone {
   return when {
