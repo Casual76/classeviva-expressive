@@ -68,4 +68,19 @@ class SubjectKeysTest {
     assertEquals("Storia dell'arte", SubjectKeys.familyLabel(SubjectKeys.Arte))
     assertNull(SubjectKeys.familyLabel("x:scienze umane"))
   }
+
+  @Test
+  fun substitution_isNotASubject() {
+    assertNull(SubjectKeys.keyOf("Supplenza"))
+    assertNull(SubjectKeys.keyOf("SUPPLENZA"))
+  }
+
+  @Test
+  fun familyIn_findsTheSubjectInAHomeworkTitle() {
+    assertEquals(SubjectKeys.Scienze, SubjectKeys.familyIn("Chimica: Studiare bene pag. 4 - 6"))
+    assertEquals(SubjectKeys.Matematica, SubjectKeys.familyIn("Compito di mate: esercizi 3-7"))
+    assertEquals(SubjectKeys.Arte, SubjectKeys.familyIn("Portare il libro di testo di storia dell'arte"))
+    assertNull(SubjectKeys.familyIn("Romanticismo: studiare pp. 799-802"))
+    assertNull(SubjectKeys.familyIn("Portare il materiale"))
+  }
 }

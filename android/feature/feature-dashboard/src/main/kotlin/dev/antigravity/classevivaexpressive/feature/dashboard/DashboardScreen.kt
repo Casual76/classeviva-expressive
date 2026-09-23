@@ -48,7 +48,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradePaneTin
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FluidGlassGroup
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectMark
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectRowIcon
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberMinuteTicker
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.subjectPalette
@@ -221,7 +221,7 @@ fun DashboardRoute(
   val unreadCommunications = remember(snapshot.unreadCommunications) { snapshot.unreadCommunications.take(3) }
   val unseenGradeIds = remember(snapshot.unseenGrades) { snapshot.unseenGrades.mapTo(mutableSetOf()) { it.id } }
 
-  val firstName = snapshot.profile.name.takeIf { it.isNotBlank() }?.split(" ")?.firstOrNull()?.replaceFirstChar { it.titlecase() } ?: "Studente"
+  val firstName = snapshot.profile.name.takeIf { it.isNotBlank() }?.split(" ")?.firstOrNull()?.lowercase()?.replaceFirstChar { it.titlecase() } ?: "Studente"
   val titleText = snapshot.headline.ifBlank { "Ciao, $firstName" }
   val facetToday = rememberCurrentDate()
   val titleFacets = remember(snapshot, facetToday) {
@@ -416,7 +416,7 @@ private fun TodayLessonRow(lesson: Lesson, live: Boolean = false) {
     // Il colore della riga e' quello della materia, sul segno: la piastrella resta neutra, e che
     // la lezione sia firmata lo dice gia' il badge.
     tone = FluidTone.Neutral,
-    leading = { SubjectMark(lesson.subject) },
+    leading = { SubjectRowIcon(lesson.subject) },
     badge = {
       FluidStatusBadge(
         label = presentation.badgeLabel,
@@ -496,7 +496,7 @@ private fun DashboardTabletPanes(
         detail = listOfNotNull(
           snapshot.averageNumeric?.let { "Media ${snapshot.averageLabel}" },
           snapshot.unseenGrades.size.takeIf { it > 0 }?.let { if (it == 1) "1 nuovo" else "$it nuovi" },
-        ).joinToString(" · ").ifBlank { null },
+        ).joinToString(" · ").ifBlank { "Nessuna media ancora" },
         action = { FluidQuickAction(label = "Tutti i voti", onClick = onNavigateGrades) },
       ) {
         if (recentGrades.isEmpty()) {
@@ -531,7 +531,13 @@ private fun DashboardTabletPanes(
         DashboardSection(
           title = "In arrivo",
           modifier = modifier,
-          detail = assessments.takeIf { it > 0 }?.let { if (it == 1) "1 verifica in 7 giorni" else "$it verifiche in 7 giorni" },
+          // Sempre una riga sotto il titolo, anche quando non c'e' niente da contare: affiancate, due
+          // testate di altezza diversa mettevano i titoli su due righe diverse.
+          detail = when (assessments) {
+            0 -> "Nessuna verifica in 7 giorni"
+            1 -> "1 verifica in 7 giorni"
+            else -> "$assessments verifiche in 7 giorni"
+          },
         ) {
           if (upcomingItems.isEmpty()) {
             NoUpcomingItems()
@@ -544,7 +550,7 @@ private fun DashboardTabletPanes(
         DashboardSection(
           title = "Bacheca",
           modifier = modifier,
-          detail = snapshot.unreadCommunications.size.takeIf { it > 0 }?.let { "$it da leggere" },
+          detail = snapshot.unreadCommunications.size.let { if (it == 0) "Tutto letto" else "$it da leggere" },
         ) {
           if (unreadCommunications.isEmpty()) {
             NoUrgentCommunications()

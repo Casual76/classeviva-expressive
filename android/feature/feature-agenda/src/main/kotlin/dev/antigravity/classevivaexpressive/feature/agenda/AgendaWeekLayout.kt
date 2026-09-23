@@ -19,9 +19,11 @@ internal data class AgendaPlacementInput(
   val subject: String?,
   val teacher: String?,
   val time: String?,
+  /** L'ultimo appiglio: "Chimica: studiare pag. 4" dice la materia anche quando il registro no. */
+  val title: String? = null,
 )
 
-internal enum class AgendaAnchor { OwnTime, SubjectLesson, TeacherLesson, AllDay }
+internal enum class AgendaAnchor { OwnTime, SubjectLesson, TeacherLesson, TitleLesson, AllDay }
 
 internal data class AgendaPlacement(val id: String, val span: MinuteSpan?, val anchor: AgendaAnchor)
 
@@ -61,6 +63,7 @@ internal fun placeAgendaDay(
     ?.takeIf { it != 0 && it >= clamp.start && it < clamp.end }
   val subjectKey = SubjectKeys.keyOf(item.subject)
   val teacher = item.teacher?.let(::teacherKey)?.takeIf { it.isNotEmpty() }
+  val titleKey = SubjectKeys.familyIn(item.title)
   when {
     ownMinute != null -> {
       val around = bands.firstOrNull { ownMinute >= it.span.start && ownMinute < it.span.end }
@@ -70,6 +73,8 @@ internal fun placeAgendaDay(
       AgendaPlacement(item.id, bands.first { SubjectKeys.keyOf(it.subject) == subjectKey }.span, AgendaAnchor.SubjectLesson)
     teacher != null && bands.any { it.teacher?.let(::teacherKey) == teacher } ->
       AgendaPlacement(item.id, bands.first { it.teacher?.let(::teacherKey) == teacher }.span, AgendaAnchor.TeacherLesson)
+    titleKey != null && bands.any { SubjectKeys.keyOf(it.subject) == titleKey } ->
+      AgendaPlacement(item.id, bands.first { SubjectKeys.keyOf(it.subject) == titleKey }.span, AgendaAnchor.TitleLesson)
     else -> AgendaPlacement(item.id, null, AgendaAnchor.AllDay)
   }
 }

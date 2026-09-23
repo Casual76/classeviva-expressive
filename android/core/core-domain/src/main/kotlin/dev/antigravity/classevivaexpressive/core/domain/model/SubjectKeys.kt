@@ -51,6 +51,23 @@ object SubjectKeys {
     val first = subject?.substringBefore(" / ")?.let(::normalize)
     if (first.isNullOrEmpty()) return null
     val words = first.split(' ')
+    // Una supplenza non e' una materia: e' un'ora di qualcun altro, e un colore le darebbe
+    // un'identita' che non ha.
+    if (words.any { it in NotASubject }) return null
+    return familyOf(words) ?: (FallbackPrefix + first)
+  }
+
+  /**
+   * La famiglia nominata in un testo libero, o null: per un compito che il registro manda senza
+   * materia ma col titolo "Chimica: studiare pag. 4". Solo le famiglie note: il titolo di un compito
+   * non e' il nome di una materia sconosciuta.
+   */
+  fun familyIn(text: String?): String? {
+    val normalized = text?.let(::normalize)?.takeIf { it.isNotEmpty() } ?: return null
+    return familyOf(normalized.split(' '))
+  }
+
+  private fun familyOf(words: List<String>): String? {
     fun has(word: String) = word in words
     fun starts(prefix: String) = words.any { it.startsWith(prefix) }
 
@@ -68,12 +85,12 @@ object SubjectKeys {
       starts("latin") -> Latino
       starts("grec") -> Greco
       starts("filosof") -> Filosofia
-      starts("matemat") -> Matematica
+      starts("matemat") || has("mate") -> Matematica
       has("fisica") -> Fisica
       words.any { "storia" in it } -> Storia
       has("civica") || has("cittadinanza") -> Civica
       starts("geograf") -> Geografia
-      else -> FallbackPrefix + first
+      else -> null
     }
   }
 
@@ -96,6 +113,8 @@ object SubjectKeys {
     Geografia -> "Geografia"
     else -> null
   }
+
+  private val NotASubject = setOf("supplenza", "sostituzione", "supplente")
 
   private val NonNaturalSciences = setOf("umane", "sociali", "giuridiche", "economiche", "motorie")
 }

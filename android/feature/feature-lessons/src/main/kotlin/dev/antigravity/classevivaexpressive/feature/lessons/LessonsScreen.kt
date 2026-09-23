@@ -74,7 +74,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberMinuteTicker
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.MinuteSpan
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectBlock
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectMark
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectRowIcon
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.subjectPalette
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridCell
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridDay
@@ -835,7 +835,7 @@ private fun TimetableBlockRow(
   val isOfficial = timetable.isOfficial
   val kind = slotKind(block, timetable)
   FluidListRow(
-    title = block.displaySubject,
+    title = block.displaySubject.asReadableSubject(),
     subtitle = primary.teacher ?: "Docente non specificato",
     eyebrow = block.timeRangeLabel(),
     meta = listOfNotNull(
@@ -850,7 +850,7 @@ private fun TimetableBlockRow(
     ).joinToString(" / "),
     // La piastrella porta il colore della materia, sul segno; lo stato dello slot lo dice il badge.
     tone = FluidTone.Neutral,
-    leading = { SubjectMark(primary.subject) },
+    leading = { SubjectRowIcon(primary.subject) },
     onClick = onConfirm,
     // Era un onLongClick che apriva la modifica senza dirlo. Il menu dice entrambe le cose che
     // questa riga sa fare, e il tap resta la piu' frequente.

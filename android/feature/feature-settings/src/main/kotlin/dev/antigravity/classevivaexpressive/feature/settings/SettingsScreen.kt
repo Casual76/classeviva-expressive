@@ -81,7 +81,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.classevivaBrandAccent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveAccentPresets
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectBlock
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectMark
+import androidx.compose.material.icons.rounded.Palette
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectSwatchDot
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectSwatches
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
@@ -738,13 +738,7 @@ fun SettingsRoute(
             FluidListRow(
               title = SettingsSection.SubjectColors.title,
               subtitle = SettingsSection.SubjectColors.subtitle,
-              leading = {
-                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                  SubjectMark("STORIA", width = 4.dp, height = 16.dp)
-                  SubjectMark("FISICA", width = 4.dp, height = 16.dp)
-                  SubjectMark("INGLESE", width = 4.dp, height = 16.dp)
-                }
-              },
+              leading = { Icon(Icons.Rounded.Palette, contentDescription = null) },
               onClick = { sectionName = SettingsSection.SubjectColors.name },
             )
           }

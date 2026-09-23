@@ -951,7 +951,7 @@ private fun weekAgendaLayout(
     }
     val entries = entriesByDate[day].orEmpty().filter { it.category != AgendaCategory.LESSON }
     val placements = placeAgendaDay(
-      entries.map { AgendaPlacementInput(it.id, it.subject, it.teacher, it.time) },
+      entries.map { AgendaPlacementInput(it.id, it.subject, it.teacher, it.time, it.title) },
       bands,
     )
     entries.zip(placements).mapNotNull { (entry, placement) ->

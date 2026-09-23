@@ -73,4 +73,14 @@ class AgendaWeekLayoutTest {
   fun ownTimeOutsideTheDay_goesToTheAllDayStrip() {
     assertEquals(AgendaAnchor.AllDay, place(time = "22:30").anchor)
   }
+
+  @Test
+  fun withoutSubjectNorTeacher_theTitleFindsTheLesson() {
+    val placed = placeAgendaDay(
+      listOf(AgendaPlacementInput("x", subject = null, teacher = null, time = null, title = "Fisica: esercizi pag. 12")),
+      tuesday,
+    ).single()
+    assertEquals(AgendaAnchor.TitleLesson, placed.anchor)
+    assertEquals(MinuteSpan(11 * 60 + 10, 12 * 60), placed.span)
+  }
 }
