@@ -111,6 +111,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidColorDot
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
+import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.fluid.fluidLicensesSection
@@ -368,6 +370,13 @@ fun SettingsRoute(
   val assistantState by assistantViewModel.state.collectAsStateWithLifecycle()
   var sectionName by rememberSaveable { mutableStateOf<String?>(null) }
   val section = sectionName?.let { name -> SettingsSection.entries.firstOrNull { it.name == name } }
+  // Su uno schermo largo l'indice sta a sinistra e la sezione accanto, come nelle impostazioni di
+  // sistema di un tablet: una sezione e' sempre aperta, e all'inizio e' la prima.
+  var twoPane by remember { mutableStateOf(false) }
+  val paneSection = section ?: SettingsSection.Account
+  // Diagnostica non ha una riga sua nell'indice: e' figlia di Notifiche, e mentre e' aperta la
+  // riga accesa resta quella da cui si e' arrivati.
+  val highlightedSection = if (paneSection == SettingsSection.Diagnostics) SettingsSection.Notifications else paneSection
   val context = LocalContext.current
   val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
     viewModel.refresh()
@@ -409,7 +418,7 @@ fun SettingsRoute(
     }
   }
 
-  PredictiveBackHandler(enabled = section != null) { progress ->
+  PredictiveBackHandler(enabled = section != null && !twoPane) { progress ->
     val activeSection = section ?: return@PredictiveBackHandler
     try {
       progress.collect { backEvent ->
@@ -449,41 +458,21 @@ fun SettingsRoute(
     }
   }
 
-  // A settings section is a real child pane. It uses the same opaque lateral stack as route
-  // navigation, so a paused transition never leaves two readable pages blended together.
-  sectionTransition.AnimatedContent(
-    modifier = modifier.fillMaxSize(),
-    transitionSpec = {
-      val opening = targetState != null
-      val transform = if (opening) {
-        slideInHorizontally(
-          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-          initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = true) },
-        ) togetherWith slideOutHorizontally(
-          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-          targetOffsetX = { width -> settingsPaneExitOffset(width, opening = true) },
-        )
-      } else {
-        slideInHorizontally(
-          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-          initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = false) },
-        ) togetherWith slideOutHorizontally(
-          animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-          targetOffsetX = { width -> settingsPaneExitOffset(width, opening = false) },
-        )
-      }
-      // While popping, the root must remain physically behind the travelling opaque child. Giving
-      // the target a negative z-index also covers restored-process cases where the child did not
-      // previously acquire the opening transition's positive z-index.
-      transform.targetContentZIndex = settingsPaneTargetZIndex(opening)
-      transform.using(SizeTransform(clip = true))
-    },
-  ) { section ->
+  val settingsPage: @Composable (SettingsSection?, Boolean) -> Unit = { section, paneMode ->
     FluidScreen(
       title = section?.title ?: "Impostazioni",
       ambient = FeatureIdentity.Settings.ambient(),
       subtitle = section?.subtitle ?: "Tutto ciò che serve, senza il muro di opzioni.",
-      onBack = if (section != null || onBack != null) navigateBack else null,
+      onBack = when {
+        !paneMode -> if (section != null || onBack != null) navigateBack else null
+        // Nel pannello Diagnostica torna a Notifiche, da cui si apre; l'indice torna dove si era
+        // venuti; le altre sezioni non hanno un indietro, perche' l'indice e' gia' accanto.
+        section == SettingsSection.Diagnostics -> {
+          { sectionName = SettingsSection.Notifications.name }
+        }
+        section == null -> onBack
+        else -> null
+      },
       actions = {
         if (section == SettingsSection.Diagnostics) {
           FluidBarAction(
@@ -519,6 +508,8 @@ fun SettingsRoute(
                   (!state.runtimeState.permissionGranted || !state.runtimeState.appNotificationsEnabled)
                 ) FluidTone.Warning else FluidTone.Neutral,
                 onClick = { sectionName = destination.name },
+                selected = paneMode && destination == highlightedSection,
+                disclosure = !paneMode,
                 badge = {
                   if (destination == SettingsSection.Notifications) {
                     FluidStatusBadge(
@@ -787,6 +778,55 @@ fun SettingsRoute(
       }
     }
   }
+
+  FluidListDetailScaffold(
+    ambient = FeatureIdentity.Settings.ambient(),
+    modifier = modifier,
+    list = { isTwoPane ->
+      if (twoPane != isTwoPane) twoPane = isTwoPane
+      if (isTwoPane) {
+        settingsPage(null, true)
+      } else {
+        // A settings section is a real child pane. It uses the same opaque lateral stack as route
+        // navigation, so a paused transition never leaves two readable pages blended together.
+        sectionTransition.AnimatedContent(
+          modifier = Modifier.fillMaxSize(),
+          transitionSpec = {
+            val opening = targetState != null
+            val transform = if (opening) {
+              slideInHorizontally(
+                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+                initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = true) },
+              ) togetherWith slideOutHorizontally(
+                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+                targetOffsetX = { width -> settingsPaneExitOffset(width, opening = true) },
+              )
+            } else {
+              slideInHorizontally(
+                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+                initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = false) },
+              ) togetherWith slideOutHorizontally(
+                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
+                targetOffsetX = { width -> settingsPaneExitOffset(width, opening = false) },
+              )
+            }
+            // While popping, the root must remain physically behind the travelling opaque child. Giving
+            // the target a negative z-index also covers restored-process cases where the child did not
+            // previously acquire the opening transition's positive z-index.
+            transform.targetContentZIndex = settingsPaneTargetZIndex(opening)
+            transform.using(SizeTransform(clip = true))
+          },
+        ) { section ->
+          settingsPage(section, false)
+        }
+      }
+    },
+    detail = {
+      FluidDetailContent(item = paneSection, order = { it.ordinal }) { shown ->
+        settingsPage(shown, true)
+      }
+    },
+  )
 }
 
 private const val SettingsPaneMotionDurationMillis = 360
