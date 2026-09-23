@@ -23,14 +23,22 @@
       "sizeBytes": 33327875
     },
     "beta": {
-      "version": "7.12.1",
+      "version": "7.13.0",
       "releaseDate": "2026-09-23",
-      "changelog": "Tablet, seconda passata:\n- Ruotando il tablet con un compito, un materiale, un documento o un docente aperto, si torna ai due pannelli con la stessa cosa aperta accanto all'elenco.\n- Ruotando, gli elenchi restano dove li avevi lasciati invece di ripartire dall'inizio.\n- Tornando alla Bacheca con una circolare aperta, la circolare ricompare nel pannello senza passare dal pop-up.\n- Le pagine di dettaglio hanno lo sfondo colorato della loro sezione.\n- Documenti: la fascia in alto conta i libri quando sei sulla scheda dei libri.\n- Accesso al portale (colloqui, conferme di lettura, pagelle): si usa per primo l'accesso che funziona oggi, piu' veloce e piu' affidabile.",
-      "releaseTag": "beta-classeviva-expressive-v7.12.1",
-      "apkAsset": "classeviva-expressive-7.12.1.apk",
-      "sizeBytes": 33393417
+      "changelog": "Tablet:\n- Agenda: su un tablet in orizzontale c'e' la vista Settimana, accanto al Mese. I sette giorni in colonna con tutti i loro impegni; toccarne uno lo apre.\n- Con una tastiera: Ctrl+R (o F5) aggiorna la pagina, Ctrl+1…5 aprono Home, Voti, Agenda, Bacheca e Altro, Esc torna indietro. L'elenco completo tenendo premuto il tasto Meta.\n- Con la tastiera si vede dove si e': righe, schede e pulsanti mostrano il fuoco quando ci si muove con Tab e le frecce. Con mouse o trackpad le righe si accendono sotto il puntatore.\n\nRifiniture:\n- Il pop-up di un impegno in agenda dice ogni cosa una volta sola, e non mostra piu' una scheda \"Dettagli\" vuota.\n- Bacheca: aperta una circolare, non propone piu' \"Segna come letta\" quando e' gia' letta.\n- Voti: con un solo periodo non c'e' piu' il selettore del periodo, e i messaggi a pagina vuota dicono quando arriveranno i voti.\n- Impostazioni: disconnettersi chiede conferma, e il tasto non e' piu' il piu' vistoso della pagina.\n- Testi piu' chiari in Colloqui, Assenze e Home.",
+      "releaseTag": "beta-classeviva-expressive-v7.13.0",
+      "apkAsset": "classeviva-expressive-7.13.0.apk",
+      "sizeBytes": 33409784
     },
     "history": [
+      {
+        "version": "7.12.1",
+        "releaseDate": "2026-09-23",
+        "changelog": "Tablet, seconda passata:\n- Ruotando il tablet con un compito, un materiale, un documento o un docente aperto, si torna ai due pannelli con la stessa cosa aperta accanto all'elenco.\n- Ruotando, gli elenchi restano dove li avevi lasciati invece di ripartire dall'inizio.\n- Tornando alla Bacheca con una circolare aperta, la circolare ricompare nel pannello senza passare dal pop-up.\n- Le pagine di dettaglio hanno lo sfondo colorato della loro sezione.\n- Documenti: la fascia in alto conta i libri quando sei sulla scheda dei libri.\n- Accesso al portale (colloqui, conferme di lettura, pagelle): si usa per primo l'accesso che funziona oggi, piu' veloce e piu' affidabile.",
+        "releaseTag": "beta-classeviva-expressive-v7.12.1",
+        "apkAsset": "classeviva-expressive-7.12.1.apk",
+        "sizeBytes": 33393417
+      },
       {
         "version": "7.12.0",
         "releaseDate": "2026-09-23",
