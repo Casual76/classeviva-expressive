@@ -60,6 +60,7 @@ private val SettingsNotificationsLiveTimetableKey = booleanPreferencesKey("notif
 private val SettingsPeriodicSyncKey = booleanPreferencesKey("periodic_sync")
 private val SettingsNetworkConfigKey = stringPreferencesKey("network_config")
 private val SettingsIgnoredStableUpdateVersionKey = stringPreferencesKey("ignored_stable_update_version")
+private val SettingsSubjectColorsKey = stringPreferencesKey("subject_colors")
 private val SelectedSchoolYearKey = stringPreferencesKey("selected_school_year")
 private val SchoolYearFallbackEventsKey = stringPreferencesKey("school_year_fallback_events")
 private val TimetableTemplatesKey = stringPreferencesKey("timetable_templates")
@@ -117,6 +118,9 @@ class SettingsStore internal constructor(
       periodicSyncEnabled = prefs[SettingsPeriodicSyncKey] ?: true,
       networkConfig = networkConfig,
       ignoredStableUpdateVersion = prefs[SettingsIgnoredStableUpdateVersionKey] ?: "",
+      subjectColors = prefs[SettingsSubjectColorsKey]
+        ?.let { stored -> runCatching { json.decodeFromString<Map<String, Int>>(stored) }.getOrNull() }
+        ?: emptyMap(),
     )
   }
 
@@ -138,6 +142,12 @@ class SettingsStore internal constructor(
     this[SettingsPeriodicSyncKey] = next.periodicSyncEnabled
     this[SettingsNetworkConfigKey] = json.encodeToString(next.networkConfig)
     this[SettingsIgnoredStableUpdateVersionKey] = next.ignoredStableUpdateVersion
+    // Nessuna scelta, nessuna chiave: chi non ha mai toccato un colore ha il file di prima.
+    if (next.subjectColors.isEmpty()) {
+      remove(SettingsSubjectColorsKey)
+    } else {
+      this[SettingsSubjectColorsKey] = json.encodeToString(next.subjectColors)
+    }
   }
 
   suspend fun readSettings(): AppSettings = settings.first()

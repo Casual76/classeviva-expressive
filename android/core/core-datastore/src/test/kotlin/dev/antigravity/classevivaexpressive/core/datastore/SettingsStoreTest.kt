@@ -75,4 +75,23 @@ class SettingsStoreTest {
     assertTrue(resumed.dynamicColorEnabled)
     assertEquals(ThemeMode.DARK, resumed.themeMode)
   }
+
+  @Test
+  fun subjectColors_surviveAnUnrelatedUpdate() = runTest {
+    val store = SettingsStore(
+      dataStore = PreferenceDataStoreFactory.create(
+        scope = backgroundScope,
+        produceFile = { File(temporaryFolder.root, "subject-colors.preferences_pb") },
+      ),
+    )
+
+    store.update { it.copy(subjectColors = mapOf("storia" to 0xFF112233.toInt(), "x:diritto" to 0xFFABCDEF.toInt())) }
+    store.update { it.copy(themeMode = ThemeMode.DARK) }
+
+    val persisted = store.settings.first()
+    assertEquals(mapOf("storia" to 0xFF112233.toInt(), "x:diritto" to 0xFFABCDEF.toInt()), persisted.subjectColors)
+
+    store.update { it.copy(subjectColors = emptyMap()) }
+    assertTrue(store.settings.first().subjectColors.isEmpty())
+  }
 }

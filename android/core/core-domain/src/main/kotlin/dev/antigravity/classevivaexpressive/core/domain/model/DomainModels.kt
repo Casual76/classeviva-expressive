@@ -870,6 +870,12 @@ data class AppSettings(
   val periodicSyncEnabled: Boolean = true,
   val networkConfig: NetworkConfig = NetworkConfig(),
   val ignoredStableUpdateVersion: String = "",
+  /**
+   * I colori scelti per le materie, per famiglia ([SubjectKeys]) e in ARGB. Solo le scelte: una
+   * famiglia assente ha il colore di default, cosi' un default che cambia arriva anche a chi non ha
+   * mai toccato niente.
+   */
+  val subjectColors: Map<String, Int> = emptyMap(),
 ) {
   val notificationsEnabled: Boolean
     get() = notificationPreferences.enabled
@@ -1067,6 +1073,10 @@ interface SettingsRepository {
   suspend fun updateGatewayBaseUrl(url: String)
   suspend fun refreshLiveTimetable()
   suspend fun ignoreStableUpdateVersion(version: String)
+
+  /** Il colore di una famiglia di materie; null la riporta al default. */
+  suspend fun setSubjectColor(key: String, argb: Int?)
+  suspend fun resetSubjectColors()
 }
 
 @Serializable
