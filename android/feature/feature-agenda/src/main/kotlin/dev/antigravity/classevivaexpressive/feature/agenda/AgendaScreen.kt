@@ -71,6 +71,19 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.dangerVividColors
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectBlock
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridDay
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridEvent
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridLayer
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.WeekTimeGrid
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberMinuteTicker
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberTimeGridMinuteHeight
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.timeGridRange
+import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
+import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.draw.clip
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
@@ -640,9 +653,12 @@ fun AgendaRoute(
         )
       }
       item(key = "agenda:week-grid") {
+        // Raccolto qui e non in cima: il mese e il dettaglio di un impegno non pagano l'orario.
+        val timetable by viewModel.timetable.collectAsStateWithLifecycle()
         WeekAgendaGrid(
           days = weekDays,
           entriesByDate = entriesByDate,
+          timetable = timetable,
           onOpen = { entry, origin ->
             detailOrigin = origin
             selectedEntry = entry
@@ -837,109 +853,175 @@ private fun PeriodHeader(
 }
 
 /**
- * La settimana come sette colonne, una per giorno, con gli impegni uno sotto l'altro.
+ * La settimana sulle ore, una colonna per giorno, con le lezioni dell'orario sotto e gli impegni
+ * sopra.
  *
  * E' la vista che su un tablet il mese non sa dare: il mese dice *quando* c'e' qualcosa (i segni
- * nelle celle), la settimana dice *cosa* — e cosa c'e' giovedi' accanto a cosa c'e' venerdi', senza
- * toccare un giorno alla volta. Le colonne vuote restano: una settimana e' sette giorni anche
- * quando la domenica non ha niente, e toglierle spostava i giorni sotto l'occhio.
+ * nelle celle), la settimana dice *cosa* e *a che ora* — la verifica di storia sta sull'ora di storia
+ * del martedi', col colore della materia dietro. Quello che non ha un'ora ne' una lezione a cui
+ * agganciarsi sta nella fascia in cima al suo giorno. Le colonne vuote restano: una settimana e'
+ * sette giorni anche quando la domenica non ha niente, e toglierle spostava i giorni sotto l'occhio.
  */
 @Composable
 private fun WeekAgendaGrid(
   days: List<LocalDate>,
   entriesByDate: Map<LocalDate, List<AgendaEntry>>,
+  timetable: TimetableTemplate,
   onOpen: (AgendaEntry, Rect?) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val today = rememberCurrentDate()
-  Row(
-    modifier = modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.spacedBy(10.dp),
-  ) {
-    days.forEach { day ->
-      val dayEntries = entriesByDate[day].orEmpty().filter { it.category != AgendaCategory.LESSON }
-      val isToday = day == today
-      Column(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+  val nowState = rememberMinuteTicker()
+  val layout = remember(days, entriesByDate, timetable) {
+    weekAgendaLayout(days, entriesByDate, timetable.slotsByDay())
+  }
+  val range = remember(layout) { timeGridRange(layout.events.map { it.span }) }
+  val shortest = remember(layout) { layout.events.minOfOrNull { it.span.minutes } ?: 60 }
+  val minuteHeight = rememberTimeGridMinuteHeight(range, shortest)
+  WeekTimeGrid(
+    days = days.map { day ->
+      TimeGridDay(
+        label = "${day.format(weekdayShortFormatter).replaceFirstChar { it.uppercase() }} ${day.dayOfMonth}",
+        isToday = day == today,
+      )
+    },
+    events = layout.events,
+    range = range,
+    minuteHeight = minuteHeight,
+    modifier = modifier,
+    todayIndex = days.indexOf(today).takeIf { it >= 0 },
+    nowMinute = { nowState.value.let { it.hour * 60 + it.minute } },
+    allDay = if (layout.allDay.any { it.isNotEmpty() }) {
+      { day -> layout.allDay[day].forEach { entry -> AgendaGridChip(entry, compact = true, onOpen = onOpen) } }
+    } else {
+      null
+    },
+  ) { event, cell ->
+    when (val item = event.value) {
+      is AgendaGridItem.Lesson -> SubjectBlock(
+        subject = item.band.subject,
+        faint = true,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 8.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
       ) {
-        Column(modifier = Modifier.padding(horizontal = 4.dp)) {
-          Text(
-            text = day.format(weekdayShortFormatter).replaceFirstChar { it.uppercase() },
-            style = MaterialTheme.typography.labelMedium,
-            color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-          Text(
-            text = day.dayOfMonth.toString(),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = if (isToday) FontWeight.Bold else FontWeight.SemiBold,
-            color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
-          )
-        }
-        if (dayEntries.isEmpty()) {
-          Text(
-            text = "Libero",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-            modifier = Modifier.padding(horizontal = 4.dp),
-          )
-        } else {
-          FluidListGroup(glass = true) {
-            dayEntries.forEachIndexed { index, entry ->
-              if (index > 0) FluidListDivider()
-              WeekEntryCell(entry = entry, onOpen = onOpen)
-            }
-          }
-        }
+        Text(
+          text = item.band.subject.asReadableSubject(),
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
       }
+      is AgendaGridItem.Entry -> AgendaGridChip(
+        entry = item.entry,
+        compact = cell.compact,
+        onOpen = onOpen,
+        modifier = Modifier.fillMaxSize(),
+      )
     }
   }
 }
 
-/** Un impegno in una colonna della settimana: il genere col suo segno, il titolo, la materia. */
-@Composable
-private fun WeekEntryCell(
-  entry: AgendaEntry,
-  onOpen: (AgendaEntry, Rect?) -> Unit,
-) {
-  var bounds by remember { mutableStateOf<Rect?>(null) }
-  Column(
-    modifier = Modifier
-      .fillMaxWidth()
-      .fluidExpandOrigin { bounds = it }
-      .fluidRowPressable(onClick = { onOpen(entry, bounds) })
-      .semantics(mergeDescendants = true) {}
-      .padding(horizontal = 12.dp, vertical = 10.dp),
-    verticalArrangement = Arrangement.spacedBy(3.dp),
-  ) {
-    Row(
-      horizontalArrangement = Arrangement.spacedBy(6.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      CalendarMark(color = categoryMarkColor(entry.category))
-      Text(
-        text = listOfNotNull(entry.time?.takeIf(String::isNotBlank), categoryLabel(entry.category)).joinToString(" · "),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+private sealed interface AgendaGridItem {
+  data class Lesson(val band: LessonBand) : AgendaGridItem
+  data class Entry(val entry: AgendaEntry) : AgendaGridItem
+}
+
+private class WeekAgendaLayout(
+  val events: List<TimeGridEvent<AgendaGridItem>>,
+  val allDay: List<List<AgendaEntry>>,
+)
+
+private fun weekAgendaLayout(
+  days: List<LocalDate>,
+  entriesByDate: Map<LocalDate, List<AgendaEntry>>,
+  slotsByDay: Map<DayOfWeek, List<TemplateSlot>>,
+): WeekAgendaLayout {
+  val events = mutableListOf<TimeGridEvent<AgendaGridItem>>()
+  val allDay = days.mapIndexed { index, day ->
+    val bands = lessonBands(slotsByDay[day.dayOfWeek].orEmpty())
+    bands.forEach { band ->
+      events += TimeGridEvent(
+        key = "lesson:$index:${band.span.start}",
+        day = index,
+        span = band.span,
+        layer = TimeGridLayer.Background,
+        value = AgendaGridItem.Lesson(band),
       )
     }
-    Text(
-      text = entry.title,
-      style = MaterialTheme.typography.bodyMedium,
-      fontWeight = FontWeight.SemiBold,
-      maxLines = 4,
-      overflow = TextOverflow.Ellipsis,
+    val entries = entriesByDate[day].orEmpty().filter { it.category != AgendaCategory.LESSON }
+    val placements = placeAgendaDay(
+      entries.map { AgendaPlacementInput(it.id, it.subject, it.teacher, it.time) },
+      bands,
     )
-    entry.subject?.takeIf { it.isNotBlank() && !entry.title.contains(it, ignoreCase = true) }?.let { subject ->
+    entries.zip(placements).mapNotNull { (entry, placement) ->
+      val span = placement.span ?: return@mapNotNull entry
+      events += TimeGridEvent(key = "entry:${entry.id}", day = index, span = span, value = AgendaGridItem.Entry(entry))
+      null
+    }
+  }
+  return WeekAgendaLayout(events, allDay)
+}
+
+/**
+ * Un impegno nella settimana: pieno del colore del suo genere, come il segno nelle celle del mese,
+ * perche' sta da solo sopra la lezione. Toccarlo apre il pop-up dalla sua superficie.
+ */
+@Composable
+private fun AgendaGridChip(
+  entry: AgendaEntry,
+  compact: Boolean,
+  onOpen: (AgendaEntry, Rect?) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  var bounds by remember { mutableStateOf<Rect?>(null) }
+  val colors = FluidVividColors.from(categoryMarkColor(entry.category))
+  val shape = ContinuousCornerShape(FluidRadius.Control)
+  CompositionLocalProvider(LocalContentColor provides colors.content) {
+    Column(
+      modifier = modifier
+        .fillMaxWidth()
+        .fluidExpandOrigin { bounds = it }
+        .clip(shape)
+        .background(colors.start)
+        .fluidRowPressable(
+          onClick = { onOpen(entry, bounds) },
+          shape = shape,
+          highlightColor = colors.content.copy(alpha = 0.12f),
+        )
+        .semantics(mergeDescendants = true) {}
+        .padding(horizontal = 8.dp, vertical = 5.dp),
+      verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+      val secondary = colors.content.copy(alpha = 0.8f)
+      if (!compact) {
+        Text(
+          text = listOfNotNull(entry.time?.takeIf { it.isNotBlank() && it != "00:00" }, categoryLabel(entry.category))
+            .joinToString(" · "),
+          style = MaterialTheme.typography.labelSmall,
+          color = secondary,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
       Text(
-        text = subject,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
+        text = entry.title,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = if (compact) 1 else 3,
         overflow = TextOverflow.Ellipsis,
       )
+      if (!compact) {
+        entry.subject?.takeIf { it.isNotBlank() && !entry.title.contains(it, ignoreCase = true) }?.let { subject ->
+          Text(
+            text = subject.asReadableSubject(),
+            style = MaterialTheme.typography.labelSmall,
+            color = secondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
+      }
     }
   }
 }
