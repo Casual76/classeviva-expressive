@@ -75,6 +75,10 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaViewMode
+import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
+import dev.antigravity.classevivaexpressive.core.domain.model.ViewPreferencesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.CustomEvent
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
@@ -101,6 +105,7 @@ import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -241,12 +246,16 @@ data class AgendaUiState(
   val customEvents: List<CustomEvent> = emptyList(),
   val isRefreshing: Boolean = false,
   val syncStatus: SyncStatus = SyncStatus(),
+  /** L'ultima vista scelta, ricordata fra un'apertura e l'altra. Si mostra solo se c'e' posto. */
+  val weekMode: Boolean = false,
 )
 
 @HiltViewModel
 class AgendaViewModel @Inject constructor(
   private val agendaRepository: AgendaRepository,
   private val dashboardRepository: DashboardRepository,
+  private val viewPreferences: ViewPreferencesRepository,
+  lessonsRepository: LessonsRepository,
 ) : ViewModel() {
   private val isRefreshing = MutableStateFlow(false)
 
@@ -255,14 +264,29 @@ class AgendaViewModel @Inject constructor(
     agendaRepository.observeCustomEvents(),
     isRefreshing,
     dashboardRepository.observeDashboard(),
-  ) { items, customEvents, refreshing, dashboard ->
+    viewPreferences.observeAgendaViewMode(),
+  ) { items, customEvents, refreshing, dashboard, viewMode ->
     AgendaUiState(
       items = items,
       customEvents = customEvents,
       isRefreshing = refreshing,
       syncStatus = dashboard.syncStatus,
+      weekMode = viewMode == AgendaViewMode.WEEK,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgendaUiState())
+
+  /**
+   * L'orario della settimana, sotto gli impegni nella vista Settimana. Raccolto solo dalla
+   * settimana: il mese e il dettaglio di un impegno non lo pagano.
+   */
+  val timetable: StateFlow<TimetableTemplate> = lessonsRepository.observeTimetableTemplate()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TimetableTemplate())
+
+  fun setWeekMode(week: Boolean) {
+    viewModelScope.launch {
+      viewPreferences.setAgendaViewMode(if (week) AgendaViewMode.WEEK else AgendaViewMode.MONTH)
+    }
+  }
 
   init {
     requestRefresh(force = false, showIndicator = false)
@@ -349,8 +373,10 @@ fun AgendaRoute(
   val monthCommitments = remember(monthEntriesByDate) {
     monthEntriesByDate.values.sumOf { day -> day.count { it.category != AgendaCategory.LESSON } }
   }
-  // La settimana, su uno schermo largo abbastanza da darle sette colonne leggibili.
-  var weekMode by rememberSaveable { mutableStateOf(false) }
+  // La settimana, su uno schermo largo abbastanza da darle sette colonne leggibili. La scelta si
+  // salva e torna alla prossima apertura; quella appena fatta vale subito, senza aspettare il disco.
+  var weekModeOverride by rememberSaveable { mutableStateOf<Boolean?>(null) }
+  val weekMode = weekModeOverride ?: state.weekMode
   val weekDays = remember(selectedDate) {
     val monday = selectedDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     (0L..6L).map(monday::plusDays)
@@ -586,7 +612,11 @@ fun AgendaRoute(
           FluidPillTabs(
             options = listOf(AgendaModeMonth, AgendaModeWeek),
             selected = if (showWeek) AgendaModeWeek else AgendaModeMonth,
-            onSelect = { weekMode = it == AgendaModeWeek },
+            onSelect = {
+              val week = it == AgendaModeWeek
+              weekModeOverride = week
+              viewModel.setWeekMode(week)
+            },
           )
         }
       }
