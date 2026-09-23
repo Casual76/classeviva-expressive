@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeDateLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.VividBadge
@@ -692,7 +693,7 @@ fun MaterialsRoute(
             title = item.title,
             subtitle = item.teacherName,
             eyebrow = item.folderName,
-            meta = item.sharedAt,
+            meta = item.sharedAt.takeIf(String::isNotBlank)?.let { "Condiviso il ${gradeDateLabel(it.take(10))}" },
             tone = item.materialTone(),
             onClick = {
               materialOrigin = rowBounds
@@ -839,7 +840,7 @@ fun MaterialDetailRoute(
         title = item.title,
         subtitle = item.teacherName,
         eyebrow = item.folderName,
-        meta = item.sharedAt,
+        meta = item.sharedAt.takeIf(String::isNotBlank)?.let { "Condiviso il ${gradeDateLabel(it.take(10))}" },
         tone = item.materialTone(),
         badge = { FluidStatusBadge(item.materialBadgeLabel(), tone = item.materialTone()) },
         animatePress = false,
