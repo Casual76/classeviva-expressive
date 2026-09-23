@@ -375,7 +375,9 @@ fun SettingsRoute(
   val section = sectionName?.let { name -> SettingsSection.entries.firstOrNull { it.name == name } }
   // Su uno schermo largo l'indice sta a sinistra e la sezione accanto, come nelle impostazioni di
   // sistema di un tablet: una sezione e' sempre aperta, e all'inizio e' la prima.
-  var twoPane by remember { mutableStateOf(false) }
+  // Salvato, non solo ricordato: tornando alla pagina il primo fotogramma sa gia' se c'e' il pannello,
+  // e una cosa gia' scelta non passa per il pop-up del telefono prima di finire accanto.
+  var twoPane by rememberSaveable { mutableStateOf(false) }
   val paneSection = section ?: SettingsSection.Account
   // Diagnostica non ha una riga sua nell'indice: e' figlia di Notifiche, e mentre e' aperta la
   // riga accesa resta quella da cui si e' arrivati.

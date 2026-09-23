@@ -695,7 +695,9 @@ fun CommunicationsRoute(
   // Su uno schermo largo la circolare si legge accanto all'elenco invece che in un pop-up sopra:
   // lo decide lo scaffold misurando, e lo sa anche il resto della pagina — le righe mostrano quale
   // e' aperta, e i pop-up restano spenti finche' c'e' un pannello a fare il loro lavoro.
-  var twoPane by remember { mutableStateOf(false) }
+  // Salvato, non solo ricordato: tornando alla pagina il primo fotogramma sa gia' se c'e' il pannello,
+  // e una cosa gia' scelta non passa per il pop-up del telefono prima di finire accanto.
+  var twoPane by rememberSaveable { mutableStateOf(false) }
   val onUpload: (CommunicationDetail) -> Unit = { current ->
     pendingUploadDetail = current
     uploadLauncher.launch(arrayOf("*/*"))

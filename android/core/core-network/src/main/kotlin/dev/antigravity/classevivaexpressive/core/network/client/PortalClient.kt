@@ -222,18 +222,21 @@ class PortalClient private constructor(
       ?: throw ClassevivaNetworkException("Credenziali non disponibili per il portale.")
 
     withContext(Dispatchers.IO) {
-      // Due strade, nell'ordine. La pagina di login col suo form e' quella di sempre; dal settembre
-      // 2026 pero' il portale rimanda chi si presenta come l'app ufficiale all'accesso SPID, su un
-      // altro dominio, e il form non arriva mai — il motivo per cui colloqui, conferme di lettura e
-      // tutto il resto del portale fallivano con "errore di rete". La seconda strada e' quella che il
-      // sito stesso usa dietro al suo form: AuthApi4, che risponde in JSON e lascia il cookie.
-      val legacy = runCatching { loginWithPortalForm(credentials) }
-      if (legacy.isSuccess && hasUsablePortalSessionCookie()) return@withContext
-      runCatching { loginWithAuthApi(credentials) }.onFailure { apiFailure ->
-        // Se falliscono tutte e due, vale il motivo della strada nuova quando e' leggibile.
-        throw (apiFailure as? ClassevivaNetworkException)
-          ?: legacy.exceptionOrNull()
-          ?: apiFailure
+      // Due strade, nell'ordine. La prima e' quella che il sito stesso usa dietro al suo form:
+      // AuthApi4, che risponde in JSON con `loggedIn` e lascia il cookie. Dal settembre 2026 il
+      // portale rimanda chi si presenta come l'app ufficiale all'accesso SPID, su un altro dominio,
+      // e il form non arriva mai — il motivo per cui colloqui, conferme di lettura e tutto il resto
+      // del portale fallivano con "errore di rete".
+      // Il form resta come ripiego, ma dopo: il suo successo non si puo' verificare (una password
+      // rifiutata risponde 200 con la pagina di login, e il cookie anonimo c'e' gia' dalla GET), e
+      // messo prima avrebbe chiuso la porta ad AuthApi con una sessione che non e' di nessuno.
+      val api = runCatching { loginWithAuthApi(credentials) }
+      if (api.isSuccess && hasUsablePortalSessionCookie()) return@withContext
+      cookieStore.clear()
+      runCatching { loginWithPortalForm(credentials) }.onFailure { formFailure ->
+        // Se falliscono tutte e due, vale il motivo della strada principale quando e' leggibile.
+        throw (api.exceptionOrNull() as? ClassevivaNetworkException)
+          ?: formFailure
       }
       if (!hasUsablePortalSessionCookie()) {
         throw ClassevivaNetworkException("Il portale non ha creato una sessione valida.")
