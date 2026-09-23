@@ -1,5 +1,10 @@
 package dev.antigravity.classevivaexpressive.feature.absences
 
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnSection
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.fluidColumns
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FluidGlassGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -183,9 +188,13 @@ fun AbsencesRoute(
     }
   }
 
+  val metrics = rememberFluidScreenMetrics()
+
   FluidScreen(
     modifier = modifier,
     title = "Assenze",
+    contentMaxWidth = FluidColumnsDefaults.WideContentMaxWidth,
+    metrics = metrics,
     // Rosso sotto la pagina quando c'e' qualcosa da giustificare, esattamente come l'intestazione:
     // l'urgenza di questa sezione e' un fatto sulla sezione, non una decorazione del riquadro in
     // cima.
@@ -257,36 +266,82 @@ fun AbsencesRoute(
         FluidIndeterminateBar(modifier = Modifier.fillMaxWidth())
       }
     }
-    item { FluidSectionHeader("Da giustificare") }
-    if (pending.isEmpty()) {
-      item {
-        FluidEmptyState(
-          title = "Nessuna giustificazione in sospeso",
-          detail = "Assenze, ritardi e uscite risultano già allineati con lo stato corrente.",
-        )
-      }
+    val columns = metrics.columns(maxColumns = 2)
+    if (columns > 1) {
+      // Largo, quello che aspetta un gesto e la cronologia stanno affiancati: a sinistra cosa fare,
+      // a destra cosa e' gia' successo.
+      fluidColumns(
+        key = "absences:columns",
+        columns = columns,
+        sections = listOf(
+          FluidColumnSection(key = "absences:pending-section") {
+            AbsencesSection("Da giustificare") {
+              if (pending.isEmpty()) {
+                FluidEmptyState(
+                  title = "Nessuna giustificazione in sospeso",
+                  detail = "Assenze, ritardi e uscite risultano già allineati con lo stato corrente.",
+                )
+              } else {
+                FluidGlassGroup(pending) { absence ->
+                  AbsenceRow(
+                    absence = absence,
+                    onJustify = { viewModel.requestJustification(absence) },
+                  )
+                }
+              }
+            }
+          },
+          FluidColumnSection(key = "absences:history-section") {
+            AbsencesSection("Storico") {
+              if (history.isEmpty()) {
+                FluidEmptyState(
+                  title = "Nessuna registrazione disponibile",
+                  detail = "Quando le API ufficiali sincronizzano presenze e uscite, qui trovi una cronologia leggibile.",
+                )
+              } else {
+                FluidGlassGroup(history.take(20)) { absence ->
+                  AbsenceRow(
+                    absence = absence,
+                    onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
+                  )
+                }
+              }
+            }
+          },
+        ),
+      )
     } else {
-      fluidGlassGroups(pending) { absence ->
-        AbsenceRow(
-          absence = absence,
-          onJustify = { viewModel.requestJustification(absence) },
-        )
+      item { FluidSectionHeader("Da giustificare") }
+      if (pending.isEmpty()) {
+        item {
+          FluidEmptyState(
+            title = "Nessuna giustificazione in sospeso",
+            detail = "Assenze, ritardi e uscite risultano già allineati con lo stato corrente.",
+          )
+        }
+      } else {
+        fluidGlassGroups(pending) { absence ->
+          AbsenceRow(
+            absence = absence,
+            onJustify = { viewModel.requestJustification(absence) },
+          )
+        }
       }
-    }
-    item { FluidSectionHeader("Storico") }
-    if (history.isEmpty()) {
-      item {
-        FluidEmptyState(
-          title = "Nessuna registrazione disponibile",
-          detail = "Quando le API ufficiali sincronizzano presenze e uscite, qui trovi una cronologia leggibile.",
-        )
-      }
-    } else {
-      fluidGlassGroups(history.take(20)) { absence ->
-        AbsenceRow(
-          absence = absence,
-          onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
-        )
+      item { FluidSectionHeader("Storico") }
+      if (history.isEmpty()) {
+        item {
+          FluidEmptyState(
+            title = "Nessuna registrazione disponibile",
+            detail = "Quando le API ufficiali sincronizzano presenze e uscite, qui trovi una cronologia leggibile.",
+          )
+        }
+      } else {
+        fluidGlassGroups(history.take(20)) { absence ->
+          AbsenceRow(
+            absence = absence,
+            onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
+          )
+        }
       }
     }
     if (!state.lastMessage.isNullOrBlank()) {
@@ -319,6 +374,14 @@ fun AbsencesRoute(
         )
       },
     )
+  }
+}
+
+@Composable
+private fun AbsencesSection(title: String, content: @Composable () -> Unit) {
+  Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    FluidSectionHeader(title)
+    content()
   }
 }
 

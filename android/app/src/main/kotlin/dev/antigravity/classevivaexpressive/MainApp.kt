@@ -1,5 +1,12 @@
 package dev.antigravity.classevivaexpressive
 
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnSection
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.fluidColumns
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
+import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -1761,46 +1768,76 @@ private fun MoreHubScreen(
     MoreHubAction("Professori", "Contatti e andamento per docente.", "Docenti", FluidTone.Neutral, Icons.Rounded.CoPresent, onOpenProfessors),
   )
 
+  val metrics = rememberFluidScreenMetrics()
   FluidScreen(
     title = "Altro",
     subtitle = "Strumenti del registro, raccolti per ciò che devi fare.",
+    // Era l'unica scheda senza fondale: le altre quattro hanno la loro lavata di colore e il loro
+    // motivo, e passando ad "Altro" la pagina diventava grigia come un'altra app. Il tono e' quello
+    // della casa, perche' qui non c'e' una sezione: c'e' l'indice di tutte.
+    ambient = FeatureIdentity.Settings.ambient(),
+    contentMaxWidth = FluidColumnsDefaults.WideContentMaxWidth,
+    metrics = metrics,
   ) {
-    item { FluidSectionHeader("Registro") }
-    item { MoreHubActionGroup(registerActions) }
-    item { FluidSectionHeader("Persone e presenza") }
-    item { MoreHubActionGroup(peopleActions) }
-    item { FluidSectionHeader("App") }
-    item {
-      FluidListGroup(glass = true) {
-        if (onOpenAssistant != null) {
-          FluidListRow(
-            title = "Assistente",
-            subtitle = "Le conversazioni salvate, da rileggere o continuare.",
-            eyebrow = "IA",
-            tone = FluidTone.Primary,
-            leading = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
-            onClick = onOpenAssistant,
-          )
-          FluidListDivider()
-        }
-        FluidListRow(
-          title = "Segnala un problema",
-          subtitle = "Issue GitHub pubblica con diagnostica minima modificabile.",
-          eyebrow = "Feedback",
-          tone = FluidTone.Info,
-          leading = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
-          onClick = onOpenBugReport,
-        )
-        FluidListDivider()
-        FluidListRow(
-          title = "Impostazioni",
-          subtitle = "Account, aspetto, notifiche, dati e aggiornamenti.",
-          eyebrow = "Profilo",
-          leading = { Icon(Icons.Rounded.Settings, contentDescription = null) },
-          onClick = onOpenSettings,
-        )
-      }
-    }
+    fluidColumns(
+      key = "more:columns",
+      columns = metrics.columns(),
+      sections = listOf(
+        FluidColumnSection(key = "more:register") {
+          MoreHubSection("Registro") { MoreHubActionGroup(registerActions) }
+        },
+        FluidColumnSection(key = "more:people") {
+          MoreHubSection("Persone e presenza") { MoreHubActionGroup(peopleActions) }
+        },
+        FluidColumnSection(key = "more:app") {
+          MoreHubSection("App") {
+            FluidListGroup(glass = true) {
+              if (onOpenAssistant != null) {
+                FluidListRow(
+                  title = "Assistente",
+                  subtitle = "Le conversazioni salvate, da rileggere o continuare.",
+                  eyebrow = "IA",
+                  tone = FluidTone.Primary,
+                  leading = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
+                  onClick = onOpenAssistant,
+                )
+                FluidListDivider()
+              }
+              FluidListRow(
+                title = "Segnala un problema",
+                subtitle = "Issue GitHub pubblica con diagnostica minima modificabile.",
+                eyebrow = "Feedback",
+                tone = FluidTone.Info,
+                leading = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
+                onClick = onOpenBugReport,
+              )
+              FluidListDivider()
+              FluidListRow(
+                title = "Impostazioni",
+                subtitle = "Account, aspetto, notifiche, dati e aggiornamenti.",
+                eyebrow = "Profilo",
+                leading = { Icon(Icons.Rounded.Settings, contentDescription = null) },
+                onClick = onOpenSettings,
+              )
+            }
+          }
+        },
+      ),
+    )
+  }
+}
+
+/**
+ * Una sezione dell'indice: la testata e il suo gruppo, in un blocco solo.
+ *
+ * Sul telefono sono un item ciascuna, come prima; in colonne stanno insieme, e la testata non puo'
+ * finire in cima a una colonna col suo gruppo in fondo a un'altra.
+ */
+@Composable
+private fun MoreHubSection(title: String, content: @Composable () -> Unit) {
+  Column(verticalArrangement = Arrangement.spacedBy(FluidScreenDefaults.ItemSpacing)) {
+    FluidSectionHeader(title)
+    content()
   }
 }
 
