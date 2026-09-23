@@ -10,13 +10,13 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
   private val incomingIntents = MutableSharedFlow<android.content.Intent>(replay = 1, extraBufferCapacity = 1)
-  private val refreshRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+  private val shortcuts = MutableSharedFlow<KeyboardShortcut>(extraBufferCapacity = 1)
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
-      MainApp(incomingIntents = incomingIntents, refreshRequests = refreshRequests)
+      MainApp(incomingIntents = incomingIntents, shortcuts = shortcuts)
     }
     incomingIntents.tryEmit(intent)
   }
@@ -38,18 +38,22 @@ class MainActivity : ComponentActivity() {
   }
 
   /**
-   * Ctrl+R (e F5) aggiornano la pagina che si sta guardando, il gesto di tirarla giu' per chi ha la
-   * tastiera attaccata. Sul tasto premuto e non su quello rilasciato, come nei browser: la risposta
-   * arriva quando il dito scende. Tenuto premuto non si ripete.
+   * Le scorciatoie per chi ha la tastiera attaccata al tablet. Ctrl+R (e F5) aggiornano la pagina
+   * che si sta guardando, il gesto di tirarla giu'; Ctrl+1…5 aprono le sezioni della barra, come
+   * le schede di un browser. Sul tasto premuto e non su quello rilasciato, come nei browser: la
+   * risposta arriva quando il dito scende. Tenuti premuti non si ripetono.
    */
   override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
-    val refresh = keyCode == android.view.KeyEvent.KEYCODE_F5 ||
-      (keyCode == android.view.KeyEvent.KEYCODE_R && event.isCtrlPressed)
-    if (refresh) {
-      if (event.repeatCount == 0) refreshRequests.tryEmit(Unit)
-      return true
-    }
-    return super.onKeyDown(keyCode, event)
+    val shortcut = when {
+      keyCode == android.view.KeyEvent.KEYCODE_F5 -> KeyboardShortcut.Refresh
+      !event.isCtrlPressed -> null
+      keyCode == android.view.KeyEvent.KEYCODE_R -> KeyboardShortcut.Refresh
+      keyCode in android.view.KeyEvent.KEYCODE_1..android.view.KeyEvent.KEYCODE_5 ->
+        KeyboardShortcut.Section(keyCode - android.view.KeyEvent.KEYCODE_1)
+      else -> null
+    } ?: return super.onKeyDown(keyCode, event)
+    if (event.repeatCount == 0) shortcuts.tryEmit(shortcut)
+    return true
   }
 
   override fun onNewIntent(intent: android.content.Intent) {

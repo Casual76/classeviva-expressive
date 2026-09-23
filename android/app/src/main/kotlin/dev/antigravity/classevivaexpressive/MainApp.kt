@@ -412,8 +412,8 @@ private fun routeExitTransition(
 fun MainApp(
   viewModel: MainViewModel = hiltViewModel(),
   incomingIntents: Flow<Intent> = emptyFlow(),
-  /** Ctrl+R da una tastiera fisica: aggiorna la pagina davanti, come tirarla giu'. */
-  refreshRequests: Flow<Unit> = emptyFlow(),
+  /** Le scorciatoie di una tastiera fisica: vedi [KeyboardShortcut]. */
+  shortcuts: Flow<KeyboardShortcut> = emptyFlow(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val notificationHostState = rememberFluidNotificationHostState()
@@ -462,8 +462,8 @@ fun MainApp(
 
   ClassevivaExpressiveTheme(settings = uiState.settings) {
     val chromeController = rememberFluidChromeController()
-    LaunchedEffect(chromeController, refreshRequests) {
-      refreshRequests.collect { chromeController.refreshFront() }
+    LaunchedEffect(chromeController, shortcuts) {
+      shortcuts.collect { if (it == KeyboardShortcut.Refresh) chromeController.refreshFront() }
     }
     CompositionLocalProvider(
       LocalFluidNotificationHostState provides notificationHostState,
@@ -491,6 +491,7 @@ fun MainApp(
                 onCheckForUpdates = { viewModel.checkUpdate() },
                 onClearUpdateCheckMessage = viewModel::clearUpdateCheckMessage,
                 incomingIntents = incomingIntents,
+                shortcuts = shortcuts,
               )
             }
           }
@@ -1151,6 +1152,7 @@ private fun AuthenticatedApp(
   onCheckForUpdates: () -> Unit,
   onClearUpdateCheckMessage: () -> Unit,
   incomingIntents: Flow<Intent>,
+  shortcuts: Flow<KeyboardShortcut> = emptyFlow(),
 ) {
   val navController = rememberNavController()
   val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -1189,6 +1191,19 @@ private fun AuthenticatedApp(
     val origin = touchOrigin.origin
     navController.navigateTopLevel(targetRoute)
     navController.currentBackStackEntry?.savedStateHandle?.writeExpandMotion(origin)
+  }
+
+  // Ctrl+1…5: le cinque sezioni della barra, nell'ordine in cui stanno — come le schede di un
+  // browser. Sulla sezione in cui si e' gia', come toccare di nuovo la sua scheda: torna in cima.
+  LaunchedEffect(navController, shortcuts) {
+    shortcuts.collect { shortcut ->
+      val index = (shortcut as? KeyboardShortcut.Section)?.index ?: return@collect
+      val destination = topLevelDestinations.getOrNull(index) ?: return@collect
+      val current = navController.currentDestination?.hierarchy
+        ?.mapNotNull { it.route?.substringBefore("?") }
+        ?.firstOrNull { it in topLevelRoutes }
+      if (current == destination.baseRoute) scrollToTop.request() else navigateTopLevelRoute(destination.navigateRoute)
+    }
   }
 
   LaunchedEffect(navController, incomingIntents) {
@@ -1980,4 +1995,13 @@ private fun MoreHubActionGroup(actions: List<MoreHubAction>) {
       if (index != actions.lastIndex) FluidListDivider()
     }
   }
+}
+
+/** Cosa chiede una tastiera fisica, dall'Activity che riceve i tasti alla navigazione che risponde. */
+sealed interface KeyboardShortcut {
+  /** Ctrl+R, F5: aggiorna la pagina davanti. */
+  data object Refresh : KeyboardShortcut
+
+  /** Ctrl+1…5: la sezione della barra in quella posizione, da zero. */
+  data class Section(val index: Int) : KeyboardShortcut
 }
