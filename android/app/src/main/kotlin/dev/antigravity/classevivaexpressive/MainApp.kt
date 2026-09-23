@@ -1504,7 +1504,12 @@ private fun AuthenticatedApp(
         composable("materials") { entry ->
           FluidRouteMotionHost(this@composable) {
             val materialsViewModel: MaterialsViewModel = hiltViewModel()
+            val paneRequest by entry.savedStateHandle
+              .getStateFlow<String?>(PaneOpenRequestKey, null)
+              .collectAsStateWithLifecycle()
             AdaptiveListDetail(
+              openRequest = paneRequest,
+              onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
               ambient = FeatureIdentity.Materials.ambient(),
               emptyTitle = "Nessun materiale aperto",
               emptyMessage = "Scegli un file o un link dall'elenco per vederlo qui.",
@@ -1532,11 +1537,20 @@ private fun AuthenticatedApp(
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val materialsViewModel: MaterialsViewModel = hiltViewModel(parentEntry)
           FluidRouteMotionHost(this@composable) {
-            MaterialDetailRoute(
-              itemId = entry.arguments?.getString("itemId").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = materialsViewModel,
-            )
+            val detailId = entry.arguments?.getString("itemId").orEmpty()
+            PaneAwareDetail(
+              id = detailId,
+              onWide = { id ->
+                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+                navController.popBackStack()
+              },
+            ) {
+              MaterialDetailRoute(
+                itemId = entry.arguments?.getString("itemId").orEmpty(),
+                onBack = { navController.popBackStack() },
+                viewModel = materialsViewModel,
+              )
+            }
           }
         }
         composable(
@@ -1560,15 +1574,22 @@ private fun AuthenticatedApp(
           val pendingHomeworkId = pendingHomeworkRequest(requestedHomeworkId, consumedHomeworkId)
           FluidRouteMotionHost(this@composable) {
             val homeworkViewModel: HomeworkViewModel = hiltViewModel()
+            val paneRequest by entry.savedStateHandle
+              .getStateFlow<String?>(PaneOpenRequestKey, null)
+              .collectAsStateWithLifecycle()
             AdaptiveListDetail(
               ambient = FeatureIdentity.Homework.ambient(),
               emptyTitle = "Nessun compito aperto",
               emptyMessage = "Scegli un compito dall'elenco per leggerne consegna e scadenza qui.",
               emptyIcon = Icons.AutoMirrored.Rounded.Assignment,
               onOpenPage = { homeworkId -> navigateRoute("homework-detail/${Uri.encode(homeworkId)}") },
-              openRequest = pendingHomeworkId,
+              openRequest = paneRequest ?: pendingHomeworkId,
               onOpenRequestConsumed = { homeworkId ->
-                entry.savedStateHandle[ConsumedHomeworkRequestKey] = homeworkId
+                if (homeworkId == paneRequest) {
+                  entry.savedStateHandle[PaneOpenRequestKey] = null
+                } else {
+                  entry.savedStateHandle[ConsumedHomeworkRequestKey] = homeworkId
+                }
               },
               list = { inPane, selectedId, onOpen ->
                 HomeworkRoute(
@@ -1593,17 +1614,31 @@ private fun AuthenticatedApp(
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val homeworkViewModel: HomeworkViewModel = hiltViewModel(parentEntry)
           FluidRouteMotionHost(this@composable) {
-            HomeworkDetailRoute(
-              homeworkId = entry.arguments?.getString("homeworkId").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = homeworkViewModel,
-            )
+            val detailId = entry.arguments?.getString("homeworkId").orEmpty()
+            PaneAwareDetail(
+              id = detailId,
+              onWide = { id ->
+                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+                navController.popBackStack()
+              },
+            ) {
+              HomeworkDetailRoute(
+                homeworkId = entry.arguments?.getString("homeworkId").orEmpty(),
+                onBack = { navController.popBackStack() },
+                viewModel = homeworkViewModel,
+              )
+            }
           }
         }
         composable("documents") { entry ->
           FluidRouteMotionHost(this@composable) {
             val documentsViewModel: DocumentsViewModel = hiltViewModel()
+            val paneRequest by entry.savedStateHandle
+              .getStateFlow<String?>(PaneOpenRequestKey, null)
+              .collectAsStateWithLifecycle()
             AdaptiveListDetail(
+              openRequest = paneRequest,
+              onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
               ambient = FeatureIdentity.Documents.ambient(),
               emptyTitle = "Nessun documento aperto",
               emptyMessage = "Scegli una pagella o un documento dall'elenco per vederlo qui.",
@@ -1631,11 +1666,20 @@ private fun AuthenticatedApp(
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val documentsViewModel: DocumentsViewModel = hiltViewModel(parentEntry)
           FluidRouteMotionHost(this@composable) {
-            DocumentDetailRoute(
-              documentId = entry.arguments?.getString("documentId").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = documentsViewModel,
-            )
+            val detailId = entry.arguments?.getString("documentId").orEmpty()
+            PaneAwareDetail(
+              id = detailId,
+              onWide = { id ->
+                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+                navController.popBackStack()
+              },
+            ) {
+              DocumentDetailRoute(
+                documentId = entry.arguments?.getString("documentId").orEmpty(),
+                onBack = { navController.popBackStack() },
+                viewModel = documentsViewModel,
+              )
+            }
           }
         }
         composable(
@@ -1682,7 +1726,12 @@ private fun AuthenticatedApp(
         composable("professors") { entry ->
           FluidRouteMotionHost(this@composable) {
             val professorsViewModel: ProfessorsViewModel = hiltViewModel()
+            val paneRequest by entry.savedStateHandle
+              .getStateFlow<String?>(PaneOpenRequestKey, null)
+              .collectAsStateWithLifecycle()
             AdaptiveListDetail(
+              openRequest = paneRequest,
+              onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
               ambient = FeatureIdentity.People.ambient(),
               emptyTitle = "Nessun docente aperto",
               emptyMessage = "Scegli un docente dall'elenco per vederne materie, voti e presenza qui.",
@@ -1710,11 +1759,20 @@ private fun AuthenticatedApp(
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val professorsViewModel: ProfessorsViewModel = hiltViewModel(parentEntry)
           FluidRouteMotionHost(this@composable) {
-            ProfessorDetailRoute(
-              teacherName = entry.arguments?.getString("teacherName").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = professorsViewModel,
-            )
+            val detailId = entry.arguments?.getString("teacherName").orEmpty()
+            PaneAwareDetail(
+              id = detailId,
+              onWide = { id ->
+                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+                navController.popBackStack()
+              },
+            ) {
+              ProfessorDetailRoute(
+                teacherName = entry.arguments?.getString("teacherName").orEmpty(),
+                onBack = { navController.popBackStack() },
+                viewModel = professorsViewModel,
+              )
+            }
           }
         }
         composable(

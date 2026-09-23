@@ -1,6 +1,8 @@
 package dev.antigravity.classevivaexpressive
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -8,11 +10,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
 import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
 import dev.antigravity.fluidengine.ui.fluid.FluidDetailPlaceholder
 import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
+import dev.antigravity.fluidengine.ui.fluid.fluidListDetailLayout
 
 /**
  * Una pagina "elenco che apre una pagina" che su uno schermo largo diventa elenco+dettaglio.
@@ -81,4 +85,30 @@ internal fun AdaptiveListDetail(
       }
     },
   )
+}
+
+/** Dove una pagina di dettaglio lascia detto all'elenco cosa riaprire accanto. */
+internal const val PaneOpenRequestKey = "adaptive:pane-open"
+
+/**
+ * Una pagina di dettaglio che, se la finestra diventa abbastanza larga per i due pannelli, torna
+ * all'elenco e chiede di essere riaperta accanto.
+ *
+ * Succede ruotando il tablet, o allargando la finestra divisa, con un compito aperto: senza, restava
+ * una pagina sola stirata su tutta la larghezza, proprio dove la pagina elenco+dettaglio avrebbe
+ * mostrato la stessa cosa con l'elenco accanto. E' l'altra meta' di cio' che [AdaptiveListDetail]
+ * fa quando la finestra si stringe.
+ */
+@Composable
+internal fun PaneAwareDetail(
+  id: String,
+  onWide: (String) -> Unit,
+  content: @Composable () -> Unit,
+) {
+  BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    content()
+    if (fluidListDetailLayout(maxWidth).twoPane) {
+      LaunchedEffect(id) { onWide(id) }
+    }
+  }
 }
