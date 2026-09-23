@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,6 +59,9 @@ internal fun AdaptiveListDetail(
       onOpenPage(open)
     }
   }
+  // Indietro chiude prima la cosa aperta accanto, come sul telefono chiude la pagina di dettaglio:
+  // il gesto significa "torna all'elenco" su tutti e due i formati, e solo dall'elenco esce.
+  BackHandler(enabled = twoPane && paneId != null) { paneId = null }
   FluidListDetailScaffold(
     ambient = ambient,
     list = { isTwoPane ->

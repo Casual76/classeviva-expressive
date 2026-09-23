@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.communications
 
+import androidx.activity.compose.BackHandler
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -699,6 +700,12 @@ fun CommunicationsRoute(
     pendingUploadDetail = current
     uploadLauncher.launch(arrayOf("*/*"))
   }
+  // Su due pannelli indietro chiude prima la circolare aperta accanto, come sul telefono chiude il
+  // pop-up: solo dall'elenco si esce dalla bacheca.
+  BackHandler(
+    enabled = twoPane && (state.selectedCommunication != null || state.selectedNote != null),
+    onBack = viewModel::dismissDetail,
+  )
   FluidListDetailScaffold(
     ambient = FeatureIdentity.Communications.ambient(),
     modifier = modifier,
