@@ -1,5 +1,7 @@
 package dev.antigravity.classevivaexpressive.feature.agenda
 
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import android.content.Intent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
@@ -461,7 +463,9 @@ fun AgendaRoute(
         FluidSyncNotice(status = state.syncStatus.toFluid(), onRetry = viewModel::refresh)
       }
     }
-    item {
+    // Il primo fatto della pagina quando c'e', e assente quando non c'e' niente da dire. Rosso
+    // perche' e' la stessa famiglia del tono delle verifiche e del segno che portano nel calendario.
+    val heroBand: @Composable () -> Unit = {
       FeatureHero(
         identity = FeatureIdentity.Agenda,
         eyebrow = selectedMonth.format(calendarHeaderFormatter).replaceFirstChar { it.uppercase() },
@@ -476,10 +480,8 @@ fun AgendaRoute(
         icon = Icons.Rounded.CalendarMonth,
       )
     }
-    // Il primo fatto della pagina quando c'e', e assente quando non c'e' niente da dire. Rosso
-    // perche' e' la stessa famiglia del tono delle verifiche e del segno che portano nel calendario.
-    nextAssessment?.let { assessment ->
-      item(key = "agenda:next-assessment") {
+    val assessmentCard: (@Composable () -> Unit)? = nextAssessment?.let { assessment ->
+      {
         FluidVividCard(
           colors = dangerVividColors(),
           onClick = { selectedDateText = assessment.date.toString() },
@@ -521,6 +523,24 @@ fun AgendaRoute(
             )
           }
         }
+      }
+    }
+    if (twoPane && assessmentCard != null) {
+      // Accanto al calendario la colonna e' larga il doppio di un telefono: la fascia e la prossima
+      // verifica stanno sulla stessa riga, e il mese intero entra senza scorrere.
+      item(key = "agenda:header-row") {
+        Row(
+          modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          Box(modifier = Modifier.weight(1f).fillMaxHeight()) { heroBand() }
+          Box(modifier = Modifier.weight(1f).fillMaxHeight()) { assessmentCard() }
+        }
+      }
+    } else {
+      item { heroBand() }
+      if (assessmentCard != null) {
+        item(key = "agenda:next-assessment") { assessmentCard() }
       }
     }
     item {
