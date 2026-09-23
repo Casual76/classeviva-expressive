@@ -553,7 +553,7 @@ private fun UnreadCommunicationRow(communication: Communication, onClick: () -> 
 private fun NoRecentGrades() {
   FluidEmptyState(
     title = "Nessun voto disponibile",
-    detail = "I voti recenti appariranno qui dopo la prossima sincronizzazione.",
+    detail = "I nuovi voti compariranno qui appena i docenti li registrano.",
   )
 }
 

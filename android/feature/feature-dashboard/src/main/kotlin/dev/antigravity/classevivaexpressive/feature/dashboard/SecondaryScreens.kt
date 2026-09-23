@@ -485,7 +485,7 @@ fun MeetingsRoute(
       item {
         FluidEmptyState(
           title = "Nessun colloquio disponibile",
-          detail = "Le prenotazioni e le disponibilità compariranno qui dopo la sincronizzazione o quando il portale le espone.",
+          detail = "Quando i docenti aprono i ricevimenti li trovi qui, insieme ai colloqui che hai prenotato.",
         )
       }
       item {
