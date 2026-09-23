@@ -80,6 +80,25 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.classevivaBrandAccent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.expressiveAccentPresets
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectBlock
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectMark
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectSwatchDot
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectSwatches
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.subjectPalette
+import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.Subject
+import dev.antigravity.classevivaexpressive.core.domain.model.SubjectKeys
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
+import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
+import androidx.compose.runtime.key
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.flow.StateFlow
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
 import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupImportSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupRepository
@@ -142,7 +161,57 @@ private enum class SettingsSection(val title: String, val subtitle: String) {
   Assistant("Assistente IA", "Chiavi, modelli, voce e privacy"),
   About("Informazioni e aggiornamenti", "Versione, aggiornamenti e funzionalità"),
   Diagnostics("Diagnostica avanzata", "Canali di notifica, test e stato dell'app"),
+  SubjectColors("Colori delle materie", "Il colore di ogni materia in orario, agenda e home"),
 }
+
+/**
+ * La sezione da cui si arriva a questa. Le figlie non hanno una riga nell'indice: si aprono da una
+ * riga dentro la madre, e mentre sono aperte la riga accesa nell'indice resta quella della madre.
+ */
+private val SettingsSection.parent: SettingsSection?
+  get() = when (this) {
+    SettingsSection.Diagnostics -> SettingsSection.Notifications
+    SettingsSection.SubjectColors -> SettingsSection.Appearance
+    else -> null
+  }
+
+/** Una famiglia di materie nella sezione dei colori: la chiave salvata e il nome da mostrare. */
+data class SubjectColorRow(val key: String, val label: String)
+
+/**
+ * Le materie che hanno senso qui: quelle del registro e quelle dell'orario, una riga per famiglia.
+ *
+ * Prima che il registro abbia mai sincronizzato non c'e' niente da elencare, e una pagina vuota
+ * direbbe "non ci sono colori"; restano allora le famiglie con un default scelto apposta.
+ */
+internal fun subjectColorRows(subjects: List<Subject>, timetableSubjects: List<String>): List<SubjectColorRow> {
+  val named = subjects.sortedBy { it.order }.map { it.description } + timetableSubjects
+  val rows = LinkedHashMap<String, SubjectColorRow>()
+  named.forEach { name ->
+    val key = SubjectKeys.keyOf(name) ?: return@forEach
+    rows.getOrPut(key) {
+      SubjectColorRow(key, SubjectKeys.familyLabel(key) ?: name.substringBefore(" / ").trim().asReadableSubject())
+    }
+  }
+  if (rows.isEmpty()) {
+    DefaultSubjectFamilies.forEach { key -> rows[key] = SubjectColorRow(key, SubjectKeys.familyLabel(key).orEmpty()) }
+  }
+  return rows.values.toList()
+}
+
+private val DefaultSubjectFamilies = listOf(
+  SubjectKeys.Italiano,
+  SubjectKeys.Storia,
+  SubjectKeys.Filosofia,
+  SubjectKeys.Inglese,
+  SubjectKeys.Matematica,
+  SubjectKeys.Fisica,
+  SubjectKeys.Scienze,
+  SubjectKeys.Informatica,
+  SubjectKeys.Arte,
+  SubjectKeys.Motorie,
+  SubjectKeys.Religione,
+)
 
 data class SettingsUiState(
   val settings: AppSettings = AppSettings(),
@@ -164,6 +233,8 @@ class SettingsViewModel @Inject constructor(
   private val capabilityResolver: CapabilityResolver,
   private val appBackupRepository: AppBackupRepository,
   @param:ApplicationContext private val applicationContext: Context,
+  gradesRepository: GradesRepository,
+  lessonsRepository: LessonsRepository,
 ) : ViewModel() {
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isRefreshing = MutableStateFlow(false)
@@ -210,6 +281,14 @@ class SettingsViewModel @Inject constructor(
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
+  /** Raccolto solo dentro la sezione dei colori: fuori di li' l'orario non serve a nessuno. */
+  val subjectRows: StateFlow<List<SubjectColorRow>> = combine(
+    gradesRepository.observeSubjects(),
+    lessonsRepository.observeTimetableTemplate(),
+  ) { subjects, timetable ->
+    subjectColorRows(subjects, timetable.slots.map { it.subject })
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
   init {
     refresh(showIndicator = false)
   }
@@ -246,6 +325,14 @@ class SettingsViewModel @Inject constructor(
 
   fun setAmoled(enabled: Boolean) {
     viewModelScope.launch { settingsRepository.setAmoledEnabled(enabled) }
+  }
+
+  fun setSubjectColor(key: String, argb: Int?) {
+    viewModelScope.launch { settingsRepository.setSubjectColor(key, argb) }
+  }
+
+  fun resetSubjectColors() {
+    viewModelScope.launch { settingsRepository.resetSubjectColors() }
   }
 
   fun setNotifications(enabled: Boolean) {
@@ -381,9 +468,12 @@ fun SettingsRoute(
   // e una cosa gia' scelta non passa per il pop-up del telefono prima di finire accanto.
   var twoPane by rememberSaveable { mutableStateOf(false) }
   val paneSection = section ?: SettingsSection.Account
-  // Diagnostica non ha una riga sua nell'indice: e' figlia di Notifiche, e mentre e' aperta la
-  // riga accesa resta quella da cui si e' arrivati.
-  val highlightedSection = if (paneSection == SettingsSection.Diagnostics) SettingsSection.Notifications else paneSection
+  // Diagnostica e i colori delle materie non hanno una riga loro nell'indice: mentre sono aperte
+  // la riga accesa resta quella da cui si e' arrivati.
+  val highlightedSection = paneSection.parent ?: paneSection
+  val subjectRows by viewModel.subjectRows.collectAsStateWithLifecycle()
+  var editingSubject by remember { mutableStateOf<SubjectColorRow?>(null) }
+  var editingOrigin by remember { mutableStateOf<Rect?>(null) }
   val context = LocalContext.current
   // Disconnettersi toglie la sessione e le credenziali salvate: per rientrare servono di nuovo
   // codice e password. Un tocco solo, su un tasto grande, era troppo poco.
@@ -493,10 +583,10 @@ fun SettingsRoute(
       subtitle = section?.subtitle ?: "Tutto ciò che serve, senza il muro di opzioni.",
       onBack = when {
         !paneMode -> if (section != null || onBack != null) navigateBack else null
-        // Nel pannello Diagnostica torna a Notifiche, da cui si apre; l'indice torna dove si era
+        // Nel pannello una figlia torna alla madre da cui si apre; l'indice torna dove si era
         // venuti; le altre sezioni non hanno un indietro, perche' l'indice e' gia' accanto.
-        section == SettingsSection.Diagnostics -> {
-          { sectionName = SettingsSection.Notifications.name }
+        section?.parent != null -> {
+          { sectionName = section.parent?.name }
         }
         section == null -> onBack
         else -> null
@@ -526,7 +616,7 @@ fun SettingsRoute(
         }
         item {
           FluidListGroup(glass = true) {
-            val destinations = SettingsSection.entries.filterNot { it == SettingsSection.Diagnostics }
+            val destinations = SettingsSection.entries.filter { it.parent == null }
             destinations.forEachIndexed { index, destination ->
               FluidListRow(
                 title = destination.title,
@@ -641,6 +731,57 @@ fun SettingsRoute(
             checked = state.settings.amoledEnabled,
             onCheckedChange = viewModel::setAmoled,
           )
+        }
+        item { FluidSectionHeader(title = "Materie") }
+        item {
+          FluidListGroup(glass = true) {
+            FluidListRow(
+              title = SettingsSection.SubjectColors.title,
+              subtitle = SettingsSection.SubjectColors.subtitle,
+              leading = {
+                Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                  SubjectMark("STORIA", width = 4.dp, height = 16.dp)
+                  SubjectMark("FISICA", width = 4.dp, height = 16.dp)
+                  SubjectMark("INGLESE", width = 4.dp, height = 16.dp)
+                }
+              },
+              onClick = { sectionName = SettingsSection.SubjectColors.name },
+            )
+          }
+        }
+      }
+
+      if (section == SettingsSection.SubjectColors) {
+        item {
+          val palette = subjectPalette()
+          FluidListGroup(glass = true) {
+            subjectRows.forEachIndexed { index, row ->
+              key(row.key) {
+              var bounds by remember { mutableStateOf<Rect?>(null) }
+              FluidListRow(
+                title = row.label,
+                subtitle = if (palette.isOverridden(row.key)) "Personalizzato" else "Predefinito",
+                modifier = Modifier.fluidExpandOrigin { bounds = it },
+                leading = { SubjectSwatchDot(palette.baseForKey(row.key), size = 18.dp) },
+                onClick = {
+                  editingOrigin = bounds
+                  editingSubject = row
+                },
+              )
+              }
+              if (index != subjectRows.lastIndex) FluidListDivider()
+            }
+          }
+        }
+        if (state.settings.subjectColors.isNotEmpty()) {
+          item {
+            FluidButton(
+              text = "Ripristina tutti i colori",
+              onClick = viewModel::resetSubjectColors,
+              style = FluidButtonStyle.Tinted,
+              fillWidth = true,
+            )
+          }
         }
       }
 
@@ -861,6 +1002,75 @@ fun SettingsRoute(
       }
     },
   )
+
+  // Dichiarato sempre, visibile a comando, come ogni pop-up che nasce da una riga.
+  FluidGlassModalPortal(
+    item = editingSubject,
+    onDismissRequest = { editingSubject = null },
+    origin = { editingOrigin },
+    paneTitle = "Colore della materia",
+  ) { row ->
+    SubjectColorPicker(
+      row = row,
+      onSelect = { color -> viewModel.setSubjectColor(row.key, color.toArgb()) },
+      onReset = { viewModel.setSubjectColor(row.key, null) },
+    )
+  }
+}
+
+/**
+ * Il colore di una materia: l'anteprima di un blocco dell'orario, perche' un colore si sceglie per
+ * come verra' letto e non per come sta in un pallino, e sotto i colori possibili.
+ *
+ * Ogni tocco si applica subito, come l'accento: non c'e' un "Salva", c'e' solo da chiudere.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SubjectColorPicker(
+  row: SubjectColorRow,
+  onSelect: (Color) -> Unit,
+  onReset: () -> Unit,
+) {
+  val palette = subjectPalette()
+  val current = palette.baseForKey(row.key)
+  // All'anteprima basta un nome qualunque della famiglia: la palette risolve per chiave.
+  val sample = SubjectKeys.familyLabel(row.key) ?: row.label
+  Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    SubjectBlock(subject = sample, modifier = Modifier.fillMaxWidth()) {
+      Text(text = "8:00 – 9:00", style = MaterialTheme.typography.labelMedium)
+      Text(text = row.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    }
+    FlowRow(
+      modifier = Modifier.selectableGroup(),
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
+      verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+      SubjectSwatches.forEach { swatch ->
+        FluidColorDot(
+          color = swatch.color,
+          selected = swatch.color == current,
+          onClick = { onSelect(swatch.color) },
+          label = swatch.label,
+          // Il bianco e l'avorio sul fondo chiaro: senza contorno il pallino non c'e'.
+          modifier = if (palette.needsOutline(swatch.color)) {
+            Modifier.drawWithContent {
+              drawContent()
+              drawCircle(color = palette.outline, radius = 15.dp.toPx(), style = Stroke(width = 1.dp.toPx()))
+            }
+          } else {
+            Modifier
+          },
+        )
+      }
+    }
+    FluidButton(
+      text = "Ripristina predefinito",
+      onClick = onReset,
+      style = FluidButtonStyle.Tinted,
+      enabled = palette.isOverridden(row.key),
+      fillWidth = true,
+    )
+  }
 }
 
 private const val SettingsPaneMotionDurationMillis = 360

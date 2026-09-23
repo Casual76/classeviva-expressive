@@ -14,6 +14,10 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearReposito
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import dev.antigravity.classevivaexpressive.core.domain.model.AccentMode
+import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.Subject
+import dev.antigravity.classevivaexpressive.core.domain.model.SubjectKeys
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -46,6 +50,8 @@ class SettingsViewModelTest {
   private val capabilityResolver = mockk<CapabilityResolver>(relaxed = true)
   private val appBackupRepository = mockk<AppBackupRepository>(relaxed = true)
   private val context = mockk<Context>(relaxed = true)
+  private val gradesRepository = mockk<GradesRepository>(relaxed = true)
+  private val lessonsRepository = mockk<LessonsRepository>(relaxed = true)
 
   @Before fun setUp() { Dispatchers.setMain(testDispatcher) }
   @After fun tearDown() { Dispatchers.resetMain() }
@@ -59,7 +65,7 @@ class SettingsViewModelTest {
     every { schoolYearRepository.observeSelectedSchoolYear() } returns selectedSchoolYears
     every { schoolYearRepository.observeAvailableSchoolYears() } returns flowOf(listOf(SchoolYearRef(2025, 2026)))
     every { capabilityResolver.observeCapabilityMatrix() } returns flowOf(emptyList())
-    return SettingsViewModel(settingsRepository, authRepository, schoolYearRepository, capabilityResolver, appBackupRepository, context)
+    return SettingsViewModel(settingsRepository, authRepository, schoolYearRepository, capabilityResolver, appBackupRepository, context, gradesRepository, lessonsRepository)
   }
 
   // ─── Caricamento impostazioni ─────────────────────────────────────────────
@@ -74,7 +80,7 @@ class SettingsViewModelTest {
     every { schoolYearRepository.observeAvailableSchoolYears() } returns flowOf(emptyList())
     every { capabilityResolver.observeCapabilityMatrix() } returns flowOf(emptyList())
 
-    val vm = SettingsViewModel(settingsRepository, authRepository, schoolYearRepository, capabilityResolver, appBackupRepository, context)
+    val vm = SettingsViewModel(settingsRepository, authRepository, schoolYearRepository, capabilityResolver, appBackupRepository, context, gradesRepository, lessonsRepository)
 
     vm.state.test {
       val state = awaitItem()
@@ -272,5 +278,30 @@ class SettingsViewModelTest {
     testDispatcher.scheduler.advanceUntilIdle()
 
     assertFalse(vm.state.value.isRefreshing)
+  }
+
+  // ─── Colori delle materie ─────────────────────────────────────────────────
+
+  @Test
+  fun subjectColorRows_oneRowPerFamily_inRegistryOrder() {
+    val rows = subjectColorRows(
+      subjects = listOf(
+        Subject("2", "DISEGNO E STORIA DELL'ARTE", order = 2),
+        Subject("1", "STORIA", order = 1),
+        Subject("3", "DIRITTO ED ECONOMIA", order = 3),
+      ),
+      timetableSubjects = listOf("Storia dell'arte", "FISICA"),
+    )
+    assertEquals(
+      listOf(SubjectKeys.Storia, SubjectKeys.Arte, "x:diritto ed economia", SubjectKeys.Fisica),
+      rows.map { it.key },
+    )
+    assertEquals("Diritto ed economia", rows[2].label)
+  }
+
+  @Test
+  fun subjectColorRows_beforeAnySync_offersTheDefaultFamilies() {
+    val rows = subjectColorRows(emptyList(), emptyList())
+    assertTrue(rows.any { it.key == SubjectKeys.Italiano && it.label == "Italiano" })
   }
 }
