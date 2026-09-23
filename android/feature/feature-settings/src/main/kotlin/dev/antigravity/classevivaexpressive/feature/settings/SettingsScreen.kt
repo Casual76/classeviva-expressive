@@ -774,9 +774,13 @@ fun SettingsRoute(
         }
       }
 
-      state.lastMessage?.let { message ->
-        item {
-          FluidInlineMessage(message = message, title = "Impostazioni", onDismiss = viewModel::clearMessage)
+      // Su due pannelli il messaggio sta una volta sola, nella sezione che l'ha prodotto: l'indice
+      // accanto lo ripeteva identico.
+      if (!paneMode || section != null) {
+        state.lastMessage?.let { message ->
+          item {
+            FluidInlineMessage(message = message, title = "Impostazioni", onDismiss = viewModel::clearMessage)
+          }
         }
       }
     }
