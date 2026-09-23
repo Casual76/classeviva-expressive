@@ -73,6 +73,15 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGr
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.accentVividColors
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberMinuteTicker
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.MinuteSpan
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectBlock
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridCell
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridDay
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.TimeGridEvent
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.WeekTimeGrid
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberTimeGridMinuteHeight
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.timeGridRange
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
@@ -867,13 +876,13 @@ private fun TimetableBlockRow(
 }
 
 /**
- * La settimana intera, un giorno per colonna: l'orario come sta sul diario.
+ * La settimana intera sulle ore: un giorno per colonna, ogni lezione alta quanto dura e piena del
+ * colore della sua materia, come l'orario di carta attaccato al diario. Le ore sono a sinistra, la
+ * lezione in corso ha un anello e la riga di adesso attraversa la colonna di oggi.
  *
- * Una colonna e' un gruppo di vetro con uno slot per riga, e la riga e' compatta — ora, materia,
- * aula — perche' in sei colonne non c'e' posto per badge e spiegazioni: quelli restano nella vista
- * per giorno, dove la riga e' larga quanto la pagina. Il giorno di oggi ha la testata nell'accento;
- * i gesti sono gli stessi della riga lunga, tocco per confermare e pressione per modificare, e lo
- * slot toccato e' l'ancora da cui si apre il pannello.
+ * I gesti sono gli stessi della riga lunga: tocco per confermare, pressione per modificare, e il
+ * blocco toccato e' l'ancora da cui si apre il pannello. Badge e spiegazioni restano nella vista per
+ * giorno, dove la riga e' larga quanto la pagina.
  */
 @Composable
 private fun WeekTimetableGrid(
@@ -884,95 +893,90 @@ private fun WeekTimetableGrid(
   onConfirm: (SlotBlock, Rect?) -> Unit,
   onEdit: (SlotBlock, Rect?) -> Unit,
 ) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalArrangement = Arrangement.spacedBy(10.dp),
-  ) {
-    sections.forEach { section ->
-      val isToday = section.day == today
-      Column(
-        modifier = Modifier.weight(1f),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        Text(
-          text = section.day.longLabel(),
-          style = MaterialTheme.typography.titleSmall,
-          fontWeight = if (isToday) FontWeight.Bold else FontWeight.SemiBold,
-          color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(horizontal = 4.dp),
-        )
-        if (section.blocks.isEmpty()) {
-          Text(
-            text = "Nessuno slot",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp),
-          )
-        } else {
-          FluidListGroup(glass = true) {
-            section.blocks.forEachIndexed { index, block ->
-              if (index > 0) FluidListDivider()
-              WeekTimetableCell(
-                block = block,
-                timetable = timetable,
-                // La lezione in corso, con lo stesso velo della riga scelta: nella settimana intera
-                // e' il "sei qui" che la card in cima dice a parole.
-                live = isToday && block.contains(now()),
-                onConfirm = onConfirm,
-                onEdit = onEdit,
-              )
-            }
-          }
-        }
+  val events = remember(sections) { timetableGridEvents(sections) }
+  val range = remember(events) { timeGridRange(events.map { it.span }) }
+  val shortest = remember(events) { events.minOfOrNull { it.span.minutes } ?: 60 }
+  val minuteHeight = rememberTimeGridMinuteHeight(range, shortest)
+  WeekTimeGrid(
+    days = sections.map { TimeGridDay(label = it.day.longLabel(), isToday = it.day == today) },
+    events = events,
+    range = range,
+    minuteHeight = minuteHeight,
+    todayIndex = sections.indexOfFirst { it.day == today }.takeIf { it >= 0 },
+    nowMinute = { now().let { it.hour * 60 + it.minute } },
+  ) { event, cell ->
+    WeekTimetableCell(
+      block = event.value,
+      cell = cell,
+      timetable = timetable,
+      isToday = sections[event.day].day == today,
+      now = now,
+      onConfirm = onConfirm,
+      onEdit = onEdit,
+    )
+  }
+}
+
+/** I blocchi della settimana come eventi della griglia: un blocco senza ora leggibile non ha posto. */
+internal fun timetableGridEvents(sections: List<TimetableDaySection>): List<TimeGridEvent<SlotBlock>> =
+  sections.flatMapIndexed { dayIndex, section ->
+    section.blocks.mapNotNull { block ->
+      block.span()?.let { span ->
+        TimeGridEvent(key = "${section.day}:${block.primary.time}", day = dayIndex, span = span, value = block)
       }
     }
   }
-}
 
 @Composable
 private fun WeekTimetableCell(
   block: SlotBlock,
+  cell: TimeGridCell,
   timetable: TimetableTemplate,
-  live: Boolean,
+  isToday: Boolean,
+  now: () -> LocalTime,
   onConfirm: (SlotBlock, Rect?) -> Unit,
   onEdit: (SlotBlock, Rect?) -> Unit,
 ) {
   var bounds by remember { mutableStateOf<Rect?>(null) }
+  // Letto dentro il derivato: il minuto che passa ricompone la cella solo quando cambia la risposta.
+  val live by remember(block, isToday) { derivedStateOf { isToday && block.contains(now()) } }
   val room = block.allSlots.mapNotNull { it.room?.trim()?.takeIf(String::isNotBlank) }.firstOrNull()
   val kind = slotKind(block, timetable)
-  Column(
+  SubjectBlock(
+    // Il colore e' della prima materia del blocco, come il titolo: mai del nome unito.
+    subject = block.primary.subject,
     modifier = Modifier
-      .fillMaxWidth()
+      .fillMaxSize()
       .fluidExpandOrigin { bounds = it }
-      .then(if (live) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)) else Modifier)
-      .fluidRowPressable(
-        onClick = { onConfirm(block, bounds) },
-        onLongClick = { onEdit(block, bounds) },
-      )
-      .semantics(mergeDescendants = true) {}
-      .padding(horizontal = 12.dp, vertical = 10.dp),
-    verticalArrangement = Arrangement.spacedBy(2.dp),
+      .semantics(mergeDescendants = true) {},
+    live = live,
+    onClick = { onConfirm(block, bounds) },
+    onLongClick = { onEdit(block, bounds) },
   ) {
+    val secondary = LocalContentColor.current.copy(alpha = 0.78f)
     Text(
       text = block.timeRangeLabel(),
-      style = MaterialTheme.typography.labelMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      style = MaterialTheme.typography.labelSmall,
+      color = secondary,
+      maxLines = 1,
     )
     Text(
-      text = block.displaySubject,
+      text = block.displaySubject.asReadableSubject(),
       style = MaterialTheme.typography.titleSmall,
       fontWeight = FontWeight.SemiBold,
-      maxLines = 3,
+      maxLines = if (cell.compact) 1 else 3,
       overflow = TextOverflow.Ellipsis,
     )
-    Text(
-      text = listOfNotNull(room, kind.badgeLabel(block).lowercase().replaceFirstChar(Char::uppercase))
-        .joinToString(" · "),
-      style = MaterialTheme.typography.labelSmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
+    if (!cell.compact) {
+      Text(
+        text = listOfNotNull(room, kind.badgeLabel(block).lowercase().replaceFirstChar(Char::uppercase))
+          .joinToString(" · "),
+        style = MaterialTheme.typography.labelSmall,
+        color = secondary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
   }
 }
 
@@ -1191,25 +1195,35 @@ internal data class SlotBlock(
   val isMulti: Boolean get() = extra.isNotEmpty()
   val displaySubject: String = allSlots.map { it.subject }.distinct().joinToString(" / ")
 
-  /** Se [time] cade dentro il blocco: e' la lezione in corso. */
-  fun contains(time: LocalTime): Boolean {
-    val start = runCatching { LocalTime.parse(primary.time) }.getOrNull() ?: return false
+  private fun start(): LocalTime? = runCatching { LocalTime.parse(primary.time) }.getOrNull()
+
+  /** La fine dell'ultimo slot, o l'inizio piu' la somma delle durate: una regola sola per tutti. */
+  private fun end(start: LocalTime): LocalTime {
     val lastSlot = extra.lastOrNull() ?: primary
-    val end = lastSlot.endTime
+    return lastSlot.endTime
       ?.takeIf(String::isNotBlank)
       ?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
       ?: start.plusMinutes(allSlots.sumOf { it.durationMinutes }.toLong())
-    return !time.isBefore(start) && time.isBefore(end)
+  }
+
+  /** Se [time] cade dentro il blocco: e' la lezione in corso. */
+  fun contains(time: LocalTime): Boolean {
+    val start = start() ?: return false
+    return !time.isBefore(start) && time.isBefore(end(start))
   }
 
   fun timeRangeLabel(): String {
-    val start = runCatching { LocalTime.parse(primary.time) }.getOrNull() ?: return primary.time
-    val lastSlot = extra.lastOrNull() ?: primary
-    val end = lastSlot.endTime
-      ?.takeIf(String::isNotBlank)
-      ?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
-      ?: start.plusMinutes(allSlots.sumOf { it.durationMinutes }.toLong())
-    return "${start.format(timeFormatter)} - ${end.format(timeFormatter)}"
+    val start = start() ?: return primary.time
+    return "${start.format(timeFormatter)} - ${end(start).format(timeFormatter)}"
+  }
+
+  /** Il blocco in minuti dalla mezzanotte, per la settimana sulle ore; null senza un'ora leggibile. */
+  fun span(): MinuteSpan? {
+    val start = start() ?: return null
+    val from = start.toSecondOfDay() / 60
+    val to = end(start).toSecondOfDay() / 60
+    // Un orario sbagliato che finisce prima di cominciare occupa comunque un'ora, invece di sparire.
+    return MinuteSpan(from, if (to > from) to else from + 60)
   }
 }
 
