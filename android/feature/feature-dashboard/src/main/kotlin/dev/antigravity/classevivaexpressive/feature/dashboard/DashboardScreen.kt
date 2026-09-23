@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.items
@@ -44,8 +44,10 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeDetailContent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeDateLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.nearDayLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradePaneTint
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.FluidGlassGroup
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardStat
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
@@ -53,6 +55,8 @@ import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
+import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
+import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -66,6 +70,10 @@ import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnSection
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.fluidColumns
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
@@ -217,10 +225,19 @@ fun DashboardRoute(
   // pop-up li'. Due schermate per guardare un numero.
   var openedGrade by remember { mutableStateOf<Grade?>(null) }
   var gradeOrigin by remember { mutableStateOf<Rect?>(null) }
+  val metrics = rememberFluidScreenMetrics()
+  val openGrade: (Grade, Rect?) -> Unit = { grade, bounds ->
+    gradeOrigin = bounds
+    openedGrade = grade
+  }
 
   FluidScreen(
     modifier = modifier,
     title = titleText,
+    // Una pagina di sezioni, non una colonna di testo: su un tablet in orizzontale si allarga e le
+    // sezioni si mettono in colonna. Sul telefono e in verticale non cambia niente.
+    contentMaxWidth = FluidColumnsDefaults.WideContentMaxWidth,
+    metrics = metrics,
     ambient = FeatureIdentity.Overview.ambient(),
     subtitle = snapshot.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
@@ -286,125 +303,104 @@ fun DashboardRoute(
         )
       }
     }
-    item {
-      FluidQuickAction(label = "Apri orario", onClick = onNavigateLessons)
+    val columns = metrics.columns()
+    // In colonne l'orario si apre dalla sezione delle lezioni, dove sta la cosa di cui parla; da
+    // solo in una riga larga undici centimetri era un bottone smarrito.
+    if (columns <= 1) {
+      item {
+        FluidQuickAction(label = "Apri orario", onClick = onNavigateLessons)
+      }
     }
 
-    if (snapshot.todayLessons.isNotEmpty()) {
-      item { FluidSectionHeader("Lezioni di oggi") }
-      fluidGlassGroups(snapshot.todayLessons) { lesson ->
-        val presentation = remember(lesson) { lesson.toDashboardPresentation() }
-        FluidListRow(
-          title = lesson.subject,
-          subtitle = presentation.subtitle,
-          eyebrow = presentation.timeRangeLabel,
-          meta = listOfNotNull(
-            lesson.teacher?.takeIf(String::isNotBlank),
-          ).joinToString(" / "),
-          tone = presentation.tone,
-          leading = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
-          badge = {
-            FluidStatusBadge(
-              label = presentation.badgeLabel,
-              tone = presentation.badgeTone,
-            )
+    if (columns > 1) {
+      // Su uno schermo largo le quattro sezioni stanno una accanto all'altra, a muratura: la
+      // giornata si legge in una schermata invece che scorrendo quattro telefoni impilati.
+      fluidColumns(
+        key = "dashboard:columns",
+        columns = columns,
+        sections = listOfNotNull(
+          FluidColumnSection(key = "dashboard:lessons") {
+            DashboardSection(
+              title = "Lezioni di oggi",
+              action = { FluidQuickAction(label = "Apri orario", onClick = onNavigateLessons) },
+            ) {
+              if (snapshot.todayLessons.isEmpty()) {
+                FluidEmptyState(
+                  title = "Nessuna lezione oggi",
+                  detail = "L'orario della settimana resta a un tocco.",
+                )
+              } else {
+                FluidGlassGroup(snapshot.todayLessons) { lesson -> TodayLessonRow(lesson) }
+              }
+            }
           },
-        )
-      }
-    }
-    item { FluidSectionHeader("Voti recenti") }
-    if (recentGrades.isEmpty()) {
-      item {
-        FluidEmptyState(
-          title = "Nessun voto disponibile",
-          detail = "I voti recenti appariranno qui dopo la prossima sincronizzazione.",
-        )
-      }
+          FluidColumnSection(key = "dashboard:recent-grades") {
+            DashboardSection("Voti recenti") {
+              if (recentGrades.isEmpty()) {
+                NoRecentGrades()
+              } else {
+                RecentGradesPager(
+                  grades = recentGrades,
+                  unseenGradeIds = unseenGradeIds,
+                  onOpenGrade = openGrade,
+                  onNavigateGrades = onNavigateGrades,
+                )
+              }
+            }
+          },
+          FluidColumnSection(key = "dashboard:upcoming") {
+            DashboardSection("In arrivo") {
+              if (upcomingItems.isEmpty()) {
+                NoUpcomingItems()
+              } else {
+                FluidGlassGroup(upcomingItems) { item -> UpcomingRow(item, onNavigateAgenda) }
+              }
+            }
+          },
+          FluidColumnSection(key = "dashboard:board") {
+            DashboardSection("Bacheca") {
+              if (unreadCommunications.isEmpty()) {
+                NoUrgentCommunications()
+              } else {
+                FluidGlassGroup(unreadCommunications) { communication ->
+                  UnreadCommunicationRow(communication, onNavigateCommunications)
+                }
+              }
+            }
+          },
+        ),
+      )
     } else {
-      // Una rail di card vivide, non righe grigie: in home il voto e' un elemento che sta da solo,
-      // e il colore della fascia e' l'informazione che porta. Chiude una incoerenza vera: queste
-      // righe erano le uniche a mostrare un voto senza il suo colore.
-      // Un voto alla volta, non una rail che scorre libera: era l'unico scorrimento laterale di
-      // tutta l'app, e uno scorrimento che si ferma dove capita non somiglia a niente'altro qui.
-      // Il pager si aggancia, mostra una carta intera e lascia sbirciare la successiva quanto basta
-      // a sapere che c'e'.
-      item(key = "dashboard:grades") {
-        val pagerState = rememberPagerState(pageCount = { recentGrades.size })
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-          // Nessuno sbirciare della carta successiva: la pagina occupa tutta la larghezza e i
-          // puntini dicono gia' che ce n'e' altra. Un bordo colorato che spunta a destra somiglia a
-          // una card tagliata male piu' che a un invito a scorrere.
-          HorizontalPager(state = pagerState, pageSpacing = 10.dp) { page ->
-            val grade = recentGrades[page]
-            var cardBounds by remember { mutableStateOf<Rect?>(null) }
-            GradeCard(
-              valueLabel = grade.valueLabel,
-              numericValue = grade.numericValue,
-              title = grade.subject,
-              // Il rettangolo di cio' che si e' toccato: senza, la finestra nasce dal centro e la
-              // card resta li' sotto lo scrim, come se ce ne fossero due. Con l'origine la card
-              // *diventa* il pop-up e ci ritorna.
-              modifier = Modifier.fluidExpandOrigin { cardBounds = it },
-              subtitle = listOf(grade.type.ifBlank { "Valutazione" }, gradeDateLabel(grade.date)).joinToString(" · "),
-              unseen = unseenGradeIds.contains(grade.id),
-              onClick = { gradeOrigin = cardBounds; openedGrade = grade },
-            )
-          }
-          Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            PagerDots(count = recentGrades.size, current = pagerState.currentPage)
-            FluidQuickAction(label = "Tutti i voti", onClick = onNavigateGrades)
-          }
+      if (snapshot.todayLessons.isNotEmpty()) {
+        item { FluidSectionHeader("Lezioni di oggi") }
+        fluidGlassGroups(snapshot.todayLessons) { lesson -> TodayLessonRow(lesson) }
+      }
+      item { FluidSectionHeader("Voti recenti") }
+      if (recentGrades.isEmpty()) {
+        item { NoRecentGrades() }
+      } else {
+        item(key = "dashboard:grades") {
+          RecentGradesPager(
+            grades = recentGrades,
+            unseenGradeIds = unseenGradeIds,
+            onOpenGrade = openGrade,
+            onNavigateGrades = onNavigateGrades,
+          )
         }
       }
-    }
-    item { FluidSectionHeader("In arrivo") }
-    if (upcomingItems.isEmpty()) {
-      item {
-        FluidEmptyState(
-          title = "Nessun elemento imminente",
-          detail = "I prossimi compiti, verifiche o eventi appariranno qui.",
-        )
+      item { FluidSectionHeader("In arrivo") }
+      if (upcomingItems.isEmpty()) {
+        item { NoUpcomingItems() }
+      } else {
+        fluidGlassGroups(upcomingItems) { item -> UpcomingRow(item, onNavigateAgenda) }
       }
-    } else {
-      fluidGlassGroups(upcomingItems) { item ->
-        FluidListRow(
-          title = item.title,
-          subtitle = item.subtitle,
-          eyebrow = item.date,
-          meta = item.detail,
-          tone = FluidTone.Success,
-          leading = { Icon(Icons.Rounded.Event, contentDescription = null) },
-          onClick = onNavigateAgenda,
-          badge = { FluidStatusBadge("AGENDA", tone = FluidTone.Success) },
-          animatePress = true
-        )
-      }
-    }
-    item { FluidSectionHeader("Bacheca") }
-    if (unreadCommunications.isEmpty()) {
-      item {
-        FluidEmptyState(
-          title = "Nessuna comunicazione urgente",
-          detail = "I nuovi avvisi della scuola appariranno qui.",
-        )
-      }
-    } else {
-      fluidGlassGroups(unreadCommunications) { communication ->
-        FluidListRow(
-          title = communication.title,
-          subtitle = communication.sender,
-          eyebrow = communication.date,
-          meta = communication.contentPreview,
-          tone = FluidTone.Warning,
-          leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
-          onClick = onNavigateCommunications,
-          badge = { FluidStatusBadge("NUOVA", tone = FluidTone.Warning) },
-          animatePress = true
-        )
+      item { FluidSectionHeader("Bacheca") }
+      if (unreadCommunications.isEmpty()) {
+        item { NoUrgentCommunications() }
+      } else {
+        fluidGlassGroups(unreadCommunications) { communication ->
+          UnreadCommunicationRow(communication, onNavigateCommunications)
+        }
       }
     }
   }
@@ -420,6 +416,161 @@ fun DashboardRoute(
   ) { grade ->
     GradeDetailContent(grade = grade)
   }
+}
+
+/** Una sezione della home in colonna: il titolo e quello che introduce, con l'aria della pagina. */
+@Composable
+private fun DashboardSection(
+  title: String,
+  action: (@Composable () -> Unit)? = null,
+  content: @Composable () -> Unit,
+) {
+  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // Tutte le testate alla stessa altezza, con o senza un'azione accanto: in colonne si leggono
+    // su una riga sola, e una che scende di mezzo tasto sembra un errore di impaginazione.
+    Row(
+      modifier = Modifier.fillMaxWidth().heightIn(min = DashboardSectionHeaderHeight),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      FluidSectionHeader(title, modifier = Modifier.weight(1f))
+      action?.invoke()
+    }
+    content()
+  }
+}
+
+@Composable
+private fun TodayLessonRow(lesson: Lesson) {
+  val presentation = remember(lesson) { lesson.toDashboardPresentation() }
+  FluidListRow(
+    title = lesson.subject,
+    subtitle = presentation.subtitle,
+    eyebrow = presentation.timeRangeLabel,
+    meta = listOfNotNull(
+      lesson.teacher?.takeIf(String::isNotBlank),
+    ).joinToString(" / "),
+    tone = presentation.tone,
+    leading = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
+    badge = {
+      FluidStatusBadge(
+        label = presentation.badgeLabel,
+        tone = presentation.badgeTone,
+      )
+    },
+  )
+}
+
+/**
+ * Una rail di card vivide, non righe grigie: in home il voto e' un elemento che sta da solo, e il
+ * colore della fascia e' l'informazione che porta.
+ *
+ * Un voto alla volta, non una rail che scorre libera: era l'unico scorrimento laterale di tutta
+ * l'app, e uno scorrimento che si ferma dove capita non somiglia a niente'altro qui. Il pager si
+ * aggancia e mostra una carta intera; i puntini dicono gia' che ce n'e' altra. Un bordo colorato che
+ * spunta a destra somiglia a una card tagliata male piu' che a un invito a scorrere.
+ */
+@Composable
+private fun RecentGradesPager(
+  grades: List<Grade>,
+  unseenGradeIds: Set<String>,
+  onOpenGrade: (Grade, Rect?) -> Unit,
+  onNavigateGrades: () -> Unit,
+) {
+  val pagerState = rememberPagerState(pageCount = { grades.size })
+  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    HorizontalPager(state = pagerState, pageSpacing = 10.dp) { page ->
+      val grade = grades[page]
+      var cardBounds by remember { mutableStateOf<Rect?>(null) }
+      GradeCard(
+        valueLabel = grade.valueLabel,
+        numericValue = grade.numericValue,
+        title = grade.subject,
+        // Il rettangolo di cio' che si e' toccato: senza, la finestra nasce dal centro e la card
+        // resta li' sotto lo scrim, come se ce ne fossero due. Con l'origine la card *diventa* il
+        // pop-up e ci ritorna.
+        modifier = Modifier.fluidExpandOrigin { cardBounds = it },
+        subtitle = listOf(grade.type.ifBlank { "Valutazione" }, gradeDateLabel(grade.date)).joinToString(" · "),
+        unseen = unseenGradeIds.contains(grade.id),
+        onClick = { onOpenGrade(grade, cardBounds) },
+      )
+    }
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      PagerDots(count = grades.size, current = pagerState.currentPage)
+      FluidQuickAction(label = "Tutti i voti", onClick = onNavigateGrades)
+    }
+  }
+}
+
+private val DashboardSectionHeaderHeight = 48.dp
+
+/**
+ * Il genere dell'impegno al posto di «AGENDA»: che venga dall'agenda lo dice gia' la sezione, che
+ * sia una verifica e non un compito no — ed e' la prima cosa che si vuole sapere.
+ */
+private fun AgendaCategory.upcomingBadge(): Pair<String, FluidTone> = when (this) {
+  AgendaCategory.ASSESSMENT -> "VERIFICA" to FluidTone.Danger
+  AgendaCategory.HOMEWORK -> "COMPITO" to FluidTone.Warning
+  AgendaCategory.LESSON -> "LEZIONE" to FluidTone.Neutral
+  AgendaCategory.EVENT, AgendaCategory.CUSTOM -> "EVENTO" to FluidTone.Success
+}
+
+@Composable
+private fun UpcomingRow(item: AgendaItem, onClick: () -> Unit) {
+  val (badgeLabel, badgeTone) = item.category.upcomingBadge()
+  FluidListRow(
+    title = item.title,
+    subtitle = item.subtitle,
+    eyebrow = listOfNotNull(nearDayLabel(item.date), item.time?.takeIf(String::isNotBlank)).joinToString(" · "),
+    meta = item.detail,
+    tone = badgeTone,
+    leading = { Icon(Icons.Rounded.Event, contentDescription = null) },
+    onClick = onClick,
+    badge = { FluidStatusBadge(badgeLabel, tone = badgeTone) },
+    animatePress = true,
+  )
+}
+
+@Composable
+private fun UnreadCommunicationRow(communication: Communication, onClick: () -> Unit) {
+  FluidListRow(
+    title = communication.title,
+    subtitle = communication.sender,
+    eyebrow = nearDayLabel(communication.date),
+    meta = communication.contentPreview,
+    tone = FluidTone.Warning,
+    leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
+    onClick = onClick,
+    badge = { FluidStatusBadge("NUOVA", tone = FluidTone.Warning) },
+    animatePress = true,
+  )
+}
+
+@Composable
+private fun NoRecentGrades() {
+  FluidEmptyState(
+    title = "Nessun voto disponibile",
+    detail = "I voti recenti appariranno qui dopo la prossima sincronizzazione.",
+  )
+}
+
+@Composable
+private fun NoUpcomingItems() {
+  FluidEmptyState(
+    title = "Nessun elemento imminente",
+    detail = "I prossimi compiti, verifiche o eventi appariranno qui.",
+  )
+}
+
+@Composable
+private fun NoUrgentCommunications() {
+  FluidEmptyState(
+    title = "Nessuna comunicazione urgente",
+    detail = "I nuovi avvisi della scuola appariranno qui.",
+  )
 }
 
 /**

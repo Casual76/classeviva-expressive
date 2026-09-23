@@ -86,6 +86,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.fluid.FluidContainerScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
+import dev.antigravity.fluidengine.ui.fluid.fluidGridItems
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
 import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
 import dev.antigravity.fluidengine.ui.fluid.FluidVividCard
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
@@ -323,9 +326,15 @@ fun GradesRoute(
     buildGradesFacets(state.grades, state.seenGradeIds)
   }
 
+  val metrics = rememberFluidScreenMetrics()
+
   FluidScreen(
     modifier = modifier,
     title = "Voti",
+    // Su uno schermo largo i voti stanno in griglia: una colonna di card vivide larga undici
+    // centimetri e' una fila di bandiere, due o tre affiancate sono un quadro dell'anno.
+    contentMaxWidth = FluidColumnsDefaults.WideContentMaxWidth,
+    metrics = metrics,
     ambient = FeatureIdentity.Grades.ambient(),
     subtitle = state.syncStatus.lastSyncLabel(),
     titleFacets = titleFacets,
@@ -434,22 +443,49 @@ fun GradesRoute(
       }
     }
 
-    if (state.periods.isNotEmpty()) {
+    if (metrics.columns() > 1 && state.periods.isNotEmpty()) {
+      // Largo, i due selettori stanno su una riga: stirati da bordo a bordo erano due barre lunghe
+      // come la pagina per due o tre parole ciascuna.
       item {
-        PeriodSelector(
-          periods = state.periods,
-          selectedCode = effectivePeriodCode,
-          onSelect = viewModel::selectPeriod,
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(14.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Box(modifier = Modifier.weight(1f)) {
+            PeriodSelector(
+              periods = state.periods,
+              selectedCode = effectivePeriodCode,
+              onSelect = viewModel::selectPeriod,
+            )
+          }
+          Box(modifier = Modifier.weight(1f)) {
+            FluidPillTabs(
+              options = listOf(TAB_RECENT, TAB_SUBJECTS),
+              selected = selectedTab,
+              onSelect = { selectedTab = it },
+            )
+          }
+        }
+      }
+    } else {
+      if (state.periods.isNotEmpty()) {
+        item {
+          PeriodSelector(
+            periods = state.periods,
+            selectedCode = effectivePeriodCode,
+            onSelect = viewModel::selectPeriod,
+          )
+        }
+      }
+
+      item {
+        FluidPillTabs(
+          options = listOf(TAB_RECENT, TAB_SUBJECTS),
+          selected = selectedTab,
+          onSelect = { selectedTab = it },
         )
       }
-    }
-    
-    item {
-      FluidPillTabs(
-        options = listOf(TAB_RECENT, TAB_SUBJECTS),
-        selected = selectedTab,
-        onSelect = { selectedTab = it },
-      )
     }
     
     if (periodUnseen.isNotEmpty()) {
@@ -474,7 +510,11 @@ fun GradesRoute(
           // Card separate, non righe in un gruppo: il colore della fascia E' l'informazione, e la
           // superficie intera lo porta. Superfici piccole e opache — il tetto texture che impone
           // fluidGlassGroups alle liste su vetro qui non e' in gioco.
-          items(recentGrades, key = Grade::id) { grade ->
+          fluidGridItems(
+            items = recentGrades,
+            columns = metrics.columns(minColumn = FluidColumnsDefaults.MinCard),
+            key = Grade::id,
+          ) { grade ->
             var rowBounds by remember { mutableStateOf<Rect?>(null) }
             val unseen = !state.seenGradeIds.contains(grade.id)
             val readableDate = remember(grade.date) { grade.date.toReadableDate() }
@@ -528,7 +568,11 @@ fun GradesRoute(
           // La media di una materia e' un voto come gli altri: stessa card, stesso colore, stessa
           // scala. Erano righe grigie con una pill, cioe' il vecchio vocabolario sopravvissuto in
           // una scheda sola.
-          items(subjectRows, key = SubjectRow::subject) { row ->
+          fluidGridItems(
+            items = subjectRows,
+            columns = metrics.columns(minColumn = FluidColumnsDefaults.MinCard),
+            key = SubjectRow::subject,
+          ) { row ->
             var rowBounds by remember { mutableStateOf<Rect?>(null) }
             GradeCard(
               valueLabel = row.average?.format2() ?: "--",
