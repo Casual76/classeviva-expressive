@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -33,9 +34,23 @@ internal fun AdaptiveListDetail(
   onOpenPage: (String) -> Unit,
   list: @Composable (inPane: Boolean, selectedId: String?, onOpen: (String) -> Unit) -> Unit,
   detail: @Composable (id: String, onClose: () -> Unit) -> Unit,
+  /**
+   * Una cosa da aprire appena la pagina si vede — un deep link, una notifica. Su uno schermo largo
+   * va nel pannello accanto con l'elenco visibile, su uno stretto diventa la pagina di dettaglio.
+   */
+  openRequest: String? = null,
+  onOpenRequestConsumed: (String) -> Unit = {},
 ) {
   var paneId by rememberSaveable { mutableStateOf<String?>(null) }
   var twoPane by rememberSaveable { mutableStateOf(false) }
+  // La richiesta si serve solo dopo la prima misura: prima non si sa ancora se c'e' un pannello.
+  var measured by remember { mutableStateOf(false) }
+  LaunchedEffect(openRequest, measured) {
+    val request = openRequest ?: return@LaunchedEffect
+    if (!measured) return@LaunchedEffect
+    onOpenRequestConsumed(request)
+    if (twoPane) paneId = request else onOpenPage(request)
+  }
   LaunchedEffect(twoPane) {
     val open = paneId
     if (!twoPane && open != null) {
@@ -47,6 +62,7 @@ internal fun AdaptiveListDetail(
     ambient = ambient,
     list = { isTwoPane ->
       if (twoPane != isTwoPane) twoPane = isTwoPane
+      if (!measured) measured = true
       list(isTwoPane, paneId.takeIf { isTwoPane }) { id ->
         if (isTwoPane) paneId = id else onOpenPage(id)
       }

@@ -1556,11 +1556,6 @@ private fun AuthenticatedApp(
             .getStateFlow<String?>(ConsumedHomeworkRequestKey, null)
             .collectAsStateWithLifecycle()
           val pendingHomeworkId = pendingHomeworkRequest(requestedHomeworkId, consumedHomeworkId)
-          LaunchedEffect(pendingHomeworkId) {
-            val homeworkId = pendingHomeworkId ?: return@LaunchedEffect
-            entry.savedStateHandle[ConsumedHomeworkRequestKey] = homeworkId
-            navigateRoute(route = "homework-detail/${Uri.encode(homeworkId)}")
-          }
           FluidRouteMotionHost(this@composable) {
             val homeworkViewModel: HomeworkViewModel = hiltViewModel()
             AdaptiveListDetail(
@@ -1569,6 +1564,10 @@ private fun AuthenticatedApp(
               emptyMessage = "Scegli un compito dall'elenco per leggerne consegna e scadenza qui.",
               emptyIcon = Icons.AutoMirrored.Rounded.Assignment,
               onOpenPage = { homeworkId -> navigateRoute("homework-detail/${Uri.encode(homeworkId)}") },
+              openRequest = pendingHomeworkId,
+              onOpenRequestConsumed = { homeworkId ->
+                entry.savedStateHandle[ConsumedHomeworkRequestKey] = homeworkId
+              },
               list = { inPane, selectedId, onOpen ->
                 HomeworkRoute(
                   initialHomeworkId = null,
