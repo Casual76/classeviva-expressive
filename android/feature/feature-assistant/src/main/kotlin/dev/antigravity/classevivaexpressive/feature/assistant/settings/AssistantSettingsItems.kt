@@ -101,7 +101,7 @@ fun LazyListScope.assistantSettingsItems(
   }
 
   if (verified.size > 1) {
-    item { FluidSectionHeader(title = "Ordine dei servizi", detail = "Il primo risponde; gli altri sono la riserva quando e' al limite o non risponde.") }
+    item { FluidSectionHeader(title = "Ordine dei servizi", detail = "Il primo risponde; gli altri sono la riserva quando è al limite o non risponde.") }
     item {
       Text("Chat", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
       ProviderOrderList(order = state.settings.chatOrder, available = verified, onReorder = viewModel::setChatOrder)
@@ -173,7 +173,7 @@ private fun AssistantModelsSection(viewModel: AssistantSettingsViewModel, state:
           FluidListRow(
             title = "${provider.label} · ${tier.label()}",
             subtitle = "${tier.hint()} · ${catalogue.summary(chosen)}" +
-              if (sameAsChat) " · uguale alla chat: scegline uno piu' capace e l'assistente ci passera' da solo sulle domande difficili" else "",
+              if (sameAsChat) " · uguale alla chat: scegline uno più capace e l'assistente ci passerà da solo sulle domande difficili" else "",
             onClick = { picker = ModelPickRequest(provider, tier) },
           )
         }
@@ -213,7 +213,7 @@ private fun AssistantPreferences(viewModel: AssistantSettingsViewModel, state: A
   FluidListGroup(glass = true) {
     FluidListRow(
       title = "Ragionamento",
-      subtitle = "Quanto il modello pensa prima di rispondere: piu' alto, piu' lento e piu' preciso.",
+      subtitle = "Quanto il modello pensa prima di rispondere: più alto, più lento e più preciso.",
       badge = {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
           ThinkingLevel.entries.forEach { level ->

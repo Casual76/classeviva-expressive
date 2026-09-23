@@ -58,7 +58,7 @@ fun AssistantConsentRoute(
     item {
       ConsentCard(
         "Verso il servizio che hai scelto e verificato con la tua chiave: Groq, Google (Gemini) o OpenRouter. " +
-          "Non c'e' nessun server di ClasseViva Expressive in mezzo: i dati vanno dal telefono al servizio e basta, e valgono le regole di quel servizio sulla tua chiave.",
+          "Non c'è nessun server di ClasseViva Expressive in mezzo: i dati vanno dal telefono al servizio e basta, e valgono le regole di quel servizio sulla tua chiave.",
       )
     }
     item { FluidSectionHeader(title = "Cosa resta qui") }
@@ -71,8 +71,8 @@ fun AssistantConsentRoute(
     item { FluidSectionHeader(title = "Cosa non fa") }
     item {
       ConsentCard(
-        "Non scrive mai alla scuola per conto tuo. Le sole cose che puo' toccare sono nell'app (aprire una pagina, cambiare un'impostazione, segnare lette le comunicazioni, prendere visione, aggiungere un evento), " +
-          "solo se attivi le azioni, e quelle che contano chiedono conferma con un tasto. E' spento finche' non lo accendi qui.",
+        "Non scrive mai alla scuola per conto tuo. Le sole cose che può toccare sono nell'app (aprire una pagina, cambiare un'impostazione, segnare lette le comunicazioni, prendere visione, aggiungere un evento), " +
+          "solo se attivi le azioni, e quelle che contano chiedono conferma con un tasto. È spento finché non lo accendi qui.",
       )
     }
     item {

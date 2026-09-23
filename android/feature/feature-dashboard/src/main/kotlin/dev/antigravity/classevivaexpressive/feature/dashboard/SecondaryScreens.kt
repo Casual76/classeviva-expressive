@@ -405,7 +405,7 @@ fun MeetingsRoute(
   FluidScreen(
     title = "Colloqui",
     ambient = FeatureIdentity.Meetings.ambient(),
-    subtitle = "Prenotazioni e disponibilita dei docenti.",
+    subtitle = "Prenotazioni e disponibilità dei docenti.",
     onBack = onBack,
     actions = {
       FluidBarAction(
@@ -484,7 +484,7 @@ fun MeetingsRoute(
       item {
         FluidEmptyState(
           title = "Nessun colloquio disponibile",
-          detail = "Le prenotazioni e le disponibilita compariranno qui dopo la sincronizzazione o quando il portale le espone.",
+          detail = "Le prenotazioni e le disponibilità compariranno qui dopo la sincronizzazione o quando il portale le espone.",
         )
       }
       item {
