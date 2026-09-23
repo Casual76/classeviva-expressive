@@ -56,6 +56,30 @@ class MainActivity : ComponentActivity() {
     return true
   }
 
+  /**
+   * Le stesse scorciatoie, nell'elenco che il sistema mostra tenendo premuto Meta (o Meta+/): senza,
+   * esistevano solo per chi le indovinava.
+   */
+  override fun onProvideKeyboardShortcuts(
+    data: MutableList<android.view.KeyboardShortcutGroup>,
+    menu: android.view.Menu?,
+    deviceId: Int,
+  ) {
+    super.onProvideKeyboardShortcuts(data, menu, deviceId)
+    val ctrl = android.view.KeyEvent.META_CTRL_ON
+    val sections = listOf("Home", "Voti", "Agenda", "Bacheca", "Altro")
+    data += android.view.KeyboardShortcutGroup(
+      "ClasseViva Expressive",
+      buildList {
+        add(android.view.KeyboardShortcutInfo("Aggiorna la pagina", android.view.KeyEvent.KEYCODE_R, ctrl))
+        sections.forEachIndexed { index, label ->
+          add(android.view.KeyboardShortcutInfo(label, android.view.KeyEvent.KEYCODE_1 + index, ctrl))
+        }
+        add(android.view.KeyboardShortcutInfo("Indietro", android.view.KeyEvent.KEYCODE_ESCAPE, 0))
+      },
+    )
+  }
+
   override fun onNewIntent(intent: android.content.Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
