@@ -935,7 +935,7 @@ internal fun BugReportScreen(
         ) {
           Icon(Icons.Rounded.WarningAmber, contentDescription = null)
           Text(
-            "La segnalazione sarà una issue GitHub pubblica e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
+            "La segnalazione sarà una segnalazione (issue) pubblica su GitHub e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
             style = MaterialTheme.typography.bodyMedium,
           )
         }
@@ -984,7 +984,7 @@ internal fun BugReportScreen(
       }
     }
     if (copied) {
-      item { Text("Report copiato negli appunti.", color = MaterialTheme.colorScheme.primary) }
+      item { Text("Segnalazione copiata negli appunti.", color = MaterialTheme.colorScheme.primary) }
     }
     item {
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1866,7 +1866,7 @@ private fun MoreHubScreen(
               }
               FluidListRow(
                 title = "Segnala un problema",
-                subtitle = "Issue GitHub pubblica con diagnostica minima modificabile.",
+                subtitle = "Una segnalazione pubblica su GitHub, con una diagnostica che puoi rivedere.",
                 eyebrow = "Feedback",
                 tone = FluidTone.Info,
                 leading = { Icon(Icons.Rounded.BugReport, contentDescription = null) },
