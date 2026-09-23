@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
+import androidx.compose.foundation.background
 import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
 import dev.antigravity.fluidengine.ui.fluid.fluidRowPressable
@@ -550,6 +551,7 @@ fun LessonsRoute(
               sections = templateSections,
               timetable = state.timetableTemplate,
               today = LocalDate.now().dayOfWeek,
+              now = { nowState.value.toLocalTime() },
               onConfirm = { block, bounds -> slotOrigin = bounds; viewModel.startConfirming(block.primary) },
               onEdit = { block, bounds -> slotOrigin = bounds; viewModel.startEditing(block.primary) },
             )
@@ -877,6 +879,7 @@ private fun WeekTimetableGrid(
   sections: List<TimetableDaySection>,
   timetable: TimetableTemplate,
   today: DayOfWeek,
+  now: () -> LocalTime,
   onConfirm: (SlotBlock, Rect?) -> Unit,
   onEdit: (SlotBlock, Rect?) -> Unit,
 ) {
@@ -911,6 +914,9 @@ private fun WeekTimetableGrid(
               WeekTimetableCell(
                 block = block,
                 timetable = timetable,
+                // La lezione in corso, con lo stesso velo della riga scelta: nella settimana intera
+                // e' il "sei qui" che la card in cima dice a parole.
+                live = isToday && block.contains(now()),
                 onConfirm = onConfirm,
                 onEdit = onEdit,
               )
@@ -926,6 +932,7 @@ private fun WeekTimetableGrid(
 private fun WeekTimetableCell(
   block: SlotBlock,
   timetable: TimetableTemplate,
+  live: Boolean,
   onConfirm: (SlotBlock, Rect?) -> Unit,
   onEdit: (SlotBlock, Rect?) -> Unit,
 ) {
@@ -936,6 +943,7 @@ private fun WeekTimetableCell(
     modifier = Modifier
       .fillMaxWidth()
       .fluidExpandOrigin { bounds = it }
+      .then(if (live) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)) else Modifier)
       .fluidRowPressable(
         onClick = { onConfirm(block, bounds) },
         onLongClick = { onEdit(block, bounds) },
@@ -1181,6 +1189,17 @@ internal data class SlotBlock(
   val allSlots: List<TemplateSlot> = listOf(primary) + extra
   val isMulti: Boolean get() = extra.isNotEmpty()
   val displaySubject: String = allSlots.map { it.subject }.distinct().joinToString(" / ")
+
+  /** Se [time] cade dentro il blocco: e' la lezione in corso. */
+  fun contains(time: LocalTime): Boolean {
+    val start = runCatching { LocalTime.parse(primary.time) }.getOrNull() ?: return false
+    val lastSlot = extra.lastOrNull() ?: primary
+    val end = lastSlot.endTime
+      ?.takeIf(String::isNotBlank)
+      ?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
+      ?: start.plusMinutes(allSlots.sumOf { it.durationMinutes }.toLong())
+    return !time.isBefore(start) && time.isBefore(end)
+  }
 
   fun timeRangeLabel(): String {
     val start = runCatching { LocalTime.parse(primary.time) }.getOrNull() ?: return primary.time
