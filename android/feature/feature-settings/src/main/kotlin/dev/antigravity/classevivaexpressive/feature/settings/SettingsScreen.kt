@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.settings
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
 import android.Manifest
@@ -1255,14 +1256,14 @@ internal fun FeatureCapabilityMode.displayName(): String = when (this) {
 internal fun AppBackupImportSummary.describe(): String {
   val parts = buildList {
     if (settingsImported) add("impostazioni")
-    if (timetableTemplates > 0) add("$timetableTemplates orari")
+    if (timetableTemplates > 0) add(countLabel(timetableTemplates, "orario", "orari"))
     if (subjectGoals > 0) add(plural(subjectGoals, "obiettivo", "obiettivi"))
     if (customEvents > 0) add(plural(customEvents, "evento", "eventi"))
     if (grades > 0) {
       val years = gradeSchoolYears.takeIf { it.isNotEmpty() }?.joinToString(", ")
       add(plural(grades, "voto", "voti") + if (years != null) " ($years)" else "")
     }
-    if (seenGrades > 0) add("$seenGrades già visti")
+    if (seenGrades > 0) add(countLabel(seenGrades, "già visto", "già visti"))
     if (scoreSnapshots > 0) add(plural(scoreSnapshots, "punteggio", "punteggi"))
   }
   if (parts.isEmpty()) return "Backup importato, ma non conteneva dati da ripristinare."

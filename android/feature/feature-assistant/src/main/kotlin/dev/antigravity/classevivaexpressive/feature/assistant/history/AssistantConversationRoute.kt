@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.assistant.history
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -267,7 +268,7 @@ fun telemetry(run: AssistantRun): String = buildList {
   if (provider != null || models.isNotEmpty()) add(listOfNotNull(provider, models.joinToString(", ").takeIf { it.isNotEmpty() }).joinToString(" "))
   run.costUsd?.takeIf { it > 0.0 }?.let { add(String.format(Locale.getDefault(), "%.4f $", it)) }
   run.durationMillis?.let { add("${it / 1000} s") }
-  if (run.tools.isNotEmpty()) add("${run.tools.size} strumenti")
+  if (run.tools.isNotEmpty()) add(countLabel(run.tools.size, "strumento", "strumenti"))
   if (run.outcome != "ok") add(run.outcome)
 }.joinToString(" · ")
 

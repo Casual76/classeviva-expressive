@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
 import androidx.compose.foundation.background
 import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
@@ -834,7 +835,7 @@ private fun TimetableBlockRow(
         isOverridden -> "Modificato manualmente"
         isOfficial -> "Importato da orario ufficiale"
         block.isMulti -> "Blocco ${block.allSlots.size}h · ${(primary.confidence * 100).toInt()}%"
-        else -> "Ricorrenza ${(primary.confidence * 100).toInt()}% · ${primary.sampleCount} settimane"
+        else -> "Ricorrenza ${(primary.confidence * 100).toInt()}% · ${countLabel(primary.sampleCount, "settimana", "settimane")}"
       },
     ).joinToString(" / "),
     tone = kind.tone(),

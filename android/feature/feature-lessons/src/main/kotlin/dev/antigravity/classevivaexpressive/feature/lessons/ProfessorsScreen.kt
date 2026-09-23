@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.lessons
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.nearDayLabel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -480,7 +481,7 @@ fun ProfessorsRoute(
           subtitle = prof.subjects.joinToString(", ").ifBlank { "Materia non specificata" },
           eyebrow = "Presenza ${(prof.presenceRate * 100).toInt()}%",
           meta = buildString {
-            if (prof.gradeCount > 0) append("${prof.gradeCount} voti")
+            if (prof.gradeCount > 0) append(countLabel(prof.gradeCount, "voto", "voti"))
             prof.averageGrade?.let { append(" · media %.1f".format(it)) }
             if (prof.gradeCount == 0) append("Nessun voto assegnato")
           },
@@ -553,7 +554,7 @@ fun ProfessorDetailRoute(
         title = professor.teacherName,
         subtitle = professor.subjects.joinToString(", ").ifBlank { "Materia non specificata" },
         eyebrow = "Presenza ${(professor.presenceRate * 100).toInt()}%",
-        meta = if (professor.gradeCount > 0) "${professor.gradeCount} voti" else "Nessun voto assegnato",
+        meta = if (professor.gradeCount > 0) countLabel(professor.gradeCount, "voto", "voti") else "Nessun voto assegnato",
         tone = presenceTone,
         leading = { Icon(Icons.Rounded.Person, contentDescription = null) },
         badge = { FluidStatusBadge(professor.strictnessLabel.uppercase(), tone = strictnessTone) },
@@ -603,7 +604,7 @@ fun ProfessorDetailRoute(
       FluidSectionHeader("Dossier")
       FluidListRow(
         title = professor.funNickname,
-        subtitle = "${professor.longestPresenceStreakWeeks} settimane consecutive · ${professor.subjects.size} materie monitorate.",
+        subtitle = "${countLabel(professor.longestPresenceStreakWeeks, "settimana consecutiva", "settimane consecutive")} · ${countLabel(professor.subjects.size, "materia monitorata", "materie monitorate")}.",
         tone = FluidTone.Success,
         badge = { FluidStatusBadge("PROFILO", tone = FluidTone.Success) },
       )
@@ -788,9 +789,9 @@ private fun ProfessorDetailContent(
           title = prof.funNickname,
           subtitle = buildString {
             append("Classificazione segreta basata su ")
-            append("${prof.actualDays} giorni di osservazione, ")
+            append("${countLabel(prof.actualDays, "giorno", "giorni")} di osservazione, ")
             append("${prof.gradeCount} valutazioni e ")
-            append("${prof.subjects.size} materie monitorate.")
+            append("${countLabel(prof.subjects.size, "materia monitorata", "materie monitorate")}.")
           },
           tone = FluidTone.Success,
           badge = { FluidStatusBadge("TOP SECRET", tone = FluidTone.Success) },

@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.assistant.settings
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -284,7 +285,7 @@ private fun AssistantUsage(state: AssistantSettingsUiState, onOpenHistory: (() -
 @Composable
 private fun RecentRequestRow(log: AiRequestLog) {
   val details = buildList {
-    add("${log.provider.label}${if (log.switchedTo.isNotEmpty()) " → ${log.switchedTo.joinToString(", ") { it.label }}" else ""} · ${log.models.values.distinct().joinToString(", ")} · ${log.steps} passi · ${log.durationMillis / 1000} s")
+    add("${log.provider.label}${if (log.switchedTo.isNotEmpty()) " → ${log.switchedTo.joinToString(", ") { it.label }}" else ""} · ${log.models.values.distinct().joinToString(", ")} · ${countLabel(log.steps, "passo", "passi")} · ${log.durationMillis / 1000} s")
     if (log.groups.isNotEmpty()) add("gruppi: ${log.groups.joinToString(", ")}")
     if (log.tools.isNotEmpty()) add("strumenti: ${log.tools.joinToString(", ") { "${it.name} ${it.millis} ms${if (it.ok) "" else " ✕"}" }}")
     log.usage?.let { usage ->

@@ -1,5 +1,6 @@
 package dev.antigravity.classevivaexpressive.feature.grades
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -1039,7 +1040,7 @@ private fun buildSubjectRows(
       subject = subject,
       average = average,
       detail = buildString {
-        append("${items.size} voti")
+        append(countLabel(items.size, "voto", "voti"))
         goal?.let { append(" / target ${it.targetAverage.format1()}") }
       },
       meta = listOfNotNull(
