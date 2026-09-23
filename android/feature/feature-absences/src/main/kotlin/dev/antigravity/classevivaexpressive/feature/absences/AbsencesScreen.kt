@@ -506,9 +506,10 @@ internal fun badgeLabel(type: AbsenceType): String {
 
 internal fun hoursLabel(type: AbsenceType, hour: Int): String {
   return when (type) {
-    AbsenceType.ABSENCE -> "Ora $hour"
-    AbsenceType.LATE -> "Ingresso alla $hour"
-    AbsenceType.EXIT -> "Uscita alla $hour"
+    // L'ora di lezione, non l'ora dell'orologio: "Ingresso alla 3" si leggeva come le tre.
+    AbsenceType.ABSENCE -> "$hourª ora"
+    AbsenceType.LATE -> "Ingresso alla $hourª ora"
+    AbsenceType.EXIT -> "Uscita alla $hourª ora"
   }
 }
 
