@@ -1,6 +1,6 @@
 package dev.antigravity.classevivaexpressive.core.data.sync
 
-import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
+import dev.antigravity.classevivaexpressive.core.domain.change.toAgendaVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSource
@@ -63,21 +63,6 @@ internal fun dedicatedHomeworkRevisions(
     if (!before.differsFrom(current)) return@mapNotNull null
     current.id to before.toAgendaVersion(recordedAtEpochMillis)
   }
-}
-
-/** Un compito nella forma delle versioni d'agenda, che e' quella che lo storico sa mostrare. */
-internal fun Homework.toAgendaVersion(recordedAtEpochMillis: Long): AgendaItemVersion {
-  return AgendaItemVersion(
-    recordedAtEpochMillis = recordedAtEpochMillis,
-    title = description,
-    subtitle = subject,
-    date = dueDate,
-    detail = notes,
-    subject = subject.takeIf(String::isNotBlank),
-    teacher = teacher,
-    category = AgendaCategory.HOMEWORK,
-    createdAt = createdAt,
-  )
 }
 
 private fun Homework.isUsable(): Boolean = description.isNotBlank() && dueDate.isNotBlank()

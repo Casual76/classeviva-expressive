@@ -1,5 +1,8 @@
 package dev.antigravity.classevivaexpressive.core.data.repository
 
+import dev.antigravity.classevivaexpressive.core.domain.change.fieldChangesTo
+import dev.antigravity.classevivaexpressive.core.domain.change.meaningfulVersionChain
+
 import android.app.DownloadManager
 import android.content.Context
 import android.os.Environment
@@ -10,7 +13,6 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import dev.antigravity.classevivaexpressive.core.data.change.hasMeaningfulChangeComparedTo
 import dev.antigravity.classevivaexpressive.core.data.external.ExternalDashboardInvalidator
 import dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinator
 import dev.antigravity.classevivaexpressive.core.data.sync.observePersistedSyncStatus
@@ -505,16 +507,16 @@ class SchoolDataRepository @Inject constructor(
           .groupBy({ it.first }, { it.second })
           .mapValues { (_, versions) -> versions.sortedByDescending { it.first.recordedAtEpochMillis } }
         entities.map { entity ->
+          // Ogni versione contro quella che l'ha seguita, non contro l'attuale: con A -> B -> A la
+          // A di prima e' la parte della storia che sorprende, e il confronto con oggi la nascondeva.
+          val current: Pair<ChangeHistoryEntity?, GradeVersion> = null to entity.toGradeVersion(0L)
           entity.toGrade(
-            history = historyByGradeId[entity.id]
-              .orEmpty()
-              .filter { (historyEntity, version) ->
-                entity.hasMeaningfulChangeComparedTo(
-                  version,
-                  includeOneSidedText = historyEntity.wasRecordedAfterFirstSeen(entity.firstSeenAtMs),
-                )
-              }
-              .map { (_, version) -> version },
+            history = meaningfulVersionChain(current, historyByGradeId[entity.id].orEmpty()) { older, newer ->
+              older.second.fieldChangesTo(
+                newer.second,
+                includeOneSidedText = older.first?.wasRecordedAfterFirstSeen(entity.firstSeenAtMs) ?: true,
+              ).isNotEmpty()
+            }.map { (_, version) -> version },
           )
         }
       }.flowOn(Dispatchers.Default)
@@ -667,16 +669,14 @@ class SchoolDataRepository @Inject constructor(
           .groupBy({ it.first }, { it.second })
           .mapValues { (_, versions) -> versions.sortedByDescending { it.first.recordedAtEpochMillis } }
         entities.map { entity ->
+          val current: Pair<ChangeHistoryEntity?, AgendaItemVersion> = null to entity.toAgendaItemVersion(0L)
           entity.toAgendaItem(
-            history = historyByItemId[entity.id]
-              .orEmpty()
-              .filter { (historyEntity, version) ->
-                entity.hasMeaningfulChangeComparedTo(
-                  version,
-                  includeOneSidedText = historyEntity.wasRecordedAfterFirstSeen(entity.firstSeenAtMs),
-                )
-              }
-              .map { (_, version) -> version },
+            history = meaningfulVersionChain(current, historyByItemId[entity.id].orEmpty()) { older, newer ->
+              older.second.fieldChangesTo(
+                newer.second,
+                includeOneSidedText = older.first?.wasRecordedAfterFirstSeen(entity.firstSeenAtMs) ?: true,
+              ).isNotEmpty()
+            }.map { (_, version) -> version },
             fallbackCreatedAt = entity.firstSeenAtMs?.let(::epochMillisToCreatedAt),
           )
         }

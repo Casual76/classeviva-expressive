@@ -1,6 +1,17 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeDateLabel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ChangeTimeline
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.annotatedChange
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.changeHighlight
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.changeMetaLabel
+import dev.antigravity.classevivaexpressive.core.domain.change.ChangeEntry
+import dev.antigravity.classevivaexpressive.core.domain.change.agendaChangeTimeline
+import dev.antigravity.classevivaexpressive.core.domain.change.latestTitleDiff
+import dev.antigravity.classevivaexpressive.core.domain.change.toAgendaVersion
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.AnnotatedString
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.VividBadge
@@ -455,7 +466,7 @@ fun MeetingsRoute(
           meta = booking.bookingPosition?.let { "Posizione: $it" },
           tone = FluidTone.Success,
           onClick = { meetingOrigin = rowBounds; viewModel.selectBooking(booking) },
-          badge = { FluidStatusBadge("PRENOTATO", tone = FluidTone.Success) },
+          labels = { FluidStatusBadge("PRENOTATO", tone = FluidTone.Success) },
           animatePress = true,
         )
       }
@@ -475,7 +486,7 @@ fun MeetingsRoute(
           meta = slot.location,
           tone = FluidTone.Info,
           onClick = { meetingOrigin = rowBounds; viewModel.selectSlot(slot) },
-          badge = { FluidStatusBadge("PRENOTA", tone = FluidTone.Info) },
+          labels = { FluidStatusBadge("PRENOTA", tone = FluidTone.Info) },
           animatePress = true,
         )
       }
@@ -709,7 +720,7 @@ fun MaterialsRoute(
             },
             selected = inPane && item.id == selectedId,
             disclosure = !inPane,
-            badge = {
+            labels = {
               FluidStatusBadge(item.materialBadgeLabel(), tone = item.materialTone())
             },
           )
@@ -851,7 +862,7 @@ fun MaterialDetailRoute(
         eyebrow = item.folderName,
         meta = item.sharedAt.takeIf(String::isNotBlank)?.let { "Condiviso il ${gradeDateLabel(it.take(10))}" },
         tone = item.materialTone(),
-        badge = { FluidStatusBadge(item.materialBadgeLabel(), tone = item.materialTone()) },
+        labels = { FluidStatusBadge(item.materialBadgeLabel(), tone = item.materialTone()) },
         animatePress = false,
       )
     },
@@ -1025,24 +1036,20 @@ fun HomeworkRoute(
     var rowBounds by remember { mutableStateOf<Rect?>(null) }
     FluidListRow(
       modifier = Modifier.fluidExpandOrigin { rowBounds = it },
-      title = item.subject.ifBlank { item.description },
-      subtitle = if (item.subject.isBlank()) "" else item.description,
-      eyebrow = "COMPITO",
+      // Il testo e' il titolo e la materia sta sotto, come in agenda: e' il testo che cambia, ed e'
+      // li' che le parole nuove si evidenziano.
+      title = item.highlightedDescription(),
+      subtitle = item.homeworkSubtitle(),
       meta = item.homeworkMeta(),
       tone = homeworkDue(item.dueDate, homeworkToday).tone(),
+      titleMaxLines = 3,
       onClick = {
         homeworkOrigin = rowBounds
         if (onOpenHomework != null) onOpenHomework(item.id) else viewModel.selectHomework(item)
       },
       selected = inPane && item.id == selectedId,
       disclosure = !inPane,
-      badge = {
-        if (item.history.isNotEmpty()) {
-          FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
-        }
-        val due = homeworkDue(item.dueDate, homeworkToday)
-        FluidStatusBadge(due.badgeLabel(item.dueDate, homeworkToday), tone = due.tone())
-      },
+      labels = { HomeworkLabels(item, homeworkToday) },
     )
   }
 
@@ -1114,27 +1121,24 @@ fun HomeworkRoute(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
       ) {
-        Text(text = hw.subject, style = MaterialTheme.typography.headlineSmall)
+        Text(text = hw.subject.asReadableSubject(), style = MaterialTheme.typography.headlineSmall)
         if (state.isLoadingDetail) {
           FluidIndeterminateBar(modifier = Modifier.fillMaxWidth())
+        }
+        val timeline = remember(hw) { hw.changeTimeline() }
+        if (timeline.isNotEmpty()) {
+          ChangeTimeline(entries = timeline, detectedAtLabel = ::homeworkDetectedAtLabel)
         }
         state.selectedDetail?.let { detail ->
           Text(text = detail.fullText, style = MaterialTheme.typography.bodyMedium)
           detail.assignedDate?.let {
             Text(
-              text = "Aggiunto: ${it.homeworkCreatedAtLabel()}",
+              text = "Assegnato: ${it.homeworkCreatedAtLabel()}",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
           }
-          hw.modifiedAtLabel()?.let {
-            Text(
-              text = "Modificato: $it",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-          }
-          detail.teacher?.let {
+          (detail.teacher ?: hw.teacher)?.let {
             Text(
               text = "Docente: $it",
               style = MaterialTheme.typography.bodySmall,
@@ -1153,9 +1157,6 @@ fun HomeworkRoute(
             }
           }
         }
-        if (hw.history.isNotEmpty()) {
-          FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
-        }
         if (hw.dueDate.isNotBlank()) {
           Text(
             text = "Scadenza: ${hw.dueDate.homeworkDueLabel()}",
@@ -1163,6 +1164,7 @@ fun HomeworkRoute(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
+        HomeworkLinks(hw)
       }
     }
   }
@@ -1207,37 +1209,36 @@ fun HomeworkDetailRoute(
     onBack = onBack,
     hero = {
       FluidListRow(
-        title = homework.subject.ifBlank { homework.description },
-        subtitle = if (homework.subject.isBlank()) "" else homework.description,
-        eyebrow = "COMPITO",
+        title = homework.highlightedDescription(),
+        subtitle = homework.homeworkSubtitle(),
         // Le date stanno una volta sola, sotto, per esteso: nella testata ripetevano la riga
-        // "Aggiunto / Scadenza" che il corpo scrive subito dopo.
+        // "Assegnato / Scadenza" che il corpo scrive subito dopo.
         meta = null,
         tone = homeworkDue(homework.dueDate, LocalDate.now()).tone(),
-        badge = {
-          if (homework.history.isNotEmpty()) FluidStatusBadge("MODIFICATO", tone = FluidTone.Info)
-          val due = homeworkDue(homework.dueDate, LocalDate.now())
-          FluidStatusBadge(due.badgeLabel(homework.dueDate, LocalDate.now()), tone = due.tone())
-        },
+        labels = { HomeworkLabels(homework, LocalDate.now()) },
         animatePress = false,
       )
     },
     secondary = {
       if (state.isLoadingDetail) FluidIndeterminateBar(Modifier.fillMaxWidth())
+      val timeline = remember(homework) { homework.changeTimeline() }
+      if (timeline.isNotEmpty()) {
+        ChangeTimeline(entries = timeline, detectedAtLabel = ::homeworkDetectedAtLabel)
+      }
       val body = detail?.fullText?.takeIf(String::isNotBlank) ?: homework.description
-      // Senza materia la testata mostra gia' la consegna come titolo: ripeterla identica subito
-      // sotto era leggere due volte la stessa frase.
-      if (homework.subject.isNotBlank() || body.trim() != homework.description.trim()) {
+      // La testata mostra gia' la consegna come titolo: ripeterla identica subito sotto era
+      // leggere due volte la stessa frase.
+      if (body.trim() != homework.description.trim()) {
         Text(
           text = body,
           style = MaterialTheme.typography.bodyLarge,
         )
       }
-      detail?.assignedDate?.let { Text("Aggiunto: ${it.homeworkCreatedAtLabel()}") }
-      homework.modifiedAtLabel()?.let { Text("Modificato: $it") }
-      detail?.teacher?.takeIf(String::isNotBlank)?.let { Text("Docente: $it") }
+      (detail?.assignedDate ?: homework.assignedDate)?.let { Text("Assegnato: ${it.homeworkCreatedAtLabel()}") }
+      (detail?.teacher ?: homework.teacher)?.takeIf(String::isNotBlank)?.let { Text("Docente: $it") }
       homework.notes?.takeIf(String::isNotBlank)?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
       homework.dueDate.takeIf(String::isNotBlank)?.let { Text("Scadenza: ${it.homeworkDueLabel()}") }
+      HomeworkLinks(homework)
     },
   )
 }
@@ -1251,11 +1252,70 @@ private val homeworkCreatedAtFormatter: DateTimeFormatter =
 
 private fun Homework.homeworkMeta(): String? {
   return buildList {
-    addedAtLabel()?.let { add("Aggiunto: $it") }
-    modifiedAtLabel()?.let { add("Modificato: $it") }
+    // Assegnato e' una data della sezione Compiti; per quelli dell'agenda resta l'ora in cui sono
+    // comparsi, che e' quanto di piu' vicino si sa.
+    assignedDate?.homeworkDueLabel()?.let { add("Assegnato: $it") } ?: addedAtLabel()?.let { add("Aggiunto: $it") }
+    changeTimeline().firstOrNull()?.let { add(changeMetaLabel(it, ::homeworkDetectedAtLabel)) }
     dueDate.takeIf(String::isNotBlank)?.let { add("Scadenza: ${it.homeworkDueLabel()}") }
   }.joinToString(" / ").ifBlank { null }
 }
+
+/** La materia e il docente, sotto il testo del compito. */
+private fun Homework.homeworkSubtitle(): String =
+  listOfNotNull(subject.takeIf(String::isNotBlank)?.asReadableSubject(), teacher?.takeIf(String::isNotBlank))
+    .joinToString(" · ")
+
+/** Il testo del compito, con evidenziate le parole cambiate dall'ultima versione. */
+@Composable
+private fun Homework.highlightedDescription(): AnnotatedString {
+  val highlight = changeHighlight()
+  return remember(this, highlight) {
+    latestTitleDiff(description, history)
+      ?.let { annotatedChange(it, highlight, showRemoved = false) }
+      ?: AnnotatedString(description)
+  }
+}
+
+/** Le modifiche di questo compito, dalla piu' recente. */
+private fun Homework.changeTimeline(): List<ChangeEntry> = agendaChangeTimeline(toAgendaVersion(), history)
+
+@Composable
+private fun HomeworkLabels(homework: Homework, today: LocalDate) {
+  val due = homeworkDue(homework.dueDate, today)
+  // Svolto vale piu' della scadenza: un compito fatto non e' piu' "per domani".
+  if (homework.done) {
+    FluidStatusBadge("SVOLTO", tone = FluidTone.Success)
+  } else {
+    FluidStatusBadge(due.badgeLabel(homework.dueDate, today), tone = due.tone())
+  }
+}
+
+/** I link e i file che il docente ha allegato. I link si aprono; i file del portale si nominano. */
+@Composable
+private fun HomeworkLinks(homework: Homework) {
+  if (homework.attachments.isEmpty()) return
+  val uriHandler = LocalUriHandler.current
+  homework.attachments.forEach { attachment ->
+    val url = attachment.url
+    if (url != null && !attachment.portalOnly) {
+      FluidButton(
+        text = attachment.name,
+        onClick = { runCatching { uriHandler.openUri(url) } },
+        style = FluidButtonStyle.Tinted,
+        fillWidth = true,
+      )
+    } else {
+      Text(
+        text = "Allegato sul portale: ${attachment.name}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
+}
+
+private fun homeworkDetectedAtLabel(millis: Long): String =
+  Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDateTime().format(homeworkCreatedAtFormatter)
 
 /**
  * La scadenza, scritta come le altre date della riga.
@@ -1272,17 +1332,6 @@ private fun Homework.addedAtLabel(): String? = createdAt
   ?.trim()
   ?.takeIf(String::isNotBlank)
   ?.homeworkCreatedAtLabel()
-
-private fun Homework.modifiedAtLabel(): String? {
-  return history.maxByOrNull { it.recordedAtEpochMillis }
-    ?.recordedAtEpochMillis
-    ?.let { millis ->
-      Instant.ofEpochMilli(millis)
-        .atZone(ZoneId.systemDefault())
-        .toLocalDateTime()
-        .format(homeworkCreatedAtFormatter)
-    }
-}
 
 private fun String.homeworkCreatedAtLabel(): String {
   val value = trim().takeIf { it.isNotBlank() } ?: return this
@@ -1532,7 +1581,7 @@ fun DocumentsRoute(
             },
             selected = inPane && doc.id == selectedId,
             disclosure = !inPane,
-            badge = { FluidStatusBadge(doc.documentBadgeLabel(), tone = doc.documentTone()) },
+            labels = { FluidStatusBadge(doc.documentBadgeLabel(), tone = doc.documentTone()) },
             animatePress = true,
           )
         }
@@ -1567,7 +1616,7 @@ fun DocumentsRoute(
               eyebrow = book.subject,
               meta = "ISBN: ${book.isbn}",
               tone = bookTone,
-              badge = { FluidStatusBadge(bookBadge, tone = bookTone) },
+              labels = { FluidStatusBadge(bookBadge, tone = bookTone) },
             )
           }
         }
@@ -1702,7 +1751,7 @@ fun DocumentDetailRoute(
         title = document.title,
         subtitle = document.detail,
         tone = document.documentTone(),
-        badge = { FluidStatusBadge(document.documentBadgeLabel(), tone = document.documentTone()) },
+        labels = { FluidStatusBadge(document.documentBadgeLabel(), tone = document.documentTone()) },
         animatePress = false,
       )
     },

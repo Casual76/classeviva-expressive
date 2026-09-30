@@ -9,19 +9,14 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.antigravity.classevivaexpressive.core.domain.change.changeTimeline
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
-import dev.antigravity.fluidengine.ui.fluid.FluidButton
-import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
 
 /**
@@ -46,9 +41,9 @@ fun GradeDetailContent(
   modifier: Modifier = Modifier,
   dateLabel: String = gradeDateLabel(grade.date),
   historyDateLabel: (Long) -> String = ::gradeDateTimeLabel,
+  /** Vero nel pop-up, che e' tinto del colore del voto; falso su una pagina normale. */
+  onTint: Boolean = true,
 ) {
-  var showHistory by rememberSaveable(grade.id) { mutableStateOf(false) }
-
   Column(
     modifier = modifier
       .fillMaxWidth()
@@ -88,36 +83,11 @@ fun GradeDetailContent(
       )
     }
 
-    if (grade.history.isNotEmpty()) {
-      FluidButton(
-        text = if (showHistory) {
-          "Nascondi cronologia"
-        } else {
-          "Cronologia versioni (${grade.history.size})"
-        },
-        onClick = { showHistory = !showHistory },
-        style = FluidButtonStyle.Tinted,
-        fillWidth = true,
-      )
-      if (showHistory) {
-        FluidSectionHeader(title = "Com'era prima")
-        grade.history.forEach { version ->
-          GradeCard(
-            valueLabel = version.valueLabel,
-            numericValue = version.numericValue,
-            title = version.subject,
-            subtitle = listOfNotNull(
-              version.type.ifBlank { null },
-              historyDateLabel(version.recordedAtEpochMillis),
-            ).joinToString(" · "),
-            meta = listOfNotNull(version.description, version.notes, version.teacher)
-              .filter { it.isNotBlank() }
-              .joinToString(" · ")
-              .ifBlank { null },
-          )
-        }
-      }
-    }
+    // Aperta, e subito sotto il giudizio: chi apre un voto segnato come modificato vuole sapere
+    // cosa e' cambiato, e un tasto da premere per scoprirlo era un passaggio in piu' per la sola
+    // domanda che lo aveva portato qui.
+    val timeline = remember(grade) { grade.changeTimeline() }
+    ChangeTimeline(entries = timeline, onTint = onTint, detectedAtLabel = historyDateLabel)
 
     if (grade.history.isEmpty() && grade.description.isNullOrBlank() && grade.notes.isNullOrBlank()) {
       Text(

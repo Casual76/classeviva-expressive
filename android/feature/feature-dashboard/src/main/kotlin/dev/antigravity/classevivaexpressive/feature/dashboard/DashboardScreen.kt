@@ -417,7 +417,7 @@ private fun TodayLessonRow(lesson: Lesson, live: Boolean = false) {
     // la lezione sia firmata lo dice gia' il badge.
     tone = FluidTone.Neutral,
     leading = { SubjectRowIcon(lesson.subject) },
-    badge = {
+    labels = {
       FluidStatusBadge(
         label = presentation.badgeLabel,
         tone = presentation.badgeTone,
@@ -742,7 +742,7 @@ private fun UpcomingRow(item: AgendaItem, onClick: () -> Unit) {
     tone = badgeTone,
     leading = { Icon(Icons.Rounded.Event, contentDescription = null) },
     onClick = onClick,
-    badge = { FluidStatusBadge(badgeLabel, tone = badgeTone) },
+    labels = { FluidStatusBadge(badgeLabel, tone = badgeTone) },
     animatePress = true,
   )
 }
@@ -757,7 +757,7 @@ private fun UnreadCommunicationRow(communication: Communication, onClick: () -> 
     tone = FluidTone.Warning,
     leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
     onClick = onClick,
-    badge = { FluidStatusBadge("NUOVA", tone = FluidTone.Warning) },
+    labels = { FluidStatusBadge("NUOVA", tone = FluidTone.Warning) },
     animatePress = true,
   )
 }

@@ -477,7 +477,7 @@ private fun AbsenceRow(
         contentDescription = null,
       )
     },
-    badge = {
+    labels = {
       FluidStatusBadge(
         label = badgeLabel(absence.type),
         tone = absenceTone(absence),

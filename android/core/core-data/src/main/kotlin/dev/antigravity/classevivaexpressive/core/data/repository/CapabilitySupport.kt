@@ -74,7 +74,7 @@ class DefaultCapabilityResolver @Inject constructor(
       add(direct(RegistroFeature.PERIODS, "Disponibile", "Periodi ufficiali letti direttamente dal client."))
       add(direct(RegistroFeature.SUBJECTS, "Disponibile", "Materie ufficiali lette direttamente dal client."))
       add(direct(RegistroFeature.AGENDA, "Disponibile", "Agenda filtrata sull'anno scolastico selezionato."))
-      add(direct(RegistroFeature.HOMEWORKS, "Disponibile", "Compiti disponibili come sezione dedicata."))
+      add(direct(RegistroFeature.HOMEWORKS, "Disponibile", "Sezione Compiti del registro, col token REST o con la sessione del portale, unita ai compiti dell'agenda."))
       add(direct(RegistroFeature.LESSONS, "Disponibile", "Lezioni e argomenti filtrati sull'anno scolastico selezionato."))
       add(direct(RegistroFeature.ABSENCES, "Disponibile", "Assenze, ritardi e uscite lette via REST ufficiali."))
       add(portal(RegistroFeature.ABSENCE_JUSTIFICATIONS, "Disponibile", "Giustificazioni assenze tramite portale on-device (nessun server esterno)."))

@@ -686,8 +686,6 @@ fun GradeDetailRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   val grade = remember(state.grades, gradeId) { state.grades.firstOrNull { it.id == gradeId } }
-  var showHistory by rememberSaveable(gradeId) { mutableStateOf(false) }
-
   LaunchedEffect(gradeId) {
     viewModel.markGradesSeen(listOf(gradeId))
   }
@@ -715,84 +713,14 @@ fun GradeDetailRoute(
     onBack = onBack,
     hero = {
       Text(text = grade.subject, style = MaterialTheme.typography.headlineSmall)
+      // La cronologia sta dentro il dettaglio, una volta sola: qui c'era un secondo tasto che
+      // apriva una seconda copia della stessa storia sotto la prima.
       GradeDetailContent(
         grade = grade,
         dateLabel = grade.date.toReadableDate(),
         historyDateLabel = { it.toReadableDateTime() },
+        onTint = false,
       )
-    },
-    secondary = {
-      if (grade.history.isNotEmpty()) {
-        FluidButton(
-          text = if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${grade.history.size})",
-          onClick = { showHistory = !showHistory },
-          style = FluidButtonStyle.Tinted,
-          fillWidth = true,
-        )
-      }
-      if (showHistory) {
-        GradeHistorySection(grade = grade)
-      }
-    },
-  )
-}
-
-@Composable
-private fun GradeHistorySection(grade: Grade) {
-  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    FluidSectionHeader("Cronologia versioni")
-    GradeVersionRow(
-      label = "Versione attuale",
-      valueLabel = grade.valueLabel,
-      numericValue = grade.numericValue,
-      type = grade.type,
-      date = grade.date,
-      description = grade.description,
-      notes = grade.notes,
-      teacher = grade.teacher,
-      recordedAt = null,
-    )
-    grade.history.forEachIndexed { index, version ->
-      GradeVersionRow(
-        label = "Versione precedente ${index + 1}",
-        valueLabel = version.valueLabel,
-        numericValue = version.numericValue,
-        type = version.type,
-        date = version.date,
-        description = version.description,
-        notes = version.notes,
-        teacher = version.teacher,
-        recordedAt = version.recordedAtEpochMillis.toReadableDateTime(),
-      )
-    }
-  }
-}
-
-@Composable
-private fun GradeVersionRow(
-  label: String,
-  valueLabel: String,
-  numericValue: Double?,
-  type: String,
-  date: String,
-  description: String?,
-  notes: String?,
-  teacher: String?,
-  recordedAt: String?,
-) {
-  FluidListRow(
-    title = valueLabel,
-    subtitle = type.ifBlank { "Valutazione" },
-    eyebrow = "$label / ${date.toReadableDate()}",
-    meta = buildList {
-      description?.takeIf(String::isNotBlank)?.let(::add)
-      notes?.takeIf(String::isNotBlank)?.let(::add)
-      teacher?.takeIf(String::isNotBlank)?.let(::add)
-      recordedAt?.let { add("Rilevata $it") }
-    }.joinToString(" / ").ifBlank { null },
-    tone = gradeTone(numericValue),
-    badge = {
-      GradePill(value = valueLabel, numericValue = numericValue)
     },
   )
 }

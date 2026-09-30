@@ -152,13 +152,38 @@ class AppBackupRepositoryTest {
     coEvery { changeHistoryDao.getAllByKind(HistoryKindGrade) } returns history
 
     val payload = repository().exportBackup().getOrThrow()
-    val restored = slot<List<ChangeHistoryEntity>>()
+    val restored = mutableListOf<List<ChangeHistoryEntity>>()
     coEvery { changeHistoryDao.upsertAll(capture(restored)) } returns Unit
 
     val summary = repository().importBackup(payload).getOrThrow()
 
     assertEquals(1, summary.gradeHistory)
-    assertEquals(history, restored.captured)
+    assertEquals(history, restored.flatten())
+  }
+
+  @Test
+  fun agendaAndHomeworkHistoryRoundTripWithTheirKind() = runTest {
+    fun entry(id: String, kind: String) = ChangeHistoryEntity(
+      id = id,
+      studentId = "student-1",
+      schoolYearId = "2026-2027",
+      itemKind = kind,
+      itemId = "item-$id",
+      recordedAtEpochMillis = 1_790_000_000_000L,
+      payload = """{"title":"Pag 1371"}""",
+    )
+    val agenda = listOf(entry("a1", HistoryKindAgenda))
+    val homework = listOf(entry("h1", HistoryKindHomework))
+    stubEmptyStores()
+    coEvery { changeHistoryDao.getAllByKind(HistoryKindAgenda) } returns agenda
+    coEvery { changeHistoryDao.getAllByKind(HistoryKindHomework) } returns homework
+
+    val payload = repository().exportBackup().getOrThrow()
+    val restored = mutableListOf<List<ChangeHistoryEntity>>()
+    coEvery { changeHistoryDao.upsertAll(capture(restored)) } returns Unit
+    repository().importBackup(payload).getOrThrow()
+
+    assertEquals(agenda + homework, restored.flatten())
   }
 
   @Test
