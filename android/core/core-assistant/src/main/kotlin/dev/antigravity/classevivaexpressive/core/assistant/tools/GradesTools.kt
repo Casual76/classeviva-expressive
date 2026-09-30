@@ -249,7 +249,7 @@ class VotiDettaglioTool : AiTool<AssistantToolContext> {
       if (grade.history.isNotEmpty()) {
         blank()
         line("modifiche registrate", grade.history.size)
-        grade.history.takeLast(3).forEach { line("- ${it.valueLabel} il ${Dates.label(it.date)}${it.description?.let { d -> " · $d" } ?: ""}") }
+        grade.history.take(3).forEach { line("- ${it.valueLabel} il ${Dates.label(it.date)}${it.description?.let { d -> " · $d" } ?: ""}") }
       }
     }
   }
