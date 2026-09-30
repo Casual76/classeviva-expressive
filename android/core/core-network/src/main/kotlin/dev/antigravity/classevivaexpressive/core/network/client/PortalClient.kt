@@ -3,6 +3,7 @@ package dev.antigravity.classevivaexpressive.core.network.client
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStorage
 import dev.antigravity.classevivaexpressive.core.datastore.StoredCredentials
 import dev.antigravity.classevivaexpressive.core.domain.model.AttachmentPayload
+import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.PortalCookieDto
 import java.io.Closeable
 import java.io.IOException
@@ -14,7 +15,11 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.FormBody
@@ -213,10 +218,24 @@ class PortalClient private constructor(
     } == true
   }
 
-  private suspend fun ensurePortalSession(forceRefresh: Boolean = false) {
-    if (forceRefresh) cookieStore.clear()
+  /**
+   * Una sola apertura di sessione alla volta. Con la sezione Compiti letta dalla sincronizzazione in
+   * sottofondo, due chiamate contemporanee — il sync e una pagina del portale aperta a mano —
+   * facevano due accessi, e il secondo buttava via i cookie del primo mentre questo li usava.
+   */
+  private val sessionMutex = Mutex()
 
-    if (hasUsablePortalSessionCookie()) return
+  /** L'id numerico che le API `w1` del sito vogliono nel percorso, letto da `whoami`. */
+  @Volatile
+  private var portalStudentId: String? = null
+
+  private suspend fun ensurePortalSession(forceRefresh: Boolean = false) = sessionMutex.withLock {
+    if (forceRefresh) {
+      cookieStore.clear()
+      portalStudentId = null
+    }
+
+    if (hasUsablePortalSessionCookie()) return@withLock
 
     val credentials = sessionStorage.readStoredCredentials()
       ?: throw ClassevivaNetworkException("Credenziali non disponibili per il portale.")
@@ -464,6 +483,108 @@ class PortalClient private constructor(
     ) : SchoolReportAttempt
   }
 
+  /**
+   * La sezione Compiti con la sessione del sito, come la legge l'app ufficiale.
+   *
+   * Due passaggi come per la pagella: un cookie che il portale ha gia' dimenticato sembra valido
+   * finche' non lo si usa, quindi il rifiuto si riconosce dalla risposta e si rientra una volta.
+   * L'id da mettere nel percorso viene da `whoami`; se non si legge, vale quello della sessione REST.
+   */
+  suspend fun getHomeworksIndex(fallbackStudentId: String?): List<Homework> = withContext(Dispatchers.IO) {
+    ensurePortalSession()
+    var lastFailure: ClassevivaNetworkException? = null
+    for (pass in 0..1) {
+      val studentId = portalStudentId ?: resolvePortalStudentId() ?: fallbackStudentId
+        ?: throw ClassevivaNetworkException("Studente non identificato per la sezione Compiti.")
+      when (val result = getPortalRestJson(homeworksIndexPath(studentId), route = "portal")) {
+        is PortalRestAttempt.Success -> {
+          val homeworks = normalizeHomeworkIndex(result.payload)
+          logHomeworksIndexAttempt("portal", result.code, result.contentType, homeworks.size)
+          return@withContext homeworks
+        }
+        is PortalRestAttempt.Failure -> {
+          lastFailure = result.error
+          if (pass == 0 && result.sessionRejected) {
+            ensurePortalSession(forceRefresh = true)
+          } else {
+            break
+          }
+        }
+      }
+    }
+    throw lastFailure ?: ClassevivaNetworkException("La sezione Compiti non e' raggiungibile.")
+  }
+
+  private fun resolvePortalStudentId(): String? {
+    val result = getPortalRestJson(WhoAmIPath, route = "portal-whoami") as? PortalRestAttempt.Success
+      ?: return null
+    return parseWhoAmIStudentId(result.payload)?.also { portalStudentId = it }
+  }
+
+  /**
+   * Una GET alle API `/rest/w1` del sito, con i cookie del portale.
+   *
+   * Senza seguire i rimandi: una risposta che porta altrove, qui, e' sempre il login, e seguirla
+   * restituirebbe una pagina HTML con codice 200.
+   */
+  private fun getPortalRestJson(path: String, route: String): PortalRestAttempt {
+    val url = portalOrigin.newBuilder().encodedPath(path).query(null).build()
+    val response = runCatching {
+      portalAssetHttpClient.newCall(
+        Request.Builder()
+          .url(url)
+          .header("User-Agent", PortalUserAgent)
+          .header("Accept", "application/json")
+          .header("X-Requested-With", "XMLHttpRequest")
+          .build(),
+      ).execute()
+    }.getOrElse { error ->
+      return PortalRestAttempt.Failure(ClassevivaNetworkException("Errore di rete verso il registro.", error))
+    }
+    return response.use {
+      val code = response.code
+      val contentType = response.body?.contentType()?.toString()
+      val text = runCatching { response.body?.string().orEmpty() }.getOrDefault("")
+      val failure: PortalRestAttempt.Failure? = when {
+        response.isRedirect -> PortalRestAttempt.Failure(
+          ClassevivaNetworkException("Il registro ha rimandato all'accesso."),
+          sessionRejected = true,
+        )
+        code == 401 || code == 403 -> PortalRestAttempt.Failure(
+          ClassevivaNetworkException("Il registro ha rifiutato la sessione del portale ($code)."),
+          sessionRejected = true,
+        )
+        !response.isSuccessful -> PortalRestAttempt.Failure(
+          ClassevivaNetworkException("Il registro ha risposto con $code."),
+        )
+        !looksLikeJsonPayload(text) -> PortalRestAttempt.Failure(
+          ClassevivaNetworkException("Il registro ha risposto con una pagina invece che con dati."),
+          sessionRejected = looksLikeLoginPage(text),
+        )
+        else -> null
+      }
+      if (failure != null) {
+        logHomeworksIndexAttempt(route, code, contentType, null)
+        return@use failure
+      }
+      runCatching { Json.parseToJsonElement(text) }
+        .map { payload -> PortalRestAttempt.Success(payload, code, contentType) as PortalRestAttempt }
+        .getOrElse { cause ->
+          logHomeworksIndexAttempt(route, code, contentType, null)
+          PortalRestAttempt.Failure(ClassevivaNetworkException("Dati del registro non leggibili.", cause))
+        }
+    }
+  }
+
+  private sealed interface PortalRestAttempt {
+    data class Success(val payload: JsonElement, val code: Int, val contentType: String?) : PortalRestAttempt
+
+    data class Failure(
+      val error: ClassevivaNetworkException,
+      val sessionRejected: Boolean = false,
+    ) : PortalRestAttempt
+  }
+
   suspend fun submitPortalAction(
     pageUrl: String,
     formKeywords: List<String>,
@@ -624,6 +745,7 @@ class PortalClient private constructor(
 
   fun clearSession() {
     cookieStore.clear()
+    portalStudentId = null
   }
 
   private suspend fun discoverPortalPage(keywords: List<String>): Pair<String, String>? {

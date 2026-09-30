@@ -8,6 +8,8 @@ import dev.antigravity.classevivaexpressive.core.data.repository.DocumentsSectio
 import dev.antigravity.classevivaexpressive.core.data.repository.GradesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.HistoryKindAgenda
 import dev.antigravity.classevivaexpressive.core.data.repository.HistoryKindGrade
+import dev.antigravity.classevivaexpressive.core.data.repository.HistoryKindHomework
+import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkDedicatedSection
 import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkSection
 import dev.antigravity.classevivaexpressive.core.data.repository.LessonsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.MaterialsSection
@@ -60,6 +62,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentKind
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
+import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSource
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSubmission
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSubmissionReceipt
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
@@ -103,6 +106,9 @@ import kotlinx.serialization.json.Json
 private const val InteractiveRefreshCooldownMillis = 5L * 60L * 1000L
 private const val InteractiveRefreshCacheMaxAgeMillis = 5L * 60L * 1000L
 
+/** Ogni quanto la sincronizzazione in sottofondo rilegge la sezione Compiti. */
+private const val DedicatedHomeworkFastIntervalMillis = 20L * 60L * 1000L
+
 @Singleton
 class SchoolSyncCoordinator @Inject constructor(
   private val json: Json,
@@ -128,6 +134,7 @@ class SchoolSyncCoordinator @Inject constructor(
   val syncStatus = MutableStateFlow(SyncStatus())
   private val syncMutex = Mutex()
   private val lastInteractiveRefreshAttempts = mutableMapOf<String, Long>()
+  private val lastDedicatedHomeworkFetch = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
   @Synchronized
   fun attachSession(session: UserSession?) {
@@ -809,25 +816,15 @@ class SchoolSyncCoordinator @Inject constructor(
       }
     }
     if (selectedSections.contains(HomeworkSection)) {
-      syncYearScoped(operation, HomeworkSection, selectedYear, errors) {
-        val homeworks = filterHomeworksForYear(restClient.getHomeworks(), selectedYear)
-        val agendaHomeworks = loadAgendaForWindow()
-          .filter { it.category == AgendaCategory.HOMEWORK }
-          .map(::agendaItemToHomework)
-        val merged = mergeHomeworks(homeworks + agendaHomeworks)
-        if (mode == BackgroundSyncMode.FAST) {
-          mergeDatedWindow(
-            existing = readYearScopedValue(operation, HomeworkSection, selectedYear, emptyList<Homework>()),
-            incoming = merged,
-            start = dateWindow.start,
-            end = dateWindow.end,
-            dateSelector = { it.dueDate },
-            keySelector = { homework -> homeworkKey(homework.dueDate, homework.subject, homework.description) },
-          )
-        } else {
-          merged
-        }
-      }
+      syncHomeworks(
+        operation = operation,
+        schoolYear = selectedYear,
+        errors = errors,
+        mode = mode,
+        isPastYear = isPastYear,
+        dateWindow = dateWindow,
+        loadAgenda = { loadAgendaForWindow() },
+      )
     }
     if (selectedSections.contains(AgendaSection)) {
       syncAgenda(selectedYear, errors, operation) {
@@ -1162,6 +1159,151 @@ class SchoolSyncCoordinator @Inject constructor(
     }.onFailure { cause ->
       errors.record(GradesSection, cause)
     }
+  }
+
+  /**
+   * I compiti, da due fonti che non devono potersi rompere a vicenda.
+   *
+   * La sezione Compiti del registro e i compiti riconosciuti in agenda si leggono separatamente:
+   * prima bastava che la vecchia chiamata ai compiti fallisse per buttare via anche quelli
+   * dell'agenda. Ogni fonte che non risponde lascia il posto a quello che si era letto l'ultima
+   * volta, e l'unione ([mergeHomeworkSources]) si fa comunque.
+   */
+  private suspend fun syncHomeworks(
+    operation: SessionOperation,
+    schoolYear: SchoolYearRef,
+    errors: SyncErrors,
+    mode: BackgroundSyncMode,
+    isPastYear: Boolean,
+    dateWindow: SyncDateWindow,
+    loadAgenda: suspend () -> List<AgendaItem>,
+  ) {
+    runCatching {
+      val previousMerged = readYearScopedValue(operation, HomeworkSection, schoolYear, emptyList<Homework>())
+      // Null, e non vuota, quando la sezione non si e' mai letta: e' la differenza fra "nessun
+      // compito" e "non lo sappiamo ancora", che decide se registrare lo storico.
+      val previousDedicated = readYearScopedValue<List<Homework>?>(
+        operation,
+        HomeworkDedicatedSection,
+        schoolYear,
+        null,
+      )
+      val throttleKey = "${operation.session.studentId}::${schoolYear.id}"
+      val now = System.currentTimeMillis()
+      val recentlyFetched = lastDedicatedHomeworkFetch[throttleKey]
+        ?.let { now - it < DedicatedHomeworkFastIntervalMillis } == true
+
+      var dedicatedFetchFailed = false
+      val dedicated: List<Homework> = when {
+        // La sezione risponde solo per l'anno della sessione, come i voti: un anno passato si legge
+        // da quello che c'e'.
+        isPastYear -> previousDedicated.orEmpty()
+        // In sottofondo non a ogni giro: la strada del portale puo' voler dire un accesso nuovo.
+        mode == BackgroundSyncMode.FAST && recentlyFetched -> previousDedicated.orEmpty()
+        else -> fetchDedicatedHomeworks().fold(
+          onSuccess = { fetched ->
+            lastDedicatedHomeworkFetch[throttleKey] = now
+            val inYear = filterHomeworksForYear(fetched, schoolYear)
+            recordDedicatedHomeworkHistory(operation, schoolYear, previousDedicated, inYear, now)
+            storeYearScopedValue(operation, HomeworkDedicatedSection, schoolYear, inYear)
+            inYear
+          },
+          onFailure = { cause ->
+            dedicatedFetchFailed = true
+            // Un guasto si dice solo a chi la sezione l'ha gia' vista funzionare: una scuola che i
+            // Compiti non li usa avrebbe altrimenti un avviso di sincronizzazione parziale fisso.
+            if (mode != BackgroundSyncMode.FAST && previousDedicated != null) {
+              errors.record(HomeworkSection, cause)
+            }
+            previousDedicated.orEmpty()
+          },
+        )
+      }
+
+      // La vecchia chiamata v1 resta come ripiego, e solo quando la sezione non ha risposto.
+      val legacy = if (dedicatedFetchFailed) {
+        runCatching { filterHomeworksForYear(restClient.getHomeworks(), schoolYear) }.getOrDefault(emptyList())
+      } else {
+        emptyList()
+      }
+
+      val agendaResult = runCatching {
+        loadAgenda().filter { it.category == AgendaCategory.HOMEWORK }.map(::agendaItemToHomework)
+      }
+      val previousAgendaSide = previousMerged.filter { it.source == HomeworkSource.AGENDA }
+      val agendaSide = agendaResult.fold(
+        onSuccess = { agendaHomeworks ->
+          val incoming = mergeHomeworks(agendaHomeworks + legacy)
+          if (mode == BackgroundSyncMode.FAST) {
+            mergeDatedWindow(
+              existing = previousAgendaSide,
+              incoming = incoming,
+              start = dateWindow.start,
+              end = dateWindow.end,
+              dateSelector = { it.dueDate },
+              keySelector = { homework -> homeworkKey(homework.dueDate, homework.subject, homework.description) },
+            )
+          } else {
+            incoming
+          }
+        },
+        onFailure = { mergeHomeworks(previousAgendaSide + legacy) },
+      )
+
+      val merged = mergeHomeworkSources(dedicated, agendaSide).let { homeworks ->
+        if (agendaResult.isSuccess) return@let homeworks
+        // Senza agenda questa volta, i gemelli trovati l'ultima volta restano legati: altrimenti la
+        // riga d'agenda tornerebbe a comparire accanto al compito finche' l'agenda non risponde.
+        val previousLinks = previousMerged.associate { it.id to it.linkedAgendaIds }
+        homeworks.map { homework ->
+          val links = previousLinks[homework.id].orEmpty()
+          if (links.isEmpty()) homework else homework.copy(linkedAgendaIds = (homework.linkedAgendaIds + links).distinct())
+        }
+      }
+      storeYearScopedValue(operation, HomeworkSection, schoolYear, merged)
+    }.onFailure { cause ->
+      errors.record(HomeworkSection, cause)
+    }
+  }
+
+  /** La sezione Compiti: prima col token REST, poi con la sessione del portale. */
+  private suspend fun fetchDedicatedHomeworks(): Result<List<Homework>> {
+    val viaRest = runCatching { restClient.getHomeworksIndex() }
+    if (viaRest.isSuccess) return viaRest
+    val viaPortal = runCatching { portalClient.getHomeworksIndex(restClient.currentStudentId()) }
+    if (viaPortal.isSuccess) return viaPortal
+    return Result.failure(
+      viaPortal.exceptionOrNull()
+        ?: viaRest.exceptionOrNull()
+        ?: ClassevivaNetworkException("La sezione Compiti non e' raggiungibile."),
+    )
+  }
+
+  private suspend fun recordDedicatedHomeworkHistory(
+    operation: SessionOperation,
+    schoolYear: SchoolYearRef,
+    previous: List<Homework>?,
+    incoming: List<Homework>,
+    recordedAtEpochMillis: Long,
+  ) {
+    // La prima lettura e' il punto di partenza, non una modifica.
+    previous ?: return
+    val studentId = operation.session.studentId
+    val entries = dedicatedHomeworkRevisions(previous, incoming, recordedAtEpochMillis).map { (itemId, version) ->
+      val payload = json.encodeToString(version)
+      ChangeHistoryEntity(
+        id = historyEntryId(HistoryKindHomework, studentId, schoolYear.id, itemId, recordedAtEpochMillis, payload),
+        studentId = studentId,
+        schoolYearId = schoolYear.id,
+        itemKind = HistoryKindHomework,
+        itemId = itemId,
+        recordedAtEpochMillis = recordedAtEpochMillis,
+        payload = payload,
+      )
+    }
+    if (entries.isEmpty()) return
+    ensureSessionUnchanged(operation)
+    changeHistoryDao.upsertAll(entries)
   }
 
   private suspend fun syncAgenda(

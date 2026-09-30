@@ -102,6 +102,8 @@ internal object NotificationDeepLinks {
 
 data class SyncSnapshotPayloads(
   val homeworks: String? = null,
+  /** L'ultima lettura della sezione Compiti; null finche' non si e' mai letta. */
+  val dedicatedHomeworks: String? = null,
   val communications: String? = null,
   val absences: String? = null,
   val grades: String? = null,
@@ -386,10 +388,10 @@ class SyncNotificationDispatcher @Inject constructor(
       dispatchGrades(previous, current)
     }
     if (preferences.agenda) {
-      dispatchAgendaEvents(previous, current)
+      dispatchAgendaEvents(previous, current, homeworkChannelOn = preferences.homework)
     }
     if (preferences.homework) {
-      dispatchHomeworks(previous, current)
+      dispatchHomeworks(previous, current, agendaChannelOn = preferences.agenda)
     }
     if (preferences.communications) {
       dispatchCommunications(previous, current)
@@ -563,10 +565,19 @@ class SyncNotificationDispatcher @Inject constructor(
   private fun dispatchAgendaEvents(
     previous: SyncSnapshotPayloads,
     current: SyncSnapshotPayloads,
+    homeworkChannelOn: Boolean,
   ) {
     val before = decodeList<AgendaItem>(previous.agenda)
     val after = decodeList<AgendaItem>(current.agenda)
-    val newRelevant = after.filter { it.category == AgendaCategory.ASSESSMENT || it.category == AgendaCategory.HOMEWORK }
+    // Una riga d'agenda che e' anche un compito della sezione Compiti la annuncia il canale dei compiti.
+    val coveredByHomework = if (homeworkChannelOn) {
+      agendaIdsCoveredByDedicatedHomework(decodeList<Homework>(current.homeworks))
+    } else {
+      emptySet()
+    }
+    val newRelevant = after
+      .filter { it.category == AgendaCategory.ASSESSMENT || it.category == AgendaCategory.HOMEWORK }
+      .filterNot { it.category == AgendaCategory.HOMEWORK && it.id in coveredByHomework }
     val prevRelevant = before.filter { it.category == AgendaCategory.ASSESSMENT || it.category == AgendaCategory.HOMEWORK }
     val newItems = newRelevant.filterNot { candidate -> prevRelevant.any { it.id == candidate.id } }
     if (newItems.isEmpty()) return
@@ -652,10 +663,14 @@ class SyncNotificationDispatcher @Inject constructor(
   private fun dispatchHomeworks(
     previous: SyncSnapshotPayloads,
     current: SyncSnapshotPayloads,
+    agendaChannelOn: Boolean,
   ) {
-    val before = decodeList<Homework>(previous.homeworks)
-    val after = decodeList<Homework>(current.homeworks)
-    val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id } }
+    val newItems = homeworksToNotify(
+      before = decodeList(previous.homeworks),
+      after = decodeList(current.homeworks),
+      dedicatedPrimed = previous.dedicatedHomeworks != null,
+      agendaChannelOn = agendaChannelOn,
+    )
     if (newItems.isEmpty()) return
 
     val notification = if (newItems.size == 1) {

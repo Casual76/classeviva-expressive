@@ -7,6 +7,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.NoticeboardActionType
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentKind
+import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSource
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -841,6 +842,49 @@ class NetworkParsersTest {
   }
 
   @Test
+  fun normalizeHomework_readsHomeworksIndexItem() {
+    val hw = normalizeHomework(Json.parseToJsonElement(HomeworksIndexItem))
+
+    assertEquals("48213", hw.id)
+    assertEquals("MATEMATICA", hw.subject)
+    assertEquals("Pag 1371 es 282, 283, 311", hw.description)
+    assertEquals("2026-09-30", hw.dueDate)
+    assertEquals("2026-09-26", hw.assignedDate)
+    assertEquals("MUCCI SILVIA", hw.teacher)
+    assertTrue(hw.done)
+    // Una data sola non e' un momento: non deve diventare "aggiunto alle 00:00".
+    assertNull(hw.createdAt)
+    val link = hw.attachments.single()
+    assertEquals("https://example.org/esercizi", link.url)
+    assertEquals("Esercizi extra", link.name)
+  }
+
+  @Test
+  fun normalizeHomework_withoutDueDateDoesNotDefaultToToday() {
+    val hw = normalizeHomework(
+      Json.parseToJsonElement("""{ "evtId": 7, "homeworkDesc": "Leggere il capitolo" }"""),
+    )
+
+    assertEquals("", hw.dueDate)
+  }
+
+  @Test
+  fun normalizeHomeworkIndex_prefixesIdsAndMarksDedicated() {
+    val homeworks = normalizeHomeworkIndex(Json.parseToJsonElement("""{ "items": [$HomeworksIndexItem] }"""))
+
+    val hw = homeworks.single()
+    assertEquals("hw-48213", hw.id)
+    assertEquals(HomeworkSource.DEDICATED, hw.source)
+  }
+
+  @Test
+  fun parseWhoAmIStudentId_readsNumericIdOrIdentity() {
+    assertEquals("9123456", parseWhoAmIStudentId(Json.parseToJsonElement("""{ "id": 9123456, "ident": "S7654321X" }""")))
+    assertEquals("7654321", parseWhoAmIStudentId(Json.parseToJsonElement("""{ "data": { "ident": "S7654321X" } }""")))
+    assertNull(parseWhoAmIStudentId(Json.parseToJsonElement("""{ "name": "Mario" }""")))
+  }
+
+  @Test
   fun normalizeHomework_hasEmptyAttachmentsByDefault() {
     val hw = normalizeHomework(
       Json.parseToJsonElement(
@@ -1227,3 +1271,26 @@ class NetworkParsersTest {
     }.readText(),
   )
 }
+
+/** Un elemento della sezione Compiti nella forma di `w1/.../homeworks/index`, con dati inventati. */
+internal const val HomeworksIndexItem = """
+{
+  "evtId": 48213,
+  "evtCode": "NEWDC",
+  "teacherId": 11,
+  "teacherName": "MUCCI SILVIA",
+  "homeworkDesc": "Pag 1371 es 282, 283, 311",
+  "homeworkDone": true,
+  "assignmentDate": "2026-09-26",
+  "expiryDate": "2026-09-30",
+  "subjectId": 3,
+  "subjectDesc": "MATEMATICA",
+  "lastStudentMsg": null,
+  "lastTeacherMsg": null,
+  "newMessages": false,
+  "teacherFiles": [],
+  "teacherLinks": [{ "title": "Esercizi extra", "url": "https://example.org/esercizi" }],
+  "studentFiles": [],
+  "correctedFiles": []
+}
+"""

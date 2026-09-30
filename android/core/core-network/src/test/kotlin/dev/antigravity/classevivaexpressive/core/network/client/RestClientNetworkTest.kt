@@ -663,6 +663,52 @@ class RestClientNetworkTest {
     }
   }
 
+  @Test
+  fun getHomeworksIndex_callsW1WithTokenAndParsesItems() = runBlocking {
+    setActiveSession(token = "token-hw", studentId = "312345")
+    server.enqueue(jsonResponse("""{ "items": [$HomeworksIndexItem] }"""))
+
+    val homework = restClient.getHomeworksIndex().single()
+    val request = server.takeRequest()
+
+    assertEquals("/rest/w1/students/312345/homeworks/index", request.path)
+    assertEquals("token-hw", request.getHeader("Z-Auth-Token"))
+    assertEquals(DevApiKey, request.getHeader("Z-Dev-ApiKey"))
+    assertEquals("hw-48213", homework.id)
+    assertEquals("MUCCI SILVIA", homework.teacher)
+  }
+
+  @Test
+  fun getHomeworksIndex_rejectsLoginPageServedAsSuccess() = runBlocking {
+    setActiveSession(token = "token-hw", studentId = "312345")
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "text/html")
+        .setBody("<html><body><form><input type=\"password\"></form></body></html>"),
+    )
+
+    try {
+      restClient.getHomeworksIndex()
+      fail("A login page must not be read as an empty list of homework")
+    } catch (exception: ClassevivaNetworkException) {
+      assertTrue(exception.message.orEmpty().contains("Compiti"))
+    }
+  }
+
+  @Test
+  fun getHomeworksIndex_doesNotRefreshTheRestSessionOnRejection() = runBlocking {
+    setActiveSession(token = "token-hw", studentId = "312345", password = "secret")
+    server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":"unauthorized"}"""))
+
+    try {
+      restClient.getHomeworksIndex()
+      fail("A 401 from the homework section must surface as a failure")
+    } catch (exception: ClassevivaNetworkException) {
+      assertEquals(1, server.requestCount)
+    }
+  }
+
   private fun buildAuthService(
     gson: com.google.gson.Gson,
     headersInterceptor: Interceptor,

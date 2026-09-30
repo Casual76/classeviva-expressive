@@ -152,6 +152,35 @@ class ClassevivaRestClient @Inject constructor(
     }
   }
 
+  /** L'id dello studente della sessione REST, per chi deve chiamare il registro da un'altra strada. */
+  suspend fun currentStudentId(): String? = runCatching { requireSession().studentId }.getOrNull()
+
+  /** La sezione Compiti con il token della sessione REST. Vedi [ClassevivaApiService.getHomeworksIndex]. */
+  suspend fun getHomeworksIndex(): List<Homework> = withContext(Dispatchers.IO) {
+    val session = requireSession()
+    val response = apiCall { apiService.getHomeworksIndex(session.studentId) }
+    val contentType = (response.body() ?: response.errorBody())?.contentType()?.toString()
+    val text = try {
+      (response.body() ?: response.errorBody())?.string().orEmpty()
+    } catch (exception: IOException) {
+      throw ClassevivaNetworkException("Errore di rete durante la lettura dei compiti.", exception)
+    }
+    if (!response.isSuccessful) {
+      logHomeworksIndexAttempt("rest", response.code(), contentType, null)
+      throw httpError(response.code(), text)
+    }
+    if (!looksLikeJsonPayload(text)) {
+      logHomeworksIndexAttempt("rest", response.code(), contentType, null)
+      throw ClassevivaNetworkException("La sezione Compiti non ha risposto con dati leggibili.")
+    }
+    val payload = runCatching { json.parseToJsonElement(text) }.getOrElse { cause ->
+      throw ClassevivaNetworkException("La sezione Compiti non ha risposto con dati leggibili.", cause)
+    }
+    normalizeHomeworkIndex(payload).also { homeworks ->
+      logHomeworksIndexAttempt("rest", response.code(), contentType, homeworks.size)
+    }
+  }
+
   suspend fun getAbsences(): List<dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord> = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {

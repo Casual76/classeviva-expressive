@@ -22,6 +22,7 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.LessonsCache
 import dev.antigravity.classevivaexpressive.core.data.notifications.NotesCacheSection
 import dev.antigravity.classevivaexpressive.core.data.notifications.SyncNotificationDispatcher
 import dev.antigravity.classevivaexpressive.core.data.notifications.SyncSnapshotPayloads
+import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkDedicatedSection
 import dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheEntity
@@ -134,6 +135,7 @@ class SchoolSyncWorker @AssistedInject constructor(
     val currentYear = schoolYearStore.currentSchoolYearRef()
     return SyncSnapshotPayloads(
       homeworks = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, HomeworkCacheSection, currentYear))?.payload,
+      dedicatedHomeworks = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, HomeworkDedicatedSection, currentYear))?.payload,
       communications = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, CommunicationsCacheSection, currentYear))?.payload,
       absences = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, AbsencesCacheSection, currentYear))?.payload,
       grades = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, GradesCacheSection, currentYear))?.payload,

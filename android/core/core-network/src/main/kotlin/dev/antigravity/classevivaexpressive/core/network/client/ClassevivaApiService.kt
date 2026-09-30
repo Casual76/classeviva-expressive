@@ -5,6 +5,7 @@ import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 import okhttp3.ResponseBody
 import retrofit2.Call
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
@@ -158,6 +159,18 @@ interface ClassevivaApiService {
 
   @GET("v1/students/{id}/homeworks")
   suspend fun getHomeworks(@Path("id") studentId: String): JsonObject
+
+  /**
+   * La sezione Compiti, quella che l'app ufficiale mostra in *Oggi*: sta sulle API `w1` del sito,
+   * non su `v1`.
+   *
+   * Il corpo resta grezzo perche' chi non e' autorizzato qui non riceve un 401 in JSON ma la pagina
+   * di login, e va riconosciuta prima di provare a leggerla come dati. Senza rinnovo del token: un
+   * rifiuto di questa sezione non deve rifare l'accesso di tutta la sessione REST.
+   */
+  @Headers(SkipRefreshHeaderValue)
+  @GET("w1/students/{id}/homeworks/index")
+  suspend fun getHomeworksIndex(@Path("id") studentId: String): Response<ResponseBody>
 
   @POST("v1/students/{id}/documents")
   suspend fun getDocumentsPost(@Path("id") studentId: String): JsonElement

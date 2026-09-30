@@ -620,28 +620,7 @@ class SchoolDataRepository @Inject constructor(
       },
       observeAgendaCategoryOverrides(),
     ) { agenda, homeworks, schoolYear, customEvents, categoryOverrides ->
-      val homeworkAgendaKeys = homeworks.map { homework ->
-        agendaHomeworkKey(homework.dueDate, homework.subject, homework.description)
-      }.toSet()
-      val agendaWithoutHomeworkDuplicates = agenda.filterNot { item ->
-        item.category == AgendaCategory.HOMEWORK &&
-          agendaHomeworkKey(item.date, item.subject ?: item.subtitle, item.title) in homeworkAgendaKeys
-      }
-      val merged = agendaWithoutHomeworkDuplicates + homeworks.map { homework ->
-        AgendaItem(
-          id = "homework-${homework.id}",
-          title = homework.description,
-          subtitle = homework.subject,
-          date = homework.dueDate,
-          time = null,
-          detail = homework.notes,
-          subject = homework.subject,
-          category = AgendaCategory.HOMEWORK,
-          sharePayload = "${homework.subject} - ${homework.description} - ${homework.dueDate}",
-          createdAt = homework.createdAt,
-          history = homework.history,
-        )
-      } + customEvents.filter { event ->
+      val merged = mergeHomeworksIntoAgenda(agenda, homeworks) + customEvents.filter { event ->
         isInSchoolYear(event.date, schoolYear)
       }.map { event ->
         AgendaItem(
@@ -669,14 +648,6 @@ class SchoolDataRepository @Inject constructor(
       val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyList())
       agendaCategoryOverrideDao.observeByYear(studentId, schoolYear.id)
     }
-  }
-
-  private fun agendaHomeworkKey(date: String, subject: String?, text: String): String {
-    return listOf(date, subject.orEmpty(), text)
-      .joinToString("|")
-      .lowercase()
-      .replace(Regex("\\s+"), " ")
-      .trim()
   }
 
   private fun observeDbAgenda(): Flow<List<AgendaItem>> {
@@ -831,25 +802,28 @@ class SchoolDataRepository @Inject constructor(
     return combine(
       observeYearScopedValue(HomeworkSection, emptyList<Homework>()),
       observeDbAgenda(),
-    ) { homeworks, agenda ->
-      val agendaHomeworkByKey = agenda
-        .filter { it.category == AgendaCategory.HOMEWORK }
-        .groupBy { agendaHomeworkKey(it.date, it.subject ?: it.subtitle, it.title) }
-        .mapValues { (_, items) ->
-          items.sortedWith(
-            compareByDescending<AgendaItem> { it.history.size }
-              .thenByDescending { it.history.maxOfOrNull { version -> version.recordedAtEpochMillis } ?: Long.MIN_VALUE },
-          ).first()
-        }
-      homeworks.map { homework ->
-        val matchingAgenda = agendaHomeworkByKey[agendaHomeworkKey(homework.dueDate, homework.subject, homework.description)]
-        homework.copy(
-          createdAt = homework.createdAt ?: matchingAgenda?.createdAt,
-          history = homework.history.ifEmpty { matchingAgenda?.history.orEmpty() },
-          notes = homework.notes ?: matchingAgenda?.detail,
-        )
-      }
+      observeHomeworkHistory(),
+    ) { homeworks, agenda, homeworkHistory ->
+      enrichHomeworksFromAgenda(homeworks, agenda, homeworkHistory)
     }.flowOn(Dispatchers.Default)
+  }
+
+  /** Le versioni precedenti dei compiti della sezione Compiti, per id, dalla piu' recente. */
+  private fun observeHomeworkHistory(): Flow<Map<String, List<AgendaItemVersion>>> {
+    return combine(
+      sessionStore.session,
+      schoolYearStore.observeSelectedSchoolYear(),
+    ) { session, schoolYear ->
+      session to schoolYear
+    }.flatMapLatest { (session, schoolYear) ->
+      val studentId = session?.studentId ?: return@flatMapLatest flowOf(emptyMap())
+      changeHistoryDao.observeByYearAndKind(studentId, schoolYear.id, HistoryKindHomework).map { entries ->
+        entries
+          .mapNotNull { entity -> entity.toAgendaItemVersion(json)?.let { version -> entity.itemId to version } }
+          .groupBy({ it.first }, { it.second })
+          .mapValues { (_, versions) -> versions.sortedByDescending(AgendaItemVersion::recordedAtEpochMillis) }
+      }
+    }
   }
 
   override suspend fun refreshHomeworks(force: Boolean): Result<List<Homework>> = runCatching {
@@ -863,7 +837,8 @@ class SchoolDataRepository @Inject constructor(
     HomeworkDetail(
       homework = homework,
       fullText = listOfNotNull(homework.description, homework.notes).joinToString("\n\n").ifBlank { homework.description },
-      assignedDate = homework.createdAt,
+      assignedDate = homework.assignedDate ?: homework.createdAt,
+      teacher = homework.teacher,
       capability = capabilityResolver.observeCapability(RegistroFeature.HOMEWORKS).first(),
     )
   }
