@@ -37,8 +37,10 @@ import kotlinx.serialization.json.Json
 /**
  * 1: impostazioni, orari, eventi, voti visti, obiettivi, punteggi.
  * 2: i voti veri, la loro storia, e i periodi e le materie che servono a leggerli.
+ * 3: anche la storia degli impegni d'agenda e dei compiti — le versioni precedenti che la
+ *    cronologia mostra, che il registro non restituisce e che senza backup si perdevano.
  */
-private const val BackupVersion = 2
+private const val BackupVersion = 3
 
 /**
  * Un voto dentro il file di backup.
@@ -75,10 +77,11 @@ internal data class GradeBackupEntry(
 )
 
 /**
- * Una versione precedente di un voto.
+ * Una versione precedente di un voto, di un impegno o di un compito.
  *
- * `itemKind` non c'e' di proposito: la lista si chiama `gradeHistory` e contiene storia di voti.
- * Memorizzare una costante in ogni riga e' memorizzare rumore; al restore si riscrive.
+ * `itemKind` non c'e' di proposito: lo dice la lista in cui sta (`gradeHistory`, `agendaHistory`,
+ * `homeworkHistory`). Memorizzare una costante in ogni riga e' memorizzare rumore; al restore si
+ * riscrive.
  */
 @Serializable
 internal data class GradeHistoryBackupEntry(
@@ -126,6 +129,9 @@ private data class AppBackupPayload(
   val grades: List<GradeBackupEntry> = emptyList(),
   val gradeHistory: List<GradeHistoryBackupEntry> = emptyList(),
   val gradeMetadata: List<GradeMetadataBackupEntry> = emptyList(),
+  // Dalla versione 3, con lo stesso default vuoto: un file v2 decodifica senza.
+  val agendaHistory: List<GradeHistoryBackupEntry> = emptyList(),
+  val homeworkHistory: List<GradeHistoryBackupEntry> = emptyList(),
 )
 
 @Singleton
@@ -169,6 +175,10 @@ class DefaultAppBackupRepository @Inject constructor(
         gradeHistory = changeHistoryDao.getAllByKind(HistoryKindGrade)
           .map(ChangeHistoryEntity::toGradeBackup),
         gradeMetadata = gradeMetadataFor(grades),
+        agendaHistory = changeHistoryDao.getAllByKind(HistoryKindAgenda)
+          .map(ChangeHistoryEntity::toGradeBackup),
+        homeworkHistory = changeHistoryDao.getAllByKind(HistoryKindHomework)
+          .map(ChangeHistoryEntity::toGradeBackup),
       ),
     )
   }
@@ -193,7 +203,9 @@ class DefaultAppBackupRepository @Inject constructor(
       subjectGoalDao.upsertAll(backup.subjectGoals)
       studentScoreDao.upsertAll(backup.scoreSnapshots)
       gradeDao.upsertAll(gradeEntities)
-      changeHistoryDao.upsertAll(backup.gradeHistory.map(GradeHistoryBackupEntry::toEntity))
+      changeHistoryDao.upsertAll(backup.gradeHistory.map { it.toEntity() })
+      changeHistoryDao.upsertAll(backup.agendaHistory.map { it.toEntity(HistoryKindAgenda) })
+      changeHistoryDao.upsertAll(backup.homeworkHistory.map { it.toEntity(HistoryKindHomework) })
       backup.gradeMetadata.forEach { metadata -> snapshotCacheDao.upsert(metadata.toEntity()) }
       rebuildGradesSnapshot(gradeEntities)
     }
@@ -355,11 +367,11 @@ internal fun ChangeHistoryEntity.toGradeBackup(): GradeHistoryBackupEntry = Grad
   payload = payload,
 )
 
-internal fun GradeHistoryBackupEntry.toEntity(): ChangeHistoryEntity = ChangeHistoryEntity(
+internal fun GradeHistoryBackupEntry.toEntity(itemKind: String = HistoryKindGrade): ChangeHistoryEntity = ChangeHistoryEntity(
   id = id,
   studentId = studentId,
   schoolYearId = schoolYearId,
-  itemKind = HistoryKindGrade,
+  itemKind = itemKind,
   itemId = itemId,
   recordedAtEpochMillis = recordedAtEpochMillis,
   payload = payload,

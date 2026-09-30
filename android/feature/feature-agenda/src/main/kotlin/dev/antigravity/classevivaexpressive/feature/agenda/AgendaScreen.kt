@@ -66,6 +66,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ChangeTimeline
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.annotatedChange
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.changeHighlight
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.changeMetaLabel
+import dev.antigravity.classevivaexpressive.core.domain.change.ChangeEntry
+import dev.antigravity.classevivaexpressive.core.domain.change.agendaChangeTimeline
+import dev.antigravity.classevivaexpressive.core.domain.change.latestTitleDiff
+import androidx.compose.ui.text.AnnotatedString
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
@@ -1199,33 +1207,40 @@ private fun AgendaEntryRow(
   onLongClick: (() -> Unit)?,
   modifier: Modifier = Modifier,
   contextActions: (() -> List<FluidContextAction>)? = null,
+  titleMaxLines: Int = AgendaRowTitleMaxLines,
 ) {
+  val highlight = changeHighlight()
+  val latestChange = remember(entry) { entry.changeTimeline().firstOrNull() }
+  // Un impegno modificato non ha piu' una pillola che lo dice: lo dicono le parole cambiate,
+  // evidenziate nel titolo per tutto il tempo in cui la modifica esiste.
+  val title = remember(entry, highlight) {
+    latestTitleDiff(entry.title, entry.history)
+      ?.let { annotatedChange(it, highlight, showRemoved = false) }
+      ?: AnnotatedString(entry.title)
+  }
   FluidListRow(
-    title = entry.title,
+    title = title,
     subtitle = entry.subject ?: entry.subtitle,
-    // L'ora, quando c'e'. Il genere lo dice gia' il badge a destra: senza ora l'occhiello ripeteva
-    // «Compito» due volte sulla stessa riga.
+    // L'ora, quando c'e'. Il genere lo dice gia' l'etichetta accanto: senza ora l'occhiello
+    // ripeteva «Compito» due volte sulla stessa riga.
     eyebrow = entry.time?.takeIf(String::isNotBlank),
     meta = buildList {
       entry.createdAtLabel()?.let { add("Aggiunto: $it") }
-      entry.modifiedAtLabel()?.let { add("Modificato: $it") }
+      latestChange?.let { add(changeMetaLabel(it) { millis -> millis.toReadableDateTime() }) }
       entry.detail?.takeIf(String::isNotBlank)?.let(::add)
       entry.teacher?.takeIf(String::isNotBlank)?.let(::add)
     }.joinToString(" / ").ifBlank { null },
     tone = categoryTone(entry.category),
     leading = { Icon(categoryIcon(entry.category), contentDescription = null) },
-    badge = {
-      if (entry.history.isNotEmpty()) {
-        FluidStatusBadge(
-          label = "MODIFICATO",
-          tone = FluidTone.Info,
-        )
-      }
+    // Un'etichetta e non un badge: accanto al titolo quando c'e' posto, sotto quando ruberebbe la
+    // riga. Nel badge, con la freccia, lasciava al titolo una colonna di sillabe.
+    labels = {
       FluidStatusBadge(
         label = categoryLabel(entry.category),
         tone = categoryTone(entry.category),
       )
     },
+    titleMaxLines = titleMaxLines,
     onClick = onClick,
     onLongClick = onLongClick,
     contextActions = contextActions,
@@ -1239,7 +1254,7 @@ private fun AgendaDetailContent(
   entry: AgendaEntry,
   onShare: () -> Unit,
 ) {
-  var showHistory by rememberSaveable(entry.id) { mutableStateOf(false) }
+  val timeline = remember(entry) { entry.changeTimeline() }
 
   Box {
     LazyColumn(
@@ -1260,14 +1275,18 @@ private fun AgendaDetailContent(
           disclosure = false,
         )
       }
+      // Cosa e' cambiato, prima di tutto il resto: e' la domanda con cui si apre un impegno che la
+      // lista mostra con le parole evidenziate. Stava in fondo, dietro un tasto, sotto «Condividi».
+      if (timeline.isNotEmpty()) {
+        item {
+          ChangeTimeline(entries = timeline, detectedAtLabel = { it.toReadableDateTime() })
+        }
+      }
       item {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
           InfoLine(label = "Data evento", value = entry.eventDateLabel())
           entry.createdAtLabel()?.let { addedAt ->
             InfoLine(label = "Aggiunto", value = addedAt)
-          }
-          entry.modifiedAtLabel()?.let { modifiedAt ->
-            InfoLine(label = "Modificato", value = modifiedAt)
           }
           entry.subject?.takeIf { it.isNotBlank() && it != headerSubtitle }?.let { subject ->
             InfoLine(label = "Materia", value = subject)
@@ -1302,14 +1321,6 @@ private fun AgendaDetailContent(
           modifier = Modifier.fillMaxWidth(),
           verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-          if (entry.history.isNotEmpty()) {
-            FluidButton(
-              text = if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${entry.history.size})",
-              onClick = { showHistory = !showHistory },
-              style = FluidButtonStyle.Tinted,
-              fillWidth = true,
-            )
-          }
           // Niente bottone "Chiudi": il popover si congeda con un tocco fuori o col back, e un
           // bottone che duplica il gesto occupava meta' della riga delle azioni.
           FluidButton(
@@ -1320,79 +1331,8 @@ private fun AgendaDetailContent(
           )
         }
       }
-      if (showHistory && entry.history.isNotEmpty()) {
-        item {
-          AgendaHistorySection(entry = entry)
-        }
-      }
       item { Spacer(modifier = Modifier.height(16.dp)) }
     }
-  }
-}
-
-@Composable
-private fun AgendaHistorySection(entry: AgendaEntry) {
-  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    FluidSectionHeader("Cronologia versioni")
-    AgendaVersionCard(
-      label = "Versione attuale",
-      title = entry.title,
-      subtitle = entry.subject ?: entry.subtitle.ifBlank { "Agenda" },
-      eventDate = entry.eventDateLabel(),
-      detail = entry.detail,
-      teacher = entry.teacher,
-      recordedAt = entry.modifiedAtLabel(),
-      category = entry.category,
-    )
-    entry.history.forEachIndexed { index, version ->
-      AgendaVersionCard(
-        label = "Versione precedente ${index + 1}",
-        title = version.title,
-        subtitle = version.subject ?: version.subtitle.ifBlank { "Agenda" },
-        eventDate = version.eventDateLabel(),
-        detail = version.detail,
-        teacher = version.teacher,
-        recordedAt = version.recordedAtEpochMillis.toReadableDateTime(),
-        category = version.category,
-      )
-    }
-  }
-}
-
-@Composable
-private fun AgendaVersionCard(
-  label: String,
-  title: String,
-  subtitle: String,
-  eventDate: String,
-  detail: String?,
-  teacher: String?,
-  recordedAt: String?,
-  category: AgendaCategory,
-) {
-  FluidCard(highlighted = label == "Versione attuale", glass = true) {
-    Text(
-      text = label,
-      style = MaterialTheme.typography.labelLarge,
-      color = MaterialTheme.colorScheme.primary,
-      fontWeight = FontWeight.SemiBold,
-    )
-    Text(
-      text = title,
-      style = MaterialTheme.typography.titleMedium,
-      color = MaterialTheme.colorScheme.onSurface,
-      fontWeight = FontWeight.SemiBold,
-    )
-    Text(
-      text = subtitle,
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    InfoLine(label = "Data evento", value = eventDate)
-    recordedAt?.let { InfoLine(label = if (label == "Versione attuale") "Ultima modifica" else "Rilevata", value = it) }
-    teacher?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Docente", value = it) }
-    detail?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Dettagli", value = it) }
-    FluidStatusBadge(categoryLabel(category), tone = categoryTone(category))
   }
 }
 
@@ -1569,6 +1509,12 @@ private fun AddEventContent(
   }
 }
 
+/**
+ * Quante righe di titolo una voce d'agenda mostra in lista. Il registro manda a volte un paragrafo
+ * intero come titolo di un compito, e la lista diventava una pagina da leggere.
+ */
+private const val AgendaRowTitleMaxLines = 3
+
 private data class AgendaEntry(
   val id: String,
   val title: String,
@@ -1650,8 +1596,6 @@ fun AgendaDetailRoute(
   val entry = remember(state.items, state.customEvents, entryId) {
     state.toAgendaEntries().firstOrNull { it.id == entryId }
   }
-  var showHistory by rememberSaveable(entryId) { mutableStateOf(false) }
-
   if (entry == null) {
     FluidScreen(
       title = "Dettaglio agenda",
@@ -1679,13 +1623,18 @@ fun AgendaDetailRoute(
         onClick = null,
         onLongClick = null,
         modifier = Modifier.fillMaxWidth(),
+        titleMaxLines = Int.MAX_VALUE,
       )
     },
     secondary = {
+      val timeline = remember(entry) { entry.changeTimeline() }
+      if (timeline.isNotEmpty()) {
+        ChangeTimeline(entries = timeline, detectedAtLabel = { it.toReadableDateTime() })
+        FluidListDivider()
+      }
       Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         InfoLine(label = "Data evento", value = entry.eventDateLabel())
         entry.createdAtLabel()?.let { InfoLine(label = "Aggiunto", value = it) }
-        entry.modifiedAtLabel()?.let { InfoLine(label = "Modificato", value = it) }
         entry.subject?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Materia", value = it) }
         entry.teacher?.takeIf(String::isNotBlank)?.let { InfoLine(label = "Docente", value = it) }
       }
@@ -1703,15 +1652,6 @@ fun AgendaDetailRoute(
           style = MaterialTheme.typography.bodyLarge,
         )
       }
-      if (entry.history.isNotEmpty()) {
-        FluidButton(
-          text = if (showHistory) "Nascondi cronologia" else "Cronologia versioni (${entry.history.size})",
-          onClick = { showHistory = !showHistory },
-          style = FluidButtonStyle.Tinted,
-          fillWidth = true,
-        )
-      }
-      if (showHistory) AgendaHistorySection(entry)
       FluidButton(
         text = "Condividi",
         onClick = { shareEntry(context, entry) },
@@ -1785,18 +1725,23 @@ private fun AgendaEntry.createdAtLabel(): String? {
   }.getOrElse { value }
 }
 
-private fun AgendaEntry.modifiedAtLabel(): String? {
-  return history.maxByOrNull { it.recordedAtEpochMillis }
-    ?.recordedAtEpochMillis
-    ?.toReadableDateTime()
-}
-
-private fun AgendaItemVersion.eventDateLabel(): String {
-  return buildList {
-    add(date.toLocalDateOrNull()?.format(eventDateFormatter)?.replaceFirstChar { it.uppercase() } ?: date)
-    time?.takeIf(String::isNotBlank)?.let(::add)
-  }.joinToString(" • ")
-}
+/** Le modifiche di questo impegno, dalla piu' recente. */
+private fun AgendaEntry.changeTimeline(): List<ChangeEntry> = agendaChangeTimeline(
+  current = AgendaItemVersion(
+    recordedAtEpochMillis = 0L,
+    title = title,
+    subtitle = subtitle,
+    date = date?.toString().orEmpty(),
+    time = time,
+    detail = detail,
+    subject = subject,
+    teacher = teacher,
+    category = category,
+    sharePayload = sharePayload,
+    createdAt = createdAt,
+  ),
+  newestFirst = history,
+)
 
 private fun Long.toReadableDateTime(): String {
   return Instant.ofEpochMilli(this)

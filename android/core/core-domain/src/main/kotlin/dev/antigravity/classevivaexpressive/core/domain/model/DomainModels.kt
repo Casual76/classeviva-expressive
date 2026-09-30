@@ -338,7 +338,29 @@ data class Homework(
   val history: List<AgendaItemVersion> = emptyList(),
   val notes: String? = null,
   val attachments: List<RemoteAttachment> = emptyList(),
+  val teacher: String? = null,
+  /** Il giorno in cui il docente l'ha assegnato, quando il registro lo dice (solo la data). */
+  val assignedDate: String? = null,
+  /** Segnato come svolto nella sezione Compiti del registro. */
+  val done: Boolean = false,
+  val source: HomeworkSource = HomeworkSource.AGENDA,
+  /**
+   * Le righe d'agenda che dicono la stessa cosa di questo compito.
+   *
+   * Un compito della sezione Compiti ha spesso il suo gemello in agenda, scritto dallo stesso
+   * docente senza materia: senza questo legame l'agenda li mostrava tutti e due.
+   */
+  val linkedAgendaIds: List<String> = emptyList(),
 )
+
+/**
+ * Da dove arriva un compito.
+ *
+ * [DEDICATED] e' la sezione Compiti del registro (quella che l'app ufficiale mostra in *Oggi*), con
+ * id stabili, docente e scadenza propri; [AGENDA] e' un impegno d'agenda riconosciuto come compito.
+ */
+@Serializable
+enum class HomeworkSource { DEDICATED, AGENDA }
 
 @Serializable
 data class AttachmentPayload(

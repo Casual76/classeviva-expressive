@@ -17,5 +17,15 @@ internal const val MeetingTeachersSection = "meeting_teachers"
 internal const val MeetingSlotsSection = "meeting_slots"
 internal const val MeetingBookingsSection = "meeting_bookings"
 
+/**
+ * L'ultima lettura della sezione Compiti del registro, com'era, prima dell'unione con l'agenda.
+ *
+ * Non e' una sezione da sincronizzare: e' la memoria di quella fonte. Serve a confrontare due
+ * letture per lo storico, a non perdere i compiti quando la fonte non risponde, e — quando manca
+ * del tutto — a sapere che la prima lettura non deve annunciare come nuovi i compiti dell'anno.
+ */
+internal const val HomeworkDedicatedSection = "homeworks_dedicated"
+
 internal const val HistoryKindGrade = "grade"
 internal const val HistoryKindAgenda = "agenda"
+internal const val HistoryKindHomework = "homework"

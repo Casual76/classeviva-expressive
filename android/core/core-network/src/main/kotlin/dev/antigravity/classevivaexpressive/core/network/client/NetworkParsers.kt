@@ -15,6 +15,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentKind
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
+import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSource
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialAsset
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
@@ -268,17 +269,68 @@ private fun resolveLessonSignedState(obj: JsonObject, topic: String?): Boolean {
   return eventCode.startsWith("LSF") || !topic.isNullOrBlank()
 }
 
+/**
+ * Un compito, da qualunque delle due forme in cui il registro lo scrive.
+ *
+ * Le chiavi della sezione Compiti (`homeworkDesc`, `expiryDate`, `assignmentDate`, `teacherName`)
+ * vengono prima: senza, la descrizione usciva vuota e il compito veniva scartato, e la scadenza
+ * mancante diventava *oggi* — un compito per venerdi' mostrato come in scadenza stamattina.
+ */
 internal fun normalizeHomework(data: JsonElement): Homework {
   val obj = data.obj()
   return Homework(
     id = obj.string("id", "hwId", "evtId", "homeworkId").orEmpty(),
     subject = resolveSubject(obj).orEmpty(),
-    description = sanitizeRegisterText(obj.string("contenuto", "description", "notes", "title")).orEmpty(),
-    dueDate = normalizeDate(obj.string("dataConsegna", "dueDate", "date", "evtDate", "evtDatetimeEnd")),
-    createdAt = normalizeDateTimeOrNull(obj.string("evtInsDatetime", "mdtPubl", "crtDT", "insertDate", "assignedDate")),
+    description = sanitizeRegisterText(obj.string("homeworkDesc", "contenuto", "description", "notes", "title")).orEmpty(),
+    // Senza scadenza resta vuota: e' chi unisce le fonti a scartarla, invece di metterla a oggi.
+    dueDate = normalizeDateOrNull(
+      obj.string("expiryDate", "dataConsegna", "dueDate", "date", "evtDate", "evtDatetimeEnd"),
+    ).orEmpty(),
+    createdAt = normalizeDateTimeOrNull(obj.string("evtInsDatetime", "mdtPubl", "crtDT", "insertDate")),
     notes = sanitizeRegisterText(obj.string("note", "notesForFamily", "notes")),
-    attachments = normalizeAttachments(obj["allegati"] ?: obj["attachments"]),
+    attachments = normalizeAttachments(obj["allegati"] ?: obj["attachments"]) +
+      normalizeAttachments(obj["teacherFiles"]) +
+      normalizeHomeworkLinks(obj["teacherLinks"]),
+    teacher = sanitizeRegisterText(obj.string("teacherName", "authorName", "docente")),
+    assignedDate = normalizeDateOrNull(obj.string("assignmentDate", "assignedDate")),
+    done = obj.bool("homeworkDone", "done") ?: false,
   )
+}
+
+/**
+ * La risposta di `w1/students/{id}/homeworks/index`, cioe' la sezione Compiti.
+ *
+ * Gli id prendono il prefisso `hw-`: sono gli `evtId` del registro, e nella stessa lista finiscono
+ * anche compiti ricavati dall'agenda, i cui id vengono da un'altra numerazione.
+ */
+internal fun normalizeHomeworkIndex(payload: JsonElement): List<Homework> {
+  return extractArray(payload, "items", "homeworks").map { element ->
+    val homework = normalizeHomework(element)
+    val rawId = homework.id.takeIf(String::isNotBlank)
+      ?: stableFallbackId("raw", homework.dueDate, homework.subject, homework.description)
+    homework.copy(id = "hw-$rawId", source = HomeworkSource.DEDICATED)
+  }
+}
+
+/** I link che il docente allega a un compito: stringhe nude o oggetti con un titolo. */
+private fun normalizeHomeworkLinks(data: JsonElement?): List<RemoteAttachment> {
+  return data.array().mapNotNull { item ->
+    val url: String?
+    val name: String?
+    when (item) {
+      is JsonPrimitive -> {
+        url = normalizeUrlCandidate(item.contentOrNull)
+        name = url
+      }
+      is JsonObject -> {
+        url = normalizeUrlCandidate(item.string("url", "link", "href", "linkUrl"))
+        name = sanitizeRegisterText(item.string("title", "desc", "description", "name")) ?: url
+      }
+      else -> return@mapNotNull null
+    }
+    val safeUrl = url?.takeIf(::isSafeExternalMaterialUrl) ?: return@mapNotNull null
+    RemoteAttachment(id = safeUrl, name = name ?: safeUrl, url = safeUrl, portalOnly = false)
+  }
 }
 
 internal fun normalizeAbsence(data: JsonElement): AbsenceRecord {

@@ -871,7 +871,7 @@ private fun TimetableBlockRow(
     // Etichetta e colore del badge escono dalla stessa espressione: prima erano due `when` paralleli
     // con soglie diverse (0.8 e 0.6 per il colore, 0.75 per l'etichetta), e a confidenza 0.78 la
     // riga si contraddiceva da sola dicendo "STABILE" in verde su un tono blu.
-    badge = { FluidStatusBadge(kind.badgeLabel(block), tone = kind.tone()) },
+    labels = { FluidStatusBadge(kind.badgeLabel(block), tone = kind.tone()) },
     animatePress = true,
     modifier = modifier,
   )
@@ -1083,7 +1083,7 @@ private fun HistoryLessonRow(
       FluidTone.Neutral
     },
     leading = { Icon(Icons.Rounded.HistoryEdu, contentDescription = null) },
-    badge = {
+    labels = {
       FluidStatusBadge(
         label = if (lesson.isSigned) "FIRMATA" else "NON FIRMATA",
         tone = if (lesson.isSigned) FluidTone.Success else FluidTone.Neutral,
@@ -1469,7 +1469,7 @@ private fun SlotConfirmationContent(
               meta = slot.room?.takeIf(String::isNotBlank),
               tone = if (slot.confirmed) FluidTone.Success else FluidTone.Info,
               leading = { Icon(Icons.Rounded.School, contentDescription = null) },
-              badge = {
+              labels = {
                 FluidStatusBadge(
                   label = if (slot.confirmed) "CONFERMATO" else "DA VERIFICARE",
                   tone = if (slot.confirmed) FluidTone.Success else FluidTone.Info,

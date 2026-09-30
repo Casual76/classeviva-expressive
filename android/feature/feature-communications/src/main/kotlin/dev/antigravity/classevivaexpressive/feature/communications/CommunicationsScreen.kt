@@ -852,7 +852,7 @@ fun CommunicationsRoute(
               meta = communication.contentPreview.takeIf { it.isNotBlank() },
               tone = communicationTone(communication),
               leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
-              badge = {
+              labels = {
                 FluidStatusBadge(
                   label = communicationBadgeLabel(communication),
                   tone = communicationTone(communication),
@@ -974,7 +974,7 @@ fun CommunicationsRoute(
               meta = note.contentPreview.takeIf { it.isNotBlank() },
               tone = noteTone(note),
               leading = { Icon(Icons.Rounded.Gavel, contentDescription = null) },
-              badge = {
+              labels = {
                 FluidStatusBadge(
                   label = if (note.read) "LETTA" else "NOTA",
                   tone = noteTone(note),

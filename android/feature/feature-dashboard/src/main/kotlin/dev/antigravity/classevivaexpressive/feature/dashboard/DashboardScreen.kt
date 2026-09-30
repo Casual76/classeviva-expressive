@@ -1,5 +1,9 @@
 package dev.antigravity.classevivaexpressive.feature.dashboard
 
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.annotatedChange
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.changeHighlight
+import dev.antigravity.classevivaexpressive.core.domain.change.latestTitleDiff
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -417,7 +421,7 @@ private fun TodayLessonRow(lesson: Lesson, live: Boolean = false) {
     // la lezione sia firmata lo dice gia' il badge.
     tone = FluidTone.Neutral,
     leading = { SubjectRowIcon(lesson.subject) },
-    badge = {
+    labels = {
       FluidStatusBadge(
         label = presentation.badgeLabel,
         tone = presentation.badgeTone,
@@ -734,15 +738,21 @@ private fun AgendaCategory.upcomingBadge(): Pair<String, FluidTone> = when (this
 @Composable
 private fun UpcomingRow(item: AgendaItem, onClick: () -> Unit) {
   val (badgeLabel, badgeTone) = item.category.upcomingBadge()
+  // Come in agenda: le parole cambiate dall'ultima versione restano evidenziate.
+  val highlight = changeHighlight()
+  val title = remember(item, highlight) {
+    item.latestTitleDiff()?.let { annotatedChange(it, highlight, showRemoved = false) } ?: AnnotatedString(item.title)
+  }
   FluidListRow(
-    title = item.title,
+    title = title,
+    titleMaxLines = 3,
     subtitle = item.subtitle,
     eyebrow = listOfNotNull(nearDayLabel(item.date), item.time?.takeIf(String::isNotBlank)).joinToString(" · "),
     meta = item.detail,
     tone = badgeTone,
     leading = { Icon(Icons.Rounded.Event, contentDescription = null) },
     onClick = onClick,
-    badge = { FluidStatusBadge(badgeLabel, tone = badgeTone) },
+    labels = { FluidStatusBadge(badgeLabel, tone = badgeTone) },
     animatePress = true,
   )
 }
@@ -751,13 +761,14 @@ private fun UpcomingRow(item: AgendaItem, onClick: () -> Unit) {
 private fun UnreadCommunicationRow(communication: Communication, onClick: () -> Unit) {
   FluidListRow(
     title = communication.title,
+    titleMaxLines = 3,
     subtitle = communication.sender,
     eyebrow = nearDayLabel(communication.date),
     meta = communication.contentPreview,
     tone = FluidTone.Warning,
     leading = { Icon(Icons.Rounded.Campaign, contentDescription = null) },
     onClick = onClick,
-    badge = { FluidStatusBadge("NUOVA", tone = FluidTone.Warning) },
+    labels = { FluidStatusBadge("NUOVA", tone = FluidTone.Warning) },
     animatePress = true,
   )
 }

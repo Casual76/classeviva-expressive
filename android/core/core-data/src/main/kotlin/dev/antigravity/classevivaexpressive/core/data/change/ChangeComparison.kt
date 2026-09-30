@@ -1,15 +1,12 @@
 package dev.antigravity.classevivaexpressive.core.data.change
 
 import dev.antigravity.classevivaexpressive.core.database.database.AgendaItemEntity
+import dev.antigravity.classevivaexpressive.core.domain.change.ChangeText
 import dev.antigravity.classevivaexpressive.core.database.database.GradeEntity
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeVersion
-import kotlin.math.abs
-
-private const val NumberTolerance = 0.0001
-private val GenericGradeTypes = setOf("valutazione", "voto")
 
 internal fun GradeEntity.hasMeaningfulChangeComparedTo(
   grade: Grade,
@@ -85,63 +82,21 @@ private fun AgendaItemEntity.agendaSubjectLabel(): String {
   return subject?.takeIf(String::isNotBlank) ?: subtitle
 }
 
+// La regola sta in core-domain ([ChangeText]), perche' la usa anche chi mostra la cronologia.
 private fun gradeValueChanged(
   firstNumber: Double?,
   firstLabel: String?,
   secondNumber: Double?,
   secondLabel: String?,
-): Boolean {
-  if (firstNumber != null && secondNumber != null) {
-    return abs(firstNumber - secondNumber) > NumberTolerance
-  }
-  val parsedFirst = firstNumber ?: parseGradeValue(firstLabel)
-  val parsedSecond = secondNumber ?: parseGradeValue(secondLabel)
-  if (parsedFirst != null && parsedSecond != null) {
-    return abs(parsedFirst - parsedSecond) > NumberTolerance
-  }
-  return comparableTextChanged(firstLabel, secondLabel)
-}
+): Boolean = ChangeText.gradeValueChanged(firstNumber, firstLabel, secondNumber, secondLabel)
 
-private fun comparableNumberChanged(first: Double?, second: Double?): Boolean {
-  return first != null && second != null && abs(first - second) > NumberTolerance
-}
+private fun comparableNumberChanged(first: Double?, second: Double?): Boolean = ChangeText.numberChanged(first, second)
 
-private fun requiredTextChanged(first: String?, second: String?): Boolean {
-  val normalizedFirst = normalizedText(first)
-  val normalizedSecond = normalizedText(second)
-  return normalizedFirst.isNotBlank() && normalizedSecond.isNotBlank() && normalizedFirst != normalizedSecond
-}
+private fun requiredTextChanged(first: String?, second: String?): Boolean = ChangeText.comparableChanged(first, second)
 
-private fun comparableTextChanged(first: String?, second: String?): Boolean {
-  val normalizedFirst = normalizedText(first)
-  val normalizedSecond = normalizedText(second)
-  return normalizedFirst.isNotBlank() && normalizedSecond.isNotBlank() && normalizedFirst != normalizedSecond
-}
+private fun comparableTextChanged(first: String?, second: String?): Boolean = ChangeText.comparableChanged(first, second)
 
-private fun coreTextChanged(first: String?, second: String?, includeOneSidedText: Boolean): Boolean {
-  val normalizedFirst = normalizedText(first)
-  val normalizedSecond = normalizedText(second)
-  return if (includeOneSidedText) {
-    normalizedFirst != normalizedSecond
-  } else {
-    normalizedFirst.isNotBlank() && normalizedSecond.isNotBlank() && normalizedFirst != normalizedSecond
-  }
-}
+private fun coreTextChanged(first: String?, second: String?, includeOneSidedText: Boolean): Boolean =
+  ChangeText.coreChanged(first, second, includeOneSidedText)
 
-private fun significantGradeType(type: String?): String? {
-  val normalized = normalizedText(type)
-  return normalized.takeUnless { it.isBlank() || it in GenericGradeTypes }
-}
-
-private fun normalizedText(value: String?): String {
-  return value.orEmpty()
-    .trim()
-    .lowercase()
-    .replace(Regex("\\s+"), " ")
-}
-
-private fun parseGradeValue(label: String?): Double? {
-  return normalizedText(label)
-    .replace(',', '.')
-    .toDoubleOrNull()
-}
+private fun significantGradeType(type: String?): String? = ChangeText.significantGradeType(type)

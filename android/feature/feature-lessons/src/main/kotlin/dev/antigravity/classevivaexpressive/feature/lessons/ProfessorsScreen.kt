@@ -493,7 +493,7 @@ fun ProfessorsRoute(
           },
           selected = inPane && prof.teacherName == selectedId,
           disclosure = !inPane,
-          badge = { FluidStatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
+          labels = { FluidStatusBadge(prof.strictnessLabel.uppercase(), tone = strictnessTone) },
           animatePress = true,
         )
       }
@@ -558,7 +558,7 @@ fun ProfessorDetailRoute(
         meta = if (professor.gradeCount > 0) countLabel(professor.gradeCount, "voto", "voti") else "Nessun voto assegnato",
         tone = presenceTone,
         leading = { Icon(Icons.Rounded.Person, contentDescription = null) },
-        badge = { FluidStatusBadge(professor.strictnessLabel.uppercase(), tone = strictnessTone) },
+        labels = { FluidStatusBadge(professor.strictnessLabel.uppercase(), tone = strictnessTone) },
         animatePress = false,
       )
     },
@@ -579,7 +579,7 @@ fun ProfessorDetailRoute(
             title = nearDayLabel(date).replaceFirstChar { it.uppercase() },
             subtitle = "Giorno tipico senza lezione registrata.",
             tone = FluidTone.Warning,
-            badge = { FluidStatusBadge("ASSENTE", tone = FluidTone.Warning) },
+            labels = { FluidStatusBadge("ASSENTE", tone = FluidTone.Warning) },
           )
         }
       }
@@ -607,7 +607,7 @@ fun ProfessorDetailRoute(
         title = professor.funNickname,
         subtitle = "${countLabel(professor.longestPresenceStreakWeeks, "settimana consecutiva", "settimane consecutive")} · ${countLabel(professor.subjects.size, "materia monitorata", "materie monitorate")}.",
         tone = FluidTone.Success,
-        badge = { FluidStatusBadge("PROFILO", tone = FluidTone.Success) },
+        labels = { FluidStatusBadge("PROFILO", tone = FluidTone.Success) },
       )
     },
   )
@@ -685,7 +685,7 @@ private fun ProfessorDetailContent(
             title = nearDayLabel(date).replaceFirstChar { it.uppercase() },
             subtitle = "Giorno tipico senza lezione registrata.",
             tone = FluidTone.Warning,
-            badge = { FluidStatusBadge("ASSENTE", tone = FluidTone.Warning) },
+            labels = { FluidStatusBadge("ASSENTE", tone = FluidTone.Warning) },
           )
         }
       }
@@ -795,7 +795,7 @@ private fun ProfessorDetailContent(
             append("${countLabel(prof.subjects.size, "materia monitorata", "materie monitorate")}.")
           },
           tone = FluidTone.Success,
-          badge = { FluidStatusBadge("TOP SECRET", tone = FluidTone.Success) },
+          labels = { FluidStatusBadge("TOP SECRET", tone = FluidTone.Success) },
         )
       }
       item {
@@ -818,7 +818,7 @@ private fun ProfessorDetailContent(
           title = "Profilo Psicologico",
           subtitle = roast,
           tone = FluidTone.Warning,
-          badge = { FluidStatusBadge("ROAST", tone = FluidTone.Warning) },
+          labels = { FluidStatusBadge("ROAST", tone = FluidTone.Warning) },
         )
       }
       item {
@@ -871,7 +871,7 @@ private fun ProfessorDetailContent(
           subtitle = "Indice di probabilità di essere interrogati/verificati a sorpresa.",
           eyebrow = dangerLevel,
           tone = dangerTone,
-          badge = { FluidStatusBadge(dangerLevel.takeLast(dangerLevel.length - 2).trim(), tone = dangerTone) },
+          labels = { FluidStatusBadge(dangerLevel.takeLast(dangerLevel.length - 2).trim(), tone = dangerTone) },
         )
       }
     }

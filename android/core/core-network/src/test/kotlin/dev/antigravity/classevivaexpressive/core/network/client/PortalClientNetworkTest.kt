@@ -324,6 +324,78 @@ class PortalClientNetworkTest {
     }
   }
 
+  @Test
+  fun homeworksIndex_logsInResolvesWhoAmIAndCarriesCookie() = runBlocking {
+    enqueuePortalLogin()
+    server.enqueue(jsonResponse("""{ "id": 9123456, "ident": "S7654321X" }"""))
+    server.enqueue(jsonResponse("""{ "items": [$HomeworksIndexItem] }"""))
+
+    val homework = portalClient.getHomeworksIndex(fallbackStudentId = "312345").single()
+
+    assertEquals(PortalLoginApiPath, server.takeRequest().path)
+    assertEquals("/rest/w1/misc/whoami", server.takeRequest().path)
+    val homeworkRequest = server.takeRequest()
+    assertEquals("/rest/w1/students/9123456/homeworks/index", homeworkRequest.path)
+    assertTrue(homeworkRequest.getHeader("Cookie").orEmpty().contains("PHPSESSID=session-demo"))
+    assertEquals("hw-48213", homework.id)
+  }
+
+  @Test
+  fun homeworksIndex_logsInAgainOnceWhenTheSessionIsRejected() = runBlocking {
+    enqueuePortalLogin(cookieValue = "stale")
+    server.enqueue(jsonResponse("""{ "id": 9123456 }"""))
+    server.enqueue(MockResponse().setResponseCode(302).addHeader("Location", "/home/app/default/login.php"))
+    enqueuePortalLogin(cookieValue = "fresh")
+    server.enqueue(jsonResponse("""{ "id": 9123456 }"""))
+    server.enqueue(jsonResponse("""{ "items": [$HomeworksIndexItem] }"""))
+
+    val homeworks = portalClient.getHomeworksIndex(fallbackStudentId = null)
+
+    assertEquals(1, homeworks.size)
+    assertEquals(6, server.requestCount)
+    repeat(5) { server.takeRequest() }
+    assertTrue(server.takeRequest().getHeader("Cookie").orEmpty().contains("PHPSESSID=fresh"))
+  }
+
+  @Test
+  fun homeworksIndex_usesFallbackIdWhenWhoAmIFails() = runBlocking {
+    enqueuePortalLogin()
+    server.enqueue(MockResponse().setResponseCode(404))
+    server.enqueue(jsonResponse("""{ "items": [] }"""))
+
+    val homeworks = portalClient.getHomeworksIndex(fallbackStudentId = "312345")
+
+    assertTrue(homeworks.isEmpty())
+    server.takeRequest()
+    server.takeRequest()
+    assertEquals("/rest/w1/students/312345/homeworks/index", server.takeRequest().path)
+  }
+
+  @Test
+  fun homeworksIndex_failsOnLoginPageInsteadOfReturningNothing() = runBlocking {
+    enqueuePortalLogin()
+    server.enqueue(jsonResponse("""{ "id": 9123456 }"""))
+    server.enqueue(
+      MockResponse()
+        .setResponseCode(200)
+        .addHeader("Content-Type", "text/html")
+        .setBody("<html><body>Pagina</body></html>"),
+    )
+
+    try {
+      portalClient.getHomeworksIndex(fallbackStudentId = null)
+      fail("An HTML page must not be read as an empty list of homework")
+    } catch (exception: ClassevivaNetworkException) {
+      assertEquals(3, server.requestCount)
+    }
+  }
+
+  private fun jsonResponse(body: String): MockResponse =
+    MockResponse()
+      .setResponseCode(200)
+      .addHeader("Content-Type", "application/json")
+      .setBody(body)
+
   private fun enqueuePortalLogin(cookieValue: String = "session-demo") {
     server.enqueue(
       MockResponse()

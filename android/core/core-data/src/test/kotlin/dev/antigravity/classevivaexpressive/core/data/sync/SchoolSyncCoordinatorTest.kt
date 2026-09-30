@@ -38,6 +38,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.DocumentItem
 import dev.antigravity.classevivaexpressive.core.domain.model.DocumentKind
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeVersion
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
+import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkSource
 import dev.antigravity.classevivaexpressive.core.domain.model.MaterialItem
 import dev.antigravity.classevivaexpressive.core.domain.model.RemoteAttachment
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearFallbackEvent
@@ -67,6 +68,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -241,6 +243,9 @@ class SchoolSyncCoordinatorTest {
       (invocation.args[0] as SnapshotCacheEntity).also { cache[it.cacheKey] = it }
     }
     coEvery { snapshotCacheDao.getByKey(any()) } answers { cache[invocation.args[0] as String] }
+    // La vecchia chiamata v1 entra in gioco solo quando la sezione Compiti non risponde.
+    coEvery { restClient.getHomeworksIndex() } throws ClassevivaNetworkException("404")
+    coEvery { portalClient.getHomeworksIndex(any()) } throws ClassevivaNetworkException("404")
     coEvery { restClient.getHomeworks() } returns listOf(
       Homework(
         id = "hw1",
@@ -278,6 +283,152 @@ class SchoolSyncCoordinatorTest {
     assertEquals("2026-03-20T18:45", result.single().createdAt)
     assertEquals("Esercizi pag. 45", result.single().history.single().title)
   }
+
+  @Test
+  fun refreshHomeworks_keepsAgendaHomeworkWhenEveryHomeworkEndpointFails() = runTest {
+    val cache = homeworkTestCache()
+    coEvery { restClient.getHomeworksIndex() } throws ClassevivaNetworkException("401")
+    coEvery { portalClient.getHomeworksIndex(any()) } throws ClassevivaNetworkException("login")
+    coEvery { restClient.getHomeworks() } throws ClassevivaNetworkException("404")
+    coEvery { restClient.getAgenda(any(), any()) } returns listOf(agendaHomework(id = "a1", title = "Rousseau pp. 518-521"))
+    val coordinator = buildCoordinator()
+
+    val result = coordinator.refreshHomeworks(force = true)
+
+    assertEquals(listOf("agenda-a1"), result.map { it.id })
+    assertTrue(cache.keys.none { it.endsWith("::homeworks_dedicated") })
+  }
+
+  @Test
+  fun refreshHomeworks_foldsAgendaTwinIntoDedicatedHomework() = runTest {
+    homeworkTestCache()
+    coEvery { portalClient.getHomeworksIndex(any()) } returns listOf(dedicatedHomework())
+    coEvery { restClient.getAgenda(any(), any()) } returns listOf(
+      agendaHomework(id = "a1", title = "Pag 1371 es 282, 283, 311", subject = null),
+      agendaHomework(id = "a2", title = "Rousseau pp. 518-521"),
+    )
+    val coordinator = buildCoordinator()
+
+    val result = coordinator.refreshHomeworks(force = true)
+
+    assertEquals(listOf("agenda-a2", "hw-1"), result.map { it.id })
+    val dedicated = result.single { it.id == "hw-1" }
+    assertEquals(listOf("a1"), dedicated.linkedAgendaIds)
+    assertEquals("MUCCI SILVIA", dedicated.teacher)
+    coVerify(exactly = 0) { restClient.getHomeworks() }
+  }
+
+  @Test
+  fun refreshHomeworks_keepsCachedDedicatedHomeworkWhenTheSectionStopsAnswering() = runTest {
+    val cache = homeworkTestCache()
+    cache.putJson(dedicatedCacheKey(), listOf(dedicatedHomework()))
+    coEvery { restClient.getHomeworksIndex() } throws ClassevivaNetworkException("500")
+    coEvery { portalClient.getHomeworksIndex(any()) } throws ClassevivaNetworkException("500")
+    coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
+    val coordinator = buildCoordinator()
+
+    val result = coordinator.refreshHomeworks(force = true)
+
+    assertEquals(listOf("hw-1"), result.map { it.id })
+  }
+
+  @Test
+  fun refreshHomeworks_readsTheSectionThroughThePortalFirst() = runTest {
+    homeworkTestCache()
+    coEvery { restClient.currentStudentId() } returns "55"
+    coEvery { portalClient.getHomeworksIndex("55") } returns listOf(dedicatedHomework())
+    coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
+    val coordinator = buildCoordinator()
+
+    val result = coordinator.refreshHomeworks(force = true)
+
+    assertEquals(listOf("hw-1"), result.map { it.id })
+    coVerify(exactly = 0) { restClient.getHomeworksIndex() }
+  }
+
+  @Test
+  fun refreshHomeworks_triesTheTokenWhenThePortalRefuses() = runTest {
+    homeworkTestCache()
+    coEvery { portalClient.getHomeworksIndex(any()) } throws ClassevivaNetworkException("login")
+    coEvery { restClient.getHomeworksIndex() } returns listOf(dedicatedHomework())
+    coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
+    val coordinator = buildCoordinator()
+
+    val result = coordinator.refreshHomeworks(force = true)
+
+    assertEquals(listOf("hw-1"), result.map { it.id })
+  }
+
+  @Test
+  fun refreshHomeworks_recordsPreviousVersionWhenDedicatedHomeworkChanges() = runTest {
+    val cache = homeworkTestCache()
+    cache.putJson(dedicatedCacheKey(), listOf(dedicatedHomework(description = "Pag 1371 es 282, 283")))
+    coEvery { portalClient.getHomeworksIndex(any()) } returns listOf(dedicatedHomework(description = "Pag 1371 es 282, 283, 311"))
+    coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
+    val coordinator = buildCoordinator()
+
+    coordinator.refreshHomeworks(force = true)
+
+    coVerify {
+      changeHistoryDao.upsertAll(
+        match { entries ->
+          val entry = entries.single()
+          val version = Json.decodeFromString<AgendaItemVersion>(entry.payload)
+          entry.itemKind == "homework" && entry.itemId == "hw-1" && version.title == "Pag 1371 es 282, 283"
+        },
+      )
+    }
+  }
+
+  @Test
+  fun refreshHomeworks_doesNotRecordHistoryForTheDoneFlagOrTheFirstRead() = runTest {
+    val cache = homeworkTestCache()
+    coEvery { portalClient.getHomeworksIndex(any()) } returns listOf(dedicatedHomework())
+    coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
+    val coordinator = buildCoordinator()
+
+    coordinator.refreshHomeworks(force = true)
+    coEvery { portalClient.getHomeworksIndex(any()) } returns listOf(dedicatedHomework().copy(done = true))
+    coordinator.refreshHomeworks(force = true)
+
+    assertTrue(cache.containsKey(dedicatedCacheKey()))
+    coVerify(exactly = 0) { changeHistoryDao.upsertAll(any()) }
+  }
+
+  private fun homeworkTestCache(): MutableMap<String, SnapshotCacheEntity> {
+    mockkStatic(Log::class)
+    every { Log.i(any(), any()) } returns 0
+    val cache = mutableMapOf<String, SnapshotCacheEntity>()
+    coEvery { snapshotCacheDao.upsert(any()) } answers {
+      (invocation.args[0] as SnapshotCacheEntity).also { cache[it.cacheKey] = it }
+    }
+    coEvery { snapshotCacheDao.getByKey(any()) } answers { cache[invocation.args[0] as String] }
+    return cache
+  }
+
+  private fun dedicatedCacheKey(): String = yearScopedCacheKey(session.studentId, "homeworks_dedicated", currentYear)
+
+  private fun MutableMap<String, SnapshotCacheEntity>.putJson(key: String, value: List<Homework>) {
+    put(key, SnapshotCacheEntity(cacheKey = key, payload = Json.encodeToString(value), updatedAtEpochMillis = 1L))
+  }
+
+  private fun dedicatedHomework(description: String = "Pag 1371 es 282, 283, 311") = Homework(
+    id = "hw-1",
+    subject = "MATEMATICA",
+    description = description,
+    dueDate = "2026-05-07",
+    teacher = "MUCCI SILVIA",
+    source = HomeworkSource.DEDICATED,
+  )
+
+  private fun agendaHomework(id: String, title: String, subject: String? = "FILOSOFIA") = AgendaItem(
+    id = id,
+    title = title,
+    subtitle = subject.orEmpty(),
+    date = "2026-05-07",
+    subject = subject,
+    category = AgendaCategory.HOMEWORK,
+  )
 
   @Test
   fun refreshAll_recordsPreviousGradeVersionWhenExistingGradeChanges() = runTest {
