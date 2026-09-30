@@ -27,6 +27,16 @@ internal fun logHomeworksIndexAttempt(route: String, code: Int, contentType: Str
 }
 
 /**
+ * Una strada che non e' arrivata a una risposta: il tipo d'errore e il messaggio, che e' dell'app
+ * (mai credenziali ne' corpi di risposta).
+ */
+internal fun logHomeworksIndexFailure(route: String, error: Throwable) {
+  runCatching {
+    Log.i(HomeworksIndexLogTag, "$route -> ${error::class.simpleName}: ${error.message.orEmpty().take(120)}")
+  }
+}
+
+/**
  * Se il corpo e' JSON e non la pagina di login.
  *
  * Chi non e' autorizzato non riceve sempre un 401: il sito puo' rispondere 200 con l'HTML

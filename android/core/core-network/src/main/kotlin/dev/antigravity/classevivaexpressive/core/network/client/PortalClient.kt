@@ -491,7 +491,7 @@ class PortalClient private constructor(
    * L'id da mettere nel percorso viene da `whoami`; se non si legge, vale quello della sessione REST.
    */
   suspend fun getHomeworksIndex(fallbackStudentId: String?): List<Homework> = withContext(Dispatchers.IO) {
-    ensurePortalSession()
+    ensureHomeworksPortalSession()
     var lastFailure: ClassevivaNetworkException? = null
     for (pass in 0..1) {
       val studentId = portalStudentId ?: resolvePortalStudentId() ?: fallbackStudentId
@@ -505,7 +505,7 @@ class PortalClient private constructor(
         is PortalRestAttempt.Failure -> {
           lastFailure = result.error
           if (pass == 0 && result.sessionRejected) {
-            ensurePortalSession(forceRefresh = true)
+            ensureHomeworksPortalSession(forceRefresh = true)
           } else {
             break
           }
@@ -513,6 +513,19 @@ class PortalClient private constructor(
       }
     }
     throw lastFailure ?: ClassevivaNetworkException("La sezione Compiti non e' raggiungibile.")
+  }
+
+  /**
+   * L'accesso al portale per la sezione Compiti, con il motivo nel log quando non riesce: senza, un
+   * accesso rifiutato non lasciava traccia e nel log si vedeva solo il ripiego sul token.
+   */
+  private suspend fun ensureHomeworksPortalSession(forceRefresh: Boolean = false) {
+    try {
+      ensurePortalSession(forceRefresh)
+    } catch (error: Exception) {
+      logHomeworksIndexFailure("portal-login", error)
+      throw error
+    }
   }
 
   private fun resolvePortalStudentId(): String? {

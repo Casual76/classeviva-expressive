@@ -39,10 +39,13 @@ import java.util.Locale
 /**
  * Come si segnano le parole cambiate: una sola coppia di stili, per la cronologia e per le righe.
  *
- * Le parole aggiunte hanno il velo dell'accento e il peso pieno; quelle tolte sono barrate, nel
- * colore dell'errore e un po' spente. Sono gli stessi segni che una revisione di un documento usa, e
+ * Le parole aggiunte hanno un velo dell'accento dietro e il peso pieno; quelle tolte sono barrate,
+ * nel colore dell'errore e un po' spente. Sono gli stessi segni che una revisione di un documento usa, e
  * nella riga d'agenda e nel dettaglio devono dire la stessa cosa.
  */
+/** Quanti caratteri di testo uguale si tengono per parte intorno a una modifica, nella cronologia. */
+private const val ChangeContextChars = 48
+
 @Immutable
 data class ChangeHighlight(
   val added: SpanStyle,
@@ -64,10 +67,12 @@ fun changeHighlight(onTint: Boolean = false): ChangeHighlight {
   } else {
     val scheme = MaterialTheme.colorScheme
     ChangeHighlight(
+      // Un velo del primario e non `primaryContainer`: su un fondale gia' tinto dell'accento il
+      // contenitore restava a quattro livelli di grigio dalla pagina (misurato sul Tab S9) e le
+      // parole nuove non si distinguevano. Il testo tiene il suo colore, come sotto un evidenziatore.
       added = SpanStyle(
         fontWeight = FontWeight.SemiBold,
-        color = scheme.onPrimaryContainer,
-        background = scheme.primaryContainer,
+        background = scheme.primary.copy(alpha = 0.24f),
       ),
       removed = SpanStyle(
         textDecoration = TextDecoration.LineThrough,
@@ -89,16 +94,46 @@ fun annotatedChange(
   segments: List<DiffSegment>,
   highlight: ChangeHighlight,
   showRemoved: Boolean,
+  contextChars: Int? = null,
 ): AnnotatedString = buildAnnotatedString {
   segments.forEachIndexed { index, segment ->
     when (segment.kind) {
-      DiffKind.SAME -> append(segment.text)
+      DiffKind.SAME -> append(
+        if (contextChars == null) {
+          segment.text
+        } else {
+          segment.text.trimmedAround(
+            keepStart = index > 0,
+            keepEnd = index < segments.lastIndex,
+            contextChars = contextChars,
+          )
+        },
+      )
       DiffKind.ADDED -> {
         if (showRemoved && segments.getOrNull(index - 1)?.kind == DiffKind.REMOVED) append(" ")
         withStyle(highlight.added) { append(segment.text) }
       }
       DiffKind.REMOVED -> if (showRemoved) withStyle(highlight.removed) { append(segment.text) }
     }
+  }
+}
+
+/**
+ * Il testo uguale intorno a una modifica, accorciato a qualche parola per parte.
+ *
+ * Un link aggiunto in fondo a un paragrafo di dieci righe si leggeva ripetendo le dieci righe: il
+ * testo intero sta gia' nell'intestazione del dettaglio, qui serve solo a ritrovare il punto.
+ * [keepStart] tiene l'inizio (il testo segue una modifica), [keepEnd] la fine (ne precede una).
+ */
+internal fun String.trimmedAround(keepStart: Boolean, keepEnd: Boolean, contextChars: Int): String {
+  if (length <= contextChars * 2 + 8) return this
+  val head = if (keepStart) take(contextChars).substringBeforeLast(' ', take(contextChars)) else ""
+  val tail = if (keepEnd) takeLast(contextChars).substringAfter(' ', takeLast(contextChars)) else ""
+  return when {
+    keepStart && keepEnd -> "$head … $tail"
+    keepStart -> "$head …"
+    keepEnd -> "… $tail"
+    else -> this
   }
 }
 
@@ -175,7 +210,7 @@ private fun FieldChangeLine(change: FieldChange, highlight: ChangeHighlight, onT
     val words = change.words
     when {
       words != null && TextDiff.changedShare(words) <= TextDiff.RewriteShare -> Text(
-        text = annotatedChange(words, highlight, showRemoved = true),
+        text = annotatedChange(words, highlight, showRemoved = true, contextChars = ChangeContextChars),
         style = MaterialTheme.typography.bodyLarge,
       )
       // Riscritto quasi tutto: le parole segnate una per una si leggono peggio di due testi interi.

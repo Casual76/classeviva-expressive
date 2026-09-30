@@ -1266,12 +1266,18 @@ class SchoolSyncCoordinator @Inject constructor(
     }
   }
 
-  /** La sezione Compiti: prima col token REST, poi con la sessione del portale. */
+  /**
+   * La sezione Compiti: con la sessione del portale, e col token REST solo se quella non va.
+   *
+   * L'ordine viene dalla prova sul dispositivo (30 set 2026): col token la sezione risponde 401,
+   * con i cookie del portale 200 e i compiti. Il token resta dietro, perche' costa una richiesta e
+   * copre il giorno in cui il portale rifiutasse l'accesso con la password.
+   */
   private suspend fun fetchDedicatedHomeworks(): Result<List<Homework>> {
-    val viaRest = runCatching { restClient.getHomeworksIndex() }
-    if (viaRest.isSuccess) return viaRest
     val viaPortal = runCatching { portalClient.getHomeworksIndex(restClient.currentStudentId()) }
     if (viaPortal.isSuccess) return viaPortal
+    val viaRest = runCatching { restClient.getHomeworksIndex() }
+    if (viaRest.isSuccess) return viaRest
     return Result.failure(
       viaPortal.exceptionOrNull()
         ?: viaRest.exceptionOrNull()

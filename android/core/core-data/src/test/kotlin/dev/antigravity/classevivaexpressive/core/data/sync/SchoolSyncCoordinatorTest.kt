@@ -302,7 +302,7 @@ class SchoolSyncCoordinatorTest {
   @Test
   fun refreshHomeworks_foldsAgendaTwinIntoDedicatedHomework() = runTest {
     homeworkTestCache()
-    coEvery { restClient.getHomeworksIndex() } returns listOf(dedicatedHomework())
+    coEvery { portalClient.getHomeworksIndex(any()) } returns listOf(dedicatedHomework())
     coEvery { restClient.getAgenda(any(), any()) } returns listOf(
       agendaHomework(id = "a1", title = "Pag 1371 es 282, 283, 311", subject = null),
       agendaHomework(id = "a2", title = "Rousseau pp. 518-521"),
@@ -333,11 +333,24 @@ class SchoolSyncCoordinatorTest {
   }
 
   @Test
-  fun refreshHomeworks_fallsBackToThePortalWhenTheTokenIsRefused() = runTest {
+  fun refreshHomeworks_readsTheSectionThroughThePortalFirst() = runTest {
     homeworkTestCache()
-    coEvery { restClient.getHomeworksIndex() } throws ClassevivaNetworkException("401")
     coEvery { restClient.currentStudentId() } returns "55"
     coEvery { portalClient.getHomeworksIndex("55") } returns listOf(dedicatedHomework())
+    coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
+    val coordinator = buildCoordinator()
+
+    val result = coordinator.refreshHomeworks(force = true)
+
+    assertEquals(listOf("hw-1"), result.map { it.id })
+    coVerify(exactly = 0) { restClient.getHomeworksIndex() }
+  }
+
+  @Test
+  fun refreshHomeworks_triesTheTokenWhenThePortalRefuses() = runTest {
+    homeworkTestCache()
+    coEvery { portalClient.getHomeworksIndex(any()) } throws ClassevivaNetworkException("login")
+    coEvery { restClient.getHomeworksIndex() } returns listOf(dedicatedHomework())
     coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
     val coordinator = buildCoordinator()
 
@@ -350,7 +363,7 @@ class SchoolSyncCoordinatorTest {
   fun refreshHomeworks_recordsPreviousVersionWhenDedicatedHomeworkChanges() = runTest {
     val cache = homeworkTestCache()
     cache.putJson(dedicatedCacheKey(), listOf(dedicatedHomework(description = "Pag 1371 es 282, 283")))
-    coEvery { restClient.getHomeworksIndex() } returns listOf(dedicatedHomework(description = "Pag 1371 es 282, 283, 311"))
+    coEvery { portalClient.getHomeworksIndex(any()) } returns listOf(dedicatedHomework(description = "Pag 1371 es 282, 283, 311"))
     coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
     val coordinator = buildCoordinator()
 
@@ -370,12 +383,12 @@ class SchoolSyncCoordinatorTest {
   @Test
   fun refreshHomeworks_doesNotRecordHistoryForTheDoneFlagOrTheFirstRead() = runTest {
     val cache = homeworkTestCache()
-    coEvery { restClient.getHomeworksIndex() } returns listOf(dedicatedHomework())
+    coEvery { portalClient.getHomeworksIndex(any()) } returns listOf(dedicatedHomework())
     coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
     val coordinator = buildCoordinator()
 
     coordinator.refreshHomeworks(force = true)
-    coEvery { restClient.getHomeworksIndex() } returns listOf(dedicatedHomework().copy(done = true))
+    coEvery { portalClient.getHomeworksIndex(any()) } returns listOf(dedicatedHomework().copy(done = true))
     coordinator.refreshHomeworks(force = true)
 
     assertTrue(cache.containsKey(dedicatedCacheKey()))

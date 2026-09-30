@@ -33,6 +33,38 @@ class TextDiffTest {
   }
 
   @Test
+  fun anAppendedLinkIsOneAdditionEvenWhenItsDotsMatchTheOldText() {
+    val segments = TextDiff.words(
+      "UPLOAD ON CLASSROOM.",
+      "UPLOAD ON CLASSROOM: https://classroom.google.com/w/NTQ3/t/all",
+    )
+
+    assertEquals(
+      listOf(
+        DiffSegment(DiffKind.SAME, "UPLOAD ON CLASSROOM"),
+        DiffSegment(DiffKind.REMOVED, "."),
+        DiffSegment(DiffKind.ADDED, ": https://classroom.google.com/w/NTQ3/t/all"),
+      ),
+      segments,
+    )
+  }
+
+  @Test
+  fun neighbouringReplacementsReadAsOneRemovalThenOneAddition() {
+    val segments = TextDiff.words("es 290 291 per domani", "es 311 312 per domani")
+
+    assertEquals(
+      listOf(
+        DiffSegment(DiffKind.SAME, "es "),
+        DiffSegment(DiffKind.REMOVED, "290 291"),
+        DiffSegment(DiffKind.ADDED, "311 312"),
+        DiffSegment(DiffKind.SAME, " per domani"),
+      ),
+      segments,
+    )
+  }
+
+  @Test
   fun changingOnlyTheCaseIsNotAChangeAndKeepsTheNewText() {
     val segments = TextDiff.words("STUDIARE PAG 40", "Studiare pag 40")
 

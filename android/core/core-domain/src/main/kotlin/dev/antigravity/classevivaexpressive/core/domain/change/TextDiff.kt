@@ -74,8 +74,58 @@ object TextDiff {
     }
     while (i < old.size) push(DiffKind.REMOVED, old[i++])
     while (j < new.size) push(DiffKind.ADDED, new[j++])
-    return segments
+    return segments.groupChanges()
   }
+
+  /**
+   * Una modifica sola per chi legge, anche quando il confronto la spezza.
+   *
+   * Il confronto trova volentieri un punto o uno spazio in comune in mezzo a un testo nuovo: il
+   * punto finale di "…CLASSROOM." ritrovato dentro "classroom.google.com" spezzava in due il link
+   * aggiunto. Un pezzo uguale fatto solo di punteggiatura o di spazi, stretto fra due modifiche, fa
+   * parte della modifica: e dentro un gruppo prima si toglie, poi si aggiunge — "~~290 291~~ 311 312"
+   * invece di "~~290~~ 311 ~~291~~ 312".
+   */
+  private fun List<DiffSegment>.groupChanges(): List<DiffSegment> {
+    val grouped = mutableListOf<DiffSegment>()
+    var index = 0
+    while (index < size) {
+      if (this[index].kind == DiffKind.SAME) {
+        grouped += this[index++]
+        continue
+      }
+      var end = index
+      var cursor = index + 1
+      while (cursor < size) {
+        val segment = this[cursor]
+        val next = getOrNull(cursor + 1)
+        when {
+          segment.kind != DiffKind.SAME -> end = cursor
+          segment.isConnective() && next != null && next.kind != DiffKind.SAME -> Unit
+          else -> break
+        }
+        cursor++
+      }
+      val removed = StringBuilder()
+      val added = StringBuilder()
+      for (member in subList(index, end + 1)) {
+        when (member.kind) {
+          DiffKind.REMOVED -> removed.append(member.text)
+          DiffKind.ADDED -> added.append(member.text)
+          DiffKind.SAME -> {
+            removed.append(member.text)
+            added.append(member.text)
+          }
+        }
+      }
+      if (removed.isNotBlank()) grouped += DiffSegment(DiffKind.REMOVED, removed.toString())
+      if (added.isNotBlank()) grouped += DiffSegment(DiffKind.ADDED, added.toString())
+      index = end + 1
+    }
+    return grouped
+  }
+
+  private fun DiffSegment.isConnective(): Boolean = text.length <= 3 && text.none(Char::isLetterOrDigit)
 
   /** Quanto del testo e' cambiato, da 0 a 1, contando i caratteri tolti e aggiunti. */
   fun changedShare(segments: List<DiffSegment>): Float {
