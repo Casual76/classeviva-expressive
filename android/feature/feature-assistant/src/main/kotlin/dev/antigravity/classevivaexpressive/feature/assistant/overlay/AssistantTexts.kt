@@ -37,6 +37,8 @@ object AssistantTexts {
     FailureKind.TIMEOUT -> "Ci ha messo troppo: riprova con una domanda più semplice."
     FailureKind.BLOCKED -> "Il servizio ha rifiutato la richiesta."
     FailureKind.PROVIDER -> "Il servizio ha risposto con un errore."
+    FailureKind.MODEL_UNAVAILABLE -> "Il modello scelto non esiste più: scegline un altro nelle impostazioni."
+    FailureKind.CONTEXT_TOO_LONG -> "La conversazione è troppo lunga: aprine una nuova."
     FailureKind.MICROPHONE -> "Il microfono non è disponibile: chiudi l'app che lo sta usando."
     FailureKind.TRANSCRIPTION -> "Non sono riuscito a trascrivere: riprova."
     FailureKind.UNKNOWN -> "Qualcosa è andato storto."
