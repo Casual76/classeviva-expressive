@@ -15,22 +15,30 @@
       "ref": "main"
     },
     "stable": {
-      "version": "7.15.0",
-      "releaseDate": "2026-09-30",
-      "changelog": "Compiti: arrivano anche quelli della sezione Compiti del registro, la stessa che l'app ufficiale mostra in Oggi, con docente, data di assegnazione e stato svolto. Si vedono in agenda nel giorno di consegna, in home e in Altro > Compiti, senza doppioni con l'agenda. Modifiche: aprendo un impegno, un compito o un voto modificato, in cima c'e' cosa e' cambiato, con le parole tolte barrate e quelle nuove evidenziate; nelle liste le parole nuove restano evidenziate nel titolo, e la riga dice se l'impegno e' stato spostato. Le righe non schiacciano piu' il titolo: le etichette vanno sotto quando non c'e' posto, e i titoli lunghi si fermano a tre righe. Lo storico di agenda e compiti entra nel backup.",
-      "releaseTag": "stable-classeviva-expressive-v7.15.0",
-      "apkAsset": "classeviva-expressive-7.15.0.apk",
-      "sizeBytes": 33508100
+      "version": "7.15.1",
+      "releaseDate": "2026-10-13",
+      "changelog": "Il vetro dell'app è aggiornato (Fluid Engine 2.12.1). I pannelli grandi sono più sfocati e piegano di più la luce ai bordi. I pulsanti si possono tenere premuti e trascinare senza che la pagina scorra, e interruttori e cursori non la fanno più scorrere mentre li muovi. Cambiando scheda, la barra in basso non mostra più per un attimo la pagina nitida sotto il vetro, e la scheda che premi resta leggibile. Le notifiche dentro l'app si tirano giù per leggerle intere e si scartano verso l'alto. L'assistente ora spiega quando il modello scelto non esiste più o quando la conversazione è troppo lunga, e i pulsanti rapidi come Apri orario e Tutti i voti hanno la forma a pillola del resto dell'app.",
+      "releaseTag": "stable-classeviva-expressive-v7.15.1",
+      "apkAsset": "classeviva-expressive-7.15.1.apk",
+      "sizeBytes": 33557245
     },
     "beta": {
-      "version": "7.15.0",
-      "releaseDate": "2026-09-30",
-      "changelog": "Compiti: arrivano anche quelli della sezione Compiti del registro, la stessa che l'app ufficiale mostra in Oggi, con docente, data di assegnazione e stato svolto. Si vedono in agenda nel giorno di consegna, in home e in Altro > Compiti, senza doppioni con l'agenda. Modifiche: aprendo un impegno, un compito o un voto modificato, in cima c'e' cosa e' cambiato, con le parole tolte barrate e quelle nuove evidenziate; nelle liste le parole nuove restano evidenziate nel titolo, e la riga dice se l'impegno e' stato spostato. Le righe non schiacciano piu' il titolo: le etichette vanno sotto quando non c'e' posto, e i titoli lunghi si fermano a tre righe. Lo storico di agenda e compiti entra nel backup.",
-      "releaseTag": "stable-classeviva-expressive-v7.15.0",
-      "apkAsset": "classeviva-expressive-7.15.0.apk",
-      "sizeBytes": 33508100
+      "version": "7.15.1",
+      "releaseDate": "2026-10-13",
+      "changelog": "Il vetro dell'app è aggiornato (Fluid Engine 2.12.1). I pannelli grandi sono più sfocati e piegano di più la luce ai bordi. I pulsanti si possono tenere premuti e trascinare senza che la pagina scorra, e interruttori e cursori non la fanno più scorrere mentre li muovi. Cambiando scheda, la barra in basso non mostra più per un attimo la pagina nitida sotto il vetro, e la scheda che premi resta leggibile. Le notifiche dentro l'app si tirano giù per leggerle intere e si scartano verso l'alto. L'assistente ora spiega quando il modello scelto non esiste più o quando la conversazione è troppo lunga, e i pulsanti rapidi come Apri orario e Tutti i voti hanno la forma a pillola del resto dell'app.",
+      "releaseTag": "stable-classeviva-expressive-v7.15.1",
+      "apkAsset": "classeviva-expressive-7.15.1.apk",
+      "sizeBytes": 33557245
     },
     "history": [
+      {
+        "version": "7.15.0",
+        "releaseDate": "2026-09-30",
+        "changelog": "Compiti: arrivano anche quelli della sezione Compiti del registro, la stessa che l'app ufficiale mostra in Oggi, con docente, data di assegnazione e stato svolto. Si vedono in agenda nel giorno di consegna, in home e in Altro > Compiti, senza doppioni con l'agenda. Modifiche: aprendo un impegno, un compito o un voto modificato, in cima c'e' cosa e' cambiato, con le parole tolte barrate e quelle nuove evidenziate; nelle liste le parole nuove restano evidenziate nel titolo, e la riga dice se l'impegno e' stato spostato. Le righe non schiacciano piu' il titolo: le etichette vanno sotto quando non c'e' posto, e i titoli lunghi si fermano a tre righe. Lo storico di agenda e compiti entra nel backup.",
+        "releaseTag": "stable-classeviva-expressive-v7.15.0",
+        "apkAsset": "classeviva-expressive-7.15.0.apk",
+        "sizeBytes": 33508100
+      },
       {
         "version": "7.14.1",
         "releaseDate": "2026-09-23",
