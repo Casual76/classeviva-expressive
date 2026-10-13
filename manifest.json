@@ -15,22 +15,30 @@
       "ref": "main"
     },
     "stable": {
-      "version": "7.15.1",
+      "version": "7.15.2",
       "releaseDate": "2026-10-13",
-      "changelog": "Il vetro dell'app è aggiornato (Fluid Engine 2.12.1). I pannelli grandi sono più sfocati e piegano di più la luce ai bordi. I pulsanti si possono tenere premuti e trascinare senza che la pagina scorra, e interruttori e cursori non la fanno più scorrere mentre li muovi. Cambiando scheda, la barra in basso non mostra più per un attimo la pagina nitida sotto il vetro, e la scheda che premi resta leggibile. Le notifiche dentro l'app si tirano giù per leggerle intere e si scartano verso l'alto. L'assistente ora spiega quando il modello scelto non esiste più o quando la conversazione è troppo lunga, e i pulsanti rapidi come Apri orario e Tutti i voti hanno la forma a pillola del resto dell'app.",
-      "releaseTag": "stable-classeviva-expressive-v7.15.1",
-      "apkAsset": "classeviva-expressive-7.15.1.apk",
-      "sizeBytes": 33557245
+      "changelog": "Vetro sopra vetro, come dev'essere (Fluid Engine 2.13.0): un pulsante su un pannello, su un pop-up, su un foglio o su una card ora sfoca il vetro su cui sta invece di lasciar vedere la pagina nitida, e i pomelli di interruttori e cursori tenuti su una card mostrano la card.",
+      "releaseTag": "stable-classeviva-expressive-v7.15.2",
+      "apkAsset": "classeviva-expressive-7.15.2.apk",
+      "sizeBytes": 33573636
     },
     "beta": {
-      "version": "7.15.1",
+      "version": "7.15.2",
       "releaseDate": "2026-10-13",
-      "changelog": "Il vetro dell'app è aggiornato (Fluid Engine 2.12.1). I pannelli grandi sono più sfocati e piegano di più la luce ai bordi. I pulsanti si possono tenere premuti e trascinare senza che la pagina scorra, e interruttori e cursori non la fanno più scorrere mentre li muovi. Cambiando scheda, la barra in basso non mostra più per un attimo la pagina nitida sotto il vetro, e la scheda che premi resta leggibile. Le notifiche dentro l'app si tirano giù per leggerle intere e si scartano verso l'alto. L'assistente ora spiega quando il modello scelto non esiste più o quando la conversazione è troppo lunga, e i pulsanti rapidi come Apri orario e Tutti i voti hanno la forma a pillola del resto dell'app.",
-      "releaseTag": "stable-classeviva-expressive-v7.15.1",
-      "apkAsset": "classeviva-expressive-7.15.1.apk",
-      "sizeBytes": 33557245
+      "changelog": "Vetro sopra vetro, come dev'essere (Fluid Engine 2.13.0): un pulsante su un pannello, su un pop-up, su un foglio o su una card ora sfoca il vetro su cui sta invece di lasciar vedere la pagina nitida, e i pomelli di interruttori e cursori tenuti su una card mostrano la card.",
+      "releaseTag": "stable-classeviva-expressive-v7.15.2",
+      "apkAsset": "classeviva-expressive-7.15.2.apk",
+      "sizeBytes": 33573636
     },
     "history": [
+      {
+        "version": "7.15.1",
+        "releaseDate": "2026-10-13",
+        "changelog": "Il vetro dell'app è aggiornato (Fluid Engine 2.12.1). I pannelli grandi sono più sfocati e piegano di più la luce ai bordi. I pulsanti si possono tenere premuti e trascinare senza che la pagina scorra, e interruttori e cursori non la fanno più scorrere mentre li muovi. Cambiando scheda, la barra in basso non mostra più per un attimo la pagina nitida sotto il vetro, e la scheda che premi resta leggibile. Le notifiche dentro l'app si tirano giù per leggerle intere e si scartano verso l'alto. L'assistente ora spiega quando il modello scelto non esiste più o quando la conversazione è troppo lunga, e i pulsanti rapidi come Apri orario e Tutti i voti hanno la forma a pillola del resto dell'app.",
+        "releaseTag": "stable-classeviva-expressive-v7.15.1",
+        "apkAsset": "classeviva-expressive-7.15.1.apk",
+        "sizeBytes": 33557245
+      },
       {
         "version": "7.15.0",
         "releaseDate": "2026-09-30",
