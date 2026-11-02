@@ -98,7 +98,7 @@ class HomeworkSourceMergeTest {
     subject = "MATEMATICA",
     description = description,
     dueDate = dueDate,
-    teacher = "MUCCI SILVIA",
+    teacher = "BIANCHI ANNA",
     source = HomeworkSource.DEDICATED,
   )
 

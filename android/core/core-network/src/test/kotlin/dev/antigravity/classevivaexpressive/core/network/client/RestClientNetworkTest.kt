@@ -675,7 +675,7 @@ class RestClientNetworkTest {
     assertEquals("token-hw", request.getHeader("Z-Auth-Token"))
     assertEquals(DevApiKey, request.getHeader("Z-Dev-ApiKey"))
     assertEquals("hw-48213", homework.id)
-    assertEquals("MUCCI SILVIA", homework.teacher)
+    assertEquals("BIANCHI ANNA", homework.teacher)
   }
 
   @Test

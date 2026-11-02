@@ -314,7 +314,7 @@ class SchoolSyncCoordinatorTest {
     assertEquals(listOf("agenda-a2", "hw-1"), result.map { it.id })
     val dedicated = result.single { it.id == "hw-1" }
     assertEquals(listOf("a1"), dedicated.linkedAgendaIds)
-    assertEquals("MUCCI SILVIA", dedicated.teacher)
+    assertEquals("BIANCHI ANNA", dedicated.teacher)
     coVerify(exactly = 0) { restClient.getHomeworks() }
   }
 
@@ -417,7 +417,7 @@ class SchoolSyncCoordinatorTest {
     subject = "MATEMATICA",
     description = description,
     dueDate = "2026-05-07",
-    teacher = "MUCCI SILVIA",
+    teacher = "BIANCHI ANNA",
     source = HomeworkSource.DEDICATED,
   )
 

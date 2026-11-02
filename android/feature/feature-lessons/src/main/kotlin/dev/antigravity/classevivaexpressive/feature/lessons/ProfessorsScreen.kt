@@ -184,8 +184,8 @@ private fun buildProfessorStats(
   val allSubjects = (subjectsFromLessons + subjectsFromGrades).distinct()
 
   // ── Presenza (algoritmo smart multi-materia) ────────────────────────────
-  // Per professori con più materie (es. Mucci: Matematica+Fisica,
-  // Monti: Storia+Filosofia+Fisica), consideriamo presente anche quando
+  // Per professori con più materie (es. Matematica+Fisica oppure
+  // Storia+Filosofia+Fisica), consideriamo presente anche quando
   // le materie vengono invertite di ordine rispetto al solito.
   val teacherSubjectsLower = allSubjects.map { it.lowercase() }.toSet()
 

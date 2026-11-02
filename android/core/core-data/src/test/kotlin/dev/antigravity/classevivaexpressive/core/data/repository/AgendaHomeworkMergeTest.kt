@@ -20,7 +20,7 @@ class AgendaHomeworkMergeTest {
     )
 
     assertEquals(listOf("a2", "homework-hw-1"), merged.map { it.id })
-    assertEquals("MUCCI SILVIA", merged.last().teacher)
+    assertEquals("BIANCHI ANNA", merged.last().teacher)
   }
 
   @Test
@@ -68,7 +68,7 @@ class AgendaHomeworkMergeTest {
     subject = "MATEMATICA",
     description = description,
     dueDate = "2026-09-30",
-    teacher = "MUCCI SILVIA",
+    teacher = "BIANCHI ANNA",
     source = HomeworkSource.DEDICATED,
     linkedAgendaIds = linkedAgendaIds,
   )

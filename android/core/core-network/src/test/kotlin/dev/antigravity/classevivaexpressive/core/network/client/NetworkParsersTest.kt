@@ -309,7 +309,7 @@ class NetworkParsersTest {
       """
       {
         "communication": {
-          "cntHtml": "<p>La classe 4F entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Mucci.</p><p>L'adesione alla presente vale come presa visione della famiglia.</p>",
+          "cntHtml": "<p>La classe 4F entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Bianchi.</p><p>L'adesione alla presente vale come presa visione della famiglia.</p>",
           "cntValidInJoin": "1"
         }
       }
@@ -341,7 +341,7 @@ class NetworkParsersTest {
       {
         "item": {
           "title": "2690 - 4F - entrata posticipata l'8/5",
-          "text": "La classe 4F entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Mucci.\r\n\r\nL'adesione alla presente vale come presa visione della famiglia.\r\n\r\nper la vicepresidenza\r\nprof.ssa Martina Pomilia"
+          "text": "La classe 4F entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Bianchi.\r\n\r\nL'adesione alla presente vale come presa visione della famiglia.\r\n\r\nper la vicepresidenza\r\nprof.ssa Martina Pomilia"
         },
         "reply": {
           "replJoin": false,
@@ -759,7 +759,7 @@ class NetworkParsersTest {
           "evtHPos": 3,
           "evtDuration": 1,
           "subjectDesc": "LINGUA E CULTURA STRANIERA INGLESE",
-          "authorName": "DE LUCA SIMONA"
+          "authorName": "GALLI SARA"
         }
         """.trimIndent(),
       ),
@@ -784,7 +784,7 @@ class NetworkParsersTest {
           "evtHPos": 3,
           "evtDuration": 1,
           "subjectDesc": "DISEGNO E STORIA DELL'ARTE",
-          "authorName": "RUGGERI CONCETTA",
+          "authorName": "COSTA PAOLA",
           "lessonArg": ""
         }
         """.trimIndent(),
@@ -850,7 +850,7 @@ class NetworkParsersTest {
     assertEquals("Pag 1371 es 282, 283, 311", hw.description)
     assertEquals("2026-09-30", hw.dueDate)
     assertEquals("2026-09-26", hw.assignedDate)
-    assertEquals("MUCCI SILVIA", hw.teacher)
+    assertEquals("BIANCHI ANNA", hw.teacher)
     assertTrue(hw.done)
     // Una data sola non e' un momento: non deve diventare "aggiunto alle 00:00".
     assertNull(hw.createdAt)
@@ -1278,7 +1278,7 @@ internal const val HomeworksIndexItem = """
   "evtId": 48213,
   "evtCode": "NEWDC",
   "teacherId": 11,
-  "teacherName": "MUCCI SILVIA",
+  "teacherName": "BIANCHI ANNA",
   "homeworkDesc": "Pag 1371 es 282, 283, 311",
   "homeworkDone": true,
   "assignmentDate": "2026-09-26",

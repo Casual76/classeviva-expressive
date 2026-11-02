@@ -95,7 +95,7 @@ class AppBackupRepositoryTest {
     notes = "note",
     period = "Pentamestre",
     periodCode = "P2",
-    teacher = "MONTI",
+    teacher = "ROSSI",
     color = "green",
     firstSeenAtMs = 1_700_000_000_000L,
   )
