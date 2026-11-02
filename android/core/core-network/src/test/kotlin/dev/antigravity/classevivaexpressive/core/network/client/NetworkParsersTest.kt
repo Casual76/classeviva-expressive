@@ -275,7 +275,7 @@ class NetworkParsersTest {
         {
           "pubId": "2690",
           "evtCode": "CIR",
-          "cntTitle": "4F - entrata posticipata l'8/5",
+          "cntTitle": "3B - entrata posticipata l'8/5",
           "readStatus": "Da Leggere",
           "cntValidInJoin": "S"
         }
@@ -309,7 +309,7 @@ class NetworkParsersTest {
       """
       {
         "communication": {
-          "cntHtml": "<p>La classe 4F entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Bianchi.</p><p>L'adesione alla presente vale come presa visione della famiglia.</p>",
+          "cntHtml": "<p>La classe 3B entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Bianchi.</p><p>L'adesione alla presente vale come presa visione della famiglia.</p>",
           "cntValidInJoin": "1"
         }
       }
@@ -319,7 +319,7 @@ class NetworkParsersTest {
       id = "2690",
       pubId = "2690",
       evtCode = "CIR",
-      title = "4F - entrata posticipata l'8/5",
+      title = "3B - entrata posticipata l'8/5",
       contentPreview = "",
       sender = "Scuola",
       date = "2026-05-07",
@@ -328,7 +328,7 @@ class NetworkParsersTest {
 
     val detail = normalizeCommunicationDetail(payload, base)
 
-    assertTrue(detail.content.contains("La classe 4F entrerà alle ore 9:10"))
+    assertTrue(detail.content.contains("La classe 3B entrerà alle ore 9:10"))
     assertTrue(detail.content.contains("presa visione della famiglia"))
     assertEquals(NoticeboardActionType.JOIN, detail.actions.single().type)
     assertTrue(detail.communication.needsJoin)
@@ -340,8 +340,8 @@ class NetworkParsersTest {
       """
       {
         "item": {
-          "title": "2690 - 4F - entrata posticipata l'8/5",
-          "text": "La classe 4F entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Bianchi.\r\n\r\nL'adesione alla presente vale come presa visione della famiglia.\r\n\r\nper la vicepresidenza\r\nprof.ssa Martina Pomilia"
+          "title": "2690 - 3B - entrata posticipata l'8/5",
+          "text": "La classe 3B entrerà alle ore 9:10 il giorno 8/5 per assenza della prof.ssa Bianchi.\r\n\r\nL'adesione alla presente vale come presa visione della famiglia.\r\n\r\nper la vicepresidenza\r\nprof.ssa Paola Neri"
         },
         "reply": {
           "replJoin": false,
@@ -356,7 +356,7 @@ class NetworkParsersTest {
       id = "9357479",
       pubId = "24510451",
       evtCode = "CF",
-      title = "2690 - 4F - entrata posticipata l'8/5",
+      title = "2690 - 3B - entrata posticipata l'8/5",
       contentPreview = "",
       sender = "Scuola",
       date = "2026-05-07",
@@ -366,8 +366,8 @@ class NetworkParsersTest {
 
     val detail = normalizeCommunicationDetail(payload, base)
 
-    assertTrue(detail.content.contains("La classe 4F entrerà alle ore 9:10"))
-    assertTrue(detail.content.contains("prof.ssa Martina Pomilia"))
+    assertTrue(detail.content.contains("La classe 3B entrerà alle ore 9:10"))
+    assertTrue(detail.content.contains("prof.ssa Paola Neri"))
     assertEquals(NoticeboardActionType.JOIN, detail.actions.single().type)
   }
 
@@ -381,7 +381,7 @@ class NetworkParsersTest {
           "cntId": 9357479,
           "evento_id": "9357479",
           "evtCode": "CF",
-          "cntTitle": "2690 - 4F - entrata posticipata l'8/5"
+          "cntTitle": "2690 - 3B - entrata posticipata l'8/5"
         }
         """.trimIndent(),
       ),
@@ -1084,7 +1084,7 @@ class NetworkParsersTest {
           "title": "Laboratorio guidato",
           "evtDatetimeBegin": "2026-04-02T08:00:00+02:00",
           "categoryDesc": "Scienze naturali",
-          "materia": { "desc": "4F scienze applicate" }
+          "materia": { "desc": "3B scienze applicate" }
         }
         """.trimIndent(),
       ),

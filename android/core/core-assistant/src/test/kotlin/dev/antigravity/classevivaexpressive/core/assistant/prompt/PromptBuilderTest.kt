@@ -14,7 +14,7 @@ import org.junit.Test
 class PromptBuilderTest {
 
   private fun context(mode: AskMode = AskMode.TEXT, actions: Boolean = true) = PromptContext(
-    profile = StudentProfile(name = "Alessio", surname = "Rossi", schoolClass = "4", section = "F", school = "Liceo Agnoletti"),
+    profile = StudentProfile(name = "Marco", surname = "Rossi", schoolClass = "3", section = "B", school = "Liceo Esempio"),
     schoolYear = SchoolYearRef(2026, 2027),
     today = LocalDate.of(2026, 9, 5),
     periods = listOf(
@@ -33,8 +33,8 @@ class PromptBuilderTest {
   @Test
   fun `il prompt porta chi, quando e cosa c'e' da vedere`() {
     val prompt = PromptBuilder.build(context())
-    assertTrue(prompt.contains("Studente: Alessio Rossi"))
-    assertTrue(prompt.contains("Classe: 4F"))
+    assertTrue(prompt.contains("Studente: Marco Rossi"))
+    assertTrue(prompt.contains("Classe: 3B"))
     assertTrue(prompt.contains("Anno scolastico: 2026/27"))
     assertTrue(prompt.contains("Oggi: 2026-09-05 (sab), sabato"))
     assertTrue(prompt.contains("2 voti nuovi, 3 comunicazioni non lette"))

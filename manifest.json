@@ -627,7 +627,7 @@
       {
         "version": "5.6.6",
         "releaseDate": "2026-05-07",
-        "changelog": "Import orario 4F migliorato (blocco ricalcolo e tag ufficiale), fix algoritmo prof, dossier segreto potenziato, gestione Ruggeri -> Riccio",
+        "changelog": "Import orario 4F migliorato (blocco ricalcolo e tag ufficiale), fix algoritmo prof, dossier segreto potenziato, gestione dei cambi di docente",
         "releaseTag": "stable-classeviva-expressive-v5.6.6",
         "apkAsset": "classeviva-expressive-5.6.6.apk",
         "exeAsset": "",
@@ -636,7 +636,7 @@
       {
         "version": "5.6.5",
         "releaseDate": "2026-05-07",
-        "changelog": "Import orario 4F, fix algoritmo prof, dossier segreto potenziato, gestione Ruggeri -> Riccio",
+        "changelog": "Import orario 4F, fix algoritmo prof, dossier segreto potenziato, gestione dei cambi di docente",
         "releaseTag": "stable-classeviva-expressive-v5.6.5",
         "apkAsset": "classeviva-expressive-5.6.5.apk",
         "exeAsset": "",

@@ -1392,7 +1392,7 @@ class SchoolSyncCoordinatorTest {
       id = "2690",
       pubId = "2690",
       evtCode = "CIR",
-      title = "4F - entrata posticipata l'8/5",
+      title = "3B - entrata posticipata l'8/5",
       contentPreview = "Preview",
       sender = "Scuola",
       date = "2026-05-07",
@@ -1400,7 +1400,7 @@ class SchoolSyncCoordinatorTest {
     )
     val detail = CommunicationDetail(
       communication = base,
-      content = "La classe 4F entrerà alle ore 9:10 il giorno 8/5.",
+      content = "La classe 3B entrerà alle ore 9:10 il giorno 8/5.",
     )
     coEvery { communicationDao.getByPubIdAndEvtCode("2690", "CIR") } returns entity
     coEvery { restClient.getCommunicationDetail(any<Communication>()) } returns detail
