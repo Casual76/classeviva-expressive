@@ -44,14 +44,14 @@ class OrarioGiornoTool : AiTool<AssistantToolContext> {
 class OrarioSettimanaTool : AiTool<AssistantToolContext> {
   override val name = "orario_settimana"
   override val group: AiToolGroup = RegistroToolGroup.ORARIO
-  override val description = "L'orario settimanale tipo (il modello che l'app ha appreso dalle lezioni, o quello ufficiale): per ogni giorno le materie in ordine"
+  override val description = "L'orario settimanale tipo (il modello che l'app ha appreso dalle lezioni): per ogni giorno le materie in ordine"
   override val parameters = Schema.obj(emptyMap())
 
   override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput {
     val template = ctx.lessons.observeTimetableTemplate().first().withOverridesApplied()
     if (template.slots.isEmpty()) return ToolOutput("orario non disponibile: l'app non ha ancora abbastanza lezioni per ricostruirlo")
     return ToolText.output {
-      line("origine", if (template.isOfficial) "orario ufficiale" else "appreso da ${template.sampledWeeks} settimane di lezioni")
+      line("origine", "appreso da ${template.sampledWeeks} settimane di lezioni")
       template.slotsByDay().toSortedMap().forEach { (day, slots) ->
         line("${Dates.longDay(day)}: " + slots.joinToString("; ") { "${it.time} ${it.subject}" })
       }

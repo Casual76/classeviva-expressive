@@ -2,6 +2,7 @@ package dev.antigravity.classevivaexpressive.feature.lessons
 
 import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
 import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
+import dev.antigravity.classevivaexpressive.core.domain.model.slotFingerprint
 import java.time.LocalTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -88,7 +89,8 @@ class LessonsLiveSlotTest {
   @Test
   fun confirmedWinsOverEverythingElse() {
     val block = SlotBlock(primary = slot("08:00", confidence = 0.1f, confirmed = true))
-    assertEquals(SlotKind.Confirmed, slotKind(block, TimetableTemplate(isOfficial = true)))
+    val overridden = TimetableTemplate(manualOverrides = mapOf(block.primary.slotFingerprint() to block.primary))
+    assertEquals(SlotKind.Confirmed, slotKind(block, overridden))
   }
 
   @Test

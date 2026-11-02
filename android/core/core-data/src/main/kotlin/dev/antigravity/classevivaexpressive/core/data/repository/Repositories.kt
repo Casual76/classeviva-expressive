@@ -764,27 +764,9 @@ class SchoolDataRepository @Inject constructor(
     timetableTemplateStore.deleteOverride(schoolYearStore.currentSchoolYearRef().id, fingerprint)
   }
 
-  override suspend fun importOfficialTemplate(slots: List<TemplateSlot>): Result<Unit> = runCatching {
-    val schoolYearId = schoolYearStore.currentSchoolYearRef().id
-    timetableTemplateStore.writeTemplate(
-      schoolYearId,
-      TimetableTemplate(
-        slots = slots,
-        sampledWeeks = 0,
-        lastComputedAt = System.currentTimeMillis(),
-        manualOverrides = emptyMap(),
-        isOfficial = true,
-      ),
-    )
-  }
-
   override suspend fun regenerateTimetableTemplate(): Result<TimetableTemplate> = runCatching {
     val schoolYearId = schoolYearStore.currentSchoolYearRef().id
     val stored = timetableTemplateStore.observeTemplate(schoolYearId).firstValue()
-    if (stored.isOfficial) {
-      // Do not regenerate if the current template is an official imported one
-      return@runCatching stored.withOverridesApplied()
-    }
     val lessons = observeLessons().firstValue()
     val computed = predictiveTimetableUseCase.generateTimetableTemplate(lessons)
     val merged = computed.copy(manualOverrides = stored.manualOverrides)

@@ -1779,11 +1779,7 @@ class SchoolSyncCoordinator @Inject constructor(
     val session = operation.session
     ensureSessionUnchanged(operation)
     val currentTemplate = timetableTemplateStore.observeTemplate(schoolYear.id).first()
-    if (currentTemplate.isOfficial == true) {
-      // Do not overwrite official imported template
-      return
-    }
-    
+
     val lessons = readYearScopedValue(operation, LessonsSection, schoolYear, emptyList<Lesson>())
     val agenda = agendaDao.getByYearOnce(session.studentId, schoolYear.id).map { entity ->
       AgendaItem(

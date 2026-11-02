@@ -83,7 +83,6 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.WeekTimeGrid
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.rememberTimeGridMinuteHeight
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.timeGridRange
-import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Lesson
 import dev.antigravity.classevivaexpressive.core.domain.model.LessonsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
@@ -142,7 +141,6 @@ private enum class LessonsContentType {
   Hero,
   DaySelector,
   Instruction,
-  ImportAction,
   WeekNavigator,
   SectionHeader,
   EmptyDay,
@@ -159,7 +157,6 @@ data class LessonsUiState(
   val editingSlot: TemplateSlot? = null,
   val confirmingSlot: TemplateSlot? = null,
   val settingRoomSlot: TemplateSlot? = null,
-  val canImportOfficialTimetable: Boolean = false,
 )
 
 private data class DayOption(
@@ -176,7 +173,6 @@ private sealed interface SlotAction {
 @HiltViewModel
 class LessonsViewModel @Inject constructor(
   private val lessonsRepository: LessonsRepository,
-  private val dashboardRepository: DashboardRepository,
 ) : ViewModel() {
   private val lastMessage = MutableStateFlow<String?>(null)
   private val isRefreshing = MutableStateFlow(false)
@@ -186,28 +182,14 @@ class LessonsViewModel @Inject constructor(
     combine(
       lessonsRepository.observeLessons(),
       lessonsRepository.observeTimetableTemplate(),
-      dashboardRepository.observeDashboard(),
-      ::Triple
+      ::Pair
     ),
     lastMessage,
     isRefreshing,
     slotAction,
-  ) { (lessons, timetableTemplate, dashboard), message, refreshing, action ->
+  ) { (lessons, timetableTemplate), message, refreshing, action ->
     val teachers = lessons.mapNotNull { it.teacher?.takeIf(String::isNotBlank) }.distinct().size
-    val teacherSet = lessons.mapNotNull { it.teacher?.uppercase() }.toSet()
-    val agnoletti4FSignatures = listOf(
-      "MONTI ALESSANDRO", "PAOLETTI LAURA", "DE LUCA SIMONA",
-      "FERRARA ELISA", "MUCCI SILVIA", "VESER CORRADO", "PISANO ELENA",
-      "RICCIO EMANUELE", "RUGGERI CARLO", "IACI FILIPPA",
-    )
-    val profile = dashboard.profile
-    val is4F = profile.schoolClass == "4" && profile.section.uppercase() == "F"
-    val has4FSignatures = agnoletti4FSignatures.count { sig -> teacherSet.any { it.contains(sig) } } >= 5
-    // Assuming 'dashboard.profile' might not have the year directly, we can check if it's the 25/26 year.
-    // Or we check dashboard.schoolYear if available, let's just check the date since it's 2025/26
-    val isYear2526 = dashboard.profile.schoolYear?.contains("25/26") == true || dashboard.profile.schoolYear?.contains("2025") == true
-    val canImport = (is4F || has4FSignatures) && isYear2526
-    
+
     LessonsUiState(
       lessons = lessons.sortedBy { "${it.date}-${it.time}" },
       timetableTemplate = timetableTemplate,
@@ -217,7 +199,6 @@ class LessonsViewModel @Inject constructor(
       editingSlot = (action as? SlotAction.Editing)?.slot,
       confirmingSlot = (action as? SlotAction.Confirming)?.slot,
       settingRoomSlot = (action as? SlotAction.SettingRoom)?.slot,
-      canImportOfficialTimetable = canImport,
     )
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LessonsUiState())
 
@@ -290,16 +271,6 @@ class LessonsViewModel @Inject constructor(
       lessonsRepository.regenerateTimetableTemplate()
         .onSuccess { lastMessage.value = "Orario ricalcolato dal tuo storico." }
         .onFailure { lastMessage.value = it.message ?: "Ricalcolo orario fallito." }
-      isRefreshing.value = false
-    }
-  }
-
-  fun importOfficialTimetable() {
-    viewModelScope.launch {
-      isRefreshing.value = true
-      lessonsRepository.importOfficialTemplate(agnoletti4FOfficialSlots())
-        .onSuccess { lastMessage.value = "Orario ufficiale 4F importato." }
-        .onFailure { lastMessage.value = it.message ?: "Importazione fallita." }
       isRefreshing.value = false
     }
   }
@@ -445,38 +416,24 @@ fun LessonsRoute(
       onBack = onBack,
       actions = {
         // Un tasto solo, con dentro tutti i verbi: toccato aggiorna, tenuto premuto offre anche il
-        // ricalcolo e l'importazione — che in barra non ci stavano e prima erano un secondo tasto
-        // dal significato oscuro.
+        // ricalcolo — che in barra non ci stava e prima era un secondo tasto dal significato oscuro.
         FluidBarAction(
           icon = Icons.Rounded.Refresh,
           contentDescription = "Aggiorna",
           onClick = viewModel::refresh,
           actions = {
-            buildList {
-              add(
-                FluidContextAction(
-                  label = "Aggiorna",
-                  icon = Icons.Rounded.Refresh,
-                  onClick = viewModel::refresh,
-                ),
-              )
-              add(
-                FluidContextAction(
-                  label = "Ricalcola orario",
-                  icon = Icons.Rounded.AutoFixHigh,
-                  onClick = viewModel::regenerateTemplate,
-                ),
-              )
-              if (state.canImportOfficialTimetable) {
-                add(
-                  FluidContextAction(
-                    label = "Importa orario ufficiale 4F",
-                    icon = Icons.Rounded.AutoStories,
-                    onClick = viewModel::importOfficialTimetable,
-                  ),
-                )
-              }
-            }
+            listOf(
+              FluidContextAction(
+                label = "Aggiorna",
+                icon = Icons.Rounded.Refresh,
+                onClick = viewModel::refresh,
+              ),
+              FluidContextAction(
+                label = "Ricalcola orario",
+                icon = Icons.Rounded.AutoFixHigh,
+                onClick = viewModel::regenerateTemplate,
+              ),
+            )
           },
         )
       },
@@ -507,12 +464,10 @@ fun LessonsRoute(
 
       item(key = "lessons:hero", contentType = LessonsContentType.Hero) {
         val showingTemplate = selectedTab == TAB_TIMETABLE
-        val showingOfficialTemplate = showingTemplate && state.timetableTemplate.isOfficial
         val visibleCount = if (showingTemplate) state.timetableTemplate.slots.size else weekLessonCount
         FeatureHero(
           identity = FeatureIdentity.Lessons,
           eyebrow = when {
-            showingOfficialTemplate -> "Orario ufficiale"
             showingTemplate -> "Settimana ricorrente"
             else -> "Storico selezionato"
           },
@@ -546,17 +501,6 @@ fun LessonsRoute(
               modifier = Modifier.padding(horizontal = 4.dp),
             )
           }
-          if (state.canImportOfficialTimetable) {
-            item(key = "lessons:template:official-import", contentType = LessonsContentType.ImportAction) {
-              FluidButton(
-                text = "Importa orario ufficiale 4F",
-                onClick = viewModel::importOfficialTimetable,
-                style = FluidButtonStyle.Filled,
-                fillWidth = true,
-                leading = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
-              )
-            }
-          }
           item(key = "lessons:template:week", contentType = LessonsContentType.TimetableRow) {
             WeekTimetableGrid(
               sections = templateSections,
@@ -587,17 +531,6 @@ fun LessonsRoute(
               color = MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.padding(horizontal = 4.dp),
             )
-          }
-          if (state.canImportOfficialTimetable) {
-            item(key = "lessons:template:official-import", contentType = LessonsContentType.ImportAction) {
-              FluidButton(
-                text = "Importa orario ufficiale 4F",
-                onClick = viewModel::importOfficialTimetable,
-                style = FluidButtonStyle.Filled,
-                fillWidth = true,
-                leading = { Icon(Icons.Rounded.AutoFixHigh, contentDescription = null) },
-              )
-            }
           }
           templateSection?.let { section ->
             item(
@@ -832,7 +765,6 @@ private fun TimetableBlockRow(
   val displayRoom = block.allSlots
     .mapNotNull { it.room?.trim()?.takeIf(String::isNotBlank) }
     .firstOrNull()
-  val isOfficial = timetable.isOfficial
   val kind = slotKind(block, timetable)
   FluidListRow(
     title = block.displaySubject.asReadableSubject(),
@@ -843,7 +775,6 @@ private fun TimetableBlockRow(
       when {
         isConfirmed -> "Confermato manualmente"
         isOverridden -> "Modificato manualmente"
-        isOfficial -> "Importato da orario ufficiale"
         block.isMulti -> "Blocco ${block.allSlots.size}h · ${(primary.confidence * 100).toInt()}%"
         else -> "Ricorrenza ${(primary.confidence * 100).toInt()}% · ${countLabel(primary.sampleCount, "settimana", "settimane")}"
       },
@@ -1295,7 +1226,7 @@ private fun LiveLessonCard(
  * Da qui vengono sia il tono sia il badge, cosi' non possono dissentire — ed e' l'unico modo di
  * avere una soglia sola invece di due che scivolano una rispetto all'altra.
  */
-internal enum class SlotKind { Confirmed, Official, Overridden, Block, Stable, Dynamic }
+internal enum class SlotKind { Confirmed, Overridden, Block, Stable, Dynamic }
 
 /** Sopra questa confidenza una ricorrenza si considera stabile. Una soglia, non due. */
 internal const val SlotStableConfidence = 0.75f
@@ -1305,7 +1236,6 @@ internal fun slotKind(block: SlotBlock, timetable: TimetableTemplate): SlotKind 
   return when {
     block.allSlots.all(TemplateSlot::confirmed) -> SlotKind.Confirmed
     isOverridden -> SlotKind.Overridden
-    timetable.isOfficial -> SlotKind.Official
     block.isMulti -> SlotKind.Block
     block.primary.confidence >= SlotStableConfidence -> SlotKind.Stable
     else -> SlotKind.Dynamic
@@ -1320,7 +1250,7 @@ internal fun slotKind(block: SlotBlock, timetable: TimetableTemplate): SlotKind 
  * ("Ricorrenza 62% - 8 settimane") e nel badge.
  */
 internal fun SlotKind.tone(): FluidTone = when (this) {
-  SlotKind.Confirmed, SlotKind.Official -> FluidTone.Success
+  SlotKind.Confirmed -> FluidTone.Success
   SlotKind.Overridden -> FluidTone.Info
   SlotKind.Block, SlotKind.Stable -> FluidTone.Neutral
   SlotKind.Dynamic -> FluidTone.Warning
@@ -1329,7 +1259,6 @@ internal fun SlotKind.tone(): FluidTone = when (this) {
 internal fun SlotKind.badgeLabel(block: SlotBlock): String = when (this) {
   SlotKind.Confirmed -> "CONFERMATO"
   SlotKind.Overridden -> "MODIFICATO"
-  SlotKind.Official -> "IMPORT"
   SlotKind.Block -> "BLOCCO ${block.allSlots.size}H"
   SlotKind.Stable -> "STABILE"
   SlotKind.Dynamic -> "DINAMICO"
@@ -1679,42 +1608,3 @@ private fun EditSlotContent(
     )
   }
 }
-
-private fun agnoletti4FOfficialSlots(): List<TemplateSlot> = listOf(
-  // LUNEDÌ
-  TemplateSlot(1, "08:00", "09:00", 60, "Storia", "MONTI ALESSANDRO", "P1 Aula 21"),
-  TemplateSlot(1, "09:00", "10:00", 60, "Sc. Naturali", "PAOLETTI LAURA", "P1 Aula 21"),
-  TemplateSlot(1, "10:00", "11:00", 60, "Inglese", "DE LUCA SIMONA", "P1 Aula 21"),
-  TemplateSlot(1, "11:00", "12:00", 60, "Filosofia", "MONTI ALESSANDRO", "P1 Aula 21"),
-  TemplateSlot(1, "12:00", "13:00", 60, "Fisica", "MUCCI SILVIA", "P1 Lab fisica"),
-  // MARTEDÌ
-  TemplateSlot(2, "08:00", "09:00", 60, "Sc. Naturali", "PAOLETTI LAURA", "P2 Aula 36 Scienze"),
-  TemplateSlot(2, "09:00", "10:00", 60, "Sc. Naturali", "PAOLETTI LAURA", "P2 Aula 36 Scienze"),
-  TemplateSlot(2, "10:00", "11:00", 60, "Italiano", "FERRARA ELISA", "P2 Aula 33"),
-  TemplateSlot(2, "11:00", "12:00", 60, "Inglese", "DE LUCA SIMONA", "P2 Aula 33"),
-  TemplateSlot(2, "12:00", "13:00", 60, "Matematica", "MUCCI SILVIA", "P2 Aula 33"),
-  // MERCOLEDÌ
-  TemplateSlot(3, "08:00", "09:00", 60, "Italiano", "FERRARA ELISA", "P2 Aula 31"),
-  TemplateSlot(3, "09:00", "10:00", 60, "Sc. Naturali", "PAOLETTI LAURA", "P2 Aula 31"),
-  TemplateSlot(3, "10:00", "11:00", 60, "Informatica", "VESER CORRADO", "P1 Aula 17 - Lab Info 3"),
-  TemplateSlot(3, "11:00", "12:00", 60, "Informatica", "VESER CORRADO", "P1 Aula 17 - Lab Info 3"),
-  TemplateSlot(3, "12:00", "13:00", 60, "Dis e Storia dell'arte", "RICCIO EMANUELE", "P0 Aula 11"),
-  // GIOVEDÌ
-  TemplateSlot(4, "08:00", "09:00", 60, "Fisica", "MUCCI SILVIA", "P1 Aula fisica"),
-  TemplateSlot(4, "09:00", "10:00", 60, "Inglese", "DE LUCA SIMONA", "P1 Aula 28"),
-  TemplateSlot(4, "10:00", "11:00", 60, "Dis e Storia dell'arte", "RICCIO EMANUELE", "P0 Aula 01 dis"),
-  TemplateSlot(4, "11:00", "12:00", 60, "Filosofia", "MONTI ALESSANDRO", "P0 Aula 09"),
-  TemplateSlot(4, "12:00", "13:00", 60, "Storia", "MONTI ALESSANDRO", "P0 Aula 09"),
-  // VENERDÌ
-  TemplateSlot(5, "08:00", "09:00", 60, "Matematica", "MUCCI SILVIA", "P1 Aula 21"),
-  TemplateSlot(5, "09:00", "10:00", 60, "Matematica", "MUCCI SILVIA", "P1 Aula 21"),
-  TemplateSlot(5, "10:00", "11:00", 60, "Italiano", "FERRARA ELISA", "P1 Aula 24"),
-  TemplateSlot(5, "11:00", "12:00", 60, "Italiano", "FERRARA ELISA", "P1 Aula 24"),
-  TemplateSlot(5, "12:00", "13:00", 60, "Sc. Naturali", "PAOLETTI LAURA", "P2 Aula 34"),
-  TemplateSlot(5, "13:00", "14:00", 60, "Religione", "IACI FILIPPA", "P2 Aula 37"),
-  // SABATO
-  TemplateSlot(6, "08:00", "09:00", 60, "Sc. Motorie", "PISANO ELENA", "Palestre Sesto"),
-  TemplateSlot(6, "09:00", "10:00", 60, "Sc. Motorie", "PISANO ELENA", "Palestre Sesto"),
-  TemplateSlot(6, "10:00", "11:00", 60, "Fisica", "MUCCI SILVIA", "P1 Aula Lab info 1"),
-  TemplateSlot(6, "11:00", "12:00", 60, "Matematica", "MUCCI SILVIA", "P1 Aula Lab info 1"),
-)

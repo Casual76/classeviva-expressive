@@ -463,7 +463,6 @@ data class TimetableTemplate(
   val sampledWeeks: Int = 0,
   val lastComputedAt: Long = 0L,
   val manualOverrides: Map<String, TemplateSlot> = emptyMap(),
-  val isOfficial: Boolean = false,
 ) {
   fun slotsByDay(): Map<DayOfWeek, List<TemplateSlot>> {
     return slots
@@ -947,7 +946,6 @@ interface LessonsRepository {
   suspend fun saveSlotOverride(fingerprint: String, slot: TemplateSlot)
   suspend fun deleteSlotOverride(fingerprint: String)
   suspend fun regenerateTimetableTemplate(): Result<TimetableTemplate>
-  suspend fun importOfficialTemplate(slots: List<TemplateSlot>): Result<Unit>
 }
 
 interface HomeworkRepository {
