@@ -18,6 +18,8 @@ enum class RegistroToolGroup(
    * non cambia niente — il router locale sceglie sempre fra tutti.
    */
   override val loadsWithCategory: Boolean = false,
+  /** Un tool del gruppo puo' fermarsi ad aspettare il si' dell'utente: l'orchestratore gli somma la finestra del cancello. */
+  override val awaitsConfirmation: Boolean = false,
 ) : AiToolGroup {
   VOTI(
     "voti",
@@ -66,6 +68,7 @@ enum class RegistroToolGroup(
     "app",
     "azioni nell'app: aprire una pagina o un dettaglio, cambiare impostazioni (tema, colori, notifiche, sincronizzazione), " +
       "segnare lette le comunicazioni, prendere visione di una comunicazione, aggiungere un evento personale, salvare un obiettivo, aggiornare i dati",
+    awaitsConfirmation = true,
   ),
   ;
 

@@ -114,24 +114,9 @@ class AssistantRuntime @Inject constructor(
         previous = current
       }
     }
-    // Un'azione che aspetta il si': lo stato lo dice — la card mostra Conferma/Annulla, la notifica
-    // la frase — e quando la risposta arriva (o scade) si torna a com'era. Senza questo passaggio
-    // i tasti non comparivano mai e ogni conferma scadeva in silenzio.
-    scope.launch {
-      var before: AssistantState? = null
-      gate.current.collect { pending ->
-        val current = stateFlow.value
-        if (pending != null) {
-          if (current !is AssistantState.AwaitingConfirmation && current.isBusy) {
-            before = current
-            stateFlow.value = AssistantState.AwaitingConfirmation(current.questionOrEmpty(), pending, current.providerOrNull() ?: providersFirstId())
-          }
-        } else if (current is AssistantState.AwaitingConfirmation) {
-          stateFlow.value = before ?: AssistantState.Working(current.question, 0, 1, "thinking", 0, current.provider)
-          before = null
-        }
-      }
-    }
+    // Un'azione che aspetta il si': il cancello scrive lo stato (la card mostra Conferma/Annulla, la
+    // notifica la frase) e alla risposta, o allo scadere, lo rimette com'era.
+    gate.bindState(stateFlow, fallbackProvider = providersFirstId())
   }
 
   val isBusy: Boolean get() = stateFlow.value.isBusy
@@ -200,10 +185,9 @@ class AssistantRuntime @Inject constructor(
         enqueue(conversationId, question, AskMode.VOICE)
       } catch (e: CancellationException) {
         stateFlow.value = AssistantState.Cancelled(null, null)
-      } catch (e: AssistantFailure) {
-        stateFlow.value = AssistantState.Failed(null, e.kind, e.error, e.retryAfterSec, null)
       } catch (e: Throwable) {
-        stateFlow.value = AssistantState.Failed(null, FailureKind.UNKNOWN, e as? AiError, null, null)
+        val failure = AssistantFailure.of(e)
+        stateFlow.value = AssistantState.Failed(null, failure.kind, failure.error, failure.retryAfterSec, null)
       }
     }
   }
@@ -246,10 +230,9 @@ class AssistantRuntime @Inject constructor(
               transcriber.transcribe(event.file, "it", hint)
             } catch (e: CancellationException) {
               throw e
-            } catch (e: AiError.Unauthorized) {
-              throw AssistantFailure(FailureKind.UNAUTHORIZED, e)
             } catch (e: Throwable) {
-              throw AssistantFailure(FailureKind.TRANSCRIPTION, e as? AiError)
+              // Chiave, limite, rete, tempo: la ragione vera; quello che non si capisce e' la trascrizione.
+              throw AssistantFailure.of(e, FailureKind.TRANSCRIPTION)
             }
             result = transcription.text.takeIf { it.isNotBlank() }
             if (result == null) stateFlow.value = AssistantState.HeardNothing

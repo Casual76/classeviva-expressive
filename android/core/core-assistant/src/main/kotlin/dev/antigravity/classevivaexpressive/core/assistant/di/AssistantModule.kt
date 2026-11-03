@@ -70,9 +70,15 @@ object AssistantModule {
   @Singleton
   fun provideDiagnostics(): AiDiagnosticsLog = AiDiagnosticsLog()
 
+  /** La configurazione dell'orchestratore: sta in un posto solo perche' ne dipende anche il cancello. */
   @Provides
   @Singleton
-  fun provideConfirmationGate(): AiConfirmationGate = AiConfirmationGate()
+  fun provideOrchestratorConfig(): AiOrchestratorConfig = assistantOrchestratorConfig()
+
+  /** Il cancello delle conferme prende la finestra dalla stessa configurazione: i due numeri non si scostano. */
+  @Provides
+  @Singleton
+  fun provideConfirmationGate(config: AiOrchestratorConfig): AiConfirmationGate = AiConfirmationGate(config)
 
   @Provides
   @Singleton
@@ -89,25 +95,39 @@ object AssistantModule {
 
   @Provides
   @Singleton
-  fun provideOrchestrator(registry: ToolRegistry<AssistantToolContext>, router: AiRouter, diagnostics: AiDiagnosticsLog): AiOrchestrator<AssistantToolContext> =
+  fun provideOrchestrator(
+    registry: ToolRegistry<AssistantToolContext>,
+    router: AiRouter,
+    diagnostics: AiDiagnosticsLog,
+    config: AiOrchestratorConfig,
+    gate: AiConfirmationGate,
+  ): AiOrchestrator<AssistantToolContext> =
     AiOrchestrator(
       registry = registry,
       router = router,
       diagnostics = diagnostics,
-      // Il service ha quattro minuti; una card che aspetta ne avrebbe uno e mezzo.
-      config = AiOrchestratorConfig(
-        // Dodici giri, non otto: qui una domanda vera ne vale piu' d'uno — cerca, non trova,
-        // riprova con un'altra parola, apre la circolare, legge l'allegato, risponde.
-        maxRounds = 12,
-        maxMoreTools = 4,
-        // Un'azione con conferma aspetta l'utente fino a 60 s dentro il tool: il limite del tool
-        // deve stare sopra, altrimenti e' il tool a scadere mentre il tasto Conferma e' a schermo.
-        toolTimeoutMillis = 90_000L,
-        totalBudgetMillis = 300_000L,
-        finalReserveMillis = 25_000L,
-        // Un elenco di voti dell'anno o il confronto fra tutte le materie non sta in 2400 caratteri.
-        toolTextChars = 4_000,
-        maxOutputTokens = 2_000,
-      ),
+      config = config,
+      gate = gate,
     )
 }
+
+/**
+ * I tempi e i limiti dell'assistente del registro.
+ *
+ * Il tetto dei tool e' quello di *lavoro* (30 s): la finestra delle conferme (60 s del cancello) la
+ * somma l'orchestratore ai tool che la aspettano (`awaitsConfirmation` sul gruppo `APP`), e prima i
+ * due numeri erano uno solo scritto a mano (90 s) che andava tenuto sopra il cancello.
+ */
+internal fun assistantOrchestratorConfig(): AiOrchestratorConfig = AiOrchestratorConfig(
+  // Il service ha quattro minuti; una card che aspetta ne avrebbe uno e mezzo.
+  // Dodici giri, non otto: qui una domanda vera ne vale piu' d'uno — cerca, non trova,
+  // riprova con un'altra parola, apre la circolare, legge l'allegato, risponde.
+  maxRounds = 12,
+  maxMoreTools = 4,
+  toolTimeoutMillis = 30_000L,
+  totalBudgetMillis = 300_000L,
+  finalReserveMillis = 25_000L,
+  // Un elenco di voti dell'anno o il confronto fra tutte le materie non sta in 2400 caratteri.
+  toolTextChars = 4_000,
+  maxOutputTokens = 2_000,
+)
