@@ -887,6 +887,8 @@ data class AppSettings(
   val customAccentName: String = "expressive",
   val dynamicColorEnabled: Boolean = true,
   val amoledEnabled: Boolean = false,
+  /** Le vibrazioni dei tocchi (aptica dell'engine). Acceso di serie: prima non c'era modo di spegnerle. */
+  val hapticsEnabled: Boolean = true,
   val notificationPreferences: NotificationPreferences = NotificationPreferences(),
   val periodicSyncEnabled: Boolean = true,
   val networkConfig: NetworkConfig = NetworkConfig(),
@@ -1101,6 +1103,7 @@ interface SettingsRepository {
   suspend fun updateCustomAccent(name: String)
   suspend fun setDynamicColorEnabled(enabled: Boolean)
   suspend fun setAmoledEnabled(enabled: Boolean)
+  suspend fun setHapticsEnabled(enabled: Boolean)
   suspend fun setNotificationsEnabled(enabled: Boolean)
   suspend fun setPeriodicSyncEnabled(enabled: Boolean)
   suspend fun updateNotificationPreferences(preferences: NotificationPreferences)

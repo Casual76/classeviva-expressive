@@ -331,6 +331,7 @@ private class FakeSettingsRepository(
   override suspend fun updateCustomAccent(name: String) = Unit
   override suspend fun setDynamicColorEnabled(enabled: Boolean) = Unit
   override suspend fun setAmoledEnabled(enabled: Boolean) = Unit
+  override suspend fun setHapticsEnabled(enabled: Boolean) = Unit
   override suspend fun setNotificationsEnabled(enabled: Boolean) = Unit
   override suspend fun setPeriodicSyncEnabled(enabled: Boolean) = Unit
   override suspend fun updateNotificationPreferences(

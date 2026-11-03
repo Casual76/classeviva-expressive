@@ -50,6 +50,7 @@ private val SettingsAccentModeKey = stringPreferencesKey("accent_mode")
 private val SettingsCustomAccentKey = stringPreferencesKey("custom_accent")
 private val SettingsDynamicColorKey = booleanPreferencesKey("dynamic_color")
 private val SettingsAmoledKey = booleanPreferencesKey("amoled")
+private val SettingsHapticsKey = booleanPreferencesKey("haptics")
 private val SettingsNotificationsEnabledKey = booleanPreferencesKey("notifications")
 private val SettingsNotificationsHomeworkKey = booleanPreferencesKey("notifications_homework")
 private val SettingsNotificationsCommunicationsKey = booleanPreferencesKey("notifications_communications")
@@ -131,6 +132,7 @@ class SettingsStore internal constructor(
       customAccentName = prefs[SettingsCustomAccentKey] ?: "expressive",
       dynamicColorEnabled = prefs[SettingsDynamicColorKey] ?: true,
       amoledEnabled = prefs[SettingsAmoledKey] ?: false,
+      hapticsEnabled = prefs[SettingsHapticsKey] ?: true,
       notificationPreferences = NotificationPreferences(
         enabled = prefs[SettingsNotificationsEnabledKey] ?: true,
         homework = prefs[SettingsNotificationsHomeworkKey] ?: true,
@@ -157,6 +159,7 @@ class SettingsStore internal constructor(
     this[SettingsCustomAccentKey] = next.customAccentName
     this[SettingsDynamicColorKey] = next.dynamicColorEnabled
     this[SettingsAmoledKey] = next.amoledEnabled
+    this[SettingsHapticsKey] = next.hapticsEnabled
     this[SettingsNotificationsEnabledKey] = next.notificationPreferences.enabled
     this[SettingsNotificationsHomeworkKey] = next.notificationPreferences.homework
     this[SettingsNotificationsCommunicationsKey] = next.notificationPreferences.communications

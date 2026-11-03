@@ -241,6 +241,7 @@ class SchoolSettingsRepository @Inject constructor(
     it.withDynamicColorEnabled(enabled)
   }
   override suspend fun setAmoledEnabled(enabled: Boolean) = settingsStore.update { it.copy(amoledEnabled = enabled) }
+  override suspend fun setHapticsEnabled(enabled: Boolean) = settingsStore.update { it.copy(hapticsEnabled = enabled) }
   override suspend fun setNotificationsEnabled(enabled: Boolean) = settingsStore.update {
     it.copy(notificationPreferences = it.notificationPreferences.copy(enabled = enabled))
   }

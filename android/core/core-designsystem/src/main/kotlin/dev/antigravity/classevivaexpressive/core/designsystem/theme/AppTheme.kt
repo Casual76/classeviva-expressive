@@ -31,7 +31,7 @@ import dev.antigravity.fluidengine.foundation.ThemeMode as EngineThemeMode
  * senza, l'anello a sette toni collassa in un viola solo. Con lo zaffiro e il quarzo rosa come
  * parenti, le tre famiglie restano gemme evidentemente imparentate ma distinguibili.
  */
-private val BrandAccent = AccentPreset(
+val BrandAccent = AccentPreset(
   name = "classeviva",
   label = "Ametista",
   light = Color(0xFF9D4EDD),
@@ -135,4 +135,5 @@ private fun AppSettings.toEngine(): EngineSettings = EngineSettings(
   customAccentName = customAccentName,
   dynamicColorEnabled = dynamicColorEnabled,
   amoledEnabled = amoledEnabled,
+  hapticsEnabled = hapticsEnabled,
 )
