@@ -11,14 +11,14 @@
       android:exported="false"
       android:foregroundServiceType="dataSync" />
 
-    <!-- I tool del registro per PampAI/Aria: il permesso e' `signature`, quindi li chiama solo
-         un'app firmata con la stessa chiave. L'authority segue l'applicationId. -->
+    <!-- I tool del registro per PampAI/Aria. Niente `android:permission` (engine 3.0): a ogni
+         chiamata il provider controlla che chi chiama sia firmato con la stessa chiave
+         (`isCallerTrusted`). L'authority segue l'applicationId. -->
     <provider
       android:name=".pampai.RegistroToolHostProvider"
       android:authorities="${applicationId}.ai.tools"
       android:exported="true"
-      android:grantUriPermissions="true"
-      android:permission="dev.antigravity.fluidengine.permission.AI_TOOLS">
+      android:grantUriPermissions="true">
       <meta-data
         android:name="dev.antigravity.fluidengine.ai.TOOL_HOST"
         android:value="1" />

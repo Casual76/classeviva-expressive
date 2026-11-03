@@ -39,3 +39,17 @@ pip install -e .[test]
 uvicorn app.main:app --reload --port 8088
 pytest
 ```
+
+## Licenza
+
+Classeviva Expressive e' distribuita sotto **GNU General Public License v3.0** (vedi [LICENSE](LICENSE)).
+
+Il motivo e' il Fluid Engine, il design system condiviso (sottomodulo `android/engine`): dalla versione 3.0 contiene
+codice di [LibrePods](https://github.com/kavishdevar/librepods) (GPL-3.0) per i pulsanti e il loro gesto
+(`android/engine/LICENSES/LibrePods.md`), e un'app che lo distribuisce e' un'opera derivata, quindi GPL-3.0 a sua volta.
+
+I sorgenti completi di ogni APK sono in questo repository, pubblico:
+<https://github.com/Casual76/classeviva-expressive>. Chi riceve un APK ha diritto ai sorgenti della stessa versione
+(il tag o il commit corrispondente al `versionName`) e puo' modificarli e ridistribuirli alle stesse condizioni.
+Le librerie di terze parti (OkHttp, Retrofit, Room, Coil, JSoup, PDFBox-Android e le altre) sono Apache-2.0, MIT o BSD,
+compatibili con la GPL-3.0; l'elenco delle opere incluse nell'APK e' nella pagina Impostazioni, sezione informazioni.
