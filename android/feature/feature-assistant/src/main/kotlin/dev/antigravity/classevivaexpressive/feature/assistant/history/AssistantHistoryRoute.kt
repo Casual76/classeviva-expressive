@@ -25,6 +25,10 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import java.text.DateFormat
 import java.time.Instant
 import java.time.LocalDate
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import dev.antigravity.fluidengine.ui.fluid.FluidConfirmSheet
 import java.time.ZoneId
 import java.util.Date
 
@@ -42,6 +46,9 @@ fun AssistantHistoryRoute(
   val items by viewModel.items.collectAsStateWithLifecycle()
   val active by viewModel.activeConversationId.collectAsStateWithLifecycle()
   val busy by viewModel.busy.collectAsStateWithLifecycle()
+  // Eliminare e' senza ritorno: si chiede, con un foglio, prima di farlo.
+  var confirmDeleteAll by rememberSaveable { mutableStateOf(false) }
+  var conversationToDelete by rememberSaveable { mutableStateOf<Long?>(null) }
   val zone = ZoneId.systemDefault()
   val today = LocalDate.now(zone)
   val grouped = items.groupBy { Instant.ofEpochMilli(it.updatedAtMillis).atZone(zone).toLocalDate() }
@@ -54,7 +61,7 @@ fun AssistantHistoryRoute(
     itemSpacing = 12.dp,
     actions = {
       if (items.isNotEmpty()) {
-        FluidBarAction(icon = Icons.Rounded.DeleteSweep, contentDescription = "Elimina tutte", onClick = viewModel::deleteAll)
+        FluidBarAction(icon = Icons.Rounded.DeleteSweep, contentDescription = "Elimina tutte", onClick = { confirmDeleteAll = true })
       }
     },
   ) {
@@ -99,7 +106,7 @@ fun AssistantHistoryRoute(
               tone = if (conversation.id == active) FluidTone.Primary else FluidTone.Neutral,
               onClick = { onOpenConversation(conversation.id) },
               contextActions = {
-                listOf(FluidContextAction("Elimina", Icons.Rounded.Delete, destructive = true) { viewModel.delete(conversation.id) })
+                listOf(FluidContextAction("Elimina", Icons.Rounded.Delete, destructive = true) { conversationToDelete = conversation.id })
               },
             )
           }
@@ -107,4 +114,29 @@ fun AssistantHistoryRoute(
       }
     }
   }
+
+  FluidConfirmSheet(
+    visible = confirmDeleteAll,
+    onDismissRequest = { confirmDeleteAll = false },
+    title = "Eliminare tutte le conversazioni?",
+    message = "Restano solo su questo telefono, e una volta eliminate non si possono recuperare.",
+    confirmLabel = "Elimina tutte",
+    destructive = true,
+    onConfirm = {
+      confirmDeleteAll = false
+      viewModel.deleteAll()
+    },
+  )
+  FluidConfirmSheet(
+    visible = conversationToDelete != null,
+    onDismissRequest = { conversationToDelete = null },
+    title = "Eliminare questa conversazione?",
+    message = "Una volta eliminata non si puo' recuperare.",
+    confirmLabel = "Elimina",
+    destructive = true,
+    onConfirm = {
+      conversationToDelete?.let(viewModel::delete)
+      conversationToDelete = null
+    },
+  )
 }

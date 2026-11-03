@@ -53,6 +53,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
+import dev.antigravity.fluidengine.ui.navigation.navigateToPeer
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaExpressiveTheme
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
@@ -417,7 +418,7 @@ private fun NavigationTestGraph(
   TopLevelNavigationSuite(
     currentRoute = currentTopLevelRoute,
     showNavigationSuite = currentTopLevelRoute != null,
-    onNavigateRoute = { route -> navController.navigateTopLevel(route) },
+    onNavigateRoute = { route -> navController.navigateToPeer(route) },
   ) {
     NavHost(
       navController = navController,

@@ -17,6 +17,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdent
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.VividBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.fluidengine.ui.fluid.fluidGlassGroups
+import dev.antigravity.fluidengine.ui.fluid.FluidSheetScaffold
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -518,35 +519,35 @@ fun MeetingsRoute(
     origin = { meetingOrigin },
     paneTitle = "Prenotazione colloquio",
   ) { booking ->
-    Column(
-      modifier = Modifier.fillMaxWidth().padding(24.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-      Text(booking.teacher.name, style = MaterialTheme.typography.headlineSmall)
-      Text(booking.slot.meetingSlotLabel(), style = MaterialTheme.typography.bodyMedium)
-      booking.bookingPosition?.let {
-        Text("Posizione: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
-      FluidButton(
-        text = "Partecipa",
-        onClick = { viewModel.joinSelectedBooking(context::openUrl) },
-        style = FluidButtonStyle.Filled,
-        fillWidth = true,
-        leading = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null,) },
-      )
-      FluidButton(
-        text = "Annulla prenotazione",
-        onClick = viewModel::cancelSelectedBooking,
-        style = FluidButtonStyle.Tinted,
-        fillWidth = true,
-      )
-      FluidButton(
-        text = "Apri portale",
-        onClick = { context.openUrl(viewModel.portalUrl()) },
-        style = FluidButtonStyle.Plain,
-        fillWidth = true,
-      )
-    }
+    // I tasti stanno sotto il corpo e non scorrono con lui: con il testo grande l'ultimo non finisce sotto il bordo.
+    FluidSheetScaffold(
+      title = booking.teacher.name,
+      message = listOfNotNull(
+        booking.slot.meetingSlotLabel(),
+        booking.bookingPosition?.let { "Posizione: $it" },
+      ).joinToString("\n"),
+      actions = {
+        FluidButton(
+          text = "Partecipa",
+          onClick = { viewModel.joinSelectedBooking(context::openUrl) },
+          style = FluidButtonStyle.Filled,
+          fillWidth = true,
+          leading = { Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null) },
+        )
+        FluidButton(
+          text = "Annulla prenotazione",
+          onClick = viewModel::cancelSelectedBooking,
+          style = FluidButtonStyle.Tinted,
+          fillWidth = true,
+        )
+        FluidButton(
+          text = "Apri portale",
+          onClick = { context.openUrl(viewModel.portalUrl()) },
+          style = FluidButtonStyle.Plain,
+          fillWidth = true,
+        )
+      },
+    )
   }
 
   FluidGlassModalPortal(
@@ -556,28 +557,24 @@ fun MeetingsRoute(
     paneTitle = "Disponibilità colloquio",
   ) { slot ->
     val teacher = teachersById[slot.teacherId]
-    Column(
-      modifier = Modifier.fillMaxWidth().padding(24.dp),
-      verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-      Text(teacher?.name ?: "Docente", style = MaterialTheme.typography.headlineSmall)
-      Text(slot.meetingSlotLabel(), style = MaterialTheme.typography.bodyMedium)
-      slot.location?.takeIf(String::isNotBlank)?.let {
-        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-      }
-      FluidButton(
-        text = "Prenota colloquio",
-        onClick = viewModel::bookSelectedSlot,
-        style = FluidButtonStyle.Filled,
-        fillWidth = true,
-      )
-      FluidButton(
-        text = "Apri portale",
-        onClick = { context.openUrl(viewModel.portalUrl()) },
-        style = FluidButtonStyle.Plain,
-        fillWidth = true,
-      )
-    }
+    FluidSheetScaffold(
+      title = teacher?.name ?: "Docente",
+      message = listOfNotNull(slot.meetingSlotLabel(), slot.location?.takeIf(String::isNotBlank)).joinToString("\n"),
+      actions = {
+        FluidButton(
+          text = "Prenota colloquio",
+          onClick = viewModel::bookSelectedSlot,
+          style = FluidButtonStyle.Filled,
+          fillWidth = true,
+        )
+        FluidButton(
+          text = "Apri portale",
+          onClick = { context.openUrl(viewModel.portalUrl()) },
+          style = FluidButtonStyle.Plain,
+          fillWidth = true,
+        )
+      },
+    )
   }
 
 }

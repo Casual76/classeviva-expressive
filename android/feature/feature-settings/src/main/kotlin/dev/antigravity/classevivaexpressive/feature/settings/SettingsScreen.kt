@@ -143,6 +143,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
 import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
+import dev.antigravity.fluidengine.ui.page.FluidPageHost
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.fluid.fluidLicensesSection
@@ -520,68 +521,6 @@ fun SettingsRoute(
     } else {
       onBack?.invoke()
       Unit
-    }
-  }
-
-  // AnimatedContent normally starts its pop only after BackHandler fires. A seekable transition
-  // instead lets the child pane track Android's predictive-back progress while the root pane is
-  // already present behind it. The logical section is cleared only after the gesture commits, so a
-  // cancellation can settle back to the child without reconstructing either screen or jumping.
-  val sectionTransitionState = remember {
-    SeekableTransitionState<SettingsSection?>(section)
-  }
-  val sectionTransition = rememberTransition(
-    transitionState = sectionTransitionState,
-    label = "settings section transition",
-  )
-  val sectionSettleSpec = tween<Float>(
-    durationMillis = SettingsPaneMotionDurationMillis,
-    easing = FluidMotion.EaseOut,
-  )
-
-  LaunchedEffect(section) {
-    if (sectionTransitionState.targetState != section) {
-      sectionTransitionState.animateTo(section, animationSpec = sectionSettleSpec)
-    }
-  }
-
-  PredictiveBackHandler(enabled = section != null && !twoPane) { progress ->
-    val activeSection = section ?: return@PredictiveBackHandler
-    try {
-      progress.collect { backEvent ->
-        sectionTransitionState.seekTo(
-          fraction = clampSettingsBackProgress(backEvent.progress),
-          targetState = null,
-        )
-      }
-      sectionTransitionState.animateTo(
-        null,
-        animationSpec = tween(
-          durationMillis = settingsPaneSettleDurationMillis(
-            progress = sectionTransitionState.fraction,
-            completing = true,
-          ),
-          easing = FluidMotion.EaseOut,
-        ),
-      )
-      sectionName = null
-    } catch (cancelled: CancellationException) {
-      // The handler's coroutine is already cancelled here. NonCancellable is intentionally scoped
-      // only to the short visual settle, then the cancellation is propagated as required by the
-      // Activity Compose contract.
-      withContext(NonCancellable) {
-        sectionTransitionState.animateTo(
-          activeSection,
-          animationSpec = tween(
-            durationMillis = settingsPaneSettleDurationMillis(
-              progress = sectionTransitionState.fraction,
-              completing = false,
-            ),
-            easing = FluidMotion.EaseOut,
-          ),
-        )
-      }
-      throw cancelled
     }
   }
 
@@ -979,37 +918,14 @@ fun SettingsRoute(
       if (isTwoPane) {
         settingsPage(null, true)
       } else {
-        // A settings section is a real child pane. It uses the same opaque lateral stack as route
-        // navigation, so a paused transition never leaves two readable pages blended together.
-        sectionTransition.AnimatedContent(
+        // Una sezione e' una pagina figlia vera: stessa pila opaca delle rotte, e il back (tasto, gesto
+        // dal bordo, back di sistema) sta sotto il dito. La sezione si chiude quando l'host chiama onBack.
+        FluidPageHost(
+          stack = listOfNotNull(SettingsRootPage, sectionName),
+          onBack = { sectionName = null },
           modifier = Modifier.fillMaxSize(),
-          transitionSpec = {
-            val opening = targetState != null
-            val transform = if (opening) {
-              slideInHorizontally(
-                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-                initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = true) },
-              ) togetherWith slideOutHorizontally(
-                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-                targetOffsetX = { width -> settingsPaneExitOffset(width, opening = true) },
-              )
-            } else {
-              slideInHorizontally(
-                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-                initialOffsetX = { width -> settingsPaneEnterOffset(width, opening = false) },
-              ) togetherWith slideOutHorizontally(
-                animationSpec = tween(durationMillis = SettingsPaneMotionDurationMillis, easing = LinearEasing),
-                targetOffsetX = { width -> settingsPaneExitOffset(width, opening = false) },
-              )
-            }
-            // While popping, the root must remain physically behind the travelling opaque child. Giving
-            // the target a negative z-index also covers restored-process cases where the child did not
-            // previously acquire the opening transition's positive z-index.
-            transform.targetContentZIndex = settingsPaneTargetZIndex(opening)
-            transform.using(SizeTransform(clip = true))
-          },
-        ) { section ->
-          settingsPage(section, false)
+        ) { page ->
+          settingsPage(SettingsSection.entries.firstOrNull { it.name == page }, false)
         }
       }
     },
@@ -1090,25 +1006,8 @@ private fun SubjectColorPicker(
   }
 }
 
-private const val SettingsPaneMotionDurationMillis = 360
-private const val SettingsPaneMinSettleDurationMillis = 90
-
-internal fun clampSettingsBackProgress(progress: Float): Float = progress.coerceIn(0f, 1f)
-
-internal fun settingsPaneEnterOffset(width: Int, opening: Boolean): Int =
-  if (opening) width else -width / 4
-
-internal fun settingsPaneExitOffset(width: Int, opening: Boolean): Int =
-  if (opening) -width / 4 else width
-
-internal fun settingsPaneTargetZIndex(opening: Boolean): Float = if (opening) 1f else -1f
-
-internal fun settingsPaneSettleDurationMillis(progress: Float, completing: Boolean): Int {
-  val boundedProgress = clampSettingsBackProgress(progress)
-  val remainingFraction = if (completing) 1f - boundedProgress else boundedProgress
-  return (SettingsPaneMotionDurationMillis * remainingFraction).toInt()
-    .coerceIn(SettingsPaneMinSettleDurationMillis, SettingsPaneMotionDurationMillis)
-}
+/** La pagina radice della pila delle impostazioni (le altre hanno il nome della sezione). */
+private const val SettingsRootPage = "root"
 
 @Composable
 private fun RuntimeStateCard(
