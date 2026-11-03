@@ -46,7 +46,6 @@ import dev.antigravity.classevivaexpressive.core.assistant.db.MessageStatus
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantTexts
-import dev.antigravity.classevivaexpressive.feature.assistant.overlay.MarkdownBody
 import dev.antigravity.fluidengine.ai.orchestrator.AssistantState
 import dev.antigravity.fluidengine.ai.orchestrator.PendingConfirmation
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
@@ -54,6 +53,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidChip
+import dev.antigravity.fluidengine.ui.fluid.FluidMarkdown
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
@@ -181,7 +181,7 @@ private fun AssistantBubble(
       if (text.isNotBlank()) Spacer(Modifier.height(8.dp))
     }
     when {
-      text.isNotBlank() -> MarkdownBody(text)
+      text.isNotBlank() -> FluidMarkdown(markdown = text)
       message.status == MessageStatus.FAILED -> Text(message.failureKind?.let { AssistantTexts.failure(it) } ?: "Qualcosa è andato storto.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
       message.status == MessageStatus.CANCELLED -> Text("Fermata prima della risposta.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
       live == null -> Text("Interrotta: l'app si è chiusa prima della risposta.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -244,7 +244,7 @@ private fun LiveBubble(live: AssistantState, pending: PendingConfirmation?, onRe
     AssistantTexts.statusLine(live)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Medium) }
     (live as? AssistantState.Answering)?.partial?.let {
       Spacer(Modifier.height(8.dp))
-      MarkdownBody(it)
+      FluidMarkdown(markdown = it, streaming = true)
     }
     if (pending != null) {
       Spacer(Modifier.height(8.dp))

@@ -142,7 +142,7 @@ import dev.antigravity.classevivaexpressive.feature.assistant.bar.AssistantBarBu
 import dev.antigravity.classevivaexpressive.feature.assistant.bar.AssistantBarState
 import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantNavigator
 import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantOverlay
-import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantOverlayState
+import dev.antigravity.fluidengine.aiui.overlay.FluidAssistantOverlayState
 import dev.antigravity.classevivaexpressive.feature.assistant.overlay.AssistantOverlayViewModel
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.layout.Layout
@@ -973,7 +973,7 @@ private fun AuthenticatedApp(
 
   // L'assistente: lo stato dell'overlay vive qui, sopra la navigazione, cosi' il tasto nella
   // barra e la card che ne nasce parlano dello stesso rettangolo.
-  val assistantOverlay = remember { AssistantOverlayState() }
+  val assistantOverlay = remember { FluidAssistantOverlayState() }
   val assistantViewModel: AssistantOverlayViewModel = hiltViewModel()
   val assistantEnabled by assistantViewModel.enabled.collectAsStateWithLifecycle()
   val assistantState by assistantViewModel.state.collectAsStateWithLifecycle()

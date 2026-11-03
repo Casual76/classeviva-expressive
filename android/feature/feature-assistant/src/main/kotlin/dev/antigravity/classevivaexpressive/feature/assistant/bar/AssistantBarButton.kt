@@ -36,6 +36,7 @@ import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.lerp
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
+import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.fluid.glassControlSurface
@@ -78,7 +79,7 @@ fun AssistantBarButton(
   val breath by pulse.animateFloat(
     initialValue = 1f,
     targetValue = 1.18f,
-    animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+    animationSpec = FluidMotion.pulse(),
     label = "assistantScale",
   )
 

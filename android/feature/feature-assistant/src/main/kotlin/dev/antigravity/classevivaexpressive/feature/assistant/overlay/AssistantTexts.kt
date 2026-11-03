@@ -7,66 +7,43 @@ import dev.antigravity.fluidengine.ai.orchestrator.AnswerChip
 import dev.antigravity.fluidengine.ai.orchestrator.AssistantState
 import dev.antigravity.fluidengine.ai.orchestrator.FailureKind
 import dev.antigravity.fluidengine.ai.provider.ModelTier
+import dev.antigravity.fluidengine.aiui.strings.FluidAssistantStrings
+import dev.antigravity.fluidengine.aiui.strings.FluidAssistantTexts
 
-/** Da chiavi di stato, errori e chip alle parole: l'unico posto in cui la UI dell'assistente sceglie una frase. */
+/**
+ * Le parole dell'assistente del registro: quelle dell'engine (`engine-ai-ui`) piu' il dominio, cioe'
+ * le frasi dei gruppi di strumenti e i chip che portano a una pagina dell'app. Le tabelle dei
+ * fallimenti e degli stati stanno nell'engine; qui restano solo le cose che l'engine non puo' sapere.
+ */
 object AssistantTexts {
 
-  fun status(key: String, tier: ModelTier = ModelTier.CHAT): String {
-    val base = when (key) {
-      "thinking" -> if (tier == ModelTier.DEEP) "Analizzo con calma…" else "Penso…"
-      "more_tools" -> "Mi serve dell'altro…"
-      "deep_model" -> "Passo al modello più capace…"
-      RegistroToolGroup.VOTI.statusKey -> "Guardo i voti…"
-      RegistroToolGroup.AGENDA.statusKey -> "Guardo l'agenda…"
-      RegistroToolGroup.ORARIO.statusKey -> "Guardo l'orario…"
-      RegistroToolGroup.BACHECA.statusKey -> "Leggo la bacheca…"
-      RegistroToolGroup.ASSENZE.statusKey -> "Controllo le assenze…"
-      RegistroToolGroup.STATISTICHE.statusKey -> "Faccio i conti…"
-      RegistroToolGroup.DIDATTICA.statusKey -> "Cerco fra i materiali…"
-      RegistroToolGroup.APP.statusKey -> "Agisco nell'app…"
-      else -> "Penso…"
-    }
-    return if (tier == ModelTier.DEEP && key != "thinking") "$base (modello profondo)" else base
+  /** Le parole per `FluidAssistantOverlay`, con la riga di stato dei gruppi del registro. */
+  val strings = FluidAssistantStrings(
+    askPlaceholder = "Chiedi al registro…",
+    // L'app non ha l'interruttore della riserva automatica: un limite non puo' consigliare di accenderlo.
+    failoverSwitch = false,
+    failNoKeys = "Nessuna chiave verificata: apri le impostazioni dell'assistente.",
+    statusFor = { key, _ -> groupStatus(key) },
+  )
+
+  private fun groupStatus(key: String): String? = when (key) {
+    RegistroToolGroup.VOTI.statusKey -> "Guardo i voti…"
+    RegistroToolGroup.AGENDA.statusKey -> "Guardo l'agenda…"
+    RegistroToolGroup.ORARIO.statusKey -> "Guardo l'orario…"
+    RegistroToolGroup.BACHECA.statusKey -> "Leggo la bacheca…"
+    RegistroToolGroup.ASSENZE.statusKey -> "Controllo le assenze…"
+    RegistroToolGroup.STATISTICHE.statusKey -> "Faccio i conti…"
+    RegistroToolGroup.DIDATTICA.statusKey -> "Cerco fra i materiali…"
+    RegistroToolGroup.APP.statusKey -> "Agisco nell'app…"
+    else -> null
   }
 
-  fun failure(kind: FailureKind, retryAfterSec: Int? = null): String = when (kind) {
-    FailureKind.NO_KEYS -> "Nessuna chiave verificata: apri le impostazioni dell'assistente."
-    FailureKind.UNAUTHORIZED -> "La chiave non è più valida: controllala nelle impostazioni."
-    FailureKind.RATE_LIMITED -> if (retryAfterSec != null) "Il servizio è al limite: riprova fra $retryAfterSec s." else "Il servizio è al limite di richieste: riprova fra poco."
-    FailureKind.NETWORK -> "Niente rete."
-    FailureKind.TIMEOUT -> "Ci ha messo troppo: riprova con una domanda più semplice."
-    FailureKind.BLOCKED -> "Il servizio ha rifiutato la richiesta."
-    FailureKind.PROVIDER -> "Il servizio ha risposto con un errore."
-    FailureKind.MODEL_UNAVAILABLE -> "Il modello scelto non esiste più: scegline un altro nelle impostazioni."
-    FailureKind.CONTEXT_TOO_LONG -> "La conversazione è troppo lunga: aprine una nuova."
-    FailureKind.MICROPHONE -> "Il microfono non è disponibile: chiudi l'app che lo sta usando."
-    FailureKind.TRANSCRIPTION -> "Non sono riuscito a trascrivere: riprova."
-    FailureKind.UNKNOWN -> "Qualcosa è andato storto."
-  }
+  fun status(key: String, tier: ModelTier = ModelTier.CHAT): String = FluidAssistantTexts.status(key, tier, strings)
 
-  fun statusLine(state: AssistantState): String? = when (state) {
-    is AssistantState.Listening -> "Ti ascolto…"
-    AssistantState.Transcribing -> "Trascrivo…"
-    is AssistantState.Classifying -> "Capisco cosa serve…"
-    is AssistantState.Working -> {
-      val base = status(state.statusKey, state.tier)
-      if (state.statusExtra > 0) "$base (+${state.statusExtra})" else base
-    }
-    is AssistantState.WaitingRateLimit -> "${state.provider.label} è al limite: riprovo fra ${state.secondsLeft} s"
-    is AssistantState.SwitchingProvider -> "Passo a ${state.to.label}…"
-    is AssistantState.Answering -> "Rispondo…"
-    is AssistantState.AwaitingConfirmation -> "Serve una conferma"
-    AssistantState.HeardNothing -> "Non ho sentito niente"
-    is AssistantState.Failed -> failure(state.kind, state.retryAfterSec)
-    is AssistantState.Cancelled -> "Fermato"
-    is AssistantState.Done -> null
-    AssistantState.Idle -> null
-  }
+  fun failure(kind: FailureKind, retryAfterSec: Int? = null): String =
+    FluidAssistantTexts.failure(kind, strings, retryAfterSec)
 
-  fun collapsed(state: AssistantState): String = when (state) {
-    is AssistantState.Done -> "Risposta pronta"
-    else -> statusLine(state) ?: "Assistente"
-  }
+  fun statusLine(state: AssistantState): String? = FluidAssistantTexts.statusLine(state, strings)
 
   fun chipLabel(chip: AnswerChip): String = when (chip.id) {
     AssistantChips.PAGE -> AppPage.fromId(chip.value)?.label ?: chip.value.orEmpty()
@@ -83,11 +60,5 @@ object AssistantTexts {
     AssistantChips.COMMUNICATION -> chip.value?.let { AppPage.BACHECA to it }
     AssistantChips.HOMEWORK -> chip.value?.let { AppPage.COMPITI to it }
     else -> null
-  }
-
-  /** Vero se lo stato merita la card espansa di default (una risposta, un errore, una conferma). */
-  fun wantsExpanded(state: AssistantState): Boolean = when (state) {
-    is AssistantState.Done, is AssistantState.Failed, is AssistantState.AwaitingConfirmation, is AssistantState.Answering -> true
-    else -> false
   }
 }

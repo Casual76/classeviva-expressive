@@ -30,6 +30,7 @@ android {
 
 dependencies {
   api project(":core:core-assistant")
+  api project(":engine-ai-ui")
   implementation project(":core:core-domain")
   implementation project(":core:core-designsystem")
   implementation project(":core:core-data")
