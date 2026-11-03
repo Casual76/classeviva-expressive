@@ -137,6 +137,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidAccentChoice
 import dev.antigravity.fluidengine.ui.fluid.FluidAccentPicker
 import dev.antigravity.fluidengine.ui.fluid.FluidColorDot
 import dev.antigravity.fluidengine.ui.fluid.FluidToggleRow
+import dev.antigravity.fluidengine.ui.fluid.FluidUpdateController
+import dev.antigravity.fluidengine.ui.fluid.fluidUpdateSection
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
@@ -457,10 +459,9 @@ class SettingsViewModel @Inject constructor(
 fun SettingsRoute(
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
-  isCheckingForUpdates: Boolean = false,
-  updateCheckMessage: String? = null,
-  onCheckForUpdates: () -> Unit = {},
-  onClearUpdateCheckMessage: () -> Unit = {},
+  update: FluidUpdateController? = null,
+  currentVersion: String? = null,
+  onSkipUpdate: (String) -> Unit = {},
   onOpenAssistantConsent: () -> Unit = {},
   onOpenAssistantHistory: (() -> Unit)? = null,
   viewModel: SettingsViewModel = hiltViewModel(),
@@ -882,12 +883,15 @@ fun SettingsRoute(
       }
 
       if (section == SettingsSection.About) {
-        item {
-          AppUpdateSettingsCard(
-            isChecking = isCheckingForUpdates,
-            message = updateCheckMessage,
-            onCheckForUpdates = onCheckForUpdates,
-            onClearMessage = onClearUpdateCheckMessage,
+        if (update != null) {
+          fluidUpdateSection(
+            state = update.state,
+            onCheck = update::check,
+            onInstall = update::install,
+            currentVersion = currentVersion,
+            lastCheckedAtMillis = update.lastCheckedAtMillis,
+            onSkip = update.available?.version?.let { version -> { onSkipUpdate(version) } },
+            glass = true,
           )
         }
         if (state.capabilities.isNotEmpty()) {
@@ -1106,59 +1110,6 @@ internal fun settingsPaneSettleDurationMillis(progress: Float, completing: Boole
     .coerceIn(SettingsPaneMinSettleDurationMillis, SettingsPaneMotionDurationMillis)
 }
 
-@Composable
-private fun AppUpdateSettingsCard(
-  isChecking: Boolean,
-  message: String?,
-  onCheckForUpdates: () -> Unit,
-  onClearMessage: () -> Unit,
-) {
-  FluidCard {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-      Icon(Icons.Rounded.Refresh, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-      Text("Aggiornamenti app", style = MaterialTheme.typography.titleMedium)
-    }
-    Text(
-      "Controlla manualmente la versione stabile pubblicata su Pampa Store.",
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    Row(
-      modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-      horizontalArrangement = Arrangement.spacedBy(10.dp),
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      // Senza peso i due bottoni misurano wrap-content: insieme superano la larghezza di un
-      // telefono da 360dp e "Nascondi" finiva fuori dalla card.
-      FluidButton(
-        text = if (isChecking) "Controllo..." else "Controlla aggiornamenti",
-        onClick = onCheckForUpdates,
-        modifier = Modifier.weight(1f),
-        style = FluidButtonStyle.Tinted,
-        enabled = !isChecking,
-        loading = isChecking,
-        leading = { Icon(Icons.Rounded.Refresh, contentDescription = null) },
-      )
-      message?.let {
-        FluidButton(
-          text = "Nascondi",
-          onClick = onClearMessage,
-          style = FluidButtonStyle.Plain,
-        )
-      }
-    }
-    message?.let {
-      Text(
-        it,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 4.dp),
-      )
-    }
-  }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RuntimeStateCard(
   runtimeState: NotificationRuntimeState,

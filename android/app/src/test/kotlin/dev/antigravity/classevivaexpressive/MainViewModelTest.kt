@@ -5,10 +5,7 @@ import android.os.SystemClock
 import app.cash.turbine.test
 import dev.antigravity.classevivaexpressive.core.data.sync.SyncWorkScheduler
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
-import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
-import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
-import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.NotificationRuntimeState
@@ -21,6 +18,10 @@ import dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
+import dev.antigravity.fluidengine.foundation.AppUpdateInstallState
+import dev.antigravity.fluidengine.foundation.AppUpdater
+import dev.antigravity.fluidengine.foundation.AvailableAppUpdate
+import dev.antigravity.fluidengine.foundation.UpdateChannel
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -32,6 +33,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -67,32 +69,22 @@ class MainViewModelTest {
   }
 
   @Test
-  fun manualUpdateCheck_ignoresDismissedVersionFilter() = runTest {
-    val update = update(version = "6.0.4")
-    val appUpdateRepository = RecordingAppUpdateRepository(update)
+  fun ignoreUpdateVersion_isRememberedSoTheNextCheckDoesNotOfferItAgain() = runTest {
+    val settingsRepository = FakeSettingsRepository(AppSettings())
     val viewModel = MainViewModel(
       authRepository = FakeAuthRepository(),
-      settingsRepository = FakeSettingsRepository(
-        AppSettings(ignoredStableUpdateVersion = update.version),
-      ),
-      appUpdateRepository = appUpdateRepository,
+      settingsRepository = settingsRepository,
+      updater = RecordingAppUpdater(),
       schoolYearRepository = FakeSchoolYearRepository(),
       dashboardRepository = FakeDashboardRepository(),
       context = mockk<Context>(relaxed = true),
     )
     testScheduler.advanceUntilIdle()
 
-    viewModel.uiState.test {
-      awaitItem()
+    viewModel.ignoreUpdateVersion("6.0.4")
+    testScheduler.advanceUntilIdle()
 
-      viewModel.checkUpdate(showNoUpdateMessage = true)
-
-      val state = awaitItem()
-      assertEquals("", appUpdateRepository.ignoredVersions.last())
-      assertSame(update, state.availableUpdate)
-      assertEquals("Aggiornamento ${update.version} disponibile.", state.updateCheckMessage)
-      cancelAndIgnoreRemainingEvents()
-    }
+    assertEquals("6.0.4", settingsRepository.observeSettings().first().ignoredStableUpdateVersion)
   }
 
   @Test
@@ -101,7 +93,7 @@ class MainViewModelTest {
     val viewModel = MainViewModel(
       authRepository = FakeAuthRepository(session()),
       settingsRepository = settingsRepository,
-      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      updater = RecordingAppUpdater(),
       schoolYearRepository = FakeSchoolYearRepository(),
       dashboardRepository = FakeDashboardRepository(),
       context = mockk<Context>(relaxed = true),
@@ -122,7 +114,7 @@ class MainViewModelTest {
     val viewModel = MainViewModel(
       authRepository = FakeAuthRepository(),
       settingsRepository = settingsRepository,
-      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      updater = RecordingAppUpdater(),
       schoolYearRepository = FakeSchoolYearRepository(),
       dashboardRepository = FakeDashboardRepository(),
       context = mockk<Context>(relaxed = true),
@@ -143,7 +135,7 @@ class MainViewModelTest {
     val viewModel = MainViewModel(
       authRepository = FakeAuthRepository(),
       settingsRepository = FakeSettingsRepository(AppSettings()),
-      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      updater = RecordingAppUpdater(),
       schoolYearRepository = schoolYears,
       dashboardRepository = FakeDashboardRepository(),
       context = mockk<Context>(relaxed = true),
@@ -179,7 +171,7 @@ class MainViewModelTest {
     val viewModel = MainViewModel(
       authRepository = FakeAuthRepository(),
       settingsRepository = FakeSettingsRepository(AppSettings()),
-      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      updater = RecordingAppUpdater(),
       schoolYearRepository = FakeSchoolYearRepository(),
       dashboardRepository = dashboard,
       context = mockk<Context>(relaxed = true),
@@ -213,7 +205,7 @@ class MainViewModelTest {
     val viewModel = MainViewModel(
       authRepository = FakeAuthRepository(),
       settingsRepository = FakeSettingsRepository(AppSettings()),
-      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      updater = RecordingAppUpdater(),
       schoolYearRepository = FakeSchoolYearRepository(),
       dashboardRepository = dashboard,
       context = mockk<Context>(relaxed = true),
@@ -241,7 +233,7 @@ class MainViewModelTest {
     val viewModel = MainViewModel(
       authRepository = FakeAuthRepository(),
       settingsRepository = FakeSettingsRepository(AppSettings()),
-      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      updater = RecordingAppUpdater(),
       schoolYearRepository = schoolYears,
       dashboardRepository = FakeDashboardRepository(),
       context = mockk<Context>(relaxed = true),
@@ -265,7 +257,7 @@ class MainViewModelTest {
     val viewModel = MainViewModel(
       authRepository = FakeAuthRepository(),
       settingsRepository = FakeSettingsRepository(AppSettings()),
-      appUpdateRepository = RecordingAppUpdateRepository(update = null),
+      updater = RecordingAppUpdater(),
       schoolYearRepository = schoolYears,
       dashboardRepository = FakeDashboardRepository(),
       context = mockk<Context>(relaxed = true),
@@ -279,15 +271,6 @@ class MainViewModelTest {
       cancelAndIgnoreRemainingEvents()
     }
   }
-
-  private fun update(version: String) = AvailableAppUpdate(
-    version = version,
-    changelog = "Bugfix updater.",
-    releaseTag = "stable-classeviva-expressive-v$version",
-    apkAsset = "classeviva-expressive-$version.apk",
-    downloadUrl = "https://example.test/classeviva-expressive-$version.apk",
-    sizeBytes = 42L,
-  )
 
   private fun session() = UserSession(
     token = "token",
@@ -403,20 +386,13 @@ private class FakeDashboardRepository : DashboardRepository {
     Result.success(snapshots.value)
 }
 
-private class RecordingAppUpdateRepository(
-  private val update: AvailableAppUpdate?,
-) : AppUpdateRepository {
-  val ignoredVersions = mutableListOf<String>()
-
-  override suspend fun checkForStableUpdate(
+private class RecordingAppUpdater : AppUpdater {
+  override suspend fun check(
     currentVersionName: String,
+    channel: UpdateChannel,
     ignoredVersion: String,
-  ): Result<AvailableAppUpdate?> {
-    ignoredVersions += ignoredVersion
-    return Result.success(update.takeUnless { it?.version == ignoredVersion })
-  }
+  ): Result<AvailableAppUpdate?> = Result.success(null)
 
-  override fun install(update: AvailableAppUpdate): Flow<AppUpdateInstallState> {
-    return flowOf(AppUpdateInstallState.Installed(update.apkAsset))
-  }
+  override fun install(update: AvailableAppUpdate): Flow<AppUpdateInstallState> =
+    flowOf(AppUpdateInstallState.Installed(update.apkAsset))
 }

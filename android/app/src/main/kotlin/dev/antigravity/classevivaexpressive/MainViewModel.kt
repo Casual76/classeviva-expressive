@@ -5,13 +5,11 @@ import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.antigravity.fluidengine.foundation.AppUpdater
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.antigravity.classevivaexpressive.core.data.sync.SyncWorkScheduler
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
-import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
-import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
-import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearSelectionPolicy
@@ -81,19 +79,6 @@ data class MainUiState(
   val session: UserSession? = null,
   val settings: AppSettings = AppSettings(),
   val authError: String? = null,
-  val availableUpdate: AvailableAppUpdate? = null,
-  val updateInstallState: AppUpdateInstallState = AppUpdateInstallState.Idle,
-  val isCheckingUpdate: Boolean = false,
-  val isUpdateDismissedForSession: Boolean = false,
-  val updateCheckMessage: String? = null,
-)
-
-private data class UpdatePromptState(
-  val availableUpdate: AvailableAppUpdate? = null,
-  val installState: AppUpdateInstallState = AppUpdateInstallState.Idle,
-  val isChecking: Boolean = false,
-  val dismissedForSession: Boolean = false,
-  val message: String? = null,
 )
 
 private data class BackgroundSyncState(
@@ -111,7 +96,8 @@ private data class LiveTimetableConfig(
 class MainViewModel @Inject constructor(
   private val authRepository: AuthRepository,
   private val settingsRepository: SettingsRepository,
-  private val appUpdateRepository: AppUpdateRepository,
+  /** L'aggiornamento dall'app (engine-update): il controllore dell'interfaccia lo prende da qui. */
+  val updater: AppUpdater,
   private val schoolYearRepository: SchoolYearRepository,
   dashboardRepository: DashboardRepository,
   @param:ApplicationContext private val context: Context,
@@ -119,11 +105,6 @@ class MainViewModel @Inject constructor(
   private val isRestoring = MutableStateFlow(true)
   private val isAuthenticating = MutableStateFlow(false)
   private val authError = MutableStateFlow<String?>(null)
-  private val availableUpdate = MutableStateFlow<AvailableAppUpdate?>(null)
-  private val updateInstallState = MutableStateFlow<AppUpdateInstallState>(AppUpdateInstallState.Idle)
-  private val isCheckingUpdate = MutableStateFlow(false)
-  private val isUpdateDismissedForSession = MutableStateFlow(false)
-  private val updateCheckMessage = MutableStateFlow<String?>(null)
   private var liveTimetableRefreshJob: Job? = null
   private var lastLiveTimetableRefreshAtMillis = 0L
 
@@ -143,31 +124,7 @@ class MainViewModel @Inject constructor(
     )
   }
 
-  private val updatePromptState = combine(
-    availableUpdate,
-    updateInstallState,
-    isCheckingUpdate,
-    isUpdateDismissedForSession,
-    updateCheckMessage,
-  ) { update, installState, checking, dismissed, message ->
-    UpdatePromptState(
-      availableUpdate = update,
-      installState = installState,
-      isChecking = checking,
-      dismissedForSession = dismissed,
-      message = message,
-    )
-  }
-
-  val uiState = combine(baseState, updatePromptState) { base, update ->
-    base.copy(
-      availableUpdate = update.availableUpdate,
-      updateInstallState = update.installState,
-      isCheckingUpdate = update.isChecking,
-      isUpdateDismissedForSession = update.dismissedForSession,
-      updateCheckMessage = update.message,
-    )
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
+  val uiState = baseState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
 
   /** Durable repository events translated once into the app-wide visual notice vocabulary. */
   private val fallbackNotifications = schoolYearRepository.observeFallbackEvents().map { event ->
@@ -232,7 +189,6 @@ class MainViewModel @Inject constructor(
     viewModelScope.launch {
       runCatching { authRepository.restore() }
       isRestoring.value = false
-      checkUpdate(showNoUpdateMessage = false)
     }
     viewModelScope.launch {
       combine(
@@ -291,74 +247,9 @@ class MainViewModel @Inject constructor(
     viewModelScope.launch { schoolYearRepository.acknowledgeFallbackEvent(eventId) }
   }
 
-  fun checkUpdate(showNoUpdateMessage: Boolean = true) {
-    if (isCheckingUpdate.value) return
-    viewModelScope.launch {
-      isCheckingUpdate.value = true
-      if (showNoUpdateMessage) updateCheckMessage.value = null
-      try {
-        val ignoredVersion = if (showNoUpdateMessage) {
-          ""
-        } else {
-          settingsRepository.observeSettings().first().ignoredStableUpdateVersion
-        }
-        appUpdateRepository.checkForStableUpdate(
-          currentVersionName = BuildConfig.VERSION_NAME,
-          ignoredVersion = ignoredVersion,
-        ).onSuccess { update ->
-          availableUpdate.value = update
-          updateInstallState.value = AppUpdateInstallState.Idle
-          if (update != null) {
-            isUpdateDismissedForSession.value = false
-            if (showNoUpdateMessage) {
-              updateCheckMessage.value = "Aggiornamento ${update.version} disponibile."
-            }
-          } else if (showNoUpdateMessage) {
-            updateCheckMessage.value = "Nessun aggiornamento disponibile."
-          }
-        }.onFailure { error ->
-          if (showNoUpdateMessage) {
-            updateCheckMessage.value = error.message ?: "Controllo aggiornamenti non riuscito."
-          }
-        }
-      } finally {
-        isCheckingUpdate.value = false
-      }
-    }
-  }
-
-  fun startUpdateInstall() {
-    val update = availableUpdate.value ?: return
-    if (updateInstallState.value.isBusy()) return
-    viewModelScope.launch {
-      runCatching {
-        appUpdateRepository.install(update).collect { state ->
-          updateInstallState.value = state
-        }
-      }.onFailure { error ->
-        updateInstallState.value = AppUpdateInstallState.Error(
-          error.message ?: "Aggiornamento non riuscito.",
-        )
-      }
-    }
-  }
-
-  fun dismissUpdate() {
-    isUpdateDismissedForSession.value = true
-  }
-
-  fun clearUpdateCheckMessage() {
-    updateCheckMessage.value = null
-  }
-
-  fun ignoreUpdateVersion() {
-    val update = availableUpdate.value ?: return
-    viewModelScope.launch {
-      settingsRepository.ignoreStableUpdateVersion(update.version)
-      availableUpdate.value = null
-      updateInstallState.value = AppUpdateInstallState.Idle
-      isUpdateDismissedForSession.value = true
-    }
+  /** "Salta questa versione": il controllo successivo non la propone piu'. */
+  fun ignoreUpdateVersion(version: String) {
+    viewModelScope.launch { settingsRepository.ignoreStableUpdateVersion(version) }
   }
 
   fun login(username: String, password: String) {
@@ -409,14 +300,4 @@ class MainViewModel @Inject constructor(
       runCatching { settingsRepository.refreshLiveTimetable() }
     }
   }
-}
-
-private fun AppUpdateInstallState.isBusy(): Boolean = when (this) {
-  is AppUpdateInstallState.Downloading,
-  is AppUpdateInstallState.Verifying,
-  is AppUpdateInstallState.Installing,
-  is AppUpdateInstallState.AwaitingUserAction -> true
-  AppUpdateInstallState.Idle,
-  is AppUpdateInstallState.Installed,
-  is AppUpdateInstallState.Error -> false
 }

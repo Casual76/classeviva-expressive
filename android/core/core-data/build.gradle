@@ -30,6 +30,9 @@ dependencies {
   implementation project(":core:core-network")
   implementation project(":core:core-database")
   implementation project(":core:core-datastore")
+  api project(":engine-foundation")
+  implementation project(":engine-net")
+  implementation project(":engine-update")
 
   implementation libs.androidx.core.ktx
   implementation libs.androidx.lifecycle.runtime.ktx

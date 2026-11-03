@@ -67,9 +67,5 @@
         android:name="android.support.FILE_PROVIDER_PATHS"
         android:resource="@xml/file_paths" />
     </provider>
-
-    <receiver
-      android:name="dev.antigravity.classevivaexpressive.core.data.update.AppUpdateInstallResultReceiver"
-      android:exported="false" />
   </application>
 </manifest>

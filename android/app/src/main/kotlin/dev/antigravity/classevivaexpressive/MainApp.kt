@@ -106,8 +106,6 @@ import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaExpressiveTheme
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
-import dev.antigravity.classevivaexpressive.core.domain.model.AppUpdateInstallState
-import dev.antigravity.classevivaexpressive.core.domain.model.AvailableAppUpdate
 import dev.antigravity.classevivaexpressive.feature.absences.AbsencesRoute
 import dev.antigravity.classevivaexpressive.feature.agenda.AgendaDetailRoute
 import dev.antigravity.classevivaexpressive.feature.agenda.AgendaRoute
@@ -171,6 +169,11 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBar
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidTabItem
+import androidx.lifecycle.viewModelScope
+import dev.antigravity.fluidengine.ui.fluid.FluidUpdateController
+import dev.antigravity.fluidengine.ui.fluid.FluidUpdatePromptSheet
+import dev.antigravity.fluidengine.ui.fluid.FluidUpdateUiState
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidUpdateController
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidFloatingTabBarScrollConnection
 import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
 import dev.antigravity.fluidengine.ui.navigation.composable
@@ -236,6 +239,22 @@ fun MainApp(
   shortcuts: Flow<KeyboardShortcut> = emptyFlow(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  // L'aggiornamento dall'app: un controllore solo, alla radice, cosi' il foglio (qui) e la sezione delle
+  // impostazioni (piu' in basso) parlano dello stesso download. Lo scope e' quello del ViewModel: un
+  // download non si ferma cambiando pagina.
+  val update = rememberFluidUpdateController(
+    updater = viewModel.updater,
+    scope = viewModel.viewModelScope,
+    currentVersion = BuildConfig.VERSION_NAME.substringBefore("-"),
+    ignoredVersion = uiState.settings.ignoredStableUpdateVersion,
+    checkOnStart = true,
+  )
+  // "Piu' tardi": il foglio si chiude per questa sessione, e torna con un controllo nuovo (a mano,
+  // dalle impostazioni) che trova ancora una versione.
+  var updatePromptDismissed by rememberSaveable { mutableStateOf(false) }
+  LaunchedEffect(update.state) {
+    if (update.state is FluidUpdateUiState.Checking) updatePromptDismissed = false
+  }
   val notificationHostState = rememberFluidNotificationHostState()
   val glassModalHostState = rememberFluidGlassModalHostState()
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -304,10 +323,11 @@ fun MainApp(
               )
               else -> AuthenticatedApp(
                 chromeController = chromeController,
-                isCheckingForUpdates = uiState.isCheckingUpdate,
-                updateCheckMessage = uiState.updateCheckMessage,
-                onCheckForUpdates = { viewModel.checkUpdate() },
-                onClearUpdateCheckMessage = viewModel::clearUpdateCheckMessage,
+                update = update,
+                onSkipUpdate = { version ->
+                  viewModel.ignoreUpdateVersion(version)
+                  update.reset()
+                },
                 incomingIntents = incomingIntents,
                 shortcuts = shortcuts,
               )
@@ -324,16 +344,18 @@ fun MainApp(
             backdrop = chromeController.activeBackdrop.value,
             modifier = Modifier.align(Alignment.TopCenter),
           )
-          val update = uiState.availableUpdate
-          if (update != null && !uiState.isUpdateDismissedForSession) {
-            AppUpdateDialog(
-              update = update,
-              installState = uiState.updateInstallState,
-              onInstall = viewModel::startUpdateInstall,
-              onLater = viewModel::dismissUpdate,
-              onIgnore = viewModel::ignoreUpdateVersion,
-            )
-          }
+          FluidUpdatePromptSheet(
+            state = update.state.takeUnless { updatePromptDismissed },
+            onInstall = update::install,
+            onLater = { updatePromptDismissed = true },
+            onSkip = {
+              update.available?.version?.let { version ->
+                viewModel.ignoreUpdateVersion(version)
+                update.reset()
+              }
+              updatePromptDismissed = true
+            },
+          )
         }
       }
     }
@@ -383,57 +405,6 @@ private fun Context.copyBugReport(report: String) {
   clipboard.setPrimaryClip(
     ClipData.newPlainText("Classeviva Expressive bug report", report),
   )
-}
-
-@Composable
-private fun AppUpdateDialog(
-  update: AvailableAppUpdate,
-  installState: AppUpdateInstallState,
-  onInstall: () -> Unit,
-  onLater: () -> Unit,
-  onIgnore: () -> Unit,
-) {
-  val busy = installState.isBusy()
-  val statusText = when (installState) {
-    AppUpdateInstallState.Idle -> update.changelog.ifBlank { "Nuova versione disponibile." }
-    is AppUpdateInstallState.Downloading -> {
-      val percent = (installState.progress * 100).toInt().coerceIn(0, 100)
-      "Download aggiornamento: $percent%"
-    }
-    is AppUpdateInstallState.Verifying -> installState.message
-    is AppUpdateInstallState.AwaitingUserAction -> installState.message
-    is AppUpdateInstallState.Installing -> installState.message
-    is AppUpdateInstallState.Installed -> "Aggiornamento installato."
-    is AppUpdateInstallState.Error -> installState.message
-  }
-
-  FluidAlert(
-    onDismissRequest = { if (!busy) onLater() },
-    title = "Aggiornamento ${update.version}",
-    actions = listOf(
-      FluidAlertAction("Ignora", onIgnore, FluidAlertAction.Emphasis.Normal, enabled = !busy),
-      FluidAlertAction("Più tardi", onLater, FluidAlertAction.Emphasis.Normal, enabled = !busy),
-      FluidAlertAction(if (installState is AppUpdateInstallState.Error) "Riprova" else "Aggiorna", onInstall, FluidAlertAction.Emphasis.Preferred, enabled = !busy && installState !is AppUpdateInstallState.Installed),
-    ),
-    content = {
-      Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(statusText)
-        if (busy) {
-          FluidIndeterminateBar(modifier = Modifier.fillMaxWidth())
-        }
-      }
-    },
-  )
-}
-
-private fun AppUpdateInstallState.isBusy(): Boolean = when (this) {
-  is AppUpdateInstallState.Downloading,
-  is AppUpdateInstallState.Verifying,
-  is AppUpdateInstallState.Installing,
-  is AppUpdateInstallState.AwaitingUserAction -> true
-  AppUpdateInstallState.Idle,
-  is AppUpdateInstallState.Installed,
-  is AppUpdateInstallState.Error -> false
 }
 
 @Composable
@@ -939,10 +910,8 @@ internal fun pendingHomeworkRequest(
 @Composable
 private fun AuthenticatedApp(
   chromeController: FluidChromeController,
-  isCheckingForUpdates: Boolean,
-  updateCheckMessage: String?,
-  onCheckForUpdates: () -> Unit,
-  onClearUpdateCheckMessage: () -> Unit,
+  update: FluidUpdateController,
+  onSkipUpdate: (String) -> Unit,
   incomingIntents: Flow<Intent>,
   shortcuts: Flow<KeyboardShortcut> = emptyFlow(),
 ) {
@@ -1532,10 +1501,9 @@ private fun AuthenticatedApp(
         ) { entry ->
           SettingsRoute(
             onBack = navController::navigateUp,
-            isCheckingForUpdates = isCheckingForUpdates,
-            updateCheckMessage = updateCheckMessage,
-            onCheckForUpdates = onCheckForUpdates,
-            onClearUpdateCheckMessage = onClearUpdateCheckMessage,
+            update = update,
+            currentVersion = BuildConfig.VERSION_NAME,
+            onSkipUpdate = onSkipUpdate,
             onOpenAssistantConsent = { navigateRoute(AssistantConsentRouteName) },
             onOpenAssistantHistory = if (assistantEnabled) {
               { navigateRoute(AssistantHistoryRouteName) }
