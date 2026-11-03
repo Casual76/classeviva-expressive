@@ -15,22 +15,30 @@
       "ref": "main"
     },
     "stable": {
-      "version": "7.15.2",
-      "releaseDate": "2026-10-13",
-      "changelog": "Vetro sopra vetro, come dev'essere (Fluid Engine 2.13.0): un pulsante su un pannello, su un pop-up, su un foglio o su una card ora sfoca il vetro su cui sta invece di lasciar vedere la pagina nitida, e i pomelli di interruttori e cursori tenuti su una card mostrano la card.",
-      "releaseTag": "stable-classeviva-expressive-v7.15.2",
-      "apkAsset": "classeviva-expressive-7.15.2.apk",
-      "sizeBytes": 33573636
+      "version": "7.16.0",
+      "releaseDate": "2026-11-03",
+      "changelog": "Fluid Engine 3: pagine che seguono il dito dal bordo, barra di vetro, interruttori da trascinare, aggiornamento dell'app e assistente sui componenti dell'engine; prima di eliminare dallo storico ora chiede conferma. Licenza GPL-3.0.",
+      "releaseTag": "stable-classeviva-expressive-v7.16.0",
+      "apkAsset": "classeviva-expressive-7.16.0.apk",
+      "sizeBytes": 34409308
     },
     "beta": {
-      "version": "7.15.2",
-      "releaseDate": "2026-10-13",
-      "changelog": "Vetro sopra vetro, come dev'essere (Fluid Engine 2.13.0): un pulsante su un pannello, su un pop-up, su un foglio o su una card ora sfoca il vetro su cui sta invece di lasciar vedere la pagina nitida, e i pomelli di interruttori e cursori tenuti su una card mostrano la card.",
-      "releaseTag": "stable-classeviva-expressive-v7.15.2",
-      "apkAsset": "classeviva-expressive-7.15.2.apk",
-      "sizeBytes": 33573636
+      "version": "7.16.0",
+      "releaseDate": "2026-11-03",
+      "changelog": "Fluid Engine 3: pagine che seguono il dito dal bordo, barra di vetro, interruttori da trascinare, aggiornamento dell'app e assistente sui componenti dell'engine; prima di eliminare dallo storico ora chiede conferma. Licenza GPL-3.0.",
+      "releaseTag": "stable-classeviva-expressive-v7.16.0",
+      "apkAsset": "classeviva-expressive-7.16.0.apk",
+      "sizeBytes": 34409308
     },
     "history": [
+      {
+        "version": "7.15.2",
+        "releaseDate": "2026-10-13",
+        "changelog": "Vetro sopra vetro, come dev'essere (Fluid Engine 2.13.0): un pulsante su un pannello, su un pop-up, su un foglio o su una card ora sfoca il vetro su cui sta invece di lasciar vedere la pagina nitida, e i pomelli di interruttori e cursori tenuti su una card mostrano la card.",
+        "releaseTag": "stable-classeviva-expressive-v7.15.2",
+        "apkAsset": "classeviva-expressive-7.15.2.apk",
+        "sizeBytes": 33573636
+      },
       {
         "version": "7.15.1",
         "releaseDate": "2026-10-13",
