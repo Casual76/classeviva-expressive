@@ -4,7 +4,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidColumnSection
 import dev.antigravity.fluidengine.ui.fluid.FluidColumnsDefaults
 import dev.antigravity.fluidengine.ui.fluid.fluidColumns
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.FluidGlassGroup
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,7 +44,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.dangerVividColors
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord

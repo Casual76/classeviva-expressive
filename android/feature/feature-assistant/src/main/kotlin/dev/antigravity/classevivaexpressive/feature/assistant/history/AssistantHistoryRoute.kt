@@ -17,7 +17,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
 import dev.antigravity.fluidengine.ui.fluid.FluidContextAction
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
-import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaHeroCard
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -59,7 +59,7 @@ fun AssistantHistoryRoute(
     },
   ) {
     item {
-      FluidHeroCard(
+      ClassevivaHeroCard(
         title = "Chiedi al registro",
         subtitle = "Voti, compiti, circolari, orario: a voce dal tasto sopra la pillola, o scrivendo qui.",
       )

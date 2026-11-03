@@ -49,8 +49,8 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeDetailC
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeDateLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.nearDayLabel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradePaneTint
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.FluidGlassGroup
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassGroups
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassGroup
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectRowIcon
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.asReadableSubject
@@ -96,7 +96,8 @@ import dev.antigravity.fluidengine.ui.fluid.FluidVividColors
 import dev.antigravity.fluidengine.ui.fluid.rememberCurrentDate
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
-import dev.antigravity.fluidengine.ui.theme.FluidQuickAction
+import dev.antigravity.fluidengine.ui.fluid.FluidChip
+import dev.antigravity.fluidengine.ui.fluid.FluidPagerDots
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -335,7 +336,7 @@ fun DashboardRoute(
         }
       }
       item {
-        FluidQuickAction(label = "Apri orario", onClick = onNavigateLessons)
+        FluidChip(label = "Apri orario", selected = false, onClick = onNavigateLessons)
       }
       if (snapshot.todayLessons.isNotEmpty()) {
         item { FluidSectionHeader("Lezioni di oggi") }
@@ -477,7 +478,7 @@ private fun DashboardTabletPanes(
       TodayHero(lessons = lessons, moment = moment, onOpen = onNavigateLessons)
       DashboardSection(
         title = "Lezioni di oggi",
-        action = { FluidQuickAction(label = "Apri orario", onClick = onNavigateLessons) },
+        action = { FluidChip(label = "Apri orario", selected = false, onClick = onNavigateLessons) },
       ) {
         if (lessons.isEmpty()) {
           FluidEmptyState(
@@ -501,7 +502,7 @@ private fun DashboardTabletPanes(
           snapshot.averageNumeric?.let { "Media ${snapshot.averageLabel}" },
           snapshot.unseenGrades.size.takeIf { it > 0 }?.let { if (it == 1) "1 nuovo" else "$it nuovi" },
         ).joinToString(" · ").ifBlank { "Nessuna media ancora" },
-        action = { FluidQuickAction(label = "Tutti i voti", onClick = onNavigateGrades) },
+        action = { FluidChip(label = "Tutti i voti", selected = false, onClick = onNavigateGrades) },
       ) {
         if (recentGrades.isEmpty()) {
           NoRecentGrades()
@@ -716,8 +717,12 @@ private fun RecentGradesPager(
       horizontalArrangement = Arrangement.SpaceBetween,
       verticalAlignment = Alignment.CenterVertically,
     ) {
-      PagerDots(count = grades.size, current = pagerState.currentPage)
-      FluidQuickAction(label = "Tutti i voti", onClick = onNavigateGrades)
+      FluidPagerDots(
+        state = pagerState,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+        activeColor = MaterialTheme.colorScheme.primary,
+      )
+      FluidChip(label = "Tutti i voti", selected = false, onClick = onNavigateGrades)
     }
   }
 }
@@ -797,32 +802,3 @@ private fun NoUrgentCommunications() {
   )
 }
 
-/**
- * Dove sei nella pila dei voti recenti.
- *
- * Sostituisce l'unica cosa che la rail diceva bene — che ce n'era altra a destra — ora che si vede
- * una carta alla volta.
- */
-@Composable
-private fun PagerDots(count: Int, current: Int) {
-  Row(
-    horizontalArrangement = Arrangement.spacedBy(5.dp),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    repeat(count) { index ->
-      val active = index == current
-      Box(
-        modifier = Modifier
-          .size(width = if (active) 16.dp else 6.dp, height = 6.dp)
-          .background(
-            color = if (active) {
-              MaterialTheme.colorScheme.primary
-            } else {
-              MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-            },
-            shape = ContinuousCornerShape(FluidRadius.Small),
-          ),
-      )
-    }
-  }
-}

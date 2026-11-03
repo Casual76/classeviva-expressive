@@ -2,7 +2,7 @@ package dev.antigravity.classevivaexpressive.feature.settings
 
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.countLabel
 import dev.antigravity.classevivaexpressive.core.domain.model.RegistroFeature
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassGroups
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -132,7 +132,11 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
 import dev.antigravity.fluidengine.ui.fluid.FluidAlert
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.BrandAccent
+import dev.antigravity.fluidengine.ui.fluid.FluidAccentChoice
+import dev.antigravity.fluidengine.ui.fluid.FluidAccentPicker
 import dev.antigravity.fluidengine.ui.fluid.FluidColorDot
+import dev.antigravity.fluidengine.ui.fluid.FluidToggleRow
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
@@ -142,7 +146,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.fluid.fluidLicensesSection
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidCard
-import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaHeroCard
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -325,6 +329,10 @@ class SettingsViewModel @Inject constructor(
 
   fun setAmoled(enabled: Boolean) {
     viewModelScope.launch { settingsRepository.setAmoledEnabled(enabled) }
+  }
+
+  fun setHaptics(enabled: Boolean) {
+    viewModelScope.launch { settingsRepository.setHapticsEnabled(enabled) }
   }
 
   fun setSubjectColor(key: String, argb: Int?) {
@@ -606,7 +614,7 @@ fun SettingsRoute(
     ) {
       if (section == null) {
         item {
-          FluidHeroCard(
+          ClassevivaHeroCard(
             title = state.session?.profile?.name?.ifBlank { "Studente" } ?: "Profilo locale",
             subtitle = listOfNotNull(
               state.session?.profile?.schoolClass?.takeIf(String::isNotBlank),
@@ -651,7 +659,7 @@ fun SettingsRoute(
 
       if (section == SettingsSection.Account) {
         item {
-          FluidHeroCard(
+          ClassevivaHeroCard(
             title = state.session?.profile?.name?.ifBlank { "Studente" } ?: "Nessuna sessione",
             subtitle = listOfNotNull(
               state.session?.username,
@@ -686,9 +694,6 @@ fun SettingsRoute(
 
       if (section == SettingsSection.Appearance) {
         val dynamicColorSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-        val dynamicColorActive = dynamicColorSupported &&
-          state.settings.dynamicColorEnabled &&
-          state.settings.accentMode == AccentMode.DYNAMIC
         item { FluidSectionHeader(title = "Tema") }
         item {
           // Four mutually exclusive options that all fit on one row: exactly what a segmented
@@ -702,35 +707,47 @@ fun SettingsRoute(
         }
         item { FluidSectionHeader(title = "Accento") }
         item {
-          // Colour is the whole point of this control, so the swatch *is* the control. A row of
-          // named chips made the reader map a word onto a colour they could not see.
-          AccentPicker(
-            settings = state.settings,
-            onSelectBrand = { viewModel.setAccentMode(AccentMode.BRAND) },
-            onSelectDynamic = { viewModel.setDynamicColor(true) },
-            onSelectPreset = viewModel::setAccentPreset,
-          )
-        }
-        item {
-          SettingToggleRow(
-            title = "Colori dinamici",
-            subtitle = if (dynamicColorSupported) {
-              "Usa subito i colori del sistema; disattivandolo tornano quelli di Classeviva."
-            } else {
-              "Richiede Android 12 o versioni successive."
+          // Il colore e' il punto di questo controllo, quindi la pastiglia *e'* il controllo: una fila
+          // di chip con un nome obbligava a mappare una parola su un colore che non si vedeva. Il
+          // selettore e' quello dell'engine, con i preset e il marchio dell'app: le impostazioni
+          // salvano la scelta per nome ("expressive", "ember"...), la lista dell'engine no.
+          FluidAccentPicker(
+            selected = when (
+              effectiveAccentMode(settings = state.settings, dynamicColorSupported = dynamicColorSupported)
+            ) {
+              AccentMode.BRAND -> FluidAccentChoice.Brand
+              AccentMode.DYNAMIC -> FluidAccentChoice.Dynamic
+              AccentMode.CUSTOM_PRESET -> FluidAccentChoice.Preset(state.settings.customAccentName)
             },
-            checked = dynamicColorActive,
-            onCheckedChange = viewModel::setDynamicColor,
-            enabled = dynamicColorSupported,
+            onSelect = { choice ->
+              when (choice) {
+                FluidAccentChoice.Brand -> viewModel.setAccentMode(AccentMode.BRAND)
+                FluidAccentChoice.Dynamic -> viewModel.setDynamicColor(true)
+                is FluidAccentChoice.Preset -> viewModel.setAccentPreset(choice.name)
+              }
+            },
+            brand = BrandAccent,
+            presets = expressiveAccentPresets,
+            brandLabel = "Classeviva",
+            dynamicLabel = "Colori di sistema",
           )
         }
         item {
-          SettingToggleRow(
-            title = "Nero AMOLED",
-            subtitle = "Usa superfici nere nel tema scuro.",
-            checked = state.settings.amoledEnabled,
-            onCheckedChange = viewModel::setAmoled,
-          )
+          FluidListGroup(glass = true) {
+            FluidToggleRow(
+              title = "Nero AMOLED",
+              subtitle = "Usa superfici nere nel tema scuro.",
+              checked = state.settings.amoledEnabled,
+              onCheckedChange = viewModel::setAmoled,
+            )
+            FluidListDivider()
+            FluidToggleRow(
+              title = "Aptica",
+              subtitle = "Le vibrazioni che accompagnano i tocchi.",
+              checked = state.settings.hapticsEnabled,
+              onCheckedChange = viewModel::setHaptics,
+            )
+          }
         }
         item { FluidSectionHeader(title = "Materie") }
         item {
@@ -781,27 +798,28 @@ fun SettingsRoute(
 
       if (section == SettingsSection.Notifications) {
         item {
-          SettingToggleRow(
-            title = "Notifiche",
-            subtitle = "Attiva gli aggiornamenti importanti del registro.",
-            checked = state.settings.notificationsEnabled,
-            onCheckedChange = { enabled ->
-              viewModel.setNotifications(enabled)
-              if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !state.runtimeState.permissionGranted) {
-                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-              }
-            },
-            icon = { Icon(Icons.Rounded.NotificationsActive, contentDescription = null) },
-          )
-        }
-        item {
-          SettingToggleRow(
-            title = "Sincronizzazione periodica",
-            subtitle = "Aggiorna i dati in background con frequenza adattiva.",
-            checked = state.settings.periodicSyncEnabled,
-            onCheckedChange = viewModel::setPeriodicSync,
-            icon = { Icon(Icons.Rounded.Sync, contentDescription = null) },
-          )
+          FluidListGroup(glass = true) {
+            FluidToggleRow(
+              title = "Notifiche",
+              subtitle = "Attiva gli aggiornamenti importanti del registro.",
+              checked = state.settings.notificationsEnabled,
+              onCheckedChange = { enabled ->
+                viewModel.setNotifications(enabled)
+                if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !state.runtimeState.permissionGranted) {
+                  permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+              },
+              leading = { Icon(Icons.Rounded.NotificationsActive, contentDescription = null) },
+            )
+            FluidListDivider()
+            FluidToggleRow(
+              title = "Sincronizzazione periodica",
+              subtitle = "Aggiorna i dati in background con frequenza adattiva.",
+              checked = state.settings.periodicSyncEnabled,
+              onCheckedChange = viewModel::setPeriodicSync,
+              leading = { Icon(Icons.Rounded.Sync, contentDescription = null) },
+            )
+          }
         }
         if (state.settings.notificationsEnabled &&
           (!state.runtimeState.permissionGranted || !state.runtimeState.appNotificationsEnabled)
@@ -809,7 +827,8 @@ fun SettingsRoute(
           item {
             FluidInlineMessage(
               title = "Serve il tuo intervento",
-              message = "Android sta bloccando almeno una parte delle notifiche. Apri Diagnostica avanzata per correggere lo stato.",
+              message = "Android sta bloccando almeno una parte delle notifiche. Tocca qui per aprire Diagnostica avanzata e correggere lo stato.",
+              onClick = { sectionName = SettingsSection.Diagnostics.name },
               tone = FluidTone.Warning,
             )
           }
@@ -828,7 +847,7 @@ fun SettingsRoute(
 
       if (section == SettingsSection.Data) {
         item {
-          FluidHeroCard(
+          ClassevivaHeroCard(
             title = "I tuoi dati restano sotto il tuo controllo",
             subtitle = "Il backup viene creato solo quando scegli esplicitamente dove salvarlo.",
           )
@@ -1264,61 +1283,12 @@ private fun SettingToggleRow(
         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
       }
       badge?.invoke()
+      // Un interruttore vero, non decorativo (engine 3.0.4): il pomello si prende e si trascina. Un
+      // tocco altrove sulla card commuta come prima.
       FluidSwitch(
         checked = checked,
-        // The whole labelled card owns the single switch semantic/action and 48dp+ target.
-        onCheckedChange = null,
+        onCheckedChange = onCheckedChange,
         enabled = enabled,
-      )
-    }
-  }
-}
-
-/**
- * The accent row.
- *
- * "Dynamic" is shown as the colour the system would actually hand over rather than as a word, and
- * the brand entry keeps its own swatch so choosing it is a visible choice like any other.
- */
-@Composable
-private fun AccentPicker(
-  settings: AppSettings,
-  onSelectBrand: () -> Unit,
-  onSelectDynamic: () -> Unit,
-  onSelectPreset: (String) -> Unit,
-) {
-  val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-  val dynamicColor = dynamicAccentColor(isDark)
-  val resolvedAccentMode = effectiveAccentMode(
-    settings = settings,
-    dynamicColorSupported = dynamicColor != null,
-  )
-  FlowRow(
-    modifier = Modifier.selectableGroup(),
-    horizontalArrangement = Arrangement.spacedBy(6.dp),
-    verticalArrangement = Arrangement.spacedBy(6.dp),
-  ) {
-    FluidColorDot(
-      color = classevivaBrandAccent(isDark),
-      selected = resolvedAccentMode == AccentMode.BRAND,
-      onClick = onSelectBrand,
-      label = "Classeviva",
-    )
-    if (dynamicColor != null) {
-      FluidColorDot(
-        color = dynamicColor,
-        selected = resolvedAccentMode == AccentMode.DYNAMIC,
-        onClick = onSelectDynamic,
-        label = "Colori di sistema",
-      )
-    }
-    expressiveAccentPresets.forEach { preset ->
-      FluidColorDot(
-        color = preset.resolve(isDark),
-        selected = resolvedAccentMode == AccentMode.CUSTOM_PRESET &&
-          settings.customAccentName == preset.name,
-        onClick = { onSelectPreset(preset.name) },
-        label = preset.label,
       )
     }
   }
@@ -1331,17 +1301,6 @@ internal fun effectiveAccentMode(
   settings.accentMode == AccentMode.DYNAMIC &&
     (!dynamicColorSupported || !settings.dynamicColorEnabled) -> AccentMode.BRAND
   else -> settings.accentMode
-}
-
-@Composable
-private fun dynamicAccentColor(isDark: Boolean): Color? {
-  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
-  val context = LocalContext.current
-  return if (isDark) {
-    dynamicDarkColorScheme(context).primary
-  } else {
-    dynamicLightColorScheme(context).primary
-  }
 }
 
 private fun ThemeMode.label(): String {

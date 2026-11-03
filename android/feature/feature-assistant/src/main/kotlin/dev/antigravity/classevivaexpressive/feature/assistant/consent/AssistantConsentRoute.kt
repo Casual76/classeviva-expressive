@@ -20,7 +20,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidCard
-import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaHeroCard
 
 /**
  * La pagina di consenso, alla prima accensione: cosa parte dal telefono, verso chi, cosa resta
@@ -42,7 +42,7 @@ fun AssistantConsentRoute(
     itemSpacing = 12.dp,
   ) {
     item {
-      FluidHeroCard(
+      ClassevivaHeroCard(
         title = "Chiedi al registro",
         subtitle = "Voti, medie, compiti, orario, circolari, assenze: risposte in linguaggio naturale, e qualche azione nell'app.",
       )

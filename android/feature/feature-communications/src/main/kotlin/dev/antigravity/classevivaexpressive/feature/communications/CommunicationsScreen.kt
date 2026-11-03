@@ -56,7 +56,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.domain.model.Communication
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationDetail
 import dev.antigravity.classevivaexpressive.core.domain.model.CommunicationsRepository
@@ -804,8 +804,9 @@ fun CommunicationsRoute(
       }
       if (unreadCount > 0) {
           item {
-              dev.antigravity.fluidengine.ui.theme.FluidQuickAction(
+              dev.antigravity.fluidengine.ui.fluid.FluidChip(
                   label = "Segna tutte come lette",
+                  selected = false,
                   onClick = viewModel::markAllAsRead
               )
           }

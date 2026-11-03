@@ -18,18 +18,6 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -102,20 +90,17 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.navDeepLink
@@ -183,37 +168,35 @@ import dev.antigravity.fluidengine.ui.fluid.FluidNotificationHost
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidScrollToTopBus
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
-import dev.antigravity.fluidengine.ui.fluid.FluidFoldAlignment
-import dev.antigravity.fluidengine.ui.fluid.FluidFoldingTabBar
-import dev.antigravity.fluidengine.ui.fluid.FluidFoldingTabBarDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBar
+import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidTabItem
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidFloatingTabBarScrollConnection
+import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
+import dev.antigravity.fluidengine.ui.navigation.composable
+import dev.antigravity.fluidengine.ui.navigation.navigateToPeer
+import dev.antigravity.fluidengine.ui.page.FluidPageTransition
+import dev.antigravity.fluidengine.ui.page.FluidPeerMove
+import dev.antigravity.fluidengine.ui.page.rememberFluidPageHostState
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidNotificationHostState
 import dev.antigravity.fluidengine.ui.fluid.ProvideFluidChrome
 import dev.antigravity.fluidengine.ui.fluid.fluidGlassModalObscured
-import dev.antigravity.fluidengine.ui.fluid.rememberFluidBarFold
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidChromeController
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidChromeScrollConnection
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidNotificationHostState
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
-import dev.antigravity.fluidengine.ui.theme.FluidHeroCard
+import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaHeroCard
+import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
-import dev.antigravity.fluidengine.ui.theme.FluidRouteMotion
-import dev.antigravity.fluidengine.ui.theme.FluidRouteMotionHost
 import dev.antigravity.fluidengine.ui.theme.FluidScreenSurface
 import dev.antigravity.fluidengine.ui.theme.FluidTone
-import dev.antigravity.fluidengine.ui.theme.LocalRouteMotionSignals
-import dev.antigravity.fluidengine.ui.theme.MotionOrigin
-import dev.antigravity.fluidengine.ui.theme.RouteMotionSignals
-import dev.antigravity.fluidengine.ui.theme.fluidTouchOriginTracker
-import dev.antigravity.fluidengine.ui.theme.rememberFluidTouchOrigin
-import dev.antigravity.fluidengine.ui.theme.rememberRouteMotionSignals
 
 private const val BugReportRepositoryOwner = "Casual76"
 private const val BugReportRepositoryName = "classeviva-expressive"
@@ -245,169 +228,6 @@ private val topLevelDestinations = listOf(
 internal val topLevelRouteOrder = topLevelDestinations.map { it.baseRoute }
 internal val topLevelRoutes = topLevelRouteOrder.toSet()
 
-/**
- * The tab bar's own timing.
- *
- * Faster than the page transition on purpose. The bar is chrome: it should already be out of the way
- * by the time the new screen has finished arriving, otherwise the two movements read as one confused
- * gesture rather than as a screen opening over a bar that stepped aside.
- */
-private fun barSlideSpec() = FluidMotion.intOffset(
-  dampingRatio = FluidMotion.DampingChrome,
-  stiffness = FluidMotion.ResponseSnappy,
-)
-
-/**
- * One hierarchical movement for the whole app: the destination grows out of the point that was
- * touched, while the page it covers recedes a little underneath it.
- *
- * Everything here is duration-based, and that is not a stylistic preference. The predictive-back
- * gesture drives these transitions by *seeking* into them, and only a finite, monotonic curve can
- * be seeked; a spring has no duration to scrub within, which is precisely why dragging back used to
- * feel unrelated to what was on screen.
- *
- * All of it settles on [FluidMotion.EaseEmphasized] — decisive start, long calm settle, and no
- * overshoot anywhere. An earlier pass used a curve that carried three percent of overshoot on the
- * theory that it would read as springiness; on a surface the size of the display it read as the
- * page arriving, going slightly too far, and coming back, which is the "strange bounce" it was
- * meant to avoid. Spring belongs to things small enough to carry it.
- */
-private fun expandSpec() = tween<Float>(
-  durationMillis = FluidMotion.DurationExpand,
-  easing = FluidMotion.EaseEmphasized,
-)
-
-private fun collapseSpec() = tween<Float>(
-  durationMillis = FluidMotion.DurationCollapse,
-  easing = FluidMotion.EaseEmphasized,
-)
-
-/** Peers travel on the same curve as everything else, only sideways and only a little. */
-private fun peerSlideSpec() = tween<IntOffset>(
-  durationMillis = FluidMotion.DurationPeer,
-  easing = FluidMotion.EaseEmphasized,
-)
-
-/** The page being covered: it gives way while the new one is still becoming opaque. */
-private fun coveredFadeOut() = tween<Float>(
-  durationMillis = FluidMotion.DurationRouteFadeOut,
-  easing = FluidMotion.EaseIn,
-)
-
-/**
- * The page being dismissed: it stays solid while it shrinks and only disappears at the end.
- *
- * A detail that starts dissolving the instant the back gesture begins reads as a page falling
- * apart. Holding its opacity while it contracts is what makes it read as *closing* — and it is the
- * half of the gesture the finger is actually scrubbing, so it has to be the legible half.
- */
-private fun dismissedFadeOut() = tween<Float>(
-  durationMillis = 170,
-  delayMillis = 90,
-  easing = FluidMotion.EaseIn,
-)
-
-/** How far a peer page slides, in pixels, given the width it is sliding across. */
-private fun peerSlidePx(width: Int, direction: Int): Int =
-  (width * FluidMotion.PeerSlideFraction * direction).roundToInt()
-
-/**
- * Resolves the movement between two entries, and records for the layers about to draw whether the
- * departing page should lose focus on its way out.
- *
- * The entry that is joining or leaving the stack is the one that knows how it got there: on the way
- * forward that is the arriving destination, on the way back the one being dismissed.
- */
-private fun RouteMotionSignals.resolveRouteMotion(
-  initialState: NavBackStackEntry,
-  targetState: NavBackStackEntry,
-  isPop: Boolean,
-): RouteMotionDecision {
-  val carrier = if (isPop) initialState else targetState
-  val decision = decideRouteMotion(
-    fromRoute = initialState.destination.route,
-    toRoute = targetState.destination.route,
-    requestedKind = carrier.savedStateHandle.readMotionKind(),
-  )
-  hierarchical = decision.kind == RouteMotionKind.Expand
-  return decision
-}
-
-private fun routeEnterTransition(
-  decision: RouteMotionDecision,
-  origin: MotionOrigin,
-  isPop: Boolean,
-): EnterTransition = when (decision.kind) {
-  // Peers step sideways together. A full-width wipe between two readable pages says "these are
-  // nested", which is the one thing tabs are not; no movement at all said nothing whatsoever, which
-  // is how a tab change ends up feeling like the app skipped a frame.
-  RouteMotionKind.TopLevelSwitch -> {
-    // Opaque from the first frame here too, for the same reason. It matters most under a scrubbed
-    // predictive back, where the transition can be *held* at any point: a cross-fade paused halfway
-    // is two tabs printed on top of each other, and the finger can keep it there indefinitely.
-    if (decision.direction == 0) {
-      fadeIn(tween(FluidMotion.DurationPeerFadeIn, easing = FluidMotion.EaseOut))
-    } else {
-      slideInHorizontally(peerSlideSpec()) { width -> peerSlidePx(width, decision.direction) }
-    }
-  }
-
-  // No fade on either side of a hierarchical move, and that is the whole invariant: exactly one
-  // readable page at every pixel of every frame. An arriving page carries a rounded edge for as
-  // long as it is smaller than the screen, so it has no hard rectangular boundary left to disguise
-  // — and every millisecond a page spends translucent is a millisecond where two screens can be
-  // read through each other, which is what made opening something look like a cross-fade.
-  RouteMotionKind.Expand -> if (isPop) {
-    // Coming back, the page underneath is uncovered: it returns from slightly too close, which is
-    // exactly where the forward transition left it.
-    scaleIn(
-      animationSpec = collapseSpec(),
-      initialScale = FluidRouteMotion.ExpandParentScale,
-      transformOrigin = origin.toTransformOrigin(),
-    )
-  } else {
-    scaleIn(
-      animationSpec = expandSpec(),
-      initialScale = FluidRouteMotion.ExpandInitialScale,
-      transformOrigin = origin.toTransformOrigin(),
-    )
-  }
-}
-
-private fun routeExitTransition(
-  decision: RouteMotionDecision,
-  origin: MotionOrigin,
-  isPop: Boolean,
-): ExitTransition = when (decision.kind) {
-  RouteMotionKind.TopLevelSwitch -> {
-    // The one that leaves still fades, and quickly: both pages travel the same way by the same
-    // amount, so the only place the old one is ever uncovered is the narrow strip the new one has
-    // not reached yet, and that strip should resolve to the page's own background rather than to a
-    // sliver of the tab you just left.
-    val fade = fadeOut(tween(FluidMotion.DurationPeerFadeOut, easing = FluidMotion.EaseIn))
-    if (decision.direction == 0) {
-      fade
-    } else {
-      fade + slideOutHorizontally(peerSlideSpec()) { width -> peerSlidePx(width, -decision.direction) }
-    }
-  }
-
-  RouteMotionKind.Expand -> if (isPop) {
-    // The detail collapses back into the control it came out of.
-    fadeOut(dismissedFadeOut()) + scaleOut(
-      animationSpec = collapseSpec(),
-      targetScale = FluidRouteMotion.ExpandInitialScale,
-      transformOrigin = origin.toTransformOrigin(),
-    )
-  } else {
-    fadeOut(coveredFadeOut()) + scaleOut(
-      animationSpec = expandSpec(),
-      targetScale = FluidRouteMotion.ExpandParentScale,
-      transformOrigin = origin.toTransformOrigin(),
-    )
-  }
-}
-
 @Composable
 fun MainApp(
   viewModel: MainViewModel = hiltViewModel(),
@@ -418,7 +238,6 @@ fun MainApp(
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val notificationHostState = rememberFluidNotificationHostState()
   val glassModalHostState = rememberFluidGlassModalHostState()
-  val routeMotionSignals = rememberRouteMotionSignals()
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     viewModel.onAppResumed()
   }
@@ -468,7 +287,6 @@ fun MainApp(
     CompositionLocalProvider(
       LocalFluidNotificationHostState provides notificationHostState,
       LocalFluidGlassModalHostState provides glassModalHostState,
-      LocalRouteMotionSignals provides routeMotionSignals,
     ) {
       FluidScreenSurface(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize()) {
@@ -637,7 +455,6 @@ internal fun LoginScreen(
 ) {
   var username by rememberSaveable { mutableStateOf("") }
   var password by rememberSaveable { mutableStateOf("") }
-  var passwordVisible by rememberSaveable { mutableStateOf(false) }
 
   fun submit() {
     if (username.isNotBlank() && password.isNotBlank() && !isLoading) {
@@ -661,7 +478,7 @@ internal fun LoginScreen(
     verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.CenterVertically),
   ) {
     item {
-      FluidHeroCard(
+      ClassevivaHeroCard(
         title = "Classeviva Expressive",
         subtitle = "Accedi con le credenziali del registro Classeviva.",
         trailing = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
@@ -703,14 +520,7 @@ internal fun LoginScreen(
             imeAction = ImeAction.Done,
           ),
           keyboardActions = KeyboardActions(onDone = { submit() }),
-          visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-          trailing = {
-            FluidButton(
-              text = if (passwordVisible) "Nascondi" else "Mostra",
-              onClick = { passwordVisible = !passwordVisible },
-              style = FluidButtonStyle.Plain,
-            )
-          },
+          secret = true,
         )
         if (error != null) {
           Text(
@@ -758,6 +568,12 @@ internal fun TopLevelNavigationSuite(
   onReselectRoute: (String) -> Unit = {},
   scrollToTop: FluidScrollToTopBus = remember { FluidScrollToTopBus() },
   chromeController: FluidChromeController = rememberFluidChromeController(),
+  /**
+   * Quanto la barra e' uscita con la pagina: 0 dove c'e', 1 dove non c'e' (una pagina di dettaglio),
+   * in mezzo mentre le pagine si muovono, anche sotto il dito di un back. Si legge in disegno
+   * (`FluidPageHostState.fractionToward`), mai in composizione.
+   */
+  barHidden: () -> Float = { if (showNavigationSuite) 0f else 1f },
   /** Il tasto "Chiedi all'AI" sopra la pillola; null quando l'assistente e' spento. */
   assistant: AssistantBarState? = null,
   /** L'overlay dell'assistente: sopra la pagina e la barra, sotto i modali della radice. */
@@ -765,7 +581,15 @@ internal fun TopLevelNavigationSuite(
   content: @Composable () -> Unit,
 ) {
   val fallbackBackdrop = rememberGlassBackdrop()
-  val barFold = rememberFluidBarFold()
+  // La barra si ripiega da sola quando la pagina scorre davvero (e si riapre a ogni cambio di pagina o
+  // di scheda): la connessione e' quello che la pagina attraversa scorrendo. Il tasto dell'assistente
+  // vuole un numero fra i due stati, e lo ricava qui.
+  val barScroll = rememberFluidFloatingTabBarScrollConnection()
+  val barFold = animateFloatAsState(
+    targetValue = if (barScroll.isInline) 1f else 0f,
+    animationSpec = FluidMotion.standard(),
+    label = "barFold",
+  )
   val chromeScrollConnection = rememberFluidChromeScrollConnection(
     controller = chromeController,
     enabled = showNavigationSuite,
@@ -781,7 +605,7 @@ internal fun TopLevelNavigationSuite(
     modifier = Modifier
       .fillMaxSize()
       .nestedScroll(chromeScrollConnection)
-      .then(if (showNavigationSuite) Modifier.nestedScroll(barFold.connection) else Modifier),
+      .then(if (showNavigationSuite) Modifier.nestedScroll(barScroll) else Modifier),
   ) {
     // Una navigazione sola, in basso, su ogni formato. Il rail laterale del tablet e' stato
     // provato e tolto: era una colonna alta un pollice con quattro voci in cima, il suo fondale
@@ -791,8 +615,8 @@ internal fun TopLevelNavigationSuite(
     // Col tasto dell'assistente sopra la pillola, la pagina lascia libero anche il suo spazio.
     val bottomInset = when {
       !showNavigationSuite -> 0.dp
-      assistant != null -> FluidFoldingTabBarDefaults.ContentInset + AssistantBarButtonDefaults.ContentInset
-      else -> FluidFoldingTabBarDefaults.ContentInset
+      assistant != null -> FluidFloatingTabBarDefaults.ContentInset + AssistantBarButtonDefaults.ContentInset
+      else -> FluidFloatingTabBarDefaults.ContentInset
     }
     val backdrop = chromeController.activeBackdrop.value ?: fallbackBackdrop
 
@@ -811,36 +635,32 @@ internal fun TopLevelNavigationSuite(
     }
     val onReselect: (FluidTabItem) -> Unit = { item -> onReselectRoute(item.route) }
 
-    AnimatedVisibility(
-      visible = showNavigationSuite,
-      enter = slideInVertically(animationSpec = barSlideSpec()) { it },
-      exit = slideOutVertically(animationSpec = barSlideSpec()) { it },
+    Box(
       modifier = Modifier
+        .align(if (maxWidth >= 600.dp) Alignment.BottomStart else Alignment.BottomCenter)
+        // La barra non viaggia con la pagina: sta ferma e, dove la pagina che arriva non la vuole,
+        // scende fuori dallo schermo al passo delle pagine (e sotto il dito di un back).
+        .graphicsLayer { translationY = barHidden() * size.height }
         // Su uno schermo largo la barra non si stira da bordo a bordo: cinque schede spalmate su
         // ventisette centimetri sono bersagli a mezzo schermo l'uno dall'altro. Resta larga come
         // su un telefono e sta a sinistra, dalla parte del pollice — la stessa parte dove poi si
         // raccoglie ripiegandosi.
-        .align(if (maxWidth >= 600.dp) Alignment.BottomStart else Alignment.BottomCenter)
         .widthIn(max = 500.dp)
         .navigationBarsPadding()
         .padding(
-          horizontal = FluidFoldingTabBarDefaults.HorizontalMargin,
-          vertical = FluidFoldingTabBarDefaults.BottomMargin,
+          horizontal = FluidFloatingTabBarDefaults.HorizontalMargin,
+          vertical = FluidFloatingTabBarDefaults.BottomMargin,
         ),
     ) {
-      AssistantAboveBar(fold = { barFold.progress.value }, assistant = assistant, backdrop = backdrop) {
-        FluidFoldingTabBar(
+      AssistantAboveBar(fold = { barFold.value }, assistant = assistant, backdrop = backdrop) {
+        FluidFloatingTabBar(
           items = tabItems,
           selectedRoute = currentRoute,
           onSelect = onSelect,
           onReselect = onReselect,
+          scrollConnection = barScroll,
           backdrop = backdrop,
-          fold = { barFold.progress.value },
-          // Ripiegata, l'unica scheda rimasta e' quella su cui sei: un tocco li' sarebbe una
-          // riselezione, cioe' "riportami in cima", che e' l'opposto di quello che serve a una
-          // barra chiusa. Riaprirla e' la cosa ovvia da fare con una barra chiusa.
-          onExpandRequest = barFold::unfold,
-          foldAlignment = FluidFoldAlignment.Start,
+          foldAlignment = Alignment.Start,
         )
       }
     }
@@ -928,24 +748,11 @@ internal fun BugReportScreen(
     itemSpacing = 12.dp,
   ) {
     item {
-      Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-      ) {
-        Row(
-          modifier = Modifier.padding(16.dp),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
-          verticalAlignment = Alignment.Top,
-        ) {
-          Icon(Icons.Rounded.WarningAmber, contentDescription = null)
-          Text(
-            "La segnalazione sarà pubblica su GitHub e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
-            style = MaterialTheme.typography.bodyMedium,
-          )
-        }
-      }
+      FluidInlineMessage(
+        message = "La segnalazione sarà pubblica su GitHub e attribuita all'account GitHub con cui la invii. Non è anonima: non inserire credenziali o dati scolastici personali.",
+        tone = FluidTone.Warning,
+        leading = { Icon(Icons.Rounded.WarningAmber, contentDescription = null) },
+      )
     }
     item {
       FluidTextField(
@@ -1106,21 +913,6 @@ private fun TopLevelNavigationSuitePreview() {
   }
 }
 
-internal fun NavHostController.navigateTopLevel(targetRoute: String) {
-  val startDestination = graph.findStartDestination()
-  val targetBaseRoute = targetRoute.substringBefore('?')
-  val targetsStartDestination = targetBaseRoute == startDestination.route?.substringBefore('?')
-  navigate(targetRoute) {
-    popUpTo(startDestination.id) {
-      saveState = true
-    }
-    launchSingleTop = true
-    // Restoring the start route here also restores the tab that was just popped beneath it,
-    // so Back from Home would reopen that tab. Its state remains saved for later tab selection.
-    restoreState = !targetsStartDestination
-  }
-}
-
 internal fun NavHostController.handleIncomingIntent(intent: Intent): Boolean = handleDeepLink(intent)
 
 internal fun pendingGradeRequest(
@@ -1161,36 +953,36 @@ private fun AuthenticatedApp(
   val showNavigationSuite = currentRoute in topLevelRoutes
 
   val scrollToTop = remember { FluidScrollToTopBus() }
-  val touchOrigin = rememberFluidTouchOrigin()
-  // Owned by the shell above: one navigation host, one place that says what the leaving page does.
-  val motionSignals = LocalRouteMotionSignals.current
-
-  // The destination carries both the point it was opened from and the fact that it *was* opened
-  // rather than switched to, so going back undoes the same movement however the user chose to
-  // leave — the system gesture, the chevron, or a nested pop.
-  fun navigateRoute(route: String) {
-    val origin = touchOrigin.origin
-    navController.navigate(route)
-    navController.currentBackStackEntry?.savedStateHandle?.writeExpandMotion(origin)
+  // Lo stato dell'host delle pagine: la barra lo legge per uscire con la pagina di dettaglio.
+  val pages = rememberFluidPageHostState()
+  val barHidden: () -> Float = {
+    pages.fractionToward { key ->
+      val route = (key as? NavBackStackEntry)?.destination?.route?.substringBefore("?")
+      route != null && route !in topLevelRoutes
+    }
+  }
+  val peerMove = remember {
+    FluidPeerMove<NavBackStackEntry> { from, to ->
+      peerDirection(normalizeRoute(from.destination.route), normalizeRoute(to.destination.route))
+    }
   }
 
-  /** Stepping along the bar. The bar is the gesture, so the pages only have to answer it. */
-  fun navigateTopLevelRoute(targetRoute: String) {
-    navController.navigateTopLevel(targetRoute)
-    navController.currentBackStackEntry?.savedStateHandle?.writePeerMotion()
+  fun navigateRoute(route: String) {
+    navController.navigate(route)
   }
 
   /**
-   * Opening a top-level section by touching something on the page.
-   *
-   * The routes are peers but the gesture is not: tapping the average on Home is that card opening
-   * into the page behind it, and answering it with a tab bar's sideways shrug is what made the most
-   * direct route in the app look like nothing had happened.
+   * Passare a una sezione della barra, che sia dalla barra o toccando qualcosa sulla pagina (la
+   * media di Home che apre Voti): una pila sola, il passo laterale delle schede.
    */
-  fun expandToTopLevelRoute(targetRoute: String) {
-    val origin = touchOrigin.origin
-    navController.navigateTopLevel(targetRoute)
-    navController.currentBackStackEntry?.savedStateHandle?.writeExpandMotion(origin)
+  fun navigateTopLevelRoute(targetRoute: String) {
+    navController.navigateToPeer(targetRoute)
+  }
+
+  // Indietro da una sezione riporta a Home, come ha sempre fatto l'app; da Home esce. La pila delle
+  // schede e' una sola (`navigateToPeer`): senza questo un indietro da Voti uscirebbe dall'app.
+  BackHandler(enabled = currentRoute in topLevelRoutes && currentRoute != "home") {
+    navController.navigateToPeer("home")
   }
 
   // Ctrl+1…5: le cinque sezioni della barra, nell'ordine in cui stanno — come le schede di un
@@ -1199,9 +991,7 @@ private fun AuthenticatedApp(
     shortcuts.collect { shortcut ->
       val index = (shortcut as? KeyboardShortcut.Section)?.index ?: return@collect
       val destination = topLevelDestinations.getOrNull(index) ?: return@collect
-      val current = navController.currentDestination?.hierarchy
-        ?.mapNotNull { it.route?.substringBefore("?") }
-        ?.firstOrNull { it in topLevelRoutes }
+      val current = navController.currentDestination?.route?.substringBefore("?")?.takeIf { it in topLevelRoutes }
       if (current == destination.baseRoute) scrollToTop.request() else navigateTopLevelRoute(destination.navigateRoute)
     }
   }
@@ -1222,10 +1012,10 @@ private fun AuthenticatedApp(
   /** Dove porta una pagina chiesta dall'assistente: le sezioni principali si aprono, le altre si spingono. */
   fun openAssistantPage(page: AppPage, itemId: String?) {
     when (page) {
-      AppPage.HOME -> expandToTopLevelRoute("home")
-      AppPage.VOTI -> if (itemId != null) navigateRoute("grades?gradeId=${Uri.encode(itemId)}") else expandToTopLevelRoute("grades")
-      AppPage.AGENDA -> expandToTopLevelRoute("agenda")
-      AppPage.BACHECA -> expandToTopLevelRoute("communications?tab=board")
+      AppPage.HOME -> navigateTopLevelRoute("home")
+      AppPage.VOTI -> if (itemId != null) navigateRoute("grades?gradeId=${Uri.encode(itemId)}") else navigateTopLevelRoute("grades")
+      AppPage.AGENDA -> navigateTopLevelRoute("agenda")
+      AppPage.BACHECA -> navigateTopLevelRoute("communications?tab=board")
       AppPage.ORARIO -> navigateRoute("lessons")
       AppPage.COMPITI -> navigateRoute(if (itemId != null) "homework?homeworkId=${Uri.encode(itemId)}" else "homework")
       AppPage.ASSENZE -> navigateRoute("absences")
@@ -1243,10 +1033,9 @@ private fun AuthenticatedApp(
   // Keeping the provider inside the NavHost left the floating tab indicator animating at 0x.
   FluidMotionPolicyProvider {
     TopLevelNavigationSuite(
-      currentRoute = currentDestination?.hierarchy
-        ?.mapNotNull { it.route?.substringBefore("?") }
-        ?.firstOrNull { it in topLevelRoutes },
+      currentRoute = currentRoute?.takeIf { it in topLevelRoutes },
       showNavigationSuite = showNavigationSuite,
+      barHidden = barHidden,
       onNavigateRoute = { targetRoute ->
         navigateTopLevelRoute(targetRoute)
       },
@@ -1274,56 +1063,23 @@ private fun AuthenticatedApp(
         }
       },
     ) {
-      NavHost(
+      FluidNavHost(
         navController = navController,
         startDestination = "home",
-        modifier = Modifier
-          .fillMaxSize()
-          .fluidTouchOriginTracker(touchOrigin),
-        // One spatial model drives both ordinary navigation and predictive-back progress. The
-        // origin always comes from whichever entry is *leaving the stack*: forward that is the
-        // arriving one, on a pop it is the one being dismissed.
-        enterTransition = {
-          routeEnterTransition(
-            decision = motionSignals.resolveRouteMotion(initialState, targetState, isPop = false),
-            origin = targetState.savedStateHandle.readMotionOrigin(),
-            isPop = false,
-          )
-        },
-        exitTransition = {
-          routeExitTransition(
-            decision = motionSignals.resolveRouteMotion(initialState, targetState, isPop = false),
-            origin = targetState.savedStateHandle.readMotionOrigin(),
-            isPop = false,
-          )
-        },
-        popEnterTransition = {
-          routeEnterTransition(
-            decision = motionSignals.resolveRouteMotion(initialState, targetState, isPop = true),
-            origin = initialState.savedStateHandle.readMotionOrigin(),
-            isPop = true,
-          )
-        },
-        popExitTransition = {
-          routeExitTransition(
-            decision = motionSignals.resolveRouteMotion(initialState, targetState, isPop = true),
-            origin = initialState.savedStateHandle.readMotionOrigin(),
-            isPop = true,
-          )
-        },
+        modifier = Modifier.fillMaxSize(),
+        peer = peerMove,
+        state = pages,
       ) {
         composable("home") { entry ->
-          FluidRouteMotionHost(this@composable) {
-            DashboardRoute(
-              onNavigateGrades = { expandToTopLevelRoute("grades") },
-              onNavigateAgenda = { expandToTopLevelRoute("agenda") },
-              onNavigateLessons = { navigateRoute("lessons") },
-              onNavigateCommunications = {
-                expandToTopLevelRoute("communications?tab=board")
-              },
-              onOpenGrade = { gradeId -> expandToTopLevelRoute("grades?gradeId=$gradeId") },
-            )
-          }
+          DashboardRoute(
+            onNavigateGrades = { navigateTopLevelRoute("grades") },
+            onNavigateAgenda = { navigateTopLevelRoute("agenda") },
+            onNavigateLessons = { navigateRoute("lessons") },
+            onNavigateCommunications = {
+              navigateTopLevelRoute("communications?tab=board")
+            },
+            onOpenGrade = { gradeId -> navigateTopLevelRoute("grades?gradeId=$gradeId") },
+          )
         }
         composable(
           route = "agenda?agendaId={agendaId}&date={date}",
@@ -1356,29 +1112,26 @@ private fun AuthenticatedApp(
             // A cold/deep-link request has no composed source element: use the normal Push policy.
             navigateRoute(route = "agenda-detail/${Uri.encode(entryId)}")
           }
-          FluidRouteMotionHost(this@composable) {
-            AgendaRoute(
-              initialAgendaId = null,
-              initialDate = entry.arguments?.getString("date"),
-              onOpenEntry = { entryId ->
-                navigateRoute("agenda-detail/${Uri.encode(entryId)}")
-              },
-            )
-          }
+          AgendaRoute(
+            initialAgendaId = null,
+            initialDate = entry.arguments?.getString("date"),
+            onOpenEntry = { entryId ->
+              navigateRoute("agenda-detail/${Uri.encode(entryId)}")
+            },
+          )
         }
         composable(
           route = "agenda-detail/{entryId}",
+          transition = FluidPageTransition.Expand,
           arguments = listOf(navArgument("entryId") { type = NavType.StringType }),
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val agendaViewModel: AgendaViewModel = hiltViewModel(parentEntry)
-          FluidRouteMotionHost(this@composable) {
-            AgendaDetailRoute(
-              entryId = entry.arguments?.getString("entryId").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = agendaViewModel,
-            )
-          }
+          AgendaDetailRoute(
+            entryId = entry.arguments?.getString("entryId").orEmpty(),
+            onBack = { navController.popBackStack() },
+            viewModel = agendaViewModel,
+          )
         }
         composable(
           route = "grades?gradeId={gradeId}",
@@ -1398,21 +1151,20 @@ private fun AuthenticatedApp(
           val consumedGradeId by entry.savedStateHandle
             .getStateFlow<String?>(ConsumedGradeRequestKey, null)
             .collectAsStateWithLifecycle()
-          FluidRouteMotionHost(this@composable) {
-            // Niente `onOpenGrade`: senza, la schermata apre il proprio pop-up invece di
-            // navigare a una pagina intera. Per guardare un numero e tornare indietro, un viaggio
-            // di rotta era sproporzionato — e il pop-up esisteva gia', semplicemente non veniva
-            // mai raggiunto. La rotta `grade/{gradeId}` resta per i collegamenti dalle notifiche.
-            GradesRoute(
-              initialGradeId = pendingGradeRequest(requestedGradeId, consumedGradeId),
-              onInitialGradeConsumed = { gradeId ->
-                entry.savedStateHandle[ConsumedGradeRequestKey] = gradeId
-              },
-            )
-          }
+          // Niente `onOpenGrade`: senza, la schermata apre il proprio pop-up invece di
+          // navigare a una pagina intera. Per guardare un numero e tornare indietro, un viaggio
+          // di rotta era sproporzionato — e il pop-up esisteva gia', semplicemente non veniva
+          // mai raggiunto. La rotta `grade/{gradeId}` resta per i collegamenti dalle notifiche.
+          GradesRoute(
+            initialGradeId = pendingGradeRequest(requestedGradeId, consumedGradeId),
+            onInitialGradeConsumed = { gradeId ->
+              entry.savedStateHandle[ConsumedGradeRequestKey] = gradeId
+            },
+          )
         }
         composable(
           route = "grade/{gradeId}",
+          transition = FluidPageTransition.Expand,
           arguments = listOf(
             navArgument("gradeId") { type = NavType.StringType },
           ),
@@ -1421,13 +1173,11 @@ private fun AuthenticatedApp(
             navController.getBackStackEntry("grades?gradeId={gradeId}")
           }
           val gradesViewModel: GradesViewModel = hiltViewModel(gradesBackStackEntry)
-          FluidRouteMotionHost(this@composable) {
-            GradeDetailRoute(
-              gradeId = entry.arguments?.getString("gradeId").orEmpty(),
-              onBack = { navController.popBackStack() },
-              viewModel = gradesViewModel,
-            )
-          }
+          GradeDetailRoute(
+            gradeId = entry.arguments?.getString("gradeId").orEmpty(),
+            onBack = { navController.popBackStack() },
+            viewModel = gradesViewModel,
+          )
         }
         composable(
           route = "communications?tab={tab}&pubId={pubId}&evtCode={evtCode}&noteId={noteId}&categoryCode={categoryCode}",
@@ -1471,110 +1221,100 @@ private fun AuthenticatedApp(
           // Il dettaglio non e' piu' una rotta: e' il pop-up di vetro dichiarato dentro
           // CommunicationsRoute e disegnato alla radice. I deep link continuano ad arrivare qui
           // con gli stessi argomenti, che ora aprono la tab e poi il modale.
-          FluidRouteMotionHost(this@composable) {
-            CommunicationsRoute(
-              initialTab = entry.arguments?.getString("tab") ?: "board",
-              initialCommunicationPubId = entry.arguments?.getString("pubId"),
-              initialCommunicationEvtCode = entry.arguments?.getString("evtCode"),
-              initialNoteId = entry.arguments?.getString("noteId"),
-              initialNoteCategoryCode = entry.arguments?.getString("categoryCode"),
-              onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
-            )
-          }
+          CommunicationsRoute(
+            initialTab = entry.arguments?.getString("tab") ?: "board",
+            initialCommunicationPubId = entry.arguments?.getString("pubId"),
+            initialCommunicationEvtCode = entry.arguments?.getString("evtCode"),
+            initialNoteId = entry.arguments?.getString("noteId"),
+            initialNoteCategoryCode = entry.arguments?.getString("categoryCode"),
+            onBack = if (currentRoute == "communications") null else { { navController.navigateUp() } },
+          )
         }
-        composable("notes") { entry ->
-          FluidRouteMotionHost(this@composable) {
-            CommunicationsRoute(
-              initialTab = "notes",
-              onBack = navController::navigateUp,
-            )
-          }
+        composable("notes", transition = FluidPageTransition.Expand) { entry ->
+          CommunicationsRoute(
+            initialTab = "notes",
+            onBack = navController::navigateUp,
+          )
         }
         composable("more") { entry ->
-          FluidRouteMotionHost(this@composable) {
-            MoreHubScreen(
-              onOpenBugReport = { navigateRoute(BugReportRoute) },
-              onOpenNotes = { navigateRoute("notes") },
-              onOpenLessons = { navigateRoute("lessons") },
-              onOpenAbsences = { navigateRoute("absences") },
-              onOpenMaterials = { navigateRoute("materials") },
-              onOpenSettings = { navigateRoute("settings") },
-              onOpenHomework = { navigateRoute("homework") },
-              onOpenDocuments = { navigateRoute("documents") },
-              onOpenProfessors = { navigateRoute("professors") },
-              onOpenMeetings = { navigateRoute("meetings") },
-              onOpenAssistant = if (assistantEnabled) {
-                { navigateRoute(AssistantHistoryRouteName) }
-              } else {
-                null
-              },
-            )
-          }
+          MoreHubScreen(
+            onOpenBugReport = { navigateRoute(BugReportRoute) },
+            onOpenNotes = { navigateRoute("notes") },
+            onOpenLessons = { navigateRoute("lessons") },
+            onOpenAbsences = { navigateRoute("absences") },
+            onOpenMaterials = { navigateRoute("materials") },
+            onOpenSettings = { navigateRoute("settings") },
+            onOpenHomework = { navigateRoute("homework") },
+            onOpenDocuments = { navigateRoute("documents") },
+            onOpenProfessors = { navigateRoute("professors") },
+            onOpenMeetings = { navigateRoute("meetings") },
+            onOpenAssistant = if (assistantEnabled) {
+              { navigateRoute(AssistantHistoryRouteName) }
+            } else {
+              null
+            },
+          )
         }
-        composable(BugReportRoute) { entry ->
-          FluidRouteMotionHost(this@composable) {
-            // Keep the route that opened the form in the diagnostics. Reading currentRoute here would
-            // report "bugReport", because this is now (correctly) its own back-stack destination.
-            BugReportScreen(
-              currentRoute = BugReportSourceRoute,
-              onBack = navController::navigateUp,
-            )
-          }
+        composable(BugReportRoute, transition = FluidPageTransition.Expand) { entry ->
+          // Keep the route that opened the form in the diagnostics. Reading currentRoute here would
+          // report "bugReport", because this is now (correctly) its own back-stack destination.
+          BugReportScreen(
+            currentRoute = BugReportSourceRoute,
+            onBack = navController::navigateUp,
+          )
         }
-        composable("materials") { entry ->
-          FluidRouteMotionHost(this@composable) {
-            val materialsViewModel: MaterialsViewModel = hiltViewModel()
-            val paneRequest by entry.savedStateHandle
-              .getStateFlow<String?>(PaneOpenRequestKey, null)
-              .collectAsStateWithLifecycle()
-            AdaptiveListDetail(
-              openRequest = paneRequest,
-              onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
-              ambient = FeatureIdentity.Materials.ambient(),
-              emptyTitle = "Nessun materiale aperto",
-              emptyMessage = "Scegli un file o un link dall'elenco per vederlo qui.",
-              emptyIcon = Icons.Rounded.FolderCopy,
-              onOpenPage = { itemId -> navigateRoute("material-detail/${Uri.encode(itemId)}") },
-              list = { inPane, selectedId, onOpen ->
-                MaterialsRoute(
-                  onBack = navController::navigateUp,
-                  onOpenMaterial = onOpen,
-                  selectedId = selectedId,
-                  inPane = inPane,
-                  viewModel = materialsViewModel,
-                )
-              },
-              detail = { itemId, onClose ->
-                MaterialDetailRoute(itemId = itemId, onBack = null, viewModel = materialsViewModel)
-              },
-            )
-          }
+        composable("materials", transition = FluidPageTransition.Expand) { entry ->
+          val materialsViewModel: MaterialsViewModel = hiltViewModel()
+          val paneRequest by entry.savedStateHandle
+            .getStateFlow<String?>(PaneOpenRequestKey, null)
+            .collectAsStateWithLifecycle()
+          AdaptiveListDetail(
+            openRequest = paneRequest,
+            onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
+            ambient = FeatureIdentity.Materials.ambient(),
+            emptyTitle = "Nessun materiale aperto",
+            emptyMessage = "Scegli un file o un link dall'elenco per vederlo qui.",
+            emptyIcon = Icons.Rounded.FolderCopy,
+            onOpenPage = { itemId -> navigateRoute("material-detail/${Uri.encode(itemId)}") },
+            list = { inPane, selectedId, onOpen ->
+              MaterialsRoute(
+                onBack = navController::navigateUp,
+                onOpenMaterial = onOpen,
+                selectedId = selectedId,
+                inPane = inPane,
+                viewModel = materialsViewModel,
+              )
+            },
+            detail = { itemId, onClose ->
+              MaterialDetailRoute(itemId = itemId, onBack = null, viewModel = materialsViewModel)
+            },
+          )
         }
         composable(
           route = "material-detail/{itemId}",
+          transition = FluidPageTransition.Expand,
           arguments = listOf(navArgument("itemId") { type = NavType.StringType }),
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val materialsViewModel: MaterialsViewModel = hiltViewModel(parentEntry)
-          FluidRouteMotionHost(this@composable) {
-            val detailId = entry.arguments?.getString("itemId").orEmpty()
-            PaneAwareDetail(
-              id = detailId,
-              onWide = { id ->
-                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
-                navController.popBackStack()
-              },
-            ) {
-              MaterialDetailRoute(
-                itemId = entry.arguments?.getString("itemId").orEmpty(),
-                onBack = { navController.popBackStack() },
-                viewModel = materialsViewModel,
-              )
-            }
+          val detailId = entry.arguments?.getString("itemId").orEmpty()
+          PaneAwareDetail(
+            id = detailId,
+            onWide = { id ->
+              navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+              navController.popBackStack()
+            },
+          ) {
+            MaterialDetailRoute(
+              itemId = entry.arguments?.getString("itemId").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = materialsViewModel,
+            )
           }
         }
         composable(
           route = "homework?homeworkId={homeworkId}",
+          transition = FluidPageTransition.Expand,
           arguments = listOf(
             navArgument("homeworkId") {
               nullable = true
@@ -1592,128 +1332,122 @@ private fun AuthenticatedApp(
             .getStateFlow<String?>(ConsumedHomeworkRequestKey, null)
             .collectAsStateWithLifecycle()
           val pendingHomeworkId = pendingHomeworkRequest(requestedHomeworkId, consumedHomeworkId)
-          FluidRouteMotionHost(this@composable) {
-            val homeworkViewModel: HomeworkViewModel = hiltViewModel()
-            val paneRequest by entry.savedStateHandle
-              .getStateFlow<String?>(PaneOpenRequestKey, null)
-              .collectAsStateWithLifecycle()
-            AdaptiveListDetail(
-              ambient = FeatureIdentity.Homework.ambient(),
-              emptyTitle = "Nessun compito aperto",
-              emptyMessage = "Scegli un compito dall'elenco per leggerne consegna e scadenza qui.",
-              emptyIcon = Icons.AutoMirrored.Rounded.Assignment,
-              onOpenPage = { homeworkId -> navigateRoute("homework-detail/${Uri.encode(homeworkId)}") },
-              openRequest = paneRequest ?: pendingHomeworkId,
-              onOpenRequestConsumed = { homeworkId ->
-                if (homeworkId == paneRequest) {
-                  entry.savedStateHandle[PaneOpenRequestKey] = null
-                } else {
-                  entry.savedStateHandle[ConsumedHomeworkRequestKey] = homeworkId
-                }
-              },
-              list = { inPane, selectedId, onOpen ->
-                HomeworkRoute(
-                  initialHomeworkId = null,
-                  onBack = navController::navigateUp,
-                  onOpenHomework = onOpen,
-                  selectedId = selectedId,
-                  inPane = inPane,
-                  viewModel = homeworkViewModel,
-                )
-              },
-              detail = { homeworkId, onClose ->
-                HomeworkDetailRoute(homeworkId = homeworkId, onBack = null, viewModel = homeworkViewModel)
-              },
-            )
-          }
+          val homeworkViewModel: HomeworkViewModel = hiltViewModel()
+          val paneRequest by entry.savedStateHandle
+            .getStateFlow<String?>(PaneOpenRequestKey, null)
+            .collectAsStateWithLifecycle()
+          AdaptiveListDetail(
+            ambient = FeatureIdentity.Homework.ambient(),
+            emptyTitle = "Nessun compito aperto",
+            emptyMessage = "Scegli un compito dall'elenco per leggerne consegna e scadenza qui.",
+            emptyIcon = Icons.AutoMirrored.Rounded.Assignment,
+            onOpenPage = { homeworkId -> navigateRoute("homework-detail/${Uri.encode(homeworkId)}") },
+            openRequest = paneRequest ?: pendingHomeworkId,
+            onOpenRequestConsumed = { homeworkId ->
+              if (homeworkId == paneRequest) {
+                entry.savedStateHandle[PaneOpenRequestKey] = null
+              } else {
+                entry.savedStateHandle[ConsumedHomeworkRequestKey] = homeworkId
+              }
+            },
+            list = { inPane, selectedId, onOpen ->
+              HomeworkRoute(
+                initialHomeworkId = null,
+                onBack = navController::navigateUp,
+                onOpenHomework = onOpen,
+                selectedId = selectedId,
+                inPane = inPane,
+                viewModel = homeworkViewModel,
+              )
+            },
+            detail = { homeworkId, onClose ->
+              HomeworkDetailRoute(homeworkId = homeworkId, onBack = null, viewModel = homeworkViewModel)
+            },
+          )
         }
         composable(
           route = "homework-detail/{homeworkId}",
+          transition = FluidPageTransition.Expand,
           arguments = listOf(navArgument("homeworkId") { type = NavType.StringType }),
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val homeworkViewModel: HomeworkViewModel = hiltViewModel(parentEntry)
-          FluidRouteMotionHost(this@composable) {
-            val detailId = entry.arguments?.getString("homeworkId").orEmpty()
-            PaneAwareDetail(
-              id = detailId,
-              onWide = { id ->
-                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
-                navController.popBackStack()
-              },
-            ) {
-              HomeworkDetailRoute(
-                homeworkId = entry.arguments?.getString("homeworkId").orEmpty(),
-                onBack = { navController.popBackStack() },
-                viewModel = homeworkViewModel,
-              )
-            }
-          }
-        }
-        composable("documents") { entry ->
-          FluidRouteMotionHost(this@composable) {
-            val documentsViewModel: DocumentsViewModel = hiltViewModel()
-            val paneRequest by entry.savedStateHandle
-              .getStateFlow<String?>(PaneOpenRequestKey, null)
-              .collectAsStateWithLifecycle()
-            AdaptiveListDetail(
-              openRequest = paneRequest,
-              onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
-              ambient = FeatureIdentity.Documents.ambient(),
-              emptyTitle = "Nessun documento aperto",
-              emptyMessage = "Scegli una pagella o un documento dall'elenco per vederlo qui.",
-              emptyIcon = Icons.AutoMirrored.Rounded.LibraryBooks,
-              onOpenPage = { documentId -> navigateRoute("document-detail/${Uri.encode(documentId)}") },
-              list = { inPane, selectedId, onOpen ->
-                DocumentsRoute(
-                  onBack = navController::navigateUp,
-                  onOpenDocument = onOpen,
-                  selectedId = selectedId,
-                  inPane = inPane,
-                  viewModel = documentsViewModel,
-                )
-              },
-              detail = { documentId, onClose ->
-                DocumentDetailRoute(documentId = documentId, onBack = null, viewModel = documentsViewModel)
-              },
+          val detailId = entry.arguments?.getString("homeworkId").orEmpty()
+          PaneAwareDetail(
+            id = detailId,
+            onWide = { id ->
+              navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+              navController.popBackStack()
+            },
+          ) {
+            HomeworkDetailRoute(
+              homeworkId = entry.arguments?.getString("homeworkId").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = homeworkViewModel,
             )
           }
         }
+        composable("documents", transition = FluidPageTransition.Expand) { entry ->
+          val documentsViewModel: DocumentsViewModel = hiltViewModel()
+          val paneRequest by entry.savedStateHandle
+            .getStateFlow<String?>(PaneOpenRequestKey, null)
+            .collectAsStateWithLifecycle()
+          AdaptiveListDetail(
+            openRequest = paneRequest,
+            onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
+            ambient = FeatureIdentity.Documents.ambient(),
+            emptyTitle = "Nessun documento aperto",
+            emptyMessage = "Scegli una pagella o un documento dall'elenco per vederlo qui.",
+            emptyIcon = Icons.AutoMirrored.Rounded.LibraryBooks,
+            onOpenPage = { documentId -> navigateRoute("document-detail/${Uri.encode(documentId)}") },
+            list = { inPane, selectedId, onOpen ->
+              DocumentsRoute(
+                onBack = navController::navigateUp,
+                onOpenDocument = onOpen,
+                selectedId = selectedId,
+                inPane = inPane,
+                viewModel = documentsViewModel,
+              )
+            },
+            detail = { documentId, onClose ->
+              DocumentDetailRoute(documentId = documentId, onBack = null, viewModel = documentsViewModel)
+            },
+          )
+        }
         composable(
           route = "document-detail/{documentId}",
+          transition = FluidPageTransition.Expand,
           arguments = listOf(navArgument("documentId") { type = NavType.StringType }),
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val documentsViewModel: DocumentsViewModel = hiltViewModel(parentEntry)
-          FluidRouteMotionHost(this@composable) {
-            val detailId = entry.arguments?.getString("documentId").orEmpty()
-            PaneAwareDetail(
-              id = detailId,
-              onWide = { id ->
-                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
-                navController.popBackStack()
-              },
-            ) {
-              DocumentDetailRoute(
-                documentId = entry.arguments?.getString("documentId").orEmpty(),
-                onBack = { navController.popBackStack() },
-                viewModel = documentsViewModel,
-              )
-            }
+          val detailId = entry.arguments?.getString("documentId").orEmpty()
+          PaneAwareDetail(
+            id = detailId,
+            onWide = { id ->
+              navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+              navController.popBackStack()
+            },
+          ) {
+            DocumentDetailRoute(
+              documentId = entry.arguments?.getString("documentId").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = documentsViewModel,
+            )
           }
         }
         composable(
           route = "lessons",
+          transition = FluidPageTransition.Expand,
           deepLinks = listOf(
             navDeepLink { uriPattern = "classevivaexpressive://open/lessons" },
           ),
         ) { entry ->
-          FluidRouteMotionHost(this@composable) {
-            LessonsRoute(onBack = navController::navigateUp)
-          }
+          LessonsRoute(onBack = navController::navigateUp)
         }
         composable(
           route = "absences?absenceId={absenceId}",
+          transition = FluidPageTransition.Expand,
           arguments = listOf(
             navArgument("absenceId") {
               nullable = true
@@ -1726,132 +1460,122 @@ private fun AuthenticatedApp(
             navDeepLink { uriPattern = "classevivaexpressive://open/absences" },
           ),
         ) { entry ->
-          FluidRouteMotionHost(this@composable) {
-            AbsencesRoute(
-              initialAbsenceId = entry.arguments?.getString("absenceId"),
-              onBack = navController::navigateUp,
-            )
-          }
+          AbsencesRoute(
+            initialAbsenceId = entry.arguments?.getString("absenceId"),
+            onBack = navController::navigateUp,
+          )
         }
         composable(
           route = "meetings",
+          transition = FluidPageTransition.Expand,
           deepLinks = listOf(
             navDeepLink { uriPattern = "classevivaexpressive://open/meetings" },
           ),
         ) { entry ->
-          FluidRouteMotionHost(this@composable) {
-            MeetingsRoute(onBack = navController::navigateUp)
-          }
+          MeetingsRoute(onBack = navController::navigateUp)
         }
-        composable("professors") { entry ->
-          FluidRouteMotionHost(this@composable) {
-            val professorsViewModel: ProfessorsViewModel = hiltViewModel()
-            val paneRequest by entry.savedStateHandle
-              .getStateFlow<String?>(PaneOpenRequestKey, null)
-              .collectAsStateWithLifecycle()
-            AdaptiveListDetail(
-              openRequest = paneRequest,
-              onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
-              ambient = FeatureIdentity.People.ambient(),
-              emptyTitle = "Nessun docente aperto",
-              emptyMessage = "Scegli un docente dall'elenco per vederne materie, voti e presenza qui.",
-              emptyIcon = Icons.Rounded.CoPresent,
-              onOpenPage = { teacherName -> navigateRoute("professor-detail/${Uri.encode(teacherName)}") },
-              list = { inPane, selectedId, onOpen ->
-                ProfessorsRoute(
-                  onBack = navController::navigateUp,
-                  onOpenProfessor = onOpen,
-                  selectedId = selectedId,
-                  inPane = inPane,
-                  viewModel = professorsViewModel,
-                )
-              },
-              detail = { teacherName, onClose ->
-                ProfessorDetailRoute(teacherName = teacherName, onBack = null, viewModel = professorsViewModel)
-              },
-            )
-          }
+        composable("professors", transition = FluidPageTransition.Expand) { entry ->
+          val professorsViewModel: ProfessorsViewModel = hiltViewModel()
+          val paneRequest by entry.savedStateHandle
+            .getStateFlow<String?>(PaneOpenRequestKey, null)
+            .collectAsStateWithLifecycle()
+          AdaptiveListDetail(
+            openRequest = paneRequest,
+            onOpenRequestConsumed = { entry.savedStateHandle[PaneOpenRequestKey] = null },
+            ambient = FeatureIdentity.People.ambient(),
+            emptyTitle = "Nessun docente aperto",
+            emptyMessage = "Scegli un docente dall'elenco per vederne materie, voti e presenza qui.",
+            emptyIcon = Icons.Rounded.CoPresent,
+            onOpenPage = { teacherName -> navigateRoute("professor-detail/${Uri.encode(teacherName)}") },
+            list = { inPane, selectedId, onOpen ->
+              ProfessorsRoute(
+                onBack = navController::navigateUp,
+                onOpenProfessor = onOpen,
+                selectedId = selectedId,
+                inPane = inPane,
+                viewModel = professorsViewModel,
+              )
+            },
+            detail = { teacherName, onClose ->
+              ProfessorDetailRoute(teacherName = teacherName, onBack = null, viewModel = professorsViewModel)
+            },
+          )
         }
         composable(
           route = "professor-detail/{teacherName}",
+          transition = FluidPageTransition.Expand,
           arguments = listOf(navArgument("teacherName") { type = NavType.StringType }),
         ) { entry ->
           val parentEntry = remember(entry) { navController.previousBackStackEntry ?: entry }
           val professorsViewModel: ProfessorsViewModel = hiltViewModel(parentEntry)
-          FluidRouteMotionHost(this@composable) {
-            val detailId = entry.arguments?.getString("teacherName").orEmpty()
-            PaneAwareDetail(
-              id = detailId,
-              onWide = { id ->
-                navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
-                navController.popBackStack()
-              },
-            ) {
-              ProfessorDetailRoute(
-                teacherName = entry.arguments?.getString("teacherName").orEmpty(),
-                onBack = { navController.popBackStack() },
-                viewModel = professorsViewModel,
-              )
-            }
+          val detailId = entry.arguments?.getString("teacherName").orEmpty()
+          PaneAwareDetail(
+            id = detailId,
+            onWide = { id ->
+              navController.previousBackStackEntry?.savedStateHandle?.set(PaneOpenRequestKey, id)
+              navController.popBackStack()
+            },
+          ) {
+            ProfessorDetailRoute(
+              teacherName = entry.arguments?.getString("teacherName").orEmpty(),
+              onBack = { navController.popBackStack() },
+              viewModel = professorsViewModel,
+            )
           }
         }
         composable(
           route = "settings",
+          transition = FluidPageTransition.Expand,
           deepLinks = listOf(
             navDeepLink { uriPattern = "classevivaexpressive://open/settings" },
           ),
         ) { entry ->
-          FluidRouteMotionHost(this@composable) {
-            SettingsRoute(
-              onBack = navController::navigateUp,
-              isCheckingForUpdates = isCheckingForUpdates,
-              updateCheckMessage = updateCheckMessage,
-              onCheckForUpdates = onCheckForUpdates,
-              onClearUpdateCheckMessage = onClearUpdateCheckMessage,
-              onOpenAssistantConsent = { navigateRoute(AssistantConsentRouteName) },
-              onOpenAssistantHistory = if (assistantEnabled) {
-                { navigateRoute(AssistantHistoryRouteName) }
-              } else {
-                null
-              },
-            )
-          }
+          SettingsRoute(
+            onBack = navController::navigateUp,
+            isCheckingForUpdates = isCheckingForUpdates,
+            updateCheckMessage = updateCheckMessage,
+            onCheckForUpdates = onCheckForUpdates,
+            onClearUpdateCheckMessage = onClearUpdateCheckMessage,
+            onOpenAssistantConsent = { navigateRoute(AssistantConsentRouteName) },
+            onOpenAssistantHistory = if (assistantEnabled) {
+              { navigateRoute(AssistantHistoryRouteName) }
+            } else {
+              null
+            },
+          )
         }
-        composable(AssistantConsentRouteName) { entry ->
-          FluidRouteMotionHost(this@composable) {
-            AssistantConsentRoute(
-              onBack = navController::navigateUp,
-              onAccepted = navController::navigateUp,
-            )
-          }
+        composable(AssistantConsentRouteName, transition = FluidPageTransition.Expand) { entry ->
+          AssistantConsentRoute(
+            onBack = navController::navigateUp,
+            onAccepted = navController::navigateUp,
+          )
         }
         composable(
           route = AssistantHistoryRouteName,
+          transition = FluidPageTransition.Expand,
           deepLinks = listOf(navDeepLink { uriPattern = "classevivaexpressive://open/assistant" }),
         ) { entry ->
-          FluidRouteMotionHost(this@composable) {
-            AssistantHistoryRoute(
-              onBack = navController::navigateUp,
-              onOpenConversation = { id -> navigateRoute("assistant/$id") },
-              onNewConversation = { navigateRoute("assistant/new") },
-            )
-          }
+          AssistantHistoryRoute(
+            onBack = navController::navigateUp,
+            onOpenConversation = { id -> navigateRoute("assistant/$id") },
+            onNewConversation = { navigateRoute("assistant/new") },
+          )
         }
         composable(
           route = AssistantConversationRouteName,
+          transition = FluidPageTransition.Expand,
           arguments = listOf(navArgument("conversationId") { type = NavType.StringType }),
           deepLinks = listOf(navDeepLink { uriPattern = "classevivaexpressive://open/assistant?conversationId={conversationId}" }),
         ) { entry ->
-          FluidRouteMotionHost(this@composable) {
-            AssistantConversationRoute(
-              onBack = navController::navigateUp,
-              onOpenPage = { page, itemId -> openAssistantPage(page, itemId) },
-              onOverlaySuppressed = { assistantOverlay.suppressed = it },
-            )
-          }
+          AssistantConversationRoute(
+            onBack = navController::navigateUp,
+            onOpenPage = { page, itemId -> openAssistantPage(page, itemId) },
+            onOverlaySuppressed = { assistantOverlay.suppressed = it },
+          )
         }
         composable(
           route = "studentScore?payload={payload}",
+          transition = FluidPageTransition.Expand,
           arguments = listOf(
             navArgument("payload") {
               nullable = true

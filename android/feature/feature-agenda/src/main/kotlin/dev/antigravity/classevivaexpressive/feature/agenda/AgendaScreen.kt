@@ -76,7 +76,8 @@ import dev.antigravity.classevivaexpressive.core.domain.change.latestTitleDiff
 import androidx.compose.ui.text.AnnotatedString
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassGroups
+import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.dangerVividColors
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.SubjectBlock
@@ -733,14 +734,15 @@ fun AgendaRoute(
 
   // Portali, non sheet: dichiarati sempre e visibili a comando, cosi' l'uscita non si smonta
   // insieme alla condizione che li mostrava.
+  // Con `item` e non con `visible`: il portale tiene l'ultimo valore per l'animazione di chiusura.
   FluidGlassModalPortal(
-    visible = showDialog,
+    item = if (showDialog) selectedDate else null,
     onDismissRequest = { showDialog = false },
     origin = { addOrigin },
     paneTitle = "Nuovo evento",
-  ) {
+  ) { date ->
     AddEventContent(
-      initialDate = selectedDate,
+      initialDate = date,
       onDismiss = { showDialog = false },
       onSave = { title, description, subject, date, time ->
         viewModel.addCustomEvent(title, description, subject, date, time)
@@ -1120,7 +1122,7 @@ private fun CalendarDayCell(
   }
   val containerColor by animateColorAsState(
     targetValue = targetContainerColor,
-    animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
+    animationSpec = FluidMotion.color(120),
     label = "calendarDayPressColor",
   )
   val textColor = when {

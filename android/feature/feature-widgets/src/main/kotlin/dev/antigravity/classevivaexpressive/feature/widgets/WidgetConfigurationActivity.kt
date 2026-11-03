@@ -43,7 +43,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
-import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
+import dev.antigravity.fluidengine.ui.fluid.FluidToggleRow
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -177,7 +177,7 @@ private fun WidgetConfigurationScreen(
           if (index > 0) {
             FluidListDivider()
           }
-          ToggleRow(label = label, checked = checked, onCheckedChange = onChange)
+          FluidToggleRow(title = label, checked = checked, onCheckedChange = onChange)
         }
       }
     }
@@ -240,35 +240,6 @@ private fun SegmentedSetting(
       modifier = Modifier.fillMaxWidth(),
       label = valueLabel,
     )
-  }
-}
-
-@Composable
-private fun ToggleRow(
-  label: String,
-  checked: Boolean,
-  onCheckedChange: (Boolean) -> Unit,
-) {
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .semantics(mergeDescendants = true) {}
-      .toggleable(
-        value = checked,
-        role = Role.Switch,
-        onValueChange = onCheckedChange,
-      )
-      .padding(horizontal = 16.dp, vertical = 12.dp),
-    horizontalArrangement = Arrangement.spacedBy(12.dp),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Text(
-      text = label,
-      style = MaterialTheme.typography.titleMedium,
-      modifier = Modifier.weight(1f),
-    )
-    // The row owns the switch's semantics and its 48dp target, so the switch itself is decorative.
-    FluidSwitch(checked = checked, onCheckedChange = null)
   }
 }
 

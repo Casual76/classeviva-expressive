@@ -16,7 +16,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.VividBadge
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassGroups
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -881,12 +881,13 @@ fun MaterialDetailRoute(
     },
   )
 
+  // Con `item` e non con `visible`: il portale tiene l'ultimo valore per l'animazione di chiusura.
   FluidGlassModalPortal(
-    visible = showActions,
+    item = item.takeIf { showActions },
     onDismissRequest = { showActions = false },
     origin = { actionsOrigin },
     paneTitle = "Azioni materiale",
-  ) {
+  ) { _ ->
     Box {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -1771,14 +1772,14 @@ fun DocumentDetailRoute(
   )
 
   FluidGlassModalPortal(
-    visible = showActions,
+    item = document.takeIf { showActions },
     onDismissRequest = {
       showActions = false
       viewModel.dismissDocument()
     },
     origin = { actionsOrigin },
     paneTitle = "Azioni documento",
-  ) {
+  ) { _ ->
     Box {
       Column(
         modifier = Modifier.fillMaxWidth().padding(24.dp),

@@ -50,7 +50,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureHero
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.FeatureIdentity
-import dev.antigravity.classevivaexpressive.core.designsystem.theme.fluidGlassGroups
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassGroups
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.ambient
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeCard
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.GradeDetailContent
@@ -104,7 +104,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidMetricTile
 import dev.antigravity.fluidengine.ui.theme.FluidMiniChart
 import dev.antigravity.fluidengine.ui.theme.FluidPillTabs
-import dev.antigravity.fluidengine.ui.theme.FluidQuickAction
+import dev.antigravity.fluidengine.ui.fluid.FluidChip
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidSyncAction
 import dev.antigravity.fluidengine.ui.theme.FluidSyncNotice
@@ -498,8 +498,9 @@ fun GradesRoute(
 
     if (periodUnseen.isNotEmpty()) {
       item {
-        FluidQuickAction(
+        FluidChip(
           label = "Segna tutto come già visto",
+          selected = false,
           onClick = { viewModel.markGradesSeen(periodUnseen.map(Grade::id)) },
         )
       }
