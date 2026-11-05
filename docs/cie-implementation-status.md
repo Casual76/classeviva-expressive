@@ -6,7 +6,8 @@ Successivamente alla consegna con P2 aperto, l'utente ha richiesto esplicitament
 
 - APK release firmato, non debuggabile, stesso package e stessa firma della stabile 7.16.1. Build `:app:assembleRelease`, lint `:app:lintRelease` e 30 test unitari dell'app superati sul nuovo numero di versione. Log `android/build/reports/cie-beta-7.17.0-beta.1-build.log`.
 - APK: 34.556.863 byte, SHA-256 `a53482be0bba95e502a854d164d07cc38eb9821b04e28079d3d4d2b1a4ff7b83`; certificato SHA-256 `825738500ce9605429ffba3c4019228f992f2c37d1b70a2230a7ce2c25637e43`.
-- Tag previsto: `beta-classeviva-expressive-v7.17.0-beta.1`. La verifica della pubblicazione e dei manifest remoti viene conservata sotto `android/build/release-beta-7.17.0-beta.1/`.
+- Release beta pubblicata e verificata: [7.17.0-beta.1](https://github.com/Casual76/classeviva-expressive/releases/tag/beta-classeviva-expressive-v7.17.0-beta.1). Tag sul commit sorgente `0379a19dfce4faf29293e74089525d576e297275`, marcato prerelease.
+- Manifest dell'app e indice Pampa Store verificati da remoto; stabile 7.16.1 e altre 16 app invariate. APK remoto riscaricato e SHA-256 identico a quello locale. Manifest locale sincronizzato in fast-forward al commit `c1a3805`. Le evidenze sono in `android/build/release-beta-7.17.0-beta.1/` (`dry-run.json`, `publish.json`, `remote-verification.json`, `apk-validation.json`).
 
 ## Stato alla consegna
 
