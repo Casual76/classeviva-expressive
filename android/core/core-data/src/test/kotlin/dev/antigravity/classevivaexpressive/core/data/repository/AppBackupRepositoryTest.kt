@@ -1,5 +1,9 @@
 package dev.antigravity.classevivaexpressive.core.data.repository
 
+import dev.antigravity.classevivaexpressive.core.data.testSessionStore
+import dev.antigravity.classevivaexpressive.core.data.preview.PrivateSessionDataCleaner
+import dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinator
+import dev.antigravity.classevivaexpressive.core.data.sync.captureAccountWork
 import dev.antigravity.classevivaexpressive.core.database.database.BackupTransactionRunner
 import dev.antigravity.classevivaexpressive.core.database.database.ChangeHistoryDao
 import dev.antigravity.classevivaexpressive.core.database.database.ChangeHistoryEntity
@@ -12,6 +16,7 @@ import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCache
 import dev.antigravity.classevivaexpressive.core.database.database.StudentScoreDao
 import dev.antigravity.classevivaexpressive.core.database.database.SubjectGoalDao
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
+import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
 import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import dev.antigravity.classevivaexpressive.core.datastore.TimetableTemplateStore
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
@@ -22,13 +27,31 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.Collections
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AppBackupRepositoryTest {
 
   private val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true }
@@ -61,7 +84,7 @@ class AppBackupRepositoryTest {
 
   private val transactionRunner = RecordingTransactionRunner()
 
-  private fun repository() = DefaultAppBackupRepository(
+  private fun repository(sessionStore: SessionStore = testSessionStore()) = DefaultAppBackupRepository(
     json = json,
     settingsStore = settingsStore,
     schoolYearStore = schoolYearStore,
@@ -74,6 +97,7 @@ class AppBackupRepositoryTest {
     changeHistoryDao = changeHistoryDao,
     snapshotCacheDao = snapshotCacheDao,
     transactionRunner = transactionRunner,
+    sessionStore = sessionStore,
   )
 
   private fun grade(
@@ -330,5 +354,285 @@ class AppBackupRepositoryTest {
 
     assertTrue(restored.any { it.cacheKey == "student-1::2024-2025::periods" })
     assertTrue(restored.any { it.cacheKey == "student-1::2025-2026::subjects" })
+  }
+
+  @Test
+  fun admittedBlockingSafWriteKeepsLogoutWaitingEvenWhenExportCallerIsCancelled() = runTest {
+    stubEmptyStores()
+    val sessionStore = testSessionStore()
+    val writeStarted = CompletableDeferred<Unit>()
+    val releaseWrite = CountDownLatch(1)
+    val logoutRequested = CompletableDeferred<Unit>()
+    val order = Collections.synchronizedList(mutableListOf<String>())
+    val export = async {
+      repository(sessionStore).exportBackupTo(sessionStore.accountGuard.authenticationEpoch()) {
+        writeStarted.complete(Unit)
+        // Like OutputStream.write: ordinary coroutine cancellation cannot interrupt it.
+        releaseWrite.await()
+        order += "write completed"
+      }
+    }
+    try {
+      writeStarted.await()
+      export.cancel()
+      val logout = async {
+        logoutRequested.complete(Unit)
+        sessionStore.clearAndRun { order += "logout cleanup" }
+      }
+      logoutRequested.await()
+      assertFalse(logout.isCompleted)
+      assertEquals("student-1", sessionStore.readCurrentSession()!!.studentId)
+      releaseWrite.countDown()
+      export.join()
+      logout.await()
+      assertEquals(listOf("write completed", "logout cleanup"), order.toList())
+      assertEquals(null, sessionStore.readCurrentSession())
+    } finally { releaseWrite.countDown() }
+  }
+
+  @Test
+  fun exportSerializationThatLosesOwnershipCannotOpenTheSafDestination() = runTest {
+    stubEmptyStores()
+    val sessionStore = testSessionStore()
+    val original = sessionStore.readAuthSnapshot()!!
+    val readStarted = CompletableDeferred<Unit>()
+    val releaseRead = CompletableDeferred<Unit>()
+    coEvery { gradeDao.getAll() } coAnswers {
+      readStarted.complete(Unit)
+      releaseRead.await()
+      emptyList()
+    }
+    var destinationOpened = false
+    val export = async { repository(sessionStore).exportBackupTo(sessionStore.accountGuard.authenticationEpoch()) { destinationOpened = true } }
+    readStarted.await()
+    sessionStore.clearAndRun {}
+    sessionStore.writeAuthSnapshot(original.copy(session = original.session!!.copy(studentId = "student-b")))
+    releaseRead.complete(Unit)
+
+    assertTrue(export.await().isFailure)
+    assertFalse(destinationOpened)
+    assertEquals("student-b", sessionStore.readCurrentSession()!!.studentId)
+  }
+
+  @Test
+  fun importReaderFromPreviousAccountCannotCommitSettingsTemplatesOrRowsToReplacement() = runTest {
+    assertSuspendedReaderCannotAdoptReplacement(sameStudent = false)
+  }
+
+  @Test
+  fun importReaderFromPreviousLoginCannotCommitAfterSameStudentReentry() = runTest {
+    assertSuspendedReaderCannotAdoptReplacement(sameStudent = true)
+  }
+
+  private suspend fun assertSuspendedReaderCannotAdoptReplacement(sameStudent: Boolean) = kotlinx.coroutines.coroutineScope {
+    stubEmptyStores()
+    val sessionStore = testSessionStore()
+    val original = sessionStore.readAuthSnapshot()!!
+    val readStarted = CompletableDeferred<Unit>()
+    val releaseRead = CompletableDeferred<Unit>()
+    val pendingImport = async {
+      repository(sessionStore).importBackupFrom(sessionStore.accountGuard.authenticationEpoch()) {
+        readStarted.complete(Unit)
+        releaseRead.await()
+        """{"version":3,"settings":{},"selectedSchoolYearId":"2024-2025","timetableTemplates":{"2024-2025":{}}}"""
+      }
+    }
+    readStarted.await()
+    sessionStore.clearAndRun {}
+    val replacement = if (sameStudent) original else original.copy(session = original.session!!.copy(studentId = "student-b"))
+    sessionStore.writeAuthSnapshot(replacement)
+    releaseRead.complete(Unit)
+
+    assertTrue(pendingImport.await().isFailure)
+    coVerify(exactly = 0) { settingsStore.writeSettings(any()) }
+    coVerify(exactly = 0) { schoolYearStore.selectSchoolYear(any()) }
+    coVerify(exactly = 0) { timetableTemplateStore.writeAllTemplates(any()) }
+    coVerify(exactly = 0) { customEventDao.upsertAll(any()) }
+    coVerify(exactly = 0) { seenGradeDao.upsertAll(any()) }
+    coVerify(exactly = 0) { subjectGoalDao.upsertAll(any()) }
+    coVerify(exactly = 0) { studentScoreDao.upsertAll(any()) }
+    coVerify(exactly = 0) { gradeDao.upsertAll(any()) }
+    assertEquals(0, transactionRunner.started)
+    assertEquals(replacement, sessionStore.readAuthSnapshot())
+  }
+
+  @Test
+  fun safCallbacksPropagateCancellationAndDoNotTurnItIntoFailureResults() = runTest {
+    stubEmptyStores()
+    val store = testSessionStore()
+    val epoch = store.accountGuard.authenticationEpoch()
+    val exporterCancellation = runCatching {
+      repository(store).exportBackupTo(epoch) { throw CancellationException("cancelled") }
+    }.exceptionOrNull()
+    val readerCancellation = runCatching {
+      repository(store).importBackupFrom(epoch) { throw CancellationException("cancelled") }
+    }.exceptionOrNull()
+    assertTrue(exporterCancellation is CancellationException)
+    assertTrue(readerCancellation is CancellationException)
+    coVerify(exactly = 0) { settingsStore.writeSettings(any()) }
+  }
+
+  @Test
+  fun cancelledBlockingSafReadCannotCommitItsLatePayload() = runTest {
+    stubEmptyStores()
+    val readStarted = CompletableDeferred<Unit>()
+    val releaseRead = CountDownLatch(1)
+    val store = testSessionStore()
+    val epoch = store.accountGuard.authenticationEpoch()
+    val pending = async {
+      repository(store).importBackupFrom(epoch) {
+        readStarted.complete(Unit)
+        releaseRead.await()
+        """{"version":3,"settings":{}}"""
+      }
+    }
+    try {
+      readStarted.await()
+      pending.cancel()
+      releaseRead.countDown()
+      pending.join()
+      assertTrue(pending.isCancelled)
+      coVerify(exactly = 0) { settingsStore.writeSettings(any()) }
+      coVerify(exactly = 0) { timetableTemplateStore.writeAllTemplates(any()) }
+      coVerify(exactly = 0) { customEventDao.upsertAll(any()) }
+      assertEquals(0, transactionRunner.started)
+    } finally { releaseRead.countDown() }
+  }
+
+  @Test
+  fun safAndMalformedPayloadFailuresDoNotExposeProviderPathsOrPayloadText() = runTest {
+    stubEmptyStores()
+    val store = testSessionStore()
+    val epoch = store.accountGuard.authenticationEpoch()
+    val exported = repository(store).exportBackupTo(epoch) { throw java.io.IOException("content://private/file personal-data") }
+    val imported = repository(store).importBackupFrom(epoch) { "personal-data secret malformed payload" }
+    assertEquals("Esportazione backup non riuscita.", exported.exceptionOrNull()?.message)
+    assertEquals("Importazione backup non riuscita.", imported.exceptionOrNull()?.message)
+    assertEquals(null, exported.exceptionOrNull()?.cause)
+    assertEquals(null, imported.exceptionOrNull()?.cause)
+  }
+
+  @Test
+  fun pickerResultFromAnotherAccountCannotOpenAnySafReaderOrWriter() = runTest {
+    assertStalePickerDoesNotOpenSaf(sameStudent = false)
+  }
+
+  @Test
+  fun pickerResultFromPreviousLoginOfSameStudentCannotOpenAnySafReaderOrWriter() = runTest {
+    assertStalePickerDoesNotOpenSaf(sameStudent = true)
+  }
+
+  private suspend fun assertStalePickerDoesNotOpenSaf(sameStudent: Boolean) {
+    val sessionStore = testSessionStore()
+    val pickerEpoch = sessionStore.accountGuard.authenticationEpoch()
+    val original = sessionStore.readAuthSnapshot()!!
+    sessionStore.clearAndRun {}
+    val replacement = if (sameStudent) original else original.copy(session = original.session!!.copy(studentId = "student-b"))
+    sessionStore.writeAuthSnapshot(replacement)
+    var readerOpened = false
+    var writerOpened = false
+
+    val export = repository(sessionStore).exportBackupTo(pickerEpoch) { writerOpened = true }
+    val imported = repository(sessionStore).importBackupFrom(pickerEpoch) {
+      readerOpened = true
+      """{"version":3,"settings":{}}"""
+    }
+
+    assertTrue(export.isFailure)
+    assertTrue(imported.isFailure)
+    assertFalse(readerOpened)
+    assertFalse(writerOpened)
+    coVerify(exactly = 0) { gradeDao.getAll() }
+    coVerify(exactly = 0) { settingsStore.writeSettings(any()) }
+    coVerify(exactly = 0) { timetableTemplateStore.writeAllTemplates(any()) }
+    coVerify(exactly = 0) { customEventDao.upsertAll(any()) }
+    assertEquals(replacement, sessionStore.readAuthSnapshot())
+  }
+
+  @Test
+  fun realMainLogoutKeepsHeartbeatRunningWhileAnAdmittedSafWriterOwnsTheGate() = runTest {
+    withDedicatedMain {
+      withBlockedSafWriter { store, _, releaseWrite, order ->
+        val sync = mockk<SchoolSyncCoordinator>(relaxed = true)
+        val cleaner = mockk<PrivateSessionDataCleaner>(relaxed = true)
+        coEvery { cleaner.clear("student-1") } coAnswers { order += "logout cleanup" }
+        val auth = SchoolAuthRepository(store, sync, mockk(relaxed = true), cleaner)
+        val logoutEntered = CompletableDeferred<Unit>()
+        val logout = async(Dispatchers.Main) {
+          logoutEntered.complete(Unit)
+          auth.logout()
+        }
+        // This timeout runs on a real clock, independently of the Main thread being tested.
+        withContext(Dispatchers.Default) { withTimeout(5_000) { logoutEntered.await() } }
+        val heartbeat = async(Dispatchers.Main) { "Main advanced" }
+        assertEquals("Main advanced", withContext(Dispatchers.Default) { withTimeout(5_000) { heartbeat.await() } })
+        assertFalse(logout.isCompleted)
+        assertEquals("student-1", store.readCurrentSession()!!.studentId)
+
+        releaseWrite.countDown()
+        logout.await()
+        assertEquals(listOf("write completed", "logout cleanup"), order.toList())
+        assertEquals(null, store.readCurrentSession())
+      }
+    }
+  }
+
+  @Test
+  fun backupAndCoherentSnapshotCaptureOnRealMainNeverWaitSynchronouslyForSafGate() = runTest {
+    withDedicatedMain {
+      withBlockedSafWriter { store, epoch, releaseWrite, _ ->
+        val secondExport = async(Dispatchers.Main) { repository(store).exportBackupTo(epoch) {} }
+        val imported = async(Dispatchers.Main) { repository(store).importBackupFrom(epoch) { """{"version":3,"settings":{}}""" } }
+        val captured = async(Dispatchers.Main) {
+          val snapshot = store.captureAuthSnapshot()
+          val work = store.captureAccountWork(allowOffline = true)
+          assertEquals(snapshot.snapshot!!.session, work.session)
+          assertEquals(snapshot.lease, work.lease)
+          snapshot
+        }
+        val heartbeat = async(Dispatchers.Main) { "Main advanced" }
+        assertEquals("Main advanced", withContext(Dispatchers.Default) { withTimeout(5_000) { heartbeat.await() } })
+        assertEquals("student-1", captured.await().snapshot!!.session!!.studentId)
+        assertFalse(secondExport.isCompleted)
+        assertFalse(imported.isCompleted)
+
+        releaseWrite.countDown()
+        assertTrue(secondExport.await().isSuccess)
+        assertTrue(imported.await().isSuccess)
+        coVerify(exactly = 1) { settingsStore.writeSettings(any()) }
+      }
+    }
+  }
+
+  private suspend fun withDedicatedMain(block: suspend CoroutineScope.() -> Unit) {
+    val main = Executors.newSingleThreadExecutor { Thread(it, "cie-backup-test-main") }.asCoroutineDispatcher()
+    Dispatchers.setMain(main)
+    try { coroutineScope { block() } }
+    finally { Dispatchers.resetMain(); main.close() }
+  }
+
+  private suspend fun withBlockedSafWriter(
+    block: suspend CoroutineScope.(SessionStore, Long, CountDownLatch, MutableList<String>) -> Unit,
+  ) = coroutineScope {
+    stubEmptyStores()
+    val store = testSessionStore()
+    val epoch = store.captureAuthSnapshot().authenticationEpoch
+    val writeStarted = CompletableDeferred<Unit>()
+    val releaseWrite = CountDownLatch(1)
+    val order = Collections.synchronizedList(mutableListOf<String>())
+    val export = async {
+      repository(store).exportBackupTo(epoch) {
+        writeStarted.complete(Unit)
+        releaseWrite.await()
+        order += "write completed"
+      }
+    }
+    try {
+      writeStarted.await()
+      block(this, store, epoch, releaseWrite, order)
+    } finally {
+      releaseWrite.countDown()
+      withContext(NonCancellable) { export.join() }
+    }
   }
 }

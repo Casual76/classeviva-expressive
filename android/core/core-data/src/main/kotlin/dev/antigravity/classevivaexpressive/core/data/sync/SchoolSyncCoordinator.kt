@@ -32,6 +32,8 @@ import dev.antigravity.classevivaexpressive.core.database.database.AbsenceDao
 import dev.antigravity.classevivaexpressive.core.database.database.AbsenceEntity
 import dev.antigravity.classevivaexpressive.core.database.database.ChangeHistoryDao
 import dev.antigravity.classevivaexpressive.core.database.database.ChangeHistoryEntity
+import dev.antigravity.classevivaexpressive.core.database.database.CustomEventDao
+import dev.antigravity.classevivaexpressive.core.database.database.StudentScoreDao
 import dev.antigravity.classevivaexpressive.core.database.database.CommunicationDao
 import dev.antigravity.classevivaexpressive.core.database.database.CommunicationEntity
 import dev.antigravity.classevivaexpressive.core.database.database.MaterialDao
@@ -47,9 +49,17 @@ import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCache
 import dev.antigravity.classevivaexpressive.core.database.database.SyncMetadataDao
 import dev.antigravity.classevivaexpressive.core.database.database.SyncMetadataEntity
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
+import dev.antigravity.classevivaexpressive.core.datastore.StoredAuthSnapshot
+import dev.antigravity.classevivaexpressive.core.datastore.StoredCredentials
+import dev.antigravity.classevivaexpressive.core.datastore.AccountSessionLease
+import dev.antigravity.classevivaexpressive.core.datastore.AuthSnapshotLease
+import dev.antigravity.classevivaexpressive.core.datastore.CieCredentials
 import dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStore
 import dev.antigravity.classevivaexpressive.core.datastore.TimetableTemplateStore
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceJustificationRequest
+import dev.antigravity.classevivaexpressive.core.domain.model.AuthenticationState
+import dev.antigravity.classevivaexpressive.core.domain.model.AuthMethod
+import dev.antigravity.classevivaexpressive.core.domain.model.RestAuthenticationState
 import dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
@@ -89,17 +99,23 @@ import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaRestCl
 import dev.antigravity.classevivaexpressive.core.network.client.LoginResult
 import dev.antigravity.classevivaexpressive.core.network.client.PortalClient
 import dev.antigravity.classevivaexpressive.core.network.client.parseMeetingsSnapshot
+import dev.antigravity.classevivaexpressive.core.network.client.withExpectedAccount
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -128,75 +144,244 @@ class SchoolSyncCoordinator @Inject constructor(
   private val documentDao: DocumentDao,
   private val privateAssetStore: PrivateAssetStore,
   private val predictiveTimetableUseCase: PredictiveTimetableUseCase,
+  private val customEventDao: CustomEventDao,
+  private val studentScoreDao: StudentScoreDao,
 ) {
   @Volatile private var activeSession: UserSession? = null
-  @Volatile private var sessionGeneration: Long = 0L
   val syncStatus = MutableStateFlow(SyncStatus())
   private val syncMutex = Mutex()
-  private val lastInteractiveRefreshAttempts = mutableMapOf<String, Long>()
+  private val authenticationMutex = Mutex()
+  private val lastInteractiveRefreshAttempts = java.util.concurrent.ConcurrentHashMap<String, Long>()
   private val lastDedicatedHomeworkFetch = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
   @Synchronized
   fun attachSession(session: UserSession?) {
-    if (activeSession != session) sessionGeneration += 1L
+    if (activeSession?.studentId != session?.studentId) syncStatus.value = SyncStatus()
     activeSession = session
     restClient.setSession(session)
   }
 
   private data class SessionOperation(
     val session: UserSession,
-    val generation: Long,
+    val lease: AccountSessionLease,
+    val requireReady: Boolean,
   )
 
-  private fun captureSessionOperation(): SessionOperation {
-    val session = activeSession ?: error("Sessione assente.")
-    return SessionOperation(session, sessionGeneration)
+  private fun captureSessionOperation(allowOffline: Boolean = false): SessionOperation {
+    val captured = sessionStore.captureAuthSnapshot()
+    val session = captured.snapshot?.session ?: throw ClassevivaNetworkException("Sessione assente.")
+    val operation = SessionOperation(session, captured.lease, requireReady = !allowOffline)
+    ensureSessionUnchanged(operation)
+    return operation
   }
 
   private fun ensureSessionUnchanged(operation: SessionOperation) {
-    val current = activeSession
-    if (
-      sessionGeneration != operation.generation ||
-      current?.studentId != operation.session.studentId ||
-      current?.token != operation.session.token
-    ) {
+    if (!sessionStore.accountGuard.isCurrent(operation.lease, requireReady = operation.requireReady)) {
       throw ClassevivaNetworkException("La sessione e cambiata; il risultato precedente e stato scartato.")
     }
   }
 
-  suspend fun login(username: String, password: String): UserSession {
-    val loginResult: LoginResult = restClient.login(username, password)
+  /** Admission and the suspended write/effect share the same gate as logout and account changes. */
+  private suspend fun <T> commitOperation(operation: SessionOperation, block: suspend () -> T): T = withExpectedAccount(operation.lease) {
+    var admitted = false
+    val result = sessionStore.accountGuard.withCurrentAccount(operation.lease, operation.requireReady) {
+      currentCoroutineContext().ensureActive()
+      admitted = true
+      block()
+    }
+    if (!admitted) throw ClassevivaNetworkException("La sessione è cambiata; il risultato precedente è stato scartato.")
+    @Suppress("UNCHECKED_CAST")
+    result as T
+  }
+
+  private suspend fun <T> authenticate(block: suspend () -> T): T = withContext(Dispatchers.IO) {
+    if (!authenticationMutex.tryLock()) throw ClassevivaNetworkException("Un accesso è già in corso.")
+    try { block() } finally { authenticationMutex.unlock() }
+  }
+
+  private suspend fun <T> sessionResult(
+    allowOffline: Boolean = false,
+    block: suspend (SessionOperation) -> T,
+  ): Result<T> = try {
+    val operation = captureSessionOperation(allowOffline)
+    Result.success(withContext(Dispatchers.IO) { withExpectedAccount(operation.lease) {
+      block(operation).also { ensureSessionUnchanged(operation) }
+    } })
+  } catch (cancelled: CancellationException) {
+    throw cancelled
+  } catch (error: Exception) {
+    Result.failure(error)
+  }
+
+  suspend fun login(username: String, password: String): UserSession = authenticate {
+    val started = sessionStore.captureAuthSnapshot()
+    val result = restClient.login(username, password)
+    currentCoroutineContext().ensureActive()
     val provisional = UserSession(
-      token = loginResult.token,
-      studentId = loginResult.studentId,
-      username = username,
-      profile = loginResult.profileHint,
+      token = result.token,
+      studentId = result.studentId,
+      username = username.trim(),
+      profile = result.profileHint,
+      authMethod = AuthMethod.PASSWORD,
+      ident = result.ident,
     )
+    finishAuthentication(started, StoredAuthSnapshot(
+      session = provisional,
+      credentials = StoredCredentials(username.trim(), password),
+      authenticationState = AuthenticationState(rest = RestAuthenticationState.READY),
+    ))
+  }
 
-    sessionStore.writeCredentials(username, password)
-    sessionStore.writeSessionSilently(provisional)
-    attachSession(provisional)
+  suspend fun loginWithCie(pa: String, portalCookieHeader: String, expectedEpoch: Long?): UserSession = authenticate {
+    val started = sessionStore.captureAuthSnapshot()
+    if (expectedEpoch != null && started.authenticationEpoch != expectedEpoch) {
+      throw ClassevivaNetworkException("L'accesso è cambiato. Ripeti l'operazione.")
+    }
+    currentCoroutineContext().ensureActive()
+    val result = restClient.loginWithCie(pa)
+    currentCoroutineContext().ensureActive()
+    val provisional = UserSession(
+      token = result.token,
+      studentId = result.studentId,
+      username = result.ident,
+      profile = result.profileHint,
+      authMethod = AuthMethod.CIE,
+      ident = result.ident,
+    )
+    val existingPortal = started.snapshot?.portal?.takeIf {
+      it.ident == result.ident && it.studentId == result.studentId
+    }
+    finishAuthentication(started, StoredAuthSnapshot(
+      session = provisional,
+      cie = CieCredentials(result.pa, result.refreshToken, result.ident, result.expiresAtEpochMillis),
+      portal = existingPortal,
+      authenticationState = AuthenticationState(
+        rest = RestAuthenticationState.READY,
+        portal = if (existingPortal == null) dev.antigravity.classevivaexpressive.core.domain.model.PortalAuthenticationState.UNAVAILABLE
+          else dev.antigravity.classevivaexpressive.core.domain.model.PortalAuthenticationState.READY,
+      ),
+    ), portalCookieHeader)
+  }
 
-    // La carta dello studente e' un di piu': su alcune scuole risponde 403 e su una rete lenta va
-    // in timeout. Lasciar salire quell'errore faceva fallire un login riuscito, e chi chiama
-    // cancella le credenziali quando il login fallisce: su quelle scuole non si entrava mai.
-    val profile = runCatching { restClient.getProfile() }.getOrNull()
-    val session = if (profile != null) provisional.copy(profile = profile) else provisional
-    sessionStore.writeSessionSilently(session)
-    attachSession(session)
-    refreshAll(force = true)
-    sessionStore.writeSession(session)
-    return session
+  private suspend fun finishAuthentication(
+    started: AuthSnapshotLease,
+    candidate: StoredAuthSnapshot,
+    portalCookieHeader: String = "",
+  ): UserSession {
+    val provisional = checkNotNull(candidate.session)
+    if (started.snapshot?.session?.studentId?.let { it != provisional.studentId } == true) {
+      throw ClassevivaNetworkException("Per cambiare studente, esci prima dall'account corrente.")
+    }
+    currentCoroutineContext().ensureActive()
+    // A background refresh can change readiness while CieID is open or while the exchange is
+    // in flight. Retry against the latest durable snapshot only while the identity epoch agrees.
+    // Logout/re-entry (including the same student) always changes that epoch.
+    var admitted: AuthSnapshotLease? = null
+    repeat(3) {
+      if (admitted != null) return@repeat
+      currentCoroutineContext().ensureActive()
+      val latest = sessionStore.captureAuthSnapshot()
+      if (latest.authenticationEpoch != started.authenticationEpoch) {
+        throw ClassevivaNetworkException("L'accesso è cambiato. Ripeti l'operazione.")
+      }
+      if (latest.snapshot?.session?.studentId?.let { it != provisional.studentId } == true) {
+        throw ClassevivaNetworkException("Per cambiare studente, esci prima dall'account corrente.")
+      }
+      if (latest.snapshot?.session == null) {
+        // Older versions could leave unowned global templates after logout. Active legacy
+        // sessions retain their own templates, including when they need reauthentication.
+        sessionStore.accountGuard.withCurrentAccount(latest.lease, requireReady = false) {
+          clearAccountDerivedState()
+        } ?: throw ClassevivaNetworkException("L'accesso è cambiato. Ripeti l'operazione.")
+      }
+      val verifiedPortal = latest.snapshot?.portal?.takeIf {
+        it.studentId == provisional.studentId && (provisional.ident == null || it.ident == provisional.ident)
+      }
+      val readyCandidate = candidate.copy(
+        portal = verifiedPortal,
+        authenticationState = candidate.authenticationState.copy(
+          portal = if (verifiedPortal == null) dev.antigravity.classevivaexpressive.core.domain.model.PortalAuthenticationState.UNAVAILABLE
+            else checkNotNull(latest.snapshot).authenticationState.portal,
+        ),
+      )
+      admitted = sessionStore.compareAndSetAuthSnapshotAndCapture(latest.snapshot, readyCandidate, latest.lease)
+    }
+    val committed = admitted ?: throw ClassevivaNetworkException("L'accesso è cambiato. Ripeti l'operazione.")
+    sessionStore.accountGuard.withCurrentAccount(committed.lease) { attachSession(sessionStore.readCurrentSession()) }
+      ?: throw ClassevivaNetworkException("L'accesso è cambiato. Ripeti l'operazione.")
+    return withExpectedAccount(committed.lease) {
+    if (provisional.authMethod == AuthMethod.CIE && portalCookieHeader.isNotBlank()) {
+      try {
+        portalClient.importCieCookies(portalCookieHeader, checkNotNull(provisional.ident))
+      } catch (cancelled: CancellationException) {
+        throw cancelled
+      } catch (_: Exception) {
+        // REST authentication is complete; portal availability is independent.
+      }
+    }
+    val profile = try {
+      restClient.getProfile()
+    } catch (cancelled: CancellationException) {
+      throw cancelled
+    } catch (_: Exception) {
+      null
+    }
+    if (profile != null && (profile.id.isBlank() || profile.id == provisional.studentId)) {
+      val current = sessionStore.readAuthSnapshot()
+      val currentSession = current?.session
+      if (current != null && currentSession != null && currentSession.studentId == provisional.studentId) {
+        runCatching {
+          sessionStore.compareAndSetAuthSnapshot(
+            current,
+            current.copy(session = currentSession.copy(profile = profile)),
+            committed.lease,
+          )
+        }
+      }
+    }
+    sessionStore.accountGuard.withCurrentAccount(committed.lease) { attachSession(sessionStore.readCurrentSession()) }
+      ?: throw ClassevivaNetworkException("L'accesso è cambiato. Ripeti l'operazione.")
+    try {
+      refreshAll(force = true)
+    } catch (cancelled: CancellationException) {
+      throw cancelled
+    } catch (_: Exception) {
+      // A section being unavailable does not undo a durably stored login.
+    }
+    sessionStore.accountGuard.withCurrentAccount(committed.lease, requireReady = false) {
+      sessionStore.readCurrentSession()
+    } ?: throw ClassevivaNetworkException("L'accesso è cambiato. Ripeti l'operazione.")
+    }
   }
 
   fun authToken(): String? = restClient.currentToken()
 
   fun clearPortalSession() = portalClient.clearSession()
 
+  /** Called inside the logout gate; global derived templates must not become another user's data. */
+  suspend fun clearAccountDerivedState() {
+    var failure: Exception? = null
+    suspend fun attempt(block: suspend () -> Unit) {
+      try { block() } catch (error: Exception) {
+        if (failure == null) failure = error else failure?.addSuppressed(error)
+      }
+    }
+    attempt { timetableTemplateStore.writeAllTemplates(emptyMap()) }
+    attempt { customEventDao.clearAll() }
+    attempt { studentScoreDao.clearAll() }
+    lastInteractiveRefreshAttempts.clear()
+    lastDedicatedHomeworkFetch.clear()
+    syncStatus.value = SyncStatus()
+    failure?.let { throw it }
+  }
+
   suspend fun refreshAll(force: Boolean = false): SyncStatus {
     if (!force && syncMutex.isLocked) return syncStatus.value
+    val operation = captureSessionOperation()
+    return withExpectedAccount(operation.lease) {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    return refreshSelectedSections(selectedYear = selectedYear, force = force, refreshProfile = true)
+    refreshSelectedSections(selectedYear = selectedYear, force = force, refreshProfile = true)
+    }
   }
 
   suspend fun refreshSections(
@@ -206,14 +391,17 @@ class SchoolSyncCoordinator @Inject constructor(
   ): SyncStatus {
     if (sections.isEmpty() && !refreshProfile) return syncStatus.value
     if (!force && syncMutex.isLocked) return syncStatus.value
+    val operation = captureSessionOperation()
+    return withExpectedAccount(operation.lease) {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val selectedSections = if (refreshProfile) sections + ProfileSection else sections
-    return refreshSelectedSections(
+    refreshSelectedSections(
       selectedYear = selectedYear,
       force = force,
       refreshProfile = refreshProfile,
       sections = selectedSections,
     )
+    }
   }
 
   suspend fun refreshCurrentSchoolYearForNotifications(
@@ -243,8 +431,7 @@ class SchoolSyncCoordinator @Inject constructor(
     )
   }
 
-  suspend fun refreshAbsences(force: Boolean = false): Result<List<AbsenceRecord>> = runCatching {
-    val operation = captureSessionOperation()
+  suspend fun refreshAbsences(force: Boolean = false): Result<List<AbsenceRecord>> = sessionResult { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val status = refreshSelectedSections(
       selectedYear = selectedYear,
@@ -266,6 +453,7 @@ class SchoolSyncCoordinator @Inject constructor(
 
   suspend fun refreshHomeworks(force: Boolean = false): List<Homework> {
     val operation = captureSessionOperation()
+    return withExpectedAccount(operation.lease) {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     refreshSelectedSections(
       selectedYear = selectedYear,
@@ -274,11 +462,13 @@ class SchoolSyncCoordinator @Inject constructor(
       sections = setOf(HomeworkSection),
     )
     val effectiveYear = schoolYearStore.observeSelectedSchoolYear().first()
-    return readYearScopedValue(operation, HomeworkSection, effectiveYear, emptyList())
+    readYearScopedValue(operation, HomeworkSection, effectiveYear, emptyList())
+    }
   }
 
   suspend fun refreshMeetings(force: Boolean = false): List<MeetingBooking> {
     val operation = captureSessionOperation()
+    return withExpectedAccount(operation.lease) {
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     refreshSelectedSections(
       selectedYear = selectedYear,
@@ -287,10 +477,11 @@ class SchoolSyncCoordinator @Inject constructor(
       sections = setOf(MeetingTeachersSection, MeetingSlotsSection, MeetingBookingsSection),
     )
     val effectiveYear = schoolYearStore.observeSelectedSchoolYear().first()
-    return readYearScopedValue(operation, MeetingBookingsSection, effectiveYear, emptyList())
+    readYearScopedValue(operation, MeetingBookingsSection, effectiveYear, emptyList())
+    }
   }
 
-  suspend fun submitHomework(submission: HomeworkSubmission): Result<HomeworkSubmissionReceipt> = runCatching {
+  suspend fun submitHomework(submission: HomeworkSubmission): Result<HomeworkSubmissionReceipt> = sessionResult { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val submitUrl = submission.submitUrl
       ?: throw ClassevivaNetworkException("URL consegna compito non disponibile per questo tenant.")
@@ -313,7 +504,7 @@ class SchoolSyncCoordinator @Inject constructor(
     )
   }
 
-  suspend fun getCommunicationDetail(pubId: String, evtCode: String) = runCatching {
+  suspend fun getCommunicationDetail(pubId: String, evtCode: String) = sessionResult(allowOffline = true) { operation ->
     val entity = communicationDao.getByPubIdAndEvtCode(pubId, evtCode)
     val base = entity?.toCommunication(json)
     val restDetail = if (base != null) {
@@ -331,31 +522,31 @@ class SchoolSyncCoordinator @Inject constructor(
       restClient.getCommunicationDetail(pubId, evtCode)
     }
     val detail = enrichCommunicationDetailFromPortalIfNeeded(restDetail)
-    runCatching { communicationDao.markRead(detail.communication.id) }
+    runCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
     detail
   }
 
   suspend fun downloadAttachmentBytes(url: String): ByteArray = restClient.downloadAttachmentBytes(url)
 
-  suspend fun markCommunicationReadRemotely(id: String, pubId: String, evtCode: String): Result<Unit> = runCatching {
+  suspend fun markCommunicationReadRemotely(id: String, pubId: String, evtCode: String): Result<Unit> = sessionResult { operation ->
     restClient.markNoticeboardRead(pubId = pubId, evtCode = evtCode)
-    communicationDao.markRead(id)
+    commitOperation(operation) { communicationDao.markRead(id) }
   }
 
-  suspend fun markAllCommunicationsReadRemotely(): Result<Unit> = runCatching {
-    val session = activeSession ?: throw ClassevivaNetworkException("Sessione assente.")
+  suspend fun markAllCommunicationsReadRemotely(): Result<Unit> = sessionResult { operation ->
+    val session = operation.session
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val unread = communicationDao.getUnread(session.studentId, selectedYear.id)
     val failures = coroutineScope {
       unread.map { entity ->
         async {
           if (entity.pubId.isBlank() || entity.evtCode.isBlank()) {
-            communicationDao.markRead(entity.id)
+            commitOperation(operation) { communicationDao.markRead(entity.id) }
             null
           } else {
             runCatching {
               restClient.markNoticeboardRead(pubId = entity.pubId, evtCode = entity.evtCode)
-              communicationDao.markRead(entity.id)
+              commitOperation(operation) { communicationDao.markRead(entity.id) }
             }.exceptionOrNull()?.let { entity.title.ifBlank { entity.id } }
           }
         }
@@ -371,8 +562,7 @@ class SchoolSyncCoordinator @Inject constructor(
     }
   }
 
-  suspend fun acknowledgeCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = runCatching {
-    val operation = captureSessionOperation()
+  suspend fun acknowledgeCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = sessionResult { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
 
     val restResult = runCatching {
@@ -402,7 +592,7 @@ class SchoolSyncCoordinator @Inject constructor(
       throw ClassevivaNetworkException("Nessuna delle due modalità di conferma è riuscita: $composed")
     }
 
-    runCatching { communicationDao.markRead(detail.communication.id) }
+    runCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
     runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
     val updated = runCatching {
       restClient.getCommunicationDetail(detail.communication)
@@ -410,8 +600,7 @@ class SchoolSyncCoordinator @Inject constructor(
     updated
   }
 
-  suspend fun replyToCommunication(detail: CommunicationDetail, text: String): Result<CommunicationDetail> = runCatching {
-    val operation = captureSessionOperation()
+  suspend fun replyToCommunication(detail: CommunicationDetail, text: String): Result<CommunicationDetail> = sessionResult { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val replyUrl = detail.replyUrl ?: detail.portalDetailUrl
     if (replyUrl.isNullOrBlank()) {
@@ -421,7 +610,7 @@ class SchoolSyncCoordinator @Inject constructor(
     }
     portalClient.replyNoticeboard(replyUrl = replyUrl, text = text)
     runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
-    runCatching { communicationDao.markRead(detail.communication.id) }
+    runCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
     runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
     val updated = runCatching {
       restClient.getCommunicationDetail(detail.communication)
@@ -429,8 +618,7 @@ class SchoolSyncCoordinator @Inject constructor(
     updated.copy(replyText = text)
   }
 
-  suspend fun joinCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = runCatching {
-    val operation = captureSessionOperation()
+  suspend fun joinCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = sessionResult { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val joinUrl = detail.joinUrl
     if (joinUrl.isNullOrBlank()) {
@@ -442,7 +630,7 @@ class SchoolSyncCoordinator @Inject constructor(
       portalClient.joinNoticeboard(joinUrl = joinUrl)
     }
     runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
-    runCatching { communicationDao.markRead(detail.communication.id) }
+    runCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
     runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
     runCatching {
       restClient.getCommunicationDetail(detail.communication)
@@ -454,8 +642,7 @@ class SchoolSyncCoordinator @Inject constructor(
     fileName: String,
     mimeType: String?,
     bytes: ByteArray,
-  ): Result<CommunicationDetail> = runCatching {
-    val operation = captureSessionOperation()
+  ): Result<CommunicationDetail> = sessionResult { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val uploadUrl = detail.fileUploadUrl ?: detail.portalDetailUrl
     if (uploadUrl.isNullOrBlank()) {
@@ -472,15 +659,14 @@ class SchoolSyncCoordinator @Inject constructor(
       ),
     )
     runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
-    runCatching { communicationDao.markRead(detail.communication.id) }
+    runCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
     runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
     runCatching {
       restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
   }
 
-  suspend fun getNoteDetail(id: String, categoryCode: String): Result<NoteDetail> = runCatching {
-    val operation = captureSessionOperation()
+  suspend fun getNoteDetail(id: String, categoryCode: String): Result<NoteDetail> = sessionResult(allowOffline = true) { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     runCatching {
       restClient.getNoteDetail(id, categoryCode)
@@ -499,13 +685,12 @@ class SchoolSyncCoordinator @Inject constructor(
     }
   }
 
-  suspend fun openMaterial(item: MaterialItem): Result<MaterialAsset> = runCatching {
-    val operation = captureSessionOperation()
+  suspend fun openMaterial(item: MaterialItem): Result<MaterialAsset> = sessionResult(allowOffline = true) { operation ->
     val session = operation.session
     restClient.resolveMaterialExternalUrl(item)?.takeIf(String::isNotBlank)?.let { externalUrl ->
       ensureSessionUnchanged(operation)
       val attachment = item.attachments.firstOrNull { it.url == externalUrl }
-      return@runCatching MaterialAsset(
+      return@sessionResult MaterialAsset(
         id = item.id,
         title = item.title,
         objectType = item.objectType,
@@ -520,7 +705,7 @@ class SchoolSyncCoordinator @Inject constructor(
     val cacheId = "${item.id}:${item.objectId}:${item.sharedAt}"
     privateAssetStore.find(session.studentId, schoolYear.id, cacheId)?.let { cached ->
       ensureSessionUnchanged(operation)
-      return@runCatching MaterialAsset(
+      return@sessionResult MaterialAsset(
         id = item.id,
         title = item.title,
         objectType = item.objectType,
@@ -542,6 +727,7 @@ class SchoolSyncCoordinator @Inject constructor(
           mimeType = mimeType,
           input = stream.byteStream(),
           validateBeforeCommit = { ensureSessionUnchanged(operation) },
+          admitCommit = { effect -> commitOperation(operation) { effect() } },
         )
         ensureSessionUnchanged(operation)
         MaterialAsset(
@@ -554,21 +740,22 @@ class SchoolSyncCoordinator @Inject constructor(
           capabilityState = item.capabilityState,
         )
       } catch (error: Throwable) {
-        privateAssetStore.delete(session.studentId, schoolYear.id, cacheId)
+        sessionStore.accountGuard.withCurrentAccount(operation.lease, operation.requireReady) {
+          privateAssetStore.delete(session.studentId, schoolYear.id, cacheId)
+        }
         throw error
       }
     }
   }
 
-  suspend fun openDocument(item: DocumentItem): Result<DocumentAsset> = runCatching {
-    val operation = captureSessionOperation()
+  suspend fun openDocument(item: DocumentItem): Result<DocumentAsset> = sessionResult(allowOffline = true) { operation ->
     val session = operation.session
     val schoolYear = schoolYearStore.observeSelectedSchoolYear().first()
     ensureSessionUnchanged(operation)
     val cacheId = documentCacheId(item)
     privateAssetStore.find(session.studentId, schoolYear.id, cacheId)?.let { cached ->
       ensureSessionUnchanged(operation)
-      return@runCatching DocumentAsset(
+      return@sessionResult DocumentAsset(
         id = item.id,
         title = item.title,
         fileName = cached.fileName,
@@ -596,6 +783,7 @@ class SchoolSyncCoordinator @Inject constructor(
           mimeType = mimeType,
           input = stream.byteStream(),
           validateBeforeCommit = { ensureSessionUnchanged(operation) },
+          admitCommit = { effect -> commitOperation(operation) { effect() } },
         )
         ensureSessionUnchanged(operation)
         DocumentAsset(
@@ -607,7 +795,9 @@ class SchoolSyncCoordinator @Inject constructor(
           capabilityState = item.capabilityState,
         )
       } catch (error: Throwable) {
-        privateAssetStore.delete(session.studentId, schoolYear.id, cacheId)
+        sessionStore.accountGuard.withCurrentAccount(operation.lease, operation.requireReady) {
+          privateAssetStore.delete(session.studentId, schoolYear.id, cacheId)
+        }
         throw error
       }
     }
@@ -622,8 +812,7 @@ class SchoolSyncCoordinator @Inject constructor(
       justifyUrl = record.justifyUrl,
       detailUrl = record.detailUrl,
     ),
-  ): Result<List<AbsenceRecord>> = runCatching {
-    val operation = captureSessionOperation()
+  ): Result<List<AbsenceRecord>> = sessionResult { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     val effectiveRequest = request.copy(
       absenceId = record.id,
@@ -647,8 +836,7 @@ class SchoolSyncCoordinator @Inject constructor(
     updated
   }
 
-  suspend fun bookMeeting(slot: MeetingSlot): Result<MeetingBooking> = runCatching {
-    val operation = captureSessionOperation()
+  suspend fun bookMeeting(slot: MeetingSlot): Result<MeetingBooking> = sessionResult { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     portalClient.submitPortalAction(
       pageUrl = slot.id,
@@ -665,8 +853,7 @@ class SchoolSyncCoordinator @Inject constructor(
       )
   }
 
-  suspend fun cancelMeeting(booking: MeetingBooking): Result<List<MeetingBooking>> = runCatching {
-    val operation = captureSessionOperation()
+  suspend fun cancelMeeting(booking: MeetingBooking): Result<List<MeetingBooking>> = sessionResult { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
     portalClient.submitPortalAction(
       pageUrl = booking.id,
@@ -676,7 +863,7 @@ class SchoolSyncCoordinator @Inject constructor(
     readYearScopedValue(operation, MeetingBookingsSection, selectedYear, emptyList())
   }
 
-  suspend fun joinMeeting(booking: MeetingBooking): Result<MeetingJoinLink> = runCatching {
+  suspend fun joinMeeting(booking: MeetingBooking): Result<MeetingJoinLink> = sessionResult { operation ->
     val joinUrl = booking.slot.joinUrl
       ?: throw ClassevivaNetworkException("Link colloquio non disponibile.")
     MeetingJoinLink(bookingId = booking.id, url = joinUrl)
@@ -693,7 +880,9 @@ class SchoolSyncCoordinator @Inject constructor(
     allowAutomaticFallback: Boolean = true,
   ): SyncStatus {
     if (!force && syncMutex.isLocked) return syncStatus.value
-    return syncMutex.withLock {
+    val operation = captureSessionOperation()
+    return withExpectedAccount(operation.lease) { syncMutex.withLock {
+      ensureSessionUnchanged(operation)
       val status = refreshSchoolYear(
         selectedYear = selectedYear,
         force = force,
@@ -702,7 +891,7 @@ class SchoolSyncCoordinator @Inject constructor(
         mode = mode,
       )
       if (!allowAutomaticFallback || !status.schoolYearNotStarted) return@withLock status
-      val fallbackEvent = schoolYearStore.selectAutomaticFallback(selectedYear)
+      val fallbackEvent = commitOperation(operation) { schoolYearStore.selectAutomaticFallback(selectedYear) }
         ?: return@withLock status
       val fallbackYear = fallbackEvent.selected
 
@@ -717,8 +906,8 @@ class SchoolSyncCoordinator @Inject constructor(
       )
       val notice = "L'anno ${selectedYear.label} non è ancora aperto dalla scuola: " +
         "mostro ${fallbackYear.label}."
-      retried.copy(message = retried.message ?: notice).also { syncStatus.value = it }
-    }
+      retried.copy(message = retried.message ?: notice).also { status -> commitOperation(operation) { syncStatus.value = status } }
+    } }
   }
 
   private fun CommunicationDetail.requiresVerifiedRestAcknowledgement(): Boolean {
@@ -740,6 +929,19 @@ class SchoolSyncCoordinator @Inject constructor(
             message = "Sessione assente (Coordinator).",
         )
     }
+    return withExpectedAccount(operation.lease) {
+      performSchoolYearRefresh(operation, selectedYear, force, refreshProfile, sections, mode)
+    }
+  }
+
+  private suspend fun performSchoolYearRefresh(
+    operation: SessionOperation,
+    selectedYear: SchoolYearRef,
+    force: Boolean,
+    refreshProfile: Boolean,
+    sections: Set<String>?,
+    mode: BackgroundSyncMode,
+  ): SyncStatus {
     val session = operation.session
     val currentYear = schoolYearStore.currentSchoolYearRef()
     val yearStart = schoolYearStart(selectedYear)
@@ -769,7 +971,7 @@ class SchoolSyncCoordinator @Inject constructor(
     val previousStatus = syncStatus.value
     val publishForegroundStatus = mode == BackgroundSyncMode.FULL && force
     if (publishForegroundStatus) {
-      syncStatus.value = SyncStatusFactory.syncing(previousStatus)
+      commitOperation(operation) { syncStatus.value = SyncStatusFactory.syncing(previousStatus) }
     }
 
     val errors = SyncErrors()
@@ -900,7 +1102,6 @@ class SchoolSyncCoordinator @Inject constructor(
     ) {
       runCatching { refreshMeetingsSnapshot(selectedYear, operation) }.onFailure { cause ->
         errors.record(MeetingBookingsSection, cause)
-        clearMeetings(selectedYear, operation)
       }
     }
 
@@ -921,7 +1122,7 @@ class SchoolSyncCoordinator @Inject constructor(
       )
       // Chi guarda le schermate legge questo flusso, non il valore di ritorno: uscendo di qui
       // senza scriverci dentro, "Sincronizzazione in corso" restava appeso fino al giro dopo.
-      if (publishForegroundStatus) syncStatus.value = aborted
+      // The old account no longer owns the visible status; its readers derive auth availability.
       return aborted
     }
     recordSyncResults(operation, selectedYear, selectedSections, errors, completedAt)
@@ -938,10 +1139,10 @@ class SchoolSyncCoordinator @Inject constructor(
       previous = previousStatus,
       completedAtEpochMillis = completedAt,
     )
-    syncStatus.value = visibleStatus
+    commitOperation(operation) { syncStatus.value = visibleStatus }
     if (hasSuccessfulSection) {
       ensureSessionUnchanged(operation)
-      runCatching { snapshotCacheDao.recordSuccessfulSync(session.studentId, completedAt) }
+      runCatching { commitOperation(operation) { snapshotCacheDao.recordSuccessfulSync(session.studentId, completedAt) } }
     }
     return next
   }
@@ -961,14 +1162,15 @@ class SchoolSyncCoordinator @Inject constructor(
     return sections.all { section -> isSectionCacheFresh(operation, section, schoolYear, now) }
   }
 
-  private fun recordInteractiveRefreshAttempt(
+  private suspend fun recordInteractiveRefreshAttempt(
     operation: SessionOperation,
     schoolYear: SchoolYearRef,
     sections: Set<String>,
     now: Long,
   ) {
-    ensureSessionUnchanged(operation)
-    lastInteractiveRefreshAttempts[interactiveRefreshKey(operation, schoolYear, sections)] = now
+    commitOperation(operation) {
+      lastInteractiveRefreshAttempts[interactiveRefreshKey(operation, schoolYear, sections)] = now
+    }
   }
 
   private suspend fun isSectionCacheFresh(
@@ -1143,13 +1345,13 @@ class SchoolSyncCoordinator @Inject constructor(
       }
       if (historyEntries.isNotEmpty()) {
         ensureSessionUnchanged(operation)
-        changeHistoryDao.upsertAll(historyEntries)
+        commitOperation(operation) { changeHistoryDao.upsertAll(historyEntries) }
       }
       ensureSessionUnchanged(operation)
       // Cancellare e reinserire in due transazioni distinte fa due cose brutte: se il secondo
       // passo salta, l'anno resta senza voti, e chi osserva la tabella vede una lista vuota per
       // un istante a ogni sincronizzazione.
-      gradeDao.replaceByYear(session.studentId, schoolYear.id, entities)
+      commitOperation(operation) { gradeDao.replaceByYear(session.studentId, schoolYear.id, entities) }
       storeYearScopedValue(
         operation,
         GradesSection,
@@ -1202,7 +1404,7 @@ class SchoolSyncCoordinator @Inject constructor(
         mode == BackgroundSyncMode.FAST && recentlyFetched -> previousDedicated.orEmpty()
         else -> fetchDedicatedHomeworks().fold(
           onSuccess = { fetched ->
-            lastDedicatedHomeworkFetch[throttleKey] = now
+            commitOperation(operation) { lastDedicatedHomeworkFetch[throttleKey] = now }
             val inYear = filterHomeworksForYear(fetched, schoolYear)
             recordDedicatedHomeworkHistory(operation, schoolYear, previousDedicated, inYear, now)
             storeYearScopedValue(operation, HomeworkDedicatedSection, schoolYear, inYear)
@@ -1309,7 +1511,7 @@ class SchoolSyncCoordinator @Inject constructor(
     }
     if (entries.isEmpty()) return
     ensureSessionUnchanged(operation)
-    changeHistoryDao.upsertAll(entries)
+    commitOperation(operation) { changeHistoryDao.upsertAll(entries) }
   }
 
   private suspend fun syncAgenda(
@@ -1380,10 +1582,10 @@ class SchoolSyncCoordinator @Inject constructor(
       }
       if (historyEntries.isNotEmpty()) {
         ensureSessionUnchanged(operation)
-        changeHistoryDao.upsertAll(historyEntries)
+        commitOperation(operation) { changeHistoryDao.upsertAll(historyEntries) }
       }
       ensureSessionUnchanged(operation)
-      agendaDao.replaceByYear(session.studentId, schoolYear.id, entities)
+      commitOperation(operation) { agendaDao.replaceByYear(session.studentId, schoolYear.id, entities) }
       storeYearScopedValue(
         operation,
         AgendaSection,
@@ -1429,7 +1631,7 @@ class SchoolSyncCoordinator @Inject constructor(
         )
       }
       ensureSessionUnchanged(operation)
-      absenceDao.replaceByYear(session.studentId, schoolYear.id, entities)
+      commitOperation(operation) { absenceDao.replaceByYear(session.studentId, schoolYear.id, entities) }
       storeYearScopedValue(operation, AbsencesSection, schoolYear, absences)
     }.onFailure { cause ->
       errors.record(AbsencesSection, cause)
@@ -1470,7 +1672,7 @@ class SchoolSyncCoordinator @Inject constructor(
         )
       }
       ensureSessionUnchanged(operation)
-      communicationDao.replaceByYear(session.studentId, schoolYear.id, entities)
+      commitOperation(operation) { communicationDao.replaceByYear(session.studentId, schoolYear.id, entities) }
       storeYearScopedValue(operation, CommunicationsSection, schoolYear, communications)
     }.onFailure { cause ->
       errors.record(CommunicationsSection, cause)
@@ -1504,7 +1706,7 @@ class SchoolSyncCoordinator @Inject constructor(
         )
       }
       ensureSessionUnchanged(operation)
-      materialDao.replaceByYear(session.studentId, schoolYear.id, entities)
+      commitOperation(operation) { materialDao.replaceByYear(session.studentId, schoolYear.id, entities) }
       storeYearScopedValue(operation, MaterialsSection, schoolYear, materials)
     }.onFailure { cause ->
       errors.record(MaterialsSection, cause)
@@ -1538,7 +1740,7 @@ class SchoolSyncCoordinator @Inject constructor(
         )
       }
       ensureSessionUnchanged(operation)
-      documentDao.replaceByYear(session.studentId, schoolYear.id, entities)
+      commitOperation(operation) { documentDao.replaceByYear(session.studentId, schoolYear.id, entities) }
       storeYearScopedValue(operation, DocumentsSection, schoolYear, documents)
     }.onFailure { cause ->
       errors.record(DocumentsSection, cause)
@@ -1594,18 +1796,15 @@ class SchoolSyncCoordinator @Inject constructor(
     operation: SessionOperation,
     cacheKey: String,
     payload: String,
-  ) {
-    ensureSessionUnchanged(operation)
+  ) = commitOperation(operation) {
     val existing = snapshotCacheDao.getByKey(cacheKey)
-    if (existing?.payload == payload) return
-    ensureSessionUnchanged(operation)
-    snapshotCacheDao.upsert(
-      SnapshotCacheEntity(
+    if (existing?.payload != payload) {
+      snapshotCacheDao.upsert(SnapshotCacheEntity(
         cacheKey = cacheKey,
         payload = payload,
         updatedAtEpochMillis = System.currentTimeMillis(),
-      ),
-    )
+      ))
+    }
   }
 
   private suspend inline fun <reified T> clearYearScoped(
@@ -1640,6 +1839,7 @@ class SchoolSyncCoordinator @Inject constructor(
   ) {
     val studentId = operation.session.studentId
     sections.forEach { section ->
+      commitOperation(operation) {
       ensureSessionUnchanged(operation)
       val previous = syncMetadataDao.get(studentId, schoolYear.id, section)
       ensureSessionUnchanged(operation)
@@ -1653,6 +1853,7 @@ class SchoolSyncCoordinator @Inject constructor(
           lastError = null,
         ),
       )
+      }
     }
   }
 
@@ -1665,6 +1866,7 @@ class SchoolSyncCoordinator @Inject constructor(
   ) {
     val studentId = operation.session.studentId
     sections.forEach { section ->
+      commitOperation(operation) {
       ensureSessionUnchanged(operation)
       val previous = syncMetadataDao.get(studentId, schoolYear.id, section)
       ensureSessionUnchanged(operation)
@@ -1679,6 +1881,7 @@ class SchoolSyncCoordinator @Inject constructor(
           lastError = if (failed) errors.reasonFor(section) ?: GenericSyncFailure else null,
         ),
       )
+      }
     }
   }
 
@@ -1762,11 +1965,17 @@ class SchoolSyncCoordinator @Inject constructor(
   ) {
     val page = portalClient.getMeetingsPageHtml()
     ensureSessionUnchanged(operation)
-    if (page == null) {
-      clearMeetings(schoolYear, operation)
-      return
+    if (page == null) throw ClassevivaNetworkException("Il portale dei colloqui non è disponibile.")
+    val html = page.first.lowercase()
+    val loginForm = Regex("<input\\b[^>]*type\\s*=\\s*['\"]?password", RegexOption.IGNORE_CASE).containsMatchIn(html)
+    if (loginForm || !("colloqui" in html || "riceviment" in html || "prenotaz" in html)) {
+      throw ClassevivaNetworkException("La risposta dei colloqui non è riconoscibile; mantengo i dati salvati.")
     }
     val snapshot = parseMeetingsSnapshot(page.first, page.second)
+    if (snapshot.teachers.isEmpty() && snapshot.slots.isEmpty() && snapshot.bookings.isEmpty() &&
+      !isExplicitEmptyMeetingsPage(page.first)) {
+      throw ClassevivaNetworkException("La risposta dei colloqui non è riconoscibile; mantengo i dati salvati.")
+    }
     storeYearScopedValue(operation, MeetingTeachersSection, schoolYear, snapshot.teachers)
     storeYearScopedValue(operation, MeetingSlotsSection, schoolYear, snapshot.slots)
     storeYearScopedValue(operation, MeetingBookingsSection, schoolYear, snapshot.bookings)
@@ -1802,19 +2011,15 @@ class SchoolSyncCoordinator @Inject constructor(
     val merged = newTemplate.copy(manualOverrides = currentTemplate?.manualOverrides ?: emptyMap())
 
     ensureSessionUnchanged(operation)
-    timetableTemplateStore.writeTemplate(
-      schoolYear.id,
-      merged,
-    )
+    commitOperation(operation) {
+      timetableTemplateStore.writeTemplate(schoolYear.id, merged)
+    }
   }
 
-  private suspend fun clearMeetings(
-    schoolYear: SchoolYearRef,
-    operation: SessionOperation,
-  ) {
-    storeYearScopedValue(operation, MeetingTeachersSection, schoolYear, emptyList<MeetingTeacher>())
-    storeYearScopedValue(operation, MeetingSlotsSection, schoolYear, emptyList<MeetingSlot>())
-    storeYearScopedValue(operation, MeetingBookingsSection, schoolYear, emptyList<MeetingBooking>())
+  private fun isExplicitEmptyMeetingsPage(html: String): Boolean {
+    val text = html.replace(Regex("<[^>]*>"), " ").replace(Regex("\\s+"), " ").lowercase()
+    return ("colloqui" in text || "riceviment" in text) &&
+      listOf("nessun colloquio", "nessuna prenotazione", "nessun ricevimento", "non sono presenti colloqui", "nessuna disponibilità").any(text::contains)
   }
 
   private fun schoolYearStart(schoolYear: SchoolYearRef): LocalDate {

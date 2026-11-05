@@ -308,6 +308,9 @@ interface CustomEventDao {
 
   @Query("DELETE FROM custom_events WHERE id = :id")
   suspend fun deleteById(id: String)
+
+  @Query("DELETE FROM custom_events")
+  suspend fun clearAll()
 }
 
 @Dao
@@ -326,6 +329,9 @@ interface StudentScoreDao {
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsertAll(entities: List<StudentScoreSnapshotEntity>)
+
+  @Query("DELETE FROM student_score_snapshots")
+  suspend fun clearAll()
 }
 
 @Dao

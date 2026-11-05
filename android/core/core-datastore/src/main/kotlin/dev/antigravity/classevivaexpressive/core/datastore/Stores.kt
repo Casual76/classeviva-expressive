@@ -9,8 +9,6 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,12 +26,9 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearSelectio
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import dev.antigravity.classevivaexpressive.core.domain.model.TemplateSlot
 import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
-import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import java.time.LocalDate
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -42,8 +37,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 private val SettingsThemeModeKey = stringPreferencesKey("theme_mode")
 private val SettingsAccentModeKey = stringPreferencesKey("accent_mode")
@@ -372,97 +365,6 @@ class TimetableTemplateStore(@ApplicationContext context: Context) {
     dataStore.edit { prefs ->
       prefs[TimetableTemplatesKey] = json.encodeToString(StoredTimetableTemplates(templates = templates))
     }
-  }
-}
-
-data class StoredCredentials(
-  val username: String,
-  val password: String,
-)
-
-interface SessionStorage {
-  fun readCurrentSession(): UserSession?
-  fun writeSession(session: UserSession)
-  fun readStoredCredentials(): StoredCredentials?
-  fun writeCredentials(username: String, password: String)
-  fun clear()
-}
-
-@Singleton
-class SessionStore(@ApplicationContext context: Context) : SessionStorage {
-  private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-  private val sessionPayloadKey = "session_payload"
-  private val usernameKey = "credential_username"
-  private val passwordKey = "credential_password"
-  private val sharedPreferences = try {
-    EncryptedSharedPreferences.create(
-      context,
-      "classeviva_secure_session",
-      MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-      EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-      EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
-  } catch (e: Exception) {
-    context.deleteSharedPreferences("classeviva_secure_session")
-    EncryptedSharedPreferences.create(
-      context,
-      "classeviva_secure_session",
-      MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
-      EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-      EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-    )
-  }
-
-  private val sessionFlow = MutableStateFlow(readCurrentSession())
-
-  init {
-    migrateLegacySessionPayload()
-  }
-
-  val session: StateFlow<UserSession?> = sessionFlow
-
-  override fun readCurrentSession(): UserSession? {
-    val raw = sharedPreferences.getString(sessionPayloadKey, null) ?: return null
-    return runCatching { json.decodeFromString<UserSession>(raw) }.getOrNull()
-  }
-
-  fun writeSessionSilently(session: UserSession) {
-    sharedPreferences.edit().putString(sessionPayloadKey, json.encodeToString(session)).apply()
-  }
-
-  override fun writeSession(session: UserSession) {
-    writeSessionSilently(session)
-    sessionFlow.value = session
-  }
-
-  override fun readStoredCredentials(): StoredCredentials? {
-    val username = sharedPreferences.getString(usernameKey, null)?.trim().orEmpty()
-    val password = sharedPreferences.getString(passwordKey, null).orEmpty()
-    if (username.isBlank() || password.isBlank()) return null
-    return StoredCredentials(username = username, password = password)
-  }
-
-  override fun writeCredentials(username: String, password: String) {
-    sharedPreferences.edit()
-      .putString(usernameKey, username.trim())
-      .putString(passwordKey, password)
-      .apply()
-  }
-
-  override fun clear() {
-    sharedPreferences.edit().clear().apply()
-    sessionFlow.value = null
-  }
-
-  private fun migrateLegacySessionPayload() {
-    if (readStoredCredentials() != null) return
-    val raw = sharedPreferences.getString(sessionPayloadKey, null) ?: return
-    val root = runCatching { json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return
-    val username = root["username"]?.jsonPrimitive?.content?.trim().orEmpty()
-    val password = root["password"]?.jsonPrimitive?.content.orEmpty()
-    if (username.isBlank() || password.isBlank()) return
-    writeCredentials(username = username, password = password)
-    readCurrentSession()?.let(::writeSession)
   }
 }
 

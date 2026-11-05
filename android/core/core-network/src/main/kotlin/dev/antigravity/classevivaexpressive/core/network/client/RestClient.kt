@@ -61,7 +61,10 @@ data class LoginResult(
   val token: String,
   val studentId: String,
   val profileHint: StudentProfile,
-)
+  val ident: String? = null,
+) {
+  override fun toString(): String = "LoginResult(redacted)"
+}
 
 @Singleton
 class ClassevivaRestClient @Inject constructor(
@@ -72,7 +75,7 @@ class ClassevivaRestClient @Inject constructor(
 ) {
   private var activeSession: UserSession? = null
 
-  fun currentToken(): String? = activeSession?.token ?: apiSessionManager.currentSession()?.token
+  fun currentToken(): String? = apiSessionManager.currentSession()?.token
 
   fun setSession(session: UserSession?) {
     activeSession = session
@@ -96,10 +99,8 @@ class ClassevivaRestClient @Inject constructor(
     val body = response.body() ?: throw ClassevivaNetworkException("Classeviva non ha restituito un payload di login valido.")
     val token = body.token?.takeIf(String::isNotBlank)
       ?: throw ClassevivaNetworkException("Classeviva non ha restituito un token valido.")
-    val studentId = normalizeStudentId(username)
-      ?: normalizeStudentId(body.ident)
-      ?: normalizeStudentId(body.userId)
-      ?: normalizeStudentId(body.alternateUserId)
+    val serverIdentity = listOf(body.ident, body.userId, body.alternateUserId).firstOrNull { !it.isNullOrBlank() }
+    val studentId = (if (serverIdentity != null) normalizeStudentId(serverIdentity) else normalizeStudentId(username))
       ?: throw ClassevivaNetworkException("Studente non identificato dopo il login.")
 
     LoginResult(
@@ -110,7 +111,18 @@ class ClassevivaRestClient @Inject constructor(
         name = body.firstName.orEmpty(),
         surname = body.lastName.orEmpty(),
       ),
+      ident = body.ident?.takeIf(String::isNotBlank),
     )
+  }
+
+  /** Exchanges a short-lived portal token without publishing a partial authenticated state. */
+  suspend fun loginWithCie(pa: String): CieLoginResult = withContext(Dispatchers.IO) {
+    if (pa.isBlank() || pa.length > 16_384 || pa.any(Char::isWhitespace)) {
+      throw ClassevivaNetworkException("Gettone CIE non valido. Ripeti l'accesso.")
+    }
+    val response = runCatching { authService.spidLogin(CieProtocol.loginBody(pa)).execute() }.getOrNull()
+      ?: throw ClassevivaNetworkException("Accesso CIE non raggiungibile. Riprova.")
+    CieProtocol.loginResult(response, pa)
   }
 
   suspend fun getProfile(): StudentProfile = withContext(Dispatchers.IO) {
@@ -452,9 +464,12 @@ class ClassevivaRestClient @Inject constructor(
   }
 
   private suspend fun requireSession(): UserSession {
-    val session = activeSession ?: apiSessionManager.restoreValidSession()
+    val session = apiSessionManager.currentSession()
     if (session == null) {
       throw ClassevivaNetworkException("Sessione assente. Effettua di nuovo il login.")
+    }
+    if (!apiSessionManager.canUseRest()) {
+      throw ClassevivaNetworkException("Accesso scaduto. Accedi di nuovo per aggiornare i dati.")
     }
     activeSession = session
     return session

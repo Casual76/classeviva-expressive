@@ -2,6 +2,11 @@ package dev.antigravity.classevivaexpressive.core.network.client
 
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStorage
 import dev.antigravity.classevivaexpressive.core.datastore.StoredCredentials
+import dev.antigravity.classevivaexpressive.core.datastore.AccountSessionLease
+import dev.antigravity.classevivaexpressive.core.datastore.PortalSessionSnapshot
+import dev.antigravity.classevivaexpressive.core.datastore.StoredPortalCookie
+import dev.antigravity.classevivaexpressive.core.domain.model.AuthMethod
+import dev.antigravity.classevivaexpressive.core.domain.model.PortalAuthenticationState
 import dev.antigravity.classevivaexpressive.core.domain.model.AttachmentPayload
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.PortalCookieDto
@@ -15,6 +20,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asContextElement
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -138,6 +144,8 @@ class PortalClient private constructor(
   private val loggingInterceptor: HttpLoggingInterceptor,
   private val portalLoginUrl: String,
   private val portalOrigin: HttpUrl,
+  private val cookieOrigin: HttpUrl,
+  private val nowEpochMillis: () -> Long = System::currentTimeMillis,
 ) {
   @Inject
   constructor(
@@ -148,42 +156,187 @@ class PortalClient private constructor(
     loggingInterceptor = loggingInterceptor,
     portalLoginUrl = PortalLoginUrl,
     portalOrigin = PortalLoginUrl.toHttpUrl(),
+    cookieOrigin = PortalLoginUrl.toHttpUrl(),
   )
 
   internal constructor(
     sessionStorage: SessionStorage,
     loggingInterceptor: HttpLoggingInterceptor,
     portalLoginUrl: String,
+    cookieOrigin: HttpUrl = portalLoginUrl.toHttpUrl(),
+    nowEpochMillis: () -> Long = System::currentTimeMillis,
   ) : this(
     sessionStorage = sessionStorage,
     loggingInterceptor = loggingInterceptor,
     portalLoginUrl = portalLoginUrl,
     portalOrigin = portalLoginUrl.toHttpUrl(),
+    cookieOrigin = cookieOrigin,
+    nowEpochMillis = nowEpochMillis,
   )
 
   private val cookieStore = ConcurrentHashMap<String, MutableList<Cookie>>()
+  private val cookieMetadata = ConcurrentHashMap<String, StoredPortalCookie>()
+  private val requestLease = ThreadLocal<AccountSessionLease>()
+  private val requestAccount = ThreadLocal<PortalRequestAccount>()
+  private val operationLease = ThreadLocal<AccountSessionLease>()
+  private class OperationCookies(
+    @Volatile var version: Long? = null,
+    @Volatile var portal: PortalSessionSnapshot? = null,
+  )
+  private val operationCookies = ThreadLocal<OperationCookies>()
+  private data class PortalRequestAccount(val lease: AccountSessionLease, val cookieVersion: Long)
+  @Volatile private var cookieVersion = 0L
+  @Volatile private var cookieAccountLease: AccountSessionLease? = null
+  @Volatile private var verifiedCieIdent: String? = null
+  @Volatile private var publishedPortalSnapshot: PortalSessionSnapshot? = null
+
+  /** A coroutine carries one epoch through discovery, parsing, retries and submission. */
+  private suspend fun <T> withPortalOperation(block: suspend () -> T): T {
+    val enclosing = operationLease.get()
+    val expected = expectedAccountLease()
+    if (enclosing != null && expected != null && enclosing != expected) {
+      throw ClassevivaNetworkException("La sessione è cambiata. Ripeti l'operazione.")
+    }
+    val lease = enclosing ?: expected ?: sessionStorage.captureAuthSnapshot().lease
+    val cookies = operationCookies.get() ?: OperationCookies()
+    requireCurrentOperation(lease)
+    return withContext(Dispatchers.IO + operationLease.asContextElement(lease) + operationCookies.asContextElement(cookies)) {
+      block().also { requireCurrentOperation(lease) }
+    }
+  }
+
+  private fun requireCurrentOperation(lease: AccountSessionLease = checkNotNull(operationLease.get())) {
+    if (!sessionStorage.accountGuard.isCurrent(lease, requireReady = false)) {
+      throw ClassevivaNetworkException("La sessione è cambiata. L'operazione precedente è stata annullata.")
+    }
+    operationCookies.get()?.version?.let { expected ->
+      if (expected != cookieVersion) throw ClassevivaNetworkException("L'accesso al portale è cambiato. Ripeti l'operazione.")
+      if (operationCookies.get()?.portal != sessionStorage.readAuthSnapshot()?.portal) {
+        throw ClassevivaNetworkException("L'accesso al portale è cambiato. Ripeti l'operazione.")
+      }
+    }
+  }
+
+  private fun portalRequest(): Request.Builder {
+    val lease = checkNotNull(operationLease.get()) { "Operazione portale assente." }
+    requireCurrentOperation(lease)
+    val version = synchronized(cookieStore) {
+      requireCurrentOperation(lease)
+      // Verification uses a private candidate jar. Ordinary operations bind the first session
+      // they actually use, and may only advance through their own Set-Cookie responses.
+      if (candidateCookies.get() == null && operationCookies.get()?.version == null) {
+        checkNotNull(operationCookies.get()).apply {
+          version = cookieVersion
+          portal = publishedPortalSnapshot
+        }
+      }
+      cookieVersion
+    }
+    return Request.Builder().tag(PortalRequestAccount::class.java, PortalRequestAccount(lease, version))
+  }
+
+  /** Called with cookieStore held; a sibling operation must retain its previous version. */
+  private fun advanceCookieVersion() {
+    cookieVersion++
+    operationCookies.get()?.version = cookieVersion
+    operationCookies.get()?.portal = publishedPortalSnapshot
+    requestAccount.get()?.let { requestAccount.set(it.copy(cookieVersion = cookieVersion)) }
+  }
+
+  // Production uses the same fixed HTTPS origin for transport and cookies. The internal test
+  // constructor may route that logical origin through a loopback server without weakening storage.
+  private fun cookieUrl(url: HttpUrl): HttpUrl = url.newBuilder()
+    .scheme(cookieOrigin.scheme).host(cookieOrigin.host).port(cookieOrigin.port).build()
+
+  private class CookieCandidate(val lease: AccountSessionLease, cookies: List<StoredPortalCookie>) {
+    val metadata = cookies.associateBy { "${it.domain.removePrefix(".")}|${it.path}|${it.name}" }.toMutableMap()
+  }
+  private val candidateCookies = ThreadLocal<CookieCandidate>()
 
   private val cookieJar = object : CookieJar {
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-      cookieStore.getOrPut(url.host) { mutableListOf() }.apply {
-        removeAll { existing -> cookies.any { it.name == existing.name } }
-        addAll(cookies)
+      val lease = requestLease.get() ?: return
+      if (!isPortalOrigin(url) || !sessionStorage.accountGuard.isCurrent(lease, requireReady = false)) return
+      val admitted = cookies.mapNotNull { cookie ->
+        if (cookie.domain != url.host && !(url.host == "web.spaggiari.eu" && cookie.domain == "spaggiari.eu")) return@mapNotNull null
+        cookie.toStoredPortalCookie().let {
+          if (cookieOrigin.host != portalOrigin.host && it.domain == portalOrigin.host) it.copy(domain = cookieOrigin.host) else it
+        }
+      }
+      val candidate = candidateCookies.get()
+      if (candidate != null && candidate.lease == lease) {
+        admitted.forEach { candidate.metadata["${it.domain}|${it.path}|${it.name}"] = it }
+        return
+      }
+      val request = requestAccount.get() ?: return
+      val captured: Pair<PortalSessionSnapshot?, Map<String, StoredPortalCookie>> = synchronized(cookieStore) {
+        if (cookieAccountLease != lease || cookieVersion != request.cookieVersion) return
+        publishedPortalSnapshot to cookieMetadata.toMap()
+      }
+      if (captured.first != null) {
+        val previous = captured.first!!
+        val merged = captured.second.toMutableMap().apply {
+          admitted.forEach { put("${it.domain}|${it.path}|${it.name}", it) }
+        }
+        val updated = previous.copy(cookies = merged.values.filter { it.expiresAt?.let { expiry -> expiry > nowEpochMillis() } != false })
+        try {
+          if (updateCiePortalState(lease, previous.ident, updated, PortalAuthenticationState.READY, previous, enforceExpectedPortal = true)) {
+            publishCieCookies(updated, lease, request.cookieVersion)
+          } else clearSessionFor(lease, request.cookieVersion)
+        } catch (_: Exception) {
+          clearSessionFor(lease, request.cookieVersion)
+          throw IOException("Impossibile salvare l'accesso protetto al portale.")
+        }
+        return
+      }
+      if (sessionStorage.readCurrentSession()?.authMethod == AuthMethod.CIE) return
+      synchronized(cookieStore) {
+        if (cookieAccountLease != lease || cookieVersion != request.cookieVersion) return
+        admitted.forEach { stored -> cookieMetadata["${stored.domain}|${stored.path}|${stored.name}"] = stored }
+        cookieStore[cookieOrigin.host] = cookieMetadata.values.mapNotNull { it.toOkHttpCookie(cookieOrigin) }.toMutableList()
+        if (admitted.isNotEmpty()) advanceCookieVersion()
       }
     }
 
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
-      val now = System.currentTimeMillis()
-      return cookieStore[url.host]
-        ?.filter { cookie -> cookie.expiresAt > now && cookie.matches(url) }
-        .orEmpty()
+      val lease = requestLease.get() ?: return emptyList()
+      if (!sessionStorage.accountGuard.isCurrent(lease, requireReady = false)) return emptyList()
+      val target = cookieUrl(url)
+      candidateCookies.get()?.takeIf { it.lease == lease }?.let { candidate ->
+        return candidate.metadata.values
+          .filter { it.expiresAt?.let { expiry -> expiry > nowEpochMillis() } != false }
+          .mapNotNull { it.toOkHttpCookie(cookieOrigin) }.filter { it.matches(target) }
+      }
+      return synchronized(cookieStore) {
+        if (requestAccount.get()?.cookieVersion != cookieVersion) throw IOException("L'accesso al portale è cambiato.")
+        if (cookieAccountLease != lease) emptyList() else cookieStore[cookieOrigin.host]
+          ?.filter { it.expiresAt > nowEpochMillis() && it.matches(target) }.orEmpty()
+      }
     }
   }
 
   private val portalHttpClient = OkHttpClient.Builder()
     .cookieJar(cookieJar)
+    .addInterceptor { chain ->
+      val account = chain.request().tag(PortalRequestAccount::class.java)
+        ?: throw IOException("Contesto dell'operazione portale assente.")
+      val lease = account.lease
+      if (!sessionStorage.accountGuard.isCurrent(lease, requireReady = false)) throw IOException("La sessione è cambiata.")
+      if (candidateCookies.get() == null && account.cookieVersion != cookieVersion) throw IOException("L'accesso al portale è cambiato.")
+      val studentIndex = chain.request().url.pathSegments.indexOf("students")
+      val expectedId = portalStudentId ?: sessionStorage.readCurrentSession()?.studentId
+      if (studentIndex >= 0 && expectedId != null && chain.request().url.pathSegments.getOrNull(studentIndex + 1) != expectedId) {
+        throw IOException("Richiesta del portale relativa a un'altra sessione.")
+      }
+      requestLease.set(lease)
+      requestAccount.set(account)
+      try { chain.proceed(chain.request()) } finally { requestLease.remove(); requestAccount.remove() }
+    }
     .addInterceptor(loggingInterceptor)
     .addNetworkInterceptor { chain ->
       val requestUrl = chain.request().url
+      val lease = requestLease.get()
+      if (lease != null && !sessionStorage.accountGuard.isCurrent(lease, requireReady = false)) throw IOException("La sessione è cambiata.")
       if (!isPortalOrigin(requestUrl)) {
         throw IOException("Redirect del portale verso un'origine non consentita.")
       }
@@ -205,9 +358,9 @@ class PortalClient private constructor(
       url.port == portalOrigin.port
 
   private fun hasUsablePortalSessionCookie(): Boolean {
-    val rootUrl = portalOrigin.newBuilder().encodedPath("/").query(null).build()
-    val now = System.currentTimeMillis()
-    return cookieStore[portalOrigin.host]?.any { cookie ->
+    val rootUrl = cookieOrigin.newBuilder().encodedPath("/").query(null).build()
+    val now = nowEpochMillis()
+    return synchronized(cookieStore) { cookieStore[cookieOrigin.host]?.any { cookie ->
       cookie.expiresAt > now &&
         cookie.matches(rootUrl) &&
         (
@@ -215,7 +368,7 @@ class PortalClient private constructor(
             cookie.name.contains("cvv", ignoreCase = true) ||
             cookie.name.contains("sess", ignoreCase = true)
           )
-    } == true
+    } == true }
   }
 
   /**
@@ -230,9 +383,47 @@ class PortalClient private constructor(
   private var portalStudentId: String? = null
 
   private suspend fun ensurePortalSession(forceRefresh: Boolean = false) = sessionMutex.withLock {
+    val capture = sessionStorage.captureAuthSnapshot()
+    val lease = checkNotNull(operationLease.get())
+    requireCurrentOperation(lease)
+    if (capture.lease != lease) throw ClassevivaNetworkException("La sessione è cambiata.")
+    val snapshot = capture.snapshot
+    val currentSession = snapshot?.session
+    if (currentSession?.authMethod == AuthMethod.CIE) {
+      val ident = currentSession.ident ?: throw ClassevivaPortalReauthenticationException()
+      if (forceRefresh) {
+        val expected = checkNotNull(operationCookies.get())
+        if (!updateCiePortalState(lease, ident, null, PortalAuthenticationState.REAUTHENTICATION_REQUIRED,
+            expected.portal, enforceExpectedPortal = true)) {
+          throw ClassevivaNetworkException("L'accesso al portale è cambiato. Ripeti l'operazione.")
+        }
+        clearSessionFor(lease, expected.version)
+        throw ClassevivaPortalReauthenticationException()
+      }
+      if (cookieAccountLease == lease && verifiedCieIdent == ident && hasUsablePortalSessionCookie()) return@withLock
+      val saved = snapshot.portal?.takeIf { it.ident == ident && it.studentId == currentSession.studentId }
+        ?: throw ClassevivaPortalReauthenticationException()
+      when (verifyCiePortal(lease, ident, saved.cookies, saved, invalidateRejected = true)) {
+        CiePortalVerification.READY -> Unit
+        CiePortalVerification.REJECTED -> {
+          throw ClassevivaPortalReauthenticationException()
+        }
+        CiePortalVerification.UNAVAILABLE -> {
+          throw ClassevivaNetworkException("Il portale non è al momento raggiungibile. Riprova più tardi.")
+        }
+      }
+      return@withLock
+    }
+    if (cookieAccountLease != lease) clearSession()
+    cookieAccountLease = lease
     if (forceRefresh) {
-      cookieStore.clear()
-      portalStudentId = null
+      synchronized(cookieStore) {
+        cookieStore.clear()
+        cookieMetadata.clear()
+        portalStudentId = null
+        publishedPortalSnapshot = null
+        advanceCookieVersion()
+      }
     }
 
     if (hasUsablePortalSessionCookie()) return@withLock
@@ -240,7 +431,7 @@ class PortalClient private constructor(
     val credentials = sessionStorage.readStoredCredentials()
       ?: throw ClassevivaNetworkException("Credenziali non disponibili per il portale.")
 
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.IO) passwordLogin@ {
       // Due strade, nell'ordine. La prima e' quella che il sito stesso usa dietro al suo form:
       // AuthApi4, che risponde in JSON con `loggedIn` e lascia il cookie. Dal settembre 2026 il
       // portale rimanda chi si presenta come l'app ufficiale all'accesso SPID, su un altro dominio,
@@ -250,8 +441,11 @@ class PortalClient private constructor(
       // rifiutata risponde 200 con la pagina di login, e il cookie anonimo c'e' gia' dalla GET), e
       // messo prima avrebbe chiuso la porta ad AuthApi con una sessione che non e' di nessuno.
       val api = runCatching { loginWithAuthApi(credentials) }
-      if (api.isSuccess && hasUsablePortalSessionCookie()) return@withContext
-      cookieStore.clear()
+      requireCurrentOperation(lease)
+      if (api.isSuccess && hasUsablePortalSessionCookie()) return@passwordLogin
+      clearSessionFor(lease)
+      requireCurrentOperation(lease)
+      cookieAccountLease = lease
       runCatching { loginWithPortalForm(credentials) }.onFailure { formFailure ->
         // Se falliscono tutte e due, vale il motivo della strada principale quando e' leggibile.
         throw (api.exceptionOrNull() as? ClassevivaNetworkException)
@@ -263,9 +457,123 @@ class PortalClient private constructor(
     }
   }
 
+  /** A failed cookie import leaves the independently verified REST session available. */
+  suspend fun importCieCookies(cookieHeader: String, expectedIdent: String): Boolean = withPortalOperation {
+    sessionMutex.withLock {
+      val capture = sessionStorage.captureAuthSnapshot()
+      val snapshot = capture.snapshot ?: return@withLock false
+      val session = snapshot.session ?: return@withLock false
+      if (session.authMethod != AuthMethod.CIE || session.ident != expectedIdent ||
+        CieProtocol.studentId(expectedIdent) != session.studentId) return@withLock false
+      val lease = checkNotNull(operationLease.get())
+      requireCurrentOperation(lease)
+      if (capture.lease != lease) return@withLock false
+      val cookies = parseCieCookieHeader(cookieHeader, cookieOrigin) ?: return@withLock false
+      when (verifyCiePortal(lease, expectedIdent, cookies, snapshot.portal, invalidateRejected = false)) {
+        CiePortalVerification.READY -> true
+        else -> false
+      }
+    }
+  }
+
+  /** In-memory cookies become usable only after their complete verified snapshot is durable. */
+  private fun publishCieCookies(snapshot: PortalSessionSnapshot, lease: AccountSessionLease, expectedVersion: Long? = null) {
+    synchronized(cookieStore) {
+      if (!sessionStorage.accountGuard.isCurrent(lease, requireReady = false)) return
+      if (expectedVersion != null && cookieVersion != expectedVersion) return
+      cookieStore.clear()
+      cookieMetadata.clear()
+      snapshot.cookies.forEach { stored -> stored.toOkHttpCookie(cookieOrigin)?.let { cookie ->
+        cookieMetadata[cookie.storageKey()] = stored
+      } }
+      cookieStore[cookieOrigin.host] = cookieMetadata.values.mapNotNull { it.toOkHttpCookie(cookieOrigin) }.toMutableList()
+      cookieAccountLease = lease
+      verifiedCieIdent = snapshot.ident
+      portalStudentId = snapshot.portalRouteId
+      publishedPortalSnapshot = snapshot
+      advanceCookieVersion()
+    }
+  }
+
+  private enum class CiePortalVerification { READY, REJECTED, UNAVAILABLE }
+
+  private fun verifyCiePortal(
+    lease: AccountSessionLease,
+    expectedIdent: String,
+    cookies: List<StoredPortalCookie>,
+    expectedPortal: PortalSessionSnapshot?,
+    invalidateRejected: Boolean,
+  ): CiePortalVerification {
+    val expectedVersion = synchronized(cookieStore) {
+      requireCurrentOperation(lease)
+      checkNotNull(operationCookies.get()).apply {
+        version = cookieVersion
+        portal = expectedPortal
+      }
+      cookieVersion
+    }
+    requireCurrentOperation(lease)
+    fun rejected(): CiePortalVerification {
+      if (invalidateRejected) {
+        if (!updateCiePortalState(lease, expectedIdent, null, PortalAuthenticationState.REAUTHENTICATION_REQUIRED,
+            expectedPortal, enforceExpectedPortal = true)) {
+          throw ClassevivaNetworkException("L'accesso al portale è cambiato. Ripeti l'operazione.")
+        }
+        clearSessionFor(lease, expectedVersion)
+      }
+      return CiePortalVerification.REJECTED
+    }
+    val candidate = CookieCandidate(lease, cookies)
+    candidateCookies.set(candidate)
+    val attempt = try { getPortalRestJson(WhoAmIPath, "portal-whoami") } finally { candidateCookies.remove() }
+    // Both the in-memory jar and durable snapshot may have rotated during WHOAMI.
+    // A candidate never owns a newer session merely because its account epoch still matches.
+    requireCurrentOperation(lease)
+    val result = when (attempt) {
+      is PortalRestAttempt.Success -> attempt
+      is PortalRestAttempt.Failure -> return if (attempt.sessionRejected) rejected() else CiePortalVerification.UNAVAILABLE
+    }
+    val identity = parseCiePortalIdentity(result.payload) ?: return rejected()
+    if (identity.ident != expectedIdent) return rejected()
+    if (!sessionStorage.accountGuard.isCurrent(lease, requireReady = false)) return CiePortalVerification.UNAVAILABLE
+    val studentId = CieProtocol.studentId(expectedIdent) ?: return rejected()
+    val verified = PortalSessionSnapshot(identity.ident, studentId, identity.routeId,
+      candidate.metadata.values.filter { it.expiresAt?.let { expiry -> expiry > nowEpochMillis() } != false })
+    return try {
+      if (!updateCiePortalState(lease, expectedIdent, verified, PortalAuthenticationState.READY,
+          expectedPortal, enforceExpectedPortal = true)) return CiePortalVerification.UNAVAILABLE
+      publishCieCookies(verified, lease, expectedVersion)
+      CiePortalVerification.READY
+    } catch (_: Exception) {
+      CiePortalVerification.UNAVAILABLE
+    }
+  }
+
+  private fun updateCiePortalState(
+    lease: AccountSessionLease,
+    ident: String,
+    portal: PortalSessionSnapshot?,
+    state: PortalAuthenticationState,
+    expectedPortal: PortalSessionSnapshot? = null,
+    enforceExpectedPortal: Boolean = false,
+  ): Boolean {
+    repeat(3) {
+      val latest = sessionStorage.readAuthSnapshot() ?: return false
+      val session = latest.session
+      if (enforceExpectedPortal && latest.portal != expectedPortal) return false
+      if (session?.authMethod != AuthMethod.CIE || session.ident != ident) return false
+      if (sessionStorage.compareAndSetAuthSnapshot(
+          latest,
+          latest.copy(portal = portal, authenticationState = latest.authenticationState.copy(portal = state)),
+          lease,
+        )) return true
+    }
+    return false
+  }
+
   private fun loginWithPortalForm(credentials: StoredCredentials) {
     val loginHtml = portalHttpClient.newCall(
-      Request.Builder()
+      portalRequest()
         .url(portalLoginUrl)
         .header("User-Agent", PortalUserAgent)
         .build()
@@ -300,7 +608,7 @@ class PortalClient private constructor(
     formBody.add(passwordField, credentials.password)
 
     portalHttpClient.newCall(
-      Request.Builder()
+      portalRequest()
         .url(formActionUrl)
         .header("User-Agent", PortalUserAgent)
         .post(formBody.build())
@@ -329,7 +637,7 @@ class PortalClient private constructor(
       .add("target", "")
       .build()
     portalHttpClient.newCall(
-      Request.Builder()
+      portalRequest()
         .url(url)
         .header("User-Agent", PortalUserAgent)
         .header("X-Requested-With", "XMLHttpRequest")
@@ -349,7 +657,7 @@ class PortalClient private constructor(
   suspend fun openSchoolReport(
     viewUrl: String?,
     confirmUrl: String?,
-  ): NetworkDocumentStream = withContext(Dispatchers.IO) {
+  ): NetworkDocumentStream = withPortalOperation {
     val suppliedCandidates = listOfNotNull(viewUrl, confirmUrl)
       .mapNotNull { value -> value.trim().takeIf(String::isNotBlank) }
       .distinct()
@@ -372,7 +680,7 @@ class PortalClient private constructor(
       var sessionRejected = false
       candidates.forEach { targetUrl ->
         when (val result = tryOpenSchoolReport(targetUrl)) {
-          is SchoolReportAttempt.Success -> return@withContext result.stream
+          is SchoolReportAttempt.Success -> return@withPortalOperation result.stream
           is SchoolReportAttempt.Failure -> {
             lastFailure = result.error
             sessionRejected = sessionRejected || result.sessionRejected
@@ -391,7 +699,7 @@ class PortalClient private constructor(
   private fun tryOpenSchoolReport(targetUrl: HttpUrl): SchoolReportAttempt {
     val response = runCatching {
       portalAssetHttpClient.newCall(
-        Request.Builder()
+        portalRequest()
           .url(targetUrl)
           .header("User-Agent", PortalUserAgent)
           .build(),
@@ -490,17 +798,18 @@ class PortalClient private constructor(
    * finche' non lo si usa, quindi il rifiuto si riconosce dalla risposta e si rientra una volta.
    * L'id da mettere nel percorso viene da `whoami`; se non si legge, vale quello della sessione REST.
    */
-  suspend fun getHomeworksIndex(fallbackStudentId: String?): List<Homework> = withContext(Dispatchers.IO) {
+  suspend fun getHomeworksIndex(fallbackStudentId: String?): List<Homework> = withPortalOperation {
     ensureHomeworksPortalSession()
     var lastFailure: ClassevivaNetworkException? = null
     for (pass in 0..1) {
-      val studentId = portalStudentId ?: resolvePortalStudentId() ?: fallbackStudentId
+      val studentId = portalStudentId ?: resolvePortalStudentId()
+        ?: fallbackStudentId.takeUnless { sessionStorage.readCurrentSession()?.authMethod == AuthMethod.CIE }
         ?: throw ClassevivaNetworkException("Studente non identificato per la sezione Compiti.")
       when (val result = getPortalRestJson(homeworksIndexPath(studentId), route = "portal")) {
         is PortalRestAttempt.Success -> {
           val homeworks = normalizeHomeworkIndex(result.payload)
           logHomeworksIndexAttempt("portal", result.code, result.contentType, homeworks.size)
-          return@withContext homeworks
+          return@withPortalOperation homeworks
         }
         is PortalRestAttempt.Failure -> {
           lastFailure = result.error
@@ -531,6 +840,12 @@ class PortalClient private constructor(
   private fun resolvePortalStudentId(): String? {
     val result = getPortalRestJson(WhoAmIPath, route = "portal-whoami") as? PortalRestAttempt.Success
       ?: return null
+    requireCurrentOperation()
+    if (sessionStorage.readCurrentSession()?.authMethod == AuthMethod.CIE) {
+      val identity = parseCiePortalIdentity(result.payload)
+        ?.takeIf { it.ident == sessionStorage.readCurrentSession()?.ident } ?: return null
+      return identity.routeId.also { portalStudentId = it }
+    }
     return parseWhoAmIStudentId(result.payload)?.also { portalStudentId = it }
   }
 
@@ -544,7 +859,7 @@ class PortalClient private constructor(
     val url = portalOrigin.newBuilder().encodedPath(path).query(null).build()
     val response = runCatching {
       portalAssetHttpClient.newCall(
-        Request.Builder()
+        portalRequest()
           .url(url)
           .header("User-Agent", PortalUserAgent)
           .header("Accept", "application/json")
@@ -603,12 +918,12 @@ class PortalClient private constructor(
     formKeywords: List<String>,
     textValue: String? = null,
     fileAttachment: AttachmentPayload? = null,
-  ): Unit = withContext(Dispatchers.IO) {
+  ): Unit = withPortalOperation {
     ensurePortalSession()
 
     for (candidate in listOf(pageUrl)) {
       val response = portalHttpClient.newCall(
-        Request.Builder().url(candidate).header("User-Agent", PortalUserAgent).build()
+        portalRequest().url(candidate).header("User-Agent", PortalUserAgent).build()
       ).execute()
       val html = response.body?.string() ?: continue
       val responseUrl = response.request.url.toString()
@@ -622,21 +937,21 @@ class PortalClient private constructor(
       )
       if (noticeboardSubmission != null) {
         submitNoticeboardSubmission(noticeboardSubmission, textValue, fileAttachment)
-        return@withContext
+        return@withPortalOperation
       }
 
       val form = findMatchingForm(doc, formKeywords)
       if (form != null) {
         submitForm(form, responseUrl, formKeywords, textValue, fileAttachment)
-        return@withContext
+        return@withPortalOperation
       }
 
       val link = findMatchingLink(doc, formKeywords, responseUrl)
       if (link != null) {
         executePortalRequest(
-          Request.Builder().url(link).header("User-Agent", PortalUserAgent).build()
+          portalRequest().url(link).header("User-Agent", PortalUserAgent).build()
         )
-        return@withContext
+        return@withPortalOperation
       }
     }
 
@@ -687,7 +1002,7 @@ class PortalClient private constructor(
       fileAttachment = attachment,
     )
 
-  suspend fun getMeetingsPageHtml(): Pair<String, String>? = withContext(Dispatchers.IO) {
+  suspend fun getMeetingsPageHtml(): Pair<String, String>? = withPortalOperation {
     ensurePortalSession()
     // L'indirizzo diretto prima della ricerca fra i link: la ricerca parte dalla pagina di login,
     // che chi si presenta come l'app ufficiale rimanda all'accesso SPID anche da autenticato, e
@@ -705,7 +1020,7 @@ class PortalClient private constructor(
     val url = portalOrigin.newBuilder().encodedPath(path).query(null).build()
     return runCatching {
       portalHttpClient.newCall(
-        Request.Builder().url(url).header("User-Agent", PortalUserAgent).build(),
+        portalRequest().url(url).header("User-Agent", PortalUserAgent).build(),
       ).execute().use { response ->
         val finalUrl = response.request.url
         if (!response.isSuccessful || !isPortalOrigin(finalUrl) || "login" in finalUrl.encodedPath) {
@@ -717,12 +1032,12 @@ class PortalClient private constructor(
     }.getOrNull()
   }
 
-  suspend fun getNoticeboardDetail(pageUrl: String): PortalNoticeboardDetail? = withContext(Dispatchers.IO) {
+  suspend fun getNoticeboardDetail(pageUrl: String): PortalNoticeboardDetail? = withPortalOperation {
     ensurePortalSession()
     val response = portalHttpClient.newCall(
-      Request.Builder().url(pageUrl).header("User-Agent", PortalUserAgent).build()
+      portalRequest().url(pageUrl).header("User-Agent", PortalUserAgent).build()
     ).execute()
-    val html = response.body?.string() ?: return@withContext null
+    val html = response.body?.string() ?: return@withPortalOperation null
     val responseUrl = response.request.url.toString()
     val doc = Jsoup.parse(html, responseUrl)
     doc.select("script, style, nav, header, footer").remove()
@@ -751,14 +1066,30 @@ class PortalClient private constructor(
   }
 
   fun getSessionCookies(): List<PortalCookieDto> {
-    return cookieStore["web.spaggiari.eu"]?.map {
-      PortalCookieDto(name = it.name, value = it.value)
-    } ?: emptyList()
+    return synchronized(cookieStore) {
+      val lease = cookieAccountLease ?: return@synchronized emptyList()
+      if (!sessionStorage.accountGuard.isCurrent(lease, requireReady = false)) return@synchronized emptyList()
+      cookieStore["web.spaggiari.eu"]?.map { PortalCookieDto(name = it.name, value = it.value) }.orEmpty()
+    }
+  }
+
+  private fun clearSessionFor(lease: AccountSessionLease, expectedVersion: Long? = null) {
+    synchronized(cookieStore) {
+      if (cookieAccountLease != lease || (expectedVersion != null && cookieVersion != expectedVersion)) return
+      clearSession()
+    }
   }
 
   fun clearSession() {
-    cookieStore.clear()
-    portalStudentId = null
+    synchronized(cookieStore) {
+      cookieStore.clear()
+      cookieMetadata.clear()
+      cookieAccountLease = null
+      verifiedCieIdent = null
+      portalStudentId = null
+      publishedPortalSnapshot = null
+      advanceCookieVersion()
+    }
   }
 
   private suspend fun discoverPortalPage(keywords: List<String>): Pair<String, String>? {
@@ -766,7 +1097,7 @@ class PortalClient private constructor(
     // come l'app ufficiale all'accesso SPID, fuori dal portale, e la ricerca finiva prima di cominciare.
     val (landingHtml, landingUrl) = fetchPortalPage(PortalMenuPath) ?: run {
       val landingResponse = portalHttpClient.newCall(
-        Request.Builder().url(PortalLoginUrl).header("User-Agent", PortalUserAgent).build()
+        portalRequest().url(PortalLoginUrl).header("User-Agent", PortalUserAgent).build()
       ).execute()
       val html = landingResponse.body?.string() ?: return null
       html to landingResponse.request.url.toString()
@@ -786,7 +1117,7 @@ class PortalClient private constructor(
       ).filter(String::isNotBlank).joinToString(" ").lowercase()
       if (keywords.any { elementText.contains(it) }) {
         val response = portalHttpClient.newCall(
-          Request.Builder().url(href).header("User-Agent", PortalUserAgent).build()
+          portalRequest().url(href).header("User-Agent", PortalUserAgent).build()
         ).execute()
         val html = response.body?.string() ?: continue
         return html to response.request.url.toString()
@@ -859,7 +1190,7 @@ class PortalClient private constructor(
         bytes.toRequestBody(mediaType),
       )
       executePortalRequest(
-        Request.Builder().url(PortalNoticeboardUrl).header("User-Agent", PortalUserAgent).post(multipart.build()).build()
+        portalRequest().url(PortalNoticeboardUrl).header("User-Agent", PortalUserAgent).post(multipart.build()).build()
       )
       return
     }
@@ -871,7 +1202,7 @@ class PortalClient private constructor(
       form.add(submission.textFieldName ?: "testo_risposta", textValue)
     }
     executePortalRequest(
-      Request.Builder().url(PortalNoticeboardUrl).header("User-Agent", PortalUserAgent).post(form.build()).build()
+      portalRequest().url(PortalNoticeboardUrl).header("User-Agent", PortalUserAgent).post(form.build()).build()
     )
   }
 
@@ -903,7 +1234,7 @@ class PortalClient private constructor(
         ?: "file"
       multipart.addFormDataPart(fileFieldName, fileAttachment.fileName, bytes.toRequestBody(mediaType))
       executePortalRequest(
-        Request.Builder().url(action).header("User-Agent", PortalUserAgent).post(multipart.build()).build()
+        portalRequest().url(action).header("User-Agent", PortalUserAgent).post(multipart.build()).build()
       )
     } else {
       val formBody = FormBody.Builder()
@@ -916,7 +1247,7 @@ class PortalClient private constructor(
         formBody.add(name, value)
       }
       executePortalRequest(
-        Request.Builder().url(action).header("User-Agent", PortalUserAgent).post(formBody.build()).build()
+        portalRequest().url(action).header("User-Agent", PortalUserAgent).post(formBody.build()).build()
       )
     }
   }

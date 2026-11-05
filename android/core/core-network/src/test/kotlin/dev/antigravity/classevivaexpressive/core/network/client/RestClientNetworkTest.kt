@@ -731,6 +731,7 @@ class RestClientNetworkTest {
     authenticator: okhttp3.Authenticator,
   ): ClassevivaApiService {
     val client = OkHttpClient.Builder()
+      .addInterceptor(RestAccountInterceptor(sessionStorage, RestOriginPolicy.fromBaseUrl(server.url("/rest/"))))
       .addNetworkInterceptor(authTokenInterceptor)
       .addNetworkInterceptor(headersInterceptor)
       .authenticator(authenticator)

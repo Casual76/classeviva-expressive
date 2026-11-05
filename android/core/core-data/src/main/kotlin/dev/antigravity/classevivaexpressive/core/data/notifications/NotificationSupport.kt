@@ -1,5 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.data.notifications
 
+import dev.antigravity.classevivaexpressive.core.data.sync.captureAccountWork
+
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.Manifest
@@ -1122,16 +1124,19 @@ suspend fun refreshLiveTimetableNotification(
   json: Json,
 ) {
   if (Build.VERSION.SDK_INT < 36) return
+  val work = runCatching { sessionStore.captureAccountWork(allowOffline = true) }.getOrNull() ?: return
   val prefs = settingsStore.settings.first().notificationPreferences
   if (!prefs.enabled || !prefs.liveTimetable) {
-    NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+    sessionStore.accountGuard.withCurrentAccount(work.lease, requireReady = false) {
+      NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+    }
     return
   }
   val runtime = readNotificationRuntimeState(context)
   if (!runtime.permissionGranted || !runtime.appNotificationsEnabled) return
   AppNotificationChannels.create(context)
 
-  val studentId = sessionStore.session.value?.studentId ?: return
+  val studentId = work.session.studentId
   val currentYear = schoolYearStore.currentSchoolYearRef()
   val lessonsPayload = snapshotCacheDao
     .getByKey(dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey(studentId, LessonsCacheSection, currentYear))
@@ -1149,20 +1154,26 @@ suspend fun refreshLiveTimetableNotification(
     .filterNot { it.subject.isBlank() && it.teacher.isNullOrBlank() }
     .sortedBy { it.time }
   if (todayLessons.isEmpty() || todayLessons.none { !it.teacher.isNullOrBlank() }) {
-    NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+    sessionStore.accountGuard.withCurrentAccount(work.lease, requireReady = false) {
+      NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+    }
     return
   }
   val snapshot = LiveTimetableSnapshot.from(today, LocalTime.now(), todayLessons)
   if (snapshot == null) {
-    NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+    sessionStore.accountGuard.withCurrentAccount(work.lease, requireReady = false) {
+      NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
+    }
     return
   }
   val launchIntent = launchPendingIntentInternal(context)
-  notifyCompat(
-    context = context,
-    notificationId = LiveTimetableNotificationId,
-    notification = buildLiveTimetableNotification(context, snapshot, launchIntent),
-  )
+  sessionStore.accountGuard.withCurrentAccount(work.lease, requireReady = false) {
+    notifyCompat(
+      context = context,
+      notificationId = LiveTimetableNotificationId,
+      notification = buildLiveTimetableNotification(context, snapshot, launchIntent),
+    )
+  }
 }
 
 private fun launchPendingIntentInternal(context: Context): PendingIntent? {

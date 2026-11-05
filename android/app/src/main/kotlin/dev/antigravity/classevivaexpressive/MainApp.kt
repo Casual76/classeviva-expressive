@@ -16,6 +16,15 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
+import dev.antigravity.classevivaexpressive.cie.CieBrowserSession
+import dev.antigravity.classevivaexpressive.cie.CieLoginActivity
+import dev.antigravity.classevivaexpressive.cie.CieLoginOutcome
+import dev.antigravity.classevivaexpressive.core.domain.model.AuthenticationState
+import dev.antigravity.classevivaexpressive.core.domain.model.RestAuthenticationState
+import dev.antigravity.classevivaexpressive.core.domain.model.PortalAuthenticationState
+import dev.antigravity.fluidengine.ui.fluid.FluidNotification
+import dev.antigravity.fluidengine.ui.fluid.FluidNotificationAction
+import dev.antigravity.fluidengine.ui.fluid.FluidNotificationTone
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -273,6 +282,58 @@ fun MainApp(
   }
 
   val context = LocalContext.current
+  var reauthenticationVisible by remember { mutableStateOf(false) }
+  var authNoticeSequence by remember { mutableStateOf(0L) }
+  val cieLauncher = rememberLauncherForActivityResult(CieLoginActivity.Contract(), viewModel::completeCieLogin)
+  val openCieLogin: () -> Unit = {
+    viewModel.beginCieLogin()?.let { epoch ->
+      runCatching { cieLauncher.launch(epoch) }.onFailure { viewModel.completeCieLogin(CieLoginOutcome.Failed) }
+    }
+  }
+  LaunchedEffect(Unit) { runCatching { CieBrowserSession.clearIdle(context) } }
+  var previousStudent by remember { mutableStateOf<String?>(null) }
+  LaunchedEffect(uiState.isLoading, uiState.session?.studentId) {
+    if (!uiState.isLoading) {
+      if (previousStudent != null && uiState.session == null) {
+        reauthenticationVisible = false
+        runCatching { CieBrowserSession.clearIdle(context, cancelActive = true) }
+      }
+      previousStudent = uiState.session?.studentId
+    }
+  }
+  LaunchedEffect(uiState.authenticationSuccessVersion) {
+    if (uiState.authenticationSuccessVersion > 0) reauthenticationVisible = false
+  }
+  LaunchedEffect(uiState.authError, uiState.session?.studentId, reauthenticationVisible) {
+    val error = uiState.authError
+    if (error != null && uiState.session != null && !reauthenticationVisible) {
+      authNoticeSequence++
+      notificationHostState.show(FluidNotification(
+        id = "authentication-error:$authNoticeSequence",
+        title = "Accesso non completato",
+        message = error,
+        tone = FluidNotificationTone.Warning,
+        durationMillis = 7_000L,
+        actions = listOf(FluidNotificationAction("Riprova", { viewModel.clearAuthError(); reauthenticationVisible = true })),
+      ))
+    }
+  }
+  LaunchedEffect(uiState.isLoading, uiState.authentication, uiState.session?.studentId) {
+    val restExpired = uiState.authentication.rest == RestAuthenticationState.REAUTHENTICATION_REQUIRED
+    val portalExpired = uiState.authentication.portal == PortalAuthenticationState.REAUTHENTICATION_REQUIRED
+    if (!uiState.isLoading && uiState.session != null && (restExpired || portalExpired)) {
+      authNoticeSequence++
+      notificationHostState.show(FluidNotification(
+        id = "authentication:$authNoticeSequence",
+        title = if (restExpired) "Accesso da aggiornare" else "Accesso al portale da aggiornare",
+        message = if (restExpired) "I dati salvati sono disponibili offline. Accedi di nuovo per riprendere gli aggiornamenti."
+          else "Il registro continua ad aggiornarsi. Per le funzioni del portale serve un nuovo accesso.",
+        tone = FluidNotificationTone.Warning,
+        durationMillis = 9_000L,
+        actions = listOf(FluidNotificationAction("Accedi di nuovo", { reauthenticationVisible = true })),
+      ))
+    }
+  }
   var notificationPermissionRequested by rememberSaveable { mutableStateOf(false) }
   val notificationPermissionLauncher = rememberLauncherForActivityResult(
     contract = ActivityResultContracts.RequestPermission(),
@@ -320,6 +381,7 @@ fun MainApp(
                 error = uiState.authError,
                 onClearError = viewModel::clearAuthError,
                 onLogin = viewModel::login,
+                onCieLogin = openCieLogin,
               )
               else -> AuthenticatedApp(
                 chromeController = chromeController,
@@ -330,9 +392,24 @@ fun MainApp(
                 },
                 incomingIntents = incomingIntents,
                 shortcuts = shortcuts,
+                authentication = uiState.authentication,
+                authenticating = uiState.isAuthenticating,
+                onReauthenticate = { viewModel.clearAuthError(); reauthenticationVisible = true },
+                onCieLogin = openCieLogin,
+                onLogout = viewModel::logout,
               )
             }
           }
+          AuthenticationSheet(
+            visible = reauthenticationVisible && uiState.session != null,
+            initialUsername = uiState.session?.username.orEmpty(),
+            busy = uiState.isAuthenticating,
+            error = uiState.authError,
+            onDismiss = { viewModel.clearAuthError(); reauthenticationVisible = false },
+            onClearError = viewModel::clearAuthError,
+            onLogin = viewModel::login,
+            onCieLogin = openCieLogin,
+          )
           // Above the tab bar — the reason the modal lives in-root at all — and below the
           // notifications, which outrank everything.
           FluidGlassModalHost(
@@ -423,9 +500,10 @@ internal fun LoginScreen(
   error: String?,
   onClearError: () -> Unit,
   onLogin: (String, String) -> Unit,
+  onCieLogin: () -> Unit = {},
 ) {
   var username by rememberSaveable { mutableStateOf("") }
-  var password by rememberSaveable { mutableStateOf("") }
+  var password by remember { mutableStateOf("") }
 
   fun submit() {
     if (username.isNotBlank() && password.isNotBlank() && !isLoading) {
@@ -451,7 +529,7 @@ internal fun LoginScreen(
     item {
       ClassevivaHeroCard(
         title = "Classeviva Expressive",
-        subtitle = "Accedi con le credenziali del registro Classeviva.",
+        subtitle = "Accedi con le credenziali del registro Classeviva oppure con la CIE.",
         trailing = { Icon(Icons.Rounded.AutoAwesome, contentDescription = null) },
       )
     }
@@ -468,6 +546,7 @@ internal fun LoginScreen(
             .testTag("login_username")
             .contentType(ContentType.Username + ContentType.EmailAddress),
           label = "Username o codice studente",
+          enabled = !isLoading,
           singleLine = true,
           keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Text,
@@ -485,6 +564,7 @@ internal fun LoginScreen(
             .testTag("login_password")
             .contentType(ContentType.Password),
           label = "Password",
+          enabled = !isLoading,
           singleLine = true,
           keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Password,
@@ -507,6 +587,14 @@ internal fun LoginScreen(
           style = FluidButtonStyle.Filled,
           enabled = username.isNotBlank() && password.isNotBlank() && !isLoading,
           loading = isLoading,
+          fillWidth = true,
+        )
+        FluidButton(
+          text = "Entra con la CIE",
+          onClick = onCieLogin,
+          modifier = Modifier.testTag("login_cie"),
+          style = FluidButtonStyle.Tinted,
+          enabled = !isLoading,
           fillWidth = true,
         )
       }
@@ -914,6 +1002,11 @@ private fun AuthenticatedApp(
   onSkipUpdate: (String) -> Unit,
   incomingIntents: Flow<Intent>,
   shortcuts: Flow<KeyboardShortcut> = emptyFlow(),
+  authentication: AuthenticationState = AuthenticationState(),
+  authenticating: Boolean = false,
+  onReauthenticate: () -> Unit = {},
+  onCieLogin: () -> Unit = {},
+  onLogout: () -> Unit = {},
 ) {
   val navController = rememberNavController()
   val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -1500,6 +1593,11 @@ private fun AuthenticatedApp(
           ),
         ) { entry ->
           SettingsRoute(
+            authentication = authentication,
+            authenticating = authenticating,
+            onReauthenticate = onReauthenticate,
+            onCieLogin = onCieLogin,
+            onLogout = onLogout,
             onBack = navController::navigateUp,
             update = update,
             currentVersion = BuildConfig.VERSION_NAME,

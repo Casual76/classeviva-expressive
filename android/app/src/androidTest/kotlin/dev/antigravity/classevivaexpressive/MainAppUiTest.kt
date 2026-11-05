@@ -25,6 +25,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -40,6 +47,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -63,14 +71,116 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import androidx.compose.ui.test.assertTextEquals
+import dev.antigravity.classevivaexpressive.feature.settings.CieContributionCredit
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionAnchor
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionIndex
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalHost
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.theme.FluidScreenSurface
 
 class MainAppUiTest {
 
   @get:Rule
   val composeRule = createComposeRule()
+
+  private fun editableTagged(tag: String) = composeRule.onNode(
+    hasSetTextAction() and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true,
+  )
+
+  // Expanded Fluid tabs merge their label and Selected into the clickable parent. The icon has
+  // no content description, and matching its text alone would also find the current page title.
+  private fun navigationTab(label: String) = composeRule.onNode(hasText(label) and hasClickAction())
+
+  @Test fun reauthenticationCanBeDismissedWithoutRemovingTheOfflinePage() {
+    var visible by mutableStateOf(true)
+    var cieLaunches = 0
+    composeRule.setContent {
+      ClassevivaExpressiveTheme(settings = AppSettings()) {
+        val host = rememberFluidGlassModalHostState()
+        CompositionLocalProvider(LocalFluidGlassModalHostState provides host) {
+          FluidScreenSurface {
+            Box(Modifier.fillMaxSize()) {
+              Text("Dati salvati offline")
+              AuthenticationSheet(visible, "qa-student", false, null, { visible = false }, {}, { _, _ -> }, { cieLaunches++ })
+              FluidGlassModalHost(host, backdrop = null)
+            }
+          }
+        }
+      }
+    }
+    composeRule.onNodeWithTag("reauth_cie").assertIsEnabled().performClick()
+    assertEquals(1, cieLaunches)
+    composeRule.onNodeWithText("Continua offline").performClick()
+    composeRule.onNodeWithTag("reauth_cie").assertDoesNotExist()
+    composeRule.onNodeWithText("Dati salvati offline").assertIsDisplayed()
+  }
+
+  @Test fun reauthenticationImeSubmissionOwnsBothAuthenticationActions() {
+    var busy by mutableStateOf(false)
+    var submitted: Pair<String, String>? = null
+    composeRule.setContent {
+      ClassevivaExpressiveTheme(settings = AppSettings()) {
+        val host = rememberFluidGlassModalHostState()
+        CompositionLocalProvider(LocalFluidGlassModalHostState provides host) {
+          FluidScreenSurface {
+            AuthenticationSheet(true, "qa-student", busy, null, {}, {}, { username, password ->
+              submitted = username to password
+              busy = true
+            }, {})
+            FluidGlassModalHost(host, backdrop = null)
+          }
+        }
+      }
+    }
+    editableTagged("reauth_password").performTextInput("synthetic-secret")
+    editableTagged("reauth_password").performImeAction()
+    assertEquals("qa-student" to "synthetic-secret", submitted)
+    composeRule.onNodeWithTag("reauth_submit").assertIsNotEnabled()
+    composeRule.onNodeWithTag("reauth_cie").assertIsNotEnabled()
+    composeRule.onNodeWithText("Continua offline").assertIsNotEnabled()
+  }
+
+  @Test fun cieIsAvailableWithoutTypingCredentialsAndSharesTheBusyState() {
+    var launches = 0
+    var busy by mutableStateOf(false)
+    composeRule.setContent {
+      ClassevivaExpressiveTheme(settings = AppSettings()) {
+        FluidScreenSurface {
+          LoginScreen(busy, null, {}, { _, _ -> }, onCieLogin = { launches++ })
+        }
+      }
+    }
+    composeRule.onNodeWithTag("login_submit").assertIsNotEnabled()
+    composeRule.onNodeWithTag("login_cie").assertIsEnabled().performClick()
+    assertEquals(1, launches)
+    composeRule.runOnIdle { busy = true }
+    composeRule.onNodeWithTag("login_cie").assertIsNotEnabled()
+    composeRule.onNodeWithTag("login_submit").assertIsNotEnabled()
+  }
+
+  @Test fun loginPasswordNeverSurvivesSavedStateRestoration() {
+    val restoration = StateRestorationTester(composeRule)
+    restoration.setContent {
+      ClassevivaExpressiveTheme(settings = AppSettings()) {
+        FluidScreenSurface { LoginScreen(false, null, {}, { _, _ -> }) }
+      }
+    }
+    editableTagged("login_username").performTextInput("qa-student")
+    editableTagged("login_password").performTextInput("synthetic-secret")
+    restoration.emulateSavedInstanceStateRestore()
+    editableTagged("login_username").assertTextContains("qa-student")
+    editableTagged("login_password").assertTextEquals("")
+  }
+
+  @Test fun cieContributionIsVisibleWithItsAnonymousCredit() {
+    composeRule.setContent {
+      ClassevivaExpressiveTheme(settings = AppSettings()) { FluidScreenSurface { CieContributionCredit() } }
+    }
+    composeRule.onNodeWithText("Leone").assertIsDisplayed()
+    composeRule.onNodeWithText("Metodo [omissis] nella fossa dei leoni: è entrato fra le API di Spaggiari ed è uscito con il token.").assertIsDisplayed()
+  }
 
   @Test
   fun loginScreen_enablesSubmitAndInvokesLogin() {
@@ -92,9 +202,9 @@ class MainAppUiTest {
     }
 
     composeRule.onNodeWithTag("login_submit").assertIsNotEnabled()
-    composeRule.onNodeWithTag("login_username").performTextInput("studente")
+    editableTagged("login_username").performTextInput("studente")
     composeRule.onNodeWithTag("login_submit").assertIsNotEnabled()
-    composeRule.onNodeWithTag("login_password").performTextInput("password123")
+    editableTagged("login_password").performTextInput("password123")
     composeRule.onNodeWithTag("login_submit").assertIsEnabled()
     composeRule.onNodeWithTag("login_submit").performClick()
 
@@ -113,13 +223,13 @@ class MainAppUiTest {
       )
     }
 
-    composeRule.onNodeWithTag("top_level_home").assertIsSelected()
-    composeRule.onNodeWithTag("top_level_communications").assertIsNotSelected()
+    navigationTab("Home").assertIsSelected()
+    navigationTab("Bacheca").assertIsNotSelected()
     composeRule.onNodeWithTag("route_home").assertIsDisplayed()
 
-    val homeBounds = composeRule.onNodeWithTag("top_level_home").fetchSemanticsNode().boundsInRoot
-    val boardBounds = composeRule.onNodeWithTag("top_level_communications").fetchSemanticsNode().boundsInRoot
-    val moreBounds = composeRule.onNodeWithTag("top_level_more").fetchSemanticsNode().boundsInRoot
+    val homeBounds = navigationTab("Home").fetchSemanticsNode().boundsInRoot
+    val boardBounds = navigationTab("Bacheca").fetchSemanticsNode().boundsInRoot
+    val moreBounds = navigationTab("Altro").fetchSemanticsNode().boundsInRoot
     val viewportBounds = composeRule.onNodeWithTag("theme_light").fetchSemanticsNode().boundsInRoot
     assertTrue(
       "La pillola compact deve disporre i tab in ordine orizzontale",
@@ -128,21 +238,21 @@ class MainAppUiTest {
     assertTrue("Il primo tab deve restare dentro il viewport", homeBounds.left >= viewportBounds.left)
     assertTrue("L'ultimo tab deve restare dentro il viewport", moreBounds.right <= viewportBounds.right)
 
-    composeRule.onNodeWithTag("top_level_home").performClick()
+    navigationTab("Home").performClick()
     composeRule.runOnIdle {
       assertEquals("home", navController.currentDestination?.route)
     }
 
-    composeRule.onNodeWithContentDescription("Voti").assertExists()
-    composeRule.onNodeWithContentDescription("Agenda").assertExists()
-    composeRule.onNodeWithContentDescription("Bacheca").assertExists().performClick()
-    composeRule.onNodeWithTag("top_level_communications").assertIsSelected()
+    navigationTab("Voti").assertExists()
+    navigationTab("Agenda").assertExists()
+    navigationTab("Bacheca").assertExists().performClick()
+    navigationTab("Bacheca").assertIsSelected()
     composeRule.onNodeWithTag("route_communications").assertIsDisplayed()
     lateinit var stackBeforeReselection: List<String>
     composeRule.runOnIdle {
       stackBeforeReselection = navController.currentBackStack.value.mapNotNull { it.destination.route }
     }
-    composeRule.onNodeWithTag("top_level_communications").performClick()
+    navigationTab("Bacheca").performClick()
     composeRule.runOnIdle {
       assertEquals("communications?tab={tab}", navController.currentDestination?.route)
       assertEquals(
@@ -151,10 +261,10 @@ class MainAppUiTest {
         navController.currentBackStack.value.mapNotNull { it.destination.route },
       )
     }
-    composeRule.onNodeWithTag("top_level_communications").assertIsSelected()
+    navigationTab("Bacheca").assertIsSelected()
 
-    composeRule.onNodeWithContentDescription("Home").performClick()
-    composeRule.onNodeWithTag("top_level_home").assertIsSelected()
+    navigationTab("Home").performClick()
+    navigationTab("Home").assertIsSelected()
     composeRule.onNodeWithTag("route_home").assertIsDisplayed()
     composeRule.runOnIdle {
       val routeBeforeBack = navController.currentDestination?.route
@@ -185,12 +295,12 @@ class MainAppUiTest {
       )
     }
     composeRule.onNodeWithTag("route_communications").assertIsDisplayed()
-    composeRule.onNodeWithTag("top_level_communications").assertIsSelected()
+    navigationTab("Bacheca").assertIsSelected()
 
     restorationTester.emulateSavedInstanceStateRestore()
 
     composeRule.onNodeWithTag("route_communications").assertIsDisplayed()
-    composeRule.onNodeWithTag("top_level_communications").assertIsSelected()
+    navigationTab("Bacheca").assertIsSelected()
     composeRule.runOnIdle {
       assertEquals("communications?tab={tab}", navController.currentDestination?.route)
     }
@@ -209,8 +319,8 @@ class MainAppUiTest {
     }
 
     composeRule.onNodeWithTag("open_bug_report").performClick()
-    composeRule.onNodeWithTag("bug_report_title").performTextInput("Animazione interrotta")
-    composeRule.onNodeWithTag("bug_report_description").performTextInput("La pagina si sovrappone")
+    editableTagged("bug_report_title").performTextInput("Animazione interrotta")
+    editableTagged("bug_report_description").performTextInput("La pagina si sovrappone")
 
     composeRule.runOnIdle {
       assertEquals(BugReportRoute, navController.currentDestination?.route)
@@ -219,9 +329,9 @@ class MainAppUiTest {
 
     restorationTester.emulateSavedInstanceStateRestore()
 
-    composeRule.onNodeWithTag("bug_report_title")
+    editableTagged("bug_report_title")
       .assertTextContains("Animazione interrotta")
-    composeRule.onNodeWithTag("bug_report_description")
+    editableTagged("bug_report_description")
       .assertTextContains("La pagina si sovrappone")
     composeRule.runOnIdle {
       assertEquals(BugReportRoute, navController.currentDestination?.route)
@@ -242,7 +352,8 @@ class MainAppUiTest {
 
     composeRule.onNodeWithTag("open_bug_report").performClick()
     composeRule.onNodeWithText("Aggiungi passaggi e diagnostica").performScrollTo().performClick()
-    composeRule.onNodeWithTag("bug_report_diagnostics")
+    composeRule.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("bug_report_diagnostics"))
+    editableTagged("bug_report_diagnostics")
       .performScrollTo()
       .assertTextContains("Schermata: more", substring = true)
   }
@@ -264,18 +375,18 @@ class MainAppUiTest {
 
       composeRule.onNodeWithTag("theme_dark").assertExists()
       composeRule.onNodeWithTag("motion_zero").assertExists()
-      composeRule.onNodeWithTag("top_level_home").assertIsSelected()
+      navigationTab("Home").assertIsSelected()
 
-      val homeBounds = composeRule.onNodeWithTag("top_level_home").fetchSemanticsNode().boundsInRoot
-      val boardBounds = composeRule.onNodeWithTag("top_level_communications").fetchSemanticsNode().boundsInRoot
+      val homeBounds = navigationTab("Home").fetchSemanticsNode().boundsInRoot
+      val boardBounds = navigationTab("Bacheca").fetchSemanticsNode().boundsInRoot
       // Il rail del tablet non esiste piu': a 600 dp la navigazione e' la stessa pillola del
       // telefono, in orizzontale e raccolta a sinistra, dalla parte del pollice.
       assertTrue("A 600 dp i tab stanno in fila, non in colonna", boardBounds.left > homeBounds.right)
       assertTrue("A 600 dp la pillola sta a sinistra", homeBounds.left < 300.dp.value * composeRule.density.density)
 
-      composeRule.onNodeWithContentDescription("Bacheca").performClick()
+      navigationTab("Bacheca").performClick()
       composeRule.onNodeWithTag("route_communications").assertIsDisplayed()
-      composeRule.onNodeWithTag("top_level_communications").assertIsSelected()
+      navigationTab("Bacheca").assertIsSelected()
     }
   }
 

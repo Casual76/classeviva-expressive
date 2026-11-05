@@ -1,15 +1,17 @@
 package dev.antigravity.classevivaexpressive
 
-import android.content.Context
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.foundation.AppUpdater
-import dagger.hilt.android.qualifiers.ApplicationContext
-import dev.antigravity.classevivaexpressive.core.data.sync.SyncWorkScheduler
+import dev.antigravity.classevivaexpressive.core.data.sync.AccountSyncScheduler
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.AuthenticationState
+import dev.antigravity.classevivaexpressive.core.domain.model.RestAuthenticationState
+import dev.antigravity.classevivaexpressive.cie.CieLoginOutcome
+import dev.antigravity.classevivaexpressive.cie.CieLoginResult
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearSelectionPolicy
@@ -30,7 +32,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.channels.Channel
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.Job
@@ -79,10 +83,14 @@ data class MainUiState(
   val session: UserSession? = null,
   val settings: AppSettings = AppSettings(),
   val authError: String? = null,
+  val authentication: AuthenticationState = AuthenticationState(),
+  val authenticationSuccessVersion: Long = 0,
 )
 
 private data class BackgroundSyncState(
-  val hasSession: Boolean,
+  val studentId: String?,
+  val identityEpoch: Long,
+  val restReady: Boolean,
   val periodicSyncEnabled: Boolean,
 )
 
@@ -100,11 +108,21 @@ class MainViewModel @Inject constructor(
   val updater: AppUpdater,
   private val schoolYearRepository: SchoolYearRepository,
   dashboardRepository: DashboardRepository,
-  @param:ApplicationContext private val context: Context,
+  private val accountSyncScheduler: AccountSyncScheduler,
 ) : ViewModel() {
   private val isRestoring = MutableStateFlow(true)
   private val isAuthenticating = MutableStateFlow(false)
+  private val isLoggingOut = MutableStateFlow(false)
+  private val authenticationBusy = combine(isAuthenticating, isLoggingOut) { login, logout -> login || logout }
+  private val accountNotifications = Channel<FluidNotification>(Channel.BUFFERED)
   private val authError = MutableStateFlow<String?>(null)
+  private val authenticationSuccessVersion = MutableStateFlow(0L)
+  private var activeCieEpoch: Long? = null
+  private val authentication = authRepository.authenticationState
+    .stateIn(viewModelScope, SharingStarted.Eagerly, AuthenticationState())
+  private val canUseRest = combine(authRepository.session, authentication) { session, state ->
+    session != null && state.rest == RestAuthenticationState.READY
+  }.distinctUntilChanged()
   private var liveTimetableRefreshJob: Job? = null
   private var lastLiveTimetableRefreshAtMillis = 0L
 
@@ -112,7 +130,7 @@ class MainViewModel @Inject constructor(
     authRepository.session,
     settingsRepository.observeSettings(),
     isRestoring,
-    isAuthenticating,
+    authenticationBusy,
     authError,
   ) { session, settings, restoring, authenticating, error ->
     MainUiState(
@@ -124,7 +142,9 @@ class MainViewModel @Inject constructor(
     )
   }
 
-  val uiState = baseState.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
+  val uiState = combine(baseState, authentication, authenticationSuccessVersion) { base, access, success ->
+    base.copy(authentication = access, authenticationSuccessVersion = success)
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
 
   /** Durable repository events translated once into the app-wide visual notice vocabulary. */
   private val fallbackNotifications = schoolYearRepository.observeFallbackEvents().map { event ->
@@ -183,6 +203,7 @@ class MainViewModel @Inject constructor(
     fallbackNotifications,
     syncFailureNotifications,
     archivedYearNotifications,
+    accountNotifications.receiveAsFlow(),
   )
 
   init {
@@ -192,21 +213,29 @@ class MainViewModel @Inject constructor(
     }
     viewModelScope.launch {
       combine(
-        authRepository.session.map { it != null }.distinctUntilChanged(),
+        authRepository.session,
+        authentication,
         settingsRepository.observeSettings().map { it.periodicSyncEnabled }.distinctUntilChanged(),
-      ) { hasSession, periodicSyncEnabled ->
-        BackgroundSyncState(hasSession, periodicSyncEnabled)
+      ) { session, access, periodicSyncEnabled ->
+        BackgroundSyncState(session?.studentId, authRepository.authenticationEpoch(),
+          access.rest == RestAuthenticationState.READY, periodicSyncEnabled)
       }.distinctUntilChanged().collect { state ->
-        if (state.hasSession && state.periodicSyncEnabled) {
-          SyncWorkScheduler.schedule(context)
-        } else {
-          SyncWorkScheduler.cancel(context)
+        try {
+          if (state.studentId != null && state.restReady && state.periodicSyncEnabled && restIsReady()) {
+            accountSyncScheduler.schedule(state.identityEpoch, state.studentId)
+          } else {
+            accountSyncScheduler.cancel(state.identityEpoch)
+          }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+          throw cancelled
+        } catch (_: Exception) {
+          // A WorkManager runtime failure must not stop observing logout/reauthentication.
         }
       }
     }
     viewModelScope.launch {
       combine(
-        authRepository.session.map { it != null }.distinctUntilChanged(),
+        canUseRest,
         settingsRepository.observeSettings()
           .map { it.notificationPreferences.enabled to it.notificationPreferences.liveTimetable }
           .distinctUntilChanged(),
@@ -217,7 +246,8 @@ class MainViewModel @Inject constructor(
           liveTimetableEnabled = prefs.second,
         )
       }.distinctUntilChanged().collect { config ->
-        if (config.hasSession) refreshLiveTimetableIfNeeded(config, force = true, allowDisabled = true)
+        if (config.hasSession && restIsReady()) refreshLiveTimetableIfNeeded(config, force = true, allowDisabled = true)
+        else liveTimetableRefreshJob?.cancel()
       }
     }
   }
@@ -226,7 +256,7 @@ class MainViewModel @Inject constructor(
     val state = uiState.value
     refreshLiveTimetableIfNeeded(
       config = LiveTimetableConfig(
-        hasSession = state.session != null,
+        hasSession = authRepository.session.value != null && authentication.value.rest == RestAuthenticationState.READY,
         notificationsEnabled = state.settings.notificationPreferences.enabled,
         liveTimetableEnabled = state.settings.notificationPreferences.liveTimetable,
       ),
@@ -253,19 +283,88 @@ class MainViewModel @Inject constructor(
   }
 
   fun login(username: String, password: String) {
+    if (isLoggingOut.value || !isAuthenticating.compareAndSet(expect = false, update = true)) return
+    authError.value = null
     viewModelScope.launch {
-      isAuthenticating.value = true
+      try {
+        authRepository.login(username.trim(), password)
+          .onSuccess { authenticationSuccessVersion.value += 1 }
+          .onFailure {
+            authError.value = if (it.message == "Per cambiare studente, esci prima dall'account corrente.") it.message
+              else "Accesso non riuscito. Controlla le credenziali e la connessione, poi riprova."
+          }
+      } catch (cancelled: kotlinx.coroutines.CancellationException) {
+        throw cancelled
+      } catch (_: Exception) {
+        authError.value = "Accesso non riuscito. Riprova."
+      } finally { isAuthenticating.value = false }
+    }
+  }
+
+  /** The only item passed to the private browser is an opaque, non-sensitive account epoch. */
+  fun beginCieLogin(): Long? {
+    if (isRestoring.value || isLoggingOut.value || !isAuthenticating.compareAndSet(expect = false, update = true)) return null
+    return try {
       authError.value = null
-      authRepository.login(username.trim(), password)
-        .onFailure {
-          authError.value = it.message ?: "Accesso non riuscito. Controlla le credenziali."
-        }
+      authRepository.authenticationEpoch().also { activeCieEpoch = it }
+    } catch (_: Exception) {
       isAuthenticating.value = false
+      authError.value = "Impossibile avviare l’accesso con la CIE. Riprova."
+      null
+    }
+  }
+
+  fun completeCieLogin(outcome: CieLoginOutcome) {
+    if (activeCieEpoch == null) {
+      if (!isAuthenticating.value && outcome == CieLoginOutcome.Interrupted) authError.value = outcome.message
+      return
+    }
+    activeCieEpoch = null
+    isAuthenticating.value = false
+    authError.value = outcome.message
+    if (outcome == CieLoginOutcome.Success) authenticationSuccessVersion.value += 1
+  }
+
+  fun completeCieLogin(result: CieLoginResult) {
+    completeCieLogin(result.outcome)
+    if (!result.browserCleanupComplete) viewModelScope.launch {
+      accountNotifications.send(FluidNotification(
+        id = "cie-cleanup:${syncNoticeSequence.incrementAndGet()}",
+        title = "Pulizia del browser incompleta",
+        message = "Alcuni dati del browser CIE potrebbero essere rimasti sul dispositivo. " +
+          "La pulizia sarà ripetuta prima del prossimo accesso.",
+        tone = FluidNotificationTone.Warning,
+        durationMillis = 9_000L,
+      ))
     }
   }
 
   fun clearAuthError() {
     authError.value = null
+  }
+
+  /** This owner survives the Settings destination disappearing when the session is cleared. */
+  fun logout() {
+    if (!isLoggingOut.compareAndSet(expect = false, update = true)) return
+    viewModelScope.launch {
+      try {
+        authRepository.logout()
+      } catch (cancelled: kotlinx.coroutines.CancellationException) {
+        throw cancelled
+      } catch (_: Exception) {
+        val signedOut = authRepository.session.value == null
+        accountNotifications.send(FluidNotification(
+          id = "logout:${syncNoticeSequence.incrementAndGet()}",
+          title = if (signedOut) "Pulizia incompleta" else "Uscita non completata",
+          message = if (signedOut) "Sei uscito dall’account. La pulizia dei dati locali non è stata completata."
+            else "Non è stato possibile salvare l’uscita dall’account. Riprova.",
+          tone = FluidNotificationTone.Warning,
+          durationMillis = 9_000L,
+        ))
+      } finally {
+        isLoggingOut.value = false
+      }
+    }
   }
 
   fun onNotificationPermissionResult(granted: Boolean) {
@@ -274,7 +373,7 @@ class MainViewModel @Inject constructor(
       if (granted) {
         refreshLiveTimetableIfNeeded(
           config = LiveTimetableConfig(
-            hasSession = authRepository.session.value != null,
+            hasSession = authRepository.session.value != null && authentication.value.rest == RestAuthenticationState.READY,
             notificationsEnabled = uiState.value.settings.notificationPreferences.enabled,
             liveTimetableEnabled = uiState.value.settings.notificationPreferences.liveTimetable,
           ),
@@ -290,14 +389,17 @@ class MainViewModel @Inject constructor(
     force: Boolean,
     allowDisabled: Boolean,
   ) {
-    if (!config.hasSession) return
+    if (!config.hasSession || !restIsReady()) return
     if (!allowDisabled && (!config.notificationsEnabled || !config.liveTimetableEnabled)) return
     val now = SystemClock.elapsedRealtime()
     if (!force && now - lastLiveTimetableRefreshAtMillis < LiveTimetableRefreshMinIntervalMillis) return
     if (liveTimetableRefreshJob?.isActive == true) return
     lastLiveTimetableRefreshAtMillis = now
     liveTimetableRefreshJob = viewModelScope.launch {
-      runCatching { settingsRepository.refreshLiveTimetable() }
+      if (restIsReady()) runCatching { settingsRepository.refreshLiveTimetable() }
     }
   }
+
+  private fun restIsReady(): Boolean =
+    authRepository.session.value != null && authentication.value.rest == RestAuthenticationState.READY
 }

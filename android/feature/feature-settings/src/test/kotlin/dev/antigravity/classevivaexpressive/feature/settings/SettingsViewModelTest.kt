@@ -1,8 +1,11 @@
 package dev.antigravity.classevivaexpressive.feature.settings
 
 import android.content.Context
+import android.content.ContentResolver
+import android.net.Uri
 import app.cash.turbine.test
 import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupRepository
+import dev.antigravity.classevivaexpressive.core.domain.model.AppBackupImportSummary
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.CapabilityResolver
@@ -22,6 +25,9 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -260,6 +266,155 @@ class SettingsViewModelTest {
     val vm = buildViewModel()
     vm.logout()
     coVerify { authRepository.logout() }
+  }
+
+  @Test
+  fun logoutFailureIsSanitizedInsteadOfEscapingTheViewModelScope() = runTest {
+    val vm = buildViewModel()
+    coEvery { authRepository.logout() } throws java.io.IOException("private-storage-detail")
+    vm.state.test {
+      awaitItem()
+      vm.logout()
+      assertEquals("Sei uscito dall’account. La pulizia dei dati locali non è stata completata.", awaitItem().lastMessage)
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
+  @Test
+  fun exportBackupOpensAndWritesSafOnlyInsideTheRepositoryOwnedCallback() = runTest {
+    val uri = mockk<Uri>()
+    val resolver = mockk<ContentResolver>()
+    val output = ByteArrayOutputStream()
+    val repositoryEntered = CompletableDeferred<Unit>()
+    val allowWrite = CompletableDeferred<Unit>()
+    every { context.contentResolver } returns resolver
+    every { resolver.openOutputStream(uri) } returns output
+    coEvery { appBackupRepository.exportBackupTo(any(), any()) } coAnswers {
+      val write = secondArg<suspend (String) -> Unit>()
+      repositoryEntered.complete(Unit)
+      allowWrite.await()
+      write("backup-payload")
+      Result.success(Unit)
+    }
+    val vm = buildViewModel()
+
+    vm.state.test {
+      awaitItem()
+      vm.exportBackup(uri, 42L)
+      repositoryEntered.await()
+      verify(exactly = 0) { resolver.openOutputStream(any()) }
+      allowWrite.complete(Unit)
+      assertEquals("Backup esportato correttamente.", awaitItem().lastMessage)
+      assertEquals("backup-payload", output.toByteArray().decodeToString())
+      cancelAndIgnoreRemainingEvents()
+    }
+    coVerify(exactly = 1) { appBackupRepository.exportBackupTo(42L, any()) }
+    coVerify(exactly = 0) { appBackupRepository.exportBackup() }
+  }
+
+  @Test
+  fun importBackupOpensAndReadsSafOnlyInsideTheRepositoryOwnedCallback() = runTest {
+    val uri = mockk<Uri>()
+    val resolver = mockk<ContentResolver>()
+    val repositoryEntered = CompletableDeferred<Unit>()
+    val allowRead = CompletableDeferred<Unit>()
+    every { context.contentResolver } returns resolver
+    every { resolver.openInputStream(uri) } returns ByteArrayInputStream("backup-payload".encodeToByteArray())
+    coEvery { appBackupRepository.importBackupFrom(any(), any()) } coAnswers {
+      val read = secondArg<suspend () -> String>()
+      repositoryEntered.complete(Unit)
+      allowRead.await()
+      assertEquals("backup-payload", read())
+      Result.success(AppBackupImportSummary(settingsImported = true))
+    }
+    val vm = buildViewModel()
+
+    vm.state.test {
+      awaitItem()
+      vm.importBackup(uri, 42L)
+      repositoryEntered.await()
+      verify(exactly = 0) { resolver.openInputStream(any()) }
+      allowRead.complete(Unit)
+      assertTrue(awaitItem().lastMessage.orEmpty().isNotBlank())
+      cancelAndIgnoreRemainingEvents()
+    }
+    coVerify(exactly = 1) { appBackupRepository.importBackupFrom(42L, any()) }
+    coVerify(exactly = 0) { appBackupRepository.importBackup(any()) }
+  }
+
+  @Test
+  fun backupErrorsAreSanitizedAndNeverExposeProviderDetails() = runTest {
+    val uri = mockk<Uri>()
+    coEvery { appBackupRepository.exportBackupTo(any(), any()) } returns Result.failure(java.io.IOException("content://private/personal-data"))
+    coEvery { appBackupRepository.importBackupFrom(any(), any()) } throws java.io.IOException("private-payload-details")
+    val vm = buildViewModel()
+    vm.state.test {
+      awaitItem()
+      vm.exportBackup(uri, 42L)
+      assertEquals("Esportazione backup non riuscita.", awaitItem().lastMessage)
+      vm.importBackup(uri, 42L)
+      assertEquals("Importazione backup non riuscita.", awaitItem().lastMessage)
+      cancelAndIgnoreRemainingEvents()
+    }
+    verify(exactly = 0) { context.contentResolver }
+  }
+
+  @Test
+  fun backupCancellationDoesNotProduceAnErrorMessageOrOpenSaf() = runTest {
+    val uri = mockk<Uri>()
+    coEvery { appBackupRepository.exportBackupTo(any(), any()) } throws kotlinx.coroutines.CancellationException("cancelled")
+    coEvery { appBackupRepository.importBackupFrom(any(), any()) } returns Result.failure(kotlinx.coroutines.CancellationException("cancelled"))
+    val vm = buildViewModel()
+    vm.state.test {
+      awaitItem()
+      vm.exportBackup(uri, 42L)
+      vm.importBackup(uri, 42L)
+      testDispatcher.scheduler.advanceUntilIdle()
+      assertEquals(null, vm.state.value.lastMessage)
+      cancelAndIgnoreRemainingEvents()
+    }
+    verify(exactly = 0) { context.contentResolver }
+  }
+
+  @Test
+  fun backupPickerResultWithoutInMemoryOwnershipIsDiscardedAfterRecreation() = runTest {
+    val uri = mockk<Uri>()
+    val vm = buildViewModel()
+    vm.exportBackup(uri, null)
+    vm.importBackup(uri, null)
+    vm.exportBackup(null, 42L)
+    vm.importBackup(null, 42L)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    coVerify(exactly = 0) { appBackupRepository.exportBackupTo(any(), any()) }
+    coVerify(exactly = 0) { appBackupRepository.importBackupFrom(any(), any()) }
+    verify(exactly = 0) { context.contentResolver }
+  }
+
+  @Test
+  fun backupPickerResultPassesCapturedEpochWithoutAdoptingCurrentAccountEpoch() = runTest {
+    val uri = mockk<Uri>()
+    val vm = buildViewModel()
+    val session = dev.antigravity.classevivaexpressive.core.domain.model.UserSession(
+      "token", "student-a", "student", dev.antigravity.classevivaexpressive.core.domain.model.StudentProfile(id = "student-a"),
+    )
+    every { authRepository.session } returns MutableStateFlow(session)
+    every { authRepository.authenticationEpoch() } returns 42L
+    val pickerEpoch = vm.backupAuthenticationEpoch()
+    assertEquals(42L, pickerEpoch)
+    every { authRepository.authenticationEpoch() } returns 99L
+    coEvery { appBackupRepository.exportBackupTo(42L, any()) } returns Result.failure(IllegalStateException("stale"))
+    coEvery { appBackupRepository.importBackupFrom(42L, any()) } returns Result.failure(IllegalStateException("stale"))
+
+    vm.exportBackup(uri, pickerEpoch)
+    vm.importBackup(uri, pickerEpoch)
+    testDispatcher.scheduler.advanceUntilIdle()
+
+    coVerify(exactly = 1) { appBackupRepository.exportBackupTo(42L, any()) }
+    coVerify(exactly = 1) { appBackupRepository.importBackupFrom(42L, any()) }
+    coVerify(exactly = 0) { appBackupRepository.exportBackupTo(99L, any()) }
+    coVerify(exactly = 0) { appBackupRepository.importBackupFrom(99L, any()) }
+    verify(exactly = 0) { context.contentResolver }
   }
 
   // ─── Refresh ──────────────────────────────────────────────────────────────

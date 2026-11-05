@@ -14,6 +14,7 @@ import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -22,6 +23,25 @@ class PrivateSessionDataCleanerTest {
 
   @get:Rule
   val temporaryFolder = TemporaryFolder()
+
+  @Test
+  fun clear_attemptsRemainingCleanupAfterOnePermanentFailureAndSurfacesIt() = runTest {
+    val context = mockk<Context>()
+    val assets = mockk<PrivateAssetStore>(relaxed = true)
+    val attachments = mockk<AttachmentCacheDao>(relaxed = true)
+    val records = mockk<DownloadRecordDao>(relaxed = true)
+    val downloads = mockk<DownloadManager>(relaxed = true)
+    every { context.filesDir } returns temporaryFolder.newFolder("resilient-files")
+    every { context.getExternalFilesDir(any()) } returns temporaryFolder.newFolder("resilient-downloads")
+    every { assets.clearStudent("student-a") } throws java.io.IOException("storage unavailable")
+    coEvery { records.getByPrefix(any()) } returns emptyList()
+
+    val error = runCatching { PrivateSessionDataCleaner(context, assets, attachments, records, downloads).clear("student-a") }.exceptionOrNull()
+
+    assertEquals("storage unavailable", error?.message)
+    coVerify(exactly = 1) { attachments.deleteByPrefix("student-a::") }
+    coVerify(exactly = 1) { records.deleteByPrefix("student-a::") }
+  }
 
   @Test
   fun clear_removesOnlyTheRequestedAccountsFilesAndRows() = runTest {

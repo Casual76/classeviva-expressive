@@ -6,6 +6,10 @@
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+  <queries>
+    <package android:name="it.ipzs.cieid" />
+  </queries>
+
   <application
     android:name=".ClassevivaExpressiveApp"
     android:allowBackup="false"
@@ -31,6 +35,12 @@
         android:value="androidx.startup"
         tools:node="remove" />
     </provider>
+
+    <activity
+      android:name=".cie.CieLoginActivity"
+      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|uiMode"
+      android:exported="false"
+      android:windowSoftInputMode="adjustResize" />
 
     <activity
       android:name=".MainActivity"

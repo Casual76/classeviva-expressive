@@ -138,6 +138,10 @@ import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
 import dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCase
 import dev.antigravity.classevivaexpressive.core.network.client.ApiSessionManager
+import dev.antigravity.classevivaexpressive.core.data.sync.AccountWork
+import dev.antigravity.classevivaexpressive.core.data.sync.captureAccountWork
+import dev.antigravity.classevivaexpressive.core.data.sync.commitAccountWork
+import dev.antigravity.classevivaexpressive.core.data.sync.withAccountWork
 
 import dev.antigravity.classevivaexpressive.core.network.client.normalizeNoticeboardAttachmentUrl
 import dev.antigravity.classevivaexpressive.core.network.client.noticeboardAttachmentDownloadCandidates
@@ -172,26 +176,42 @@ class SchoolAuthRepository @Inject constructor(
   private val privateSessionDataCleaner: PrivateSessionDataCleaner,
 ) : AuthRepository {
   override val session: StateFlow<UserSession?> = sessionStore.session
+  override val authenticationState = sessionStore.authenticationState
+  override fun authenticationEpoch(): Long = sessionStore.captureAuthSnapshot().authenticationEpoch
 
   override suspend fun restore(): UserSession? {
-    val restored = apiSessionManager.restoreValidSession()
-    syncCoordinator.attachSession(restored)
-    return restored
+    apiSessionManager.restoreValidSession()
+    val captured = sessionStore.captureAuthSnapshot()
+    return sessionStore.accountGuard.withCurrentAccount(captured.lease, requireReady = false) {
+      sessionStore.readCurrentSession().also(syncCoordinator::attachSession)
+    }
   }
 
-  override suspend fun login(username: String, password: String): Result<UserSession> = runCatching {
-    syncCoordinator.login(username, password)
-  }.onFailure {
-    syncCoordinator.attachSession(null)
-    sessionStore.clear()
+  override suspend fun login(username: String, password: String): Result<UserSession> = authResult { syncCoordinator.login(username, password) }
+
+  override suspend fun loginWithCie(pa: String, portalCookieHeader: String, expectedEpoch: Long?): Result<UserSession> = authResult { syncCoordinator.loginWithCie(pa, portalCookieHeader, expectedEpoch) }
+
+  private suspend fun <T> authResult(block: suspend () -> T): Result<T> = try {
+    Result.success(block())
+  } catch (cancelled: kotlinx.coroutines.CancellationException) {
+    throw cancelled
+  } catch (error: Exception) {
+    Result.failure(error)
   }
 
   override suspend fun logout() {
-    val studentId = session.value?.studentId
-    syncCoordinator.attachSession(null)
-    sessionStore.clear()
-    privateSessionDataCleaner.clear(studentId)
-    syncCoordinator.clearPortalSession()
+    val requestedEpoch = sessionStore.captureAuthSnapshot().authenticationEpoch
+    withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
+      sessionStore.clearAndRunWithPrevious(expectedAuthenticationEpoch = requestedEpoch) { previous ->
+        syncCoordinator.attachSession(null)
+        syncCoordinator.clearPortalSession()
+        var failure: Exception? = null
+        try { syncCoordinator.clearAccountDerivedState() } catch (error: Exception) { failure = error }
+        try { privateSessionDataCleaner.clear(previous?.session?.studentId) }
+        catch (error: Exception) { if (failure == null) failure = error else failure?.addSuppressed(error) }
+        failure?.let { throw it }
+      }
+    }
   }
 }
 
@@ -397,8 +417,16 @@ class SchoolDataRepository @Inject constructor(
         combine(
           syncCoordinator.syncStatus,
           persistedStatus,
-        ) { runtime, persisted ->
-          runtime.withPersistedLastSuccess(persisted)
+          sessionStore.authenticationState,
+        ) { runtime, persisted, auth ->
+          val available = when (auth.rest) {
+            dev.antigravity.classevivaexpressive.core.domain.model.RestAuthenticationState.REAUTHENTICATION_REQUIRED ->
+              runtime.copy(state = dev.antigravity.classevivaexpressive.core.domain.model.SyncState.ERROR, message = "Accedi di nuovo per aggiornare. I dati salvati restano disponibili.")
+            dev.antigravity.classevivaexpressive.core.domain.model.RestAuthenticationState.STORAGE_UNAVAILABLE ->
+              runtime.copy(state = dev.antigravity.classevivaexpressive.core.domain.model.SyncState.ERROR, message = "L'accesso protetto non è disponibile. Riprova.")
+            else -> runtime
+          }
+          available.withPersistedLastSuccess(persisted)
         }
       }
     val academicFlow = combine(
@@ -482,13 +510,16 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun refreshDashboard(force: Boolean): Result<DashboardSnapshot> = runCatching {
+    val work = sessionStore.captureAccountWork()
+    withAccountWork(work) {
     syncCoordinator.refreshSections(
       force = force,
       sections = DashboardRefreshSections,
       refreshProfile = true,
     )
-    notifyExternalDashboardInvalidators()
-    observeDashboard().firstValue()
+      sessionStore.commitAccountWork(work) { notifyExternalDashboardInvalidators() }
+      observeDashboard().firstValue()
+    }
   }
 
   override fun observeGrades(): Flow<List<Grade>> {
@@ -570,7 +601,9 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun markGradeSeen(gradeId: String) {
-    val session = sessionStore.readCurrentSession() ?: return
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    sessionStore.commitAccountWork(work) {
+    val session = work.session
     seenGradeDao.upsert(
       SeenGradeEntity(
         id = "${session.studentId}::$gradeId",
@@ -581,10 +614,13 @@ class SchoolDataRepository @Inject constructor(
     )
     dismissGradeNotifications(context)
     notifyExternalDashboardInvalidators()
+    }
   }
 
   override suspend fun saveSubjectGoal(subject: String, periodCode: String?, targetAverage: Double) {
-    val session = sessionStore.readCurrentSession() ?: return
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    sessionStore.commitAccountWork(work) {
+    val session = work.session
     subjectGoalDao.upsert(
       SubjectGoalEntity(
         id = "${session.studentId}::$subject::${periodCode.orEmpty()}",
@@ -595,11 +631,15 @@ class SchoolDataRepository @Inject constructor(
         updatedAtEpochMillis = System.currentTimeMillis(),
       ),
     )
+    }
   }
 
   override suspend fun removeSubjectGoal(subject: String, periodCode: String?) {
-    val session = sessionStore.readCurrentSession() ?: return
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    sessionStore.commitAccountWork(work) {
+    val session = work.session
     subjectGoalDao.delete(session.studentId, subject, periodCode)
+    }
   }
 
   override fun observeStats(): Flow<StatsSnapshot> {
@@ -693,6 +733,8 @@ class SchoolDataRepository @Inject constructor(
   }.flowOn(Dispatchers.Default)
 
   override suspend fun addCustomEvent(event: CustomEvent) {
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    sessionStore.commitAccountWork(work) {
     val createdAt = event.createdAt ?: java.time.LocalDateTime.now().toString().take(16)
     customEventDao.upsert(
       CustomEventEntity(
@@ -703,15 +745,21 @@ class SchoolDataRepository @Inject constructor(
         createdAt = createdAt,
       ),
     )
+    }
   }
 
   override suspend fun removeCustomEvent(id: String) {
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    sessionStore.commitAccountWork(work) {
     customEventDao.deleteById(id)
+    }
   }
 
   override suspend fun setCategoryOverride(itemId: String, category: AgendaCategory) {
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    sessionStore.commitAccountWork(work) {
     require(category in UserSelectableAgendaCategories) { "Unsupported agenda category override: $category" }
-    val session = sessionStore.readCurrentSession() ?: return
+    val session = work.session
     val schoolYear = schoolYearStore.selectedSchoolYear()
     agendaCategoryOverrideDao.upsert(
       AgendaCategoryOverrideEntity(
@@ -722,6 +770,7 @@ class SchoolDataRepository @Inject constructor(
         updatedAtEpochMillis = System.currentTimeMillis(),
       ),
     )
+    }
   }
 
   override suspend fun refreshAgenda(force: Boolean): Result<List<AgendaItem>> = runCatching {
@@ -758,20 +807,27 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun saveSlotOverride(fingerprint: String, slot: TemplateSlot) {
-    timetableTemplateStore.writeOverride(schoolYearStore.currentSchoolYearRef().id, fingerprint, slot)
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    sessionStore.commitAccountWork(work) {
+      timetableTemplateStore.writeOverride(schoolYearStore.currentSchoolYearRef().id, fingerprint, slot)
+    }
   }
 
   override suspend fun deleteSlotOverride(fingerprint: String) {
-    timetableTemplateStore.deleteOverride(schoolYearStore.currentSchoolYearRef().id, fingerprint)
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    sessionStore.commitAccountWork(work) {
+      timetableTemplateStore.deleteOverride(schoolYearStore.currentSchoolYearRef().id, fingerprint)
+    }
   }
 
   override suspend fun regenerateTimetableTemplate(): Result<TimetableTemplate> = runCatching {
+    val work = sessionStore.captureAccountWork(allowOffline = true)
     val schoolYearId = schoolYearStore.currentSchoolYearRef().id
     val stored = timetableTemplateStore.observeTemplate(schoolYearId).firstValue()
     val lessons = observeLessons().firstValue()
     val computed = predictiveTimetableUseCase.generateTimetableTemplate(lessons)
     val merged = computed.copy(manualOverrides = stored.manualOverrides)
-    timetableTemplateStore.writeTemplate(schoolYearId, merged)
+    sessionStore.commitAccountWork(work) { timetableTemplateStore.writeTemplate(schoolYearId, merged) }
     merged.withOverridesApplied()
   }
 
@@ -852,20 +908,27 @@ class SchoolDataRepository @Inject constructor(
   }
 
   override suspend fun markAllAsRead(): Result<Unit> = runCatching {
-    if (sessionStore.session.value == null) return@runCatching
-    syncCoordinator.markAllCommunicationsReadRemotely().getOrThrow()
-    notifyExternalDashboardInvalidators()
+    val work = sessionStore.captureAccountWork()
+    withAccountWork(work) {
+      syncCoordinator.markAllCommunicationsReadRemotely().getOrThrow()
+      sessionStore.commitAccountWork(work) { notifyExternalDashboardInvalidators() }
+    }
   }
 
   override suspend fun markCommunicationRead(id: String): Result<Unit> = runCatching {
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    withAccountWork(work) {
     val entity = communicationDao.getById(id)
     if (entity != null && entity.pubId.isNotBlank() && entity.evtCode.isNotBlank()) {
       // Best-effort remote mark — markNoticeboardRead now swallows 400 (already read).
       runCatching { syncCoordinator.markCommunicationReadRemotely(id, entity.pubId, entity.evtCode) }
     }
     // Always persist locally regardless of remote outcome.
-    communicationDao.markRead(id)
-    notifyExternalDashboardInvalidators()
+    sessionStore.commitAccountWork(work) {
+      communicationDao.markRead(id)
+      notifyExternalDashboardInvalidators()
+    }
+    }
   }
 
   override suspend fun getCommunicationDetail(pubId: String, evtCode: String): Result<CommunicationDetail> {
@@ -883,76 +946,76 @@ class SchoolDataRepository @Inject constructor(
 
   override suspend fun resolveAttachmentLocalPath(attachment: RemoteAttachment): Result<String> = runCatching {
     require(!attachment.url.isNullOrBlank()) { "Nessun URL disponibile per l'allegato." }
-    val studentId = sessionStore.session.value?.studentId ?: error("Sessione assente.")
-    val originalUrl = attachment.url!!
-    val url = normalizeNoticeboardAttachmentUrl(originalUrl)
-    val urlKey = "$studentId::${url.trim()}".take(250)
-    val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000
-
-    val accountDirectory = privateAccountPathPart(studentId)
-    val cacheDir = java.io.File(context.filesDir, "attachment_cache/$accountDirectory")
-
-    // Return cached file if still valid.
-    val cached = attachmentCacheDao.getByUrlKey(urlKey)
-    if (cached != null) {
-      val file = java.io.File(cached.localPath)
-      if (file.exists() && System.currentTimeMillis() - cached.lastAccessedMs < thirtyDaysMs) {
-        attachmentCacheDao.upsert(cached.copy(lastAccessedMs = System.currentTimeMillis()))
-        cleanupExpiredAttachments(cacheDir, thirtyDaysMs)
-        return@runCatching cached.localPath
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    withContext(Dispatchers.IO) { withAccountWork(work) {
+      val studentId = work.session.studentId
+      val originalUrl = attachment.url!!
+      val url = normalizeNoticeboardAttachmentUrl(originalUrl)
+      val urlKey = "$studentId::${url.trim()}".take(250)
+      val thirtyDaysMs = 30L * 24 * 60 * 60 * 1000
+      val cacheDir = java.io.File(context.filesDir, "attachment_cache/${privateAccountPathPart(studentId)}")
+      val cached = attachmentCacheDao.getByUrlKey(urlKey)
+      if (cached != null) {
+        val file = java.io.File(cached.localPath)
+        val owned = file.canonicalFile.parentFile == cacheDir.canonicalFile
+        if (owned && file.exists() && System.currentTimeMillis() - cached.lastAccessedMs < thirtyDaysMs) {
+          return@withAccountWork sessionStore.commitAccountWork(work) {
+            attachmentCacheDao.upsert(cached.copy(lastAccessedMs = System.currentTimeMillis()))
+            cleanupExpiredAttachmentsAdmitted(work, cacheDir, thirtyDaysMs)
+            cached.localPath
+          }
+        }
+        sessionStore.commitAccountWork(work) {
+          if (owned) file.delete()
+          attachmentCacheDao.deleteByUrlKey(urlKey)
+        }
       }
-      // File missing or expired — evict and re-download.
-      runCatching { java.io.File(cached.localPath).delete() }
-      attachmentCacheDao.deleteByUrlKey(urlKey)
-    }
-
-    // Download with auth headers via the RestClient. Older cached noticeboard URLs used /101;
-    // attachments download from the one-based file index instead.
-    var downloadedFromUrl = url
-    var lastFailure: Throwable? = null
-    var bytes: ByteArray? = null
-    for (candidateUrl in noticeboardAttachmentDownloadCandidates(originalUrl)) {
-      try {
-        bytes = syncCoordinator.downloadAttachmentBytes(candidateUrl)
-        downloadedFromUrl = candidateUrl
-        break
-      } catch (error: Throwable) {
-        lastFailure = error
+      var downloadedFromUrl = url
+      var lastFailure: Throwable? = null
+      var bytes: ByteArray? = null
+      for (candidateUrl in noticeboardAttachmentDownloadCandidates(originalUrl)) {
+        try {
+          bytes = syncCoordinator.downloadAttachmentBytes(candidateUrl)
+          downloadedFromUrl = candidateUrl
+          break
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+          throw cancelled
+        } catch (error: Exception) {
+          lastFailure = error
+        }
       }
-    }
-    val resolvedBytes = bytes ?: throw lastFailure ?: IllegalStateException("Download allegato non riuscito.")
-    val safeBase = sanitizeFileName(attachment.name.ifBlank { "allegato" })
-    val hashSuffix = url.hashCode().let { if (it < 0) "m${-it}" else "$it" }
-    val fileName = run {
+      val resolvedBytes = bytes ?: throw lastFailure ?: IllegalStateException("Download allegato non riuscito.")
+      val safeBase = sanitizeFileName(attachment.name.ifBlank { "allegato" })
+      val hashSuffix = url.hashCode().let { if (it < 0) "m${-it}" else "$it" }
       val dot = safeBase.lastIndexOf('.')
-      if (dot > 0) "${safeBase.substring(0, dot)}_$hashSuffix${safeBase.substring(dot)}"
-      else "${safeBase}_$hashSuffix"
-    }
-    cacheDir.mkdirs()
-    val file = java.io.File(cacheDir, fileName)
-    file.writeBytes(resolvedBytes)
-
-    val now = System.currentTimeMillis()
-    attachmentCacheDao.upsert(
-      AttachmentCacheEntity(
-        urlKey = urlKey,
-        sourceUrl = downloadedFromUrl,
-        localPath = file.absolutePath,
-        fileName = fileName,
-        mimeType = attachment.mimeType,
-        downloadedAtMs = now,
-        lastAccessedMs = now,
-      )
-    )
-    cleanupExpiredAttachments(cacheDir, thirtyDaysMs)
-    file.absolutePath
+      val fileName = if (dot > 0) "${safeBase.substring(0, dot)}_$hashSuffix${safeBase.substring(dot)}" else "${safeBase}_$hashSuffix"
+      sessionStore.commitAccountWork(work) {
+        cacheDir.mkdirs()
+        val file = java.io.File(cacheDir, fileName)
+        try {
+          file.writeBytes(resolvedBytes)
+          val now = System.currentTimeMillis()
+          attachmentCacheDao.upsert(AttachmentCacheEntity(
+            urlKey = urlKey, sourceUrl = downloadedFromUrl, localPath = file.absolutePath,
+            fileName = fileName, mimeType = attachment.mimeType, downloadedAtMs = now, lastAccessedMs = now,
+          ))
+          cleanupExpiredAttachmentsAdmitted(work, cacheDir, thirtyDaysMs)
+          file.absolutePath
+        } catch (error: Throwable) {
+          file.delete()
+          throw error
+        }
+      }
+    } }
   }
 
-  private suspend fun cleanupExpiredAttachments(cacheDir: java.io.File, thirtyDaysMs: Long) {
+  /** Called only while the account admission is held; never remove a different account's rows. */
+  private suspend fun cleanupExpiredAttachmentsAdmitted(work: AccountWork, cacheDir: java.io.File, thirtyDaysMs: Long) {
     val cutoff = System.currentTimeMillis() - thirtyDaysMs
-    val expired = attachmentCacheDao.getExpiredBefore(cutoff)
-    for (entry in expired) {
-      runCatching { java.io.File(entry.localPath).delete() }
+    val prefix = "${work.session.studentId}::"
+    for (entry in attachmentCacheDao.getExpiredBefore(cutoff).filter { it.urlKey.startsWith(prefix) }) {
+      val file = java.io.File(entry.localPath)
+      if (file.canonicalFile.parentFile == cacheDir.canonicalFile) file.delete()
       attachmentCacheDao.deleteByUrlKey(entry.urlKey)
     }
   }
@@ -1140,13 +1203,23 @@ class SchoolDataRepository @Inject constructor(
   override fun observeAvailableSchoolYears(): Flow<List<SchoolYearRef>> = schoolYearStore.observeAvailableSchoolYears()
   override fun observeFallbackEvents(): Flow<SchoolYearFallbackEvent> = schoolYearStore.observeFallbackEvents()
   override suspend fun selectSchoolYear(year: SchoolYearRef) {
-    schoolYearStore.selectSchoolYear(year)
-    syncCoordinator.refreshAll(force = true)
-    notifyExternalDashboardInvalidators()
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    withAccountWork(work) {
+      sessionStore.commitAccountWork(work) { schoolYearStore.selectSchoolYear(year) }
+      try { syncCoordinator.refreshAll(force = true) }
+      catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+      catch (_: Exception) { /* Cached years remain selectable while reauthentication is needed. */ }
+      sessionStore.commitAccountWork(work) { notifyExternalDashboardInvalidators() }
+    }
   }
-  override suspend fun selectAutomaticFallback(requested: SchoolYearRef): SchoolYearFallbackEvent? =
-    schoolYearStore.selectAutomaticFallback(requested)
-  override suspend fun acknowledgeFallbackEvent(id: String) = schoolYearStore.acknowledgeFallbackEvent(id)
+  override suspend fun selectAutomaticFallback(requested: SchoolYearRef): SchoolYearFallbackEvent? {
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    return sessionStore.commitAccountWork(work) { schoolYearStore.selectAutomaticFallback(requested) }
+  }
+  override suspend fun acknowledgeFallbackEvent(id: String) {
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    sessionStore.commitAccountWork(work) { schoolYearStore.acknowledgeFallbackEvent(id) }
+  }
 
   override fun observeCurrentScore(): Flow<StudentScoreSnapshot?> {
     return combine(observeStats(), observeAbsences(), studentScoreDao.observeLatest()) { stats, absences, cached ->
@@ -1159,11 +1232,16 @@ class SchoolDataRepository @Inject constructor(
   }.flowOn(Dispatchers.Default)
 
   override suspend fun refreshStudentScore(force: Boolean): Result<StudentScoreSnapshot> = runCatching {
+    val work = sessionStore.captureAccountWork()
+    withAccountWork(work) {
     syncCoordinator.refreshSections(force = force, sections = StudentScoreRefreshSections)
     val snapshot = computeStudentScore(observeStats().firstValue(), observeAbsences().firstValue())
     val id = "score-${snapshot.computedAtEpochMillis}"
-    studentScoreDao.upsert(StudentScoreSnapshotEntity(id, json.encodeToString(snapshot), snapshot.computedAtEpochMillis))
+    sessionStore.commitAccountWork(work) {
+      studentScoreDao.upsert(StudentScoreSnapshotEntity(id, json.encodeToString(snapshot), snapshot.computedAtEpochMillis))
+    }
     snapshot
+    }
   }
 
   override suspend fun exportCurrentPayload(): Result<String> = runCatching {
@@ -1181,7 +1259,9 @@ class SchoolDataRepository @Inject constructor(
   }
 
   private suspend fun queueDownloadInternal(url: String, title: String, mimeType: String?): Long {
-    val studentId = sessionStore.session.value?.studentId ?: error("Sessione assente.")
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    return withContext(Dispatchers.IO) { sessionStore.commitAccountWork(work) {
+    val studentId = work.session.studentId
     val accountDirectory = privateAccountPathPart(studentId)
     val request = DownloadManager.Request(url.toUri())
       .setTitle(title)
@@ -1193,7 +1273,7 @@ class SchoolDataRepository @Inject constructor(
         "$accountDirectory/${sanitizeFileName(title)}",
       )
     val downloadId = downloadManager.enqueue(request)
-    downloadRecordDao.upsert(
+    try { downloadRecordDao.upsert(
       DownloadRecordEntity(
         id = "$studentId::$downloadId",
         sourceUrl = url,
@@ -1203,7 +1283,12 @@ class SchoolDataRepository @Inject constructor(
         updatedAtEpochMillis = System.currentTimeMillis(),
       ),
     )
-    return downloadId
+    } catch (error: Throwable) {
+      downloadManager.remove(downloadId)
+      throw error
+    }
+    downloadId
+    } }
   }
 
   private inline fun <reified T> observeGlobalValue(key: String, default: T): Flow<T> {

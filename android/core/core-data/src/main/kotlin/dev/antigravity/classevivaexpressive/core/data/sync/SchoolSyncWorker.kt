@@ -35,6 +35,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
 import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.CancellationException
 
 private const val ConsecutiveFailuresKey = "consecutive_failures"
 private const val MaintenanceIntervalMillis: Long = 24L * 60L * 60L * 1000L
@@ -56,49 +57,52 @@ class SchoolSyncWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, workerParams) {
 
   override suspend fun doWork(): Result {
-    val session = sessionStore.readCurrentSession() ?: return Result.success()
-    val settings = settingsStore.settings.first()
-    if (!settings.periodicSyncEnabled) {
-      SyncWorkScheduler.cancel(applicationContext)
-      return Result.success()
-    }
-
-    val before = capturePayloads(session.studentId)
+    val work = runCatching { sessionStore.captureAccountWork() }.getOrNull() ?: return Result.success()
     var consecutiveFailures = inputData.getInt(ConsecutiveFailuresKey, 0)
-    runCatching {
-      syncCoordinator.attachSession(session)
-      val fastSections = BackgroundSyncPolicy.fastSections(settings.notificationPreferences)
-      if (fastSections.isNotEmpty()) {
-        val status = syncCoordinator.refreshCurrentSchoolYearForNotifications(
-          force = true,
-          sections = fastSections,
-          mode = BackgroundSyncMode.FAST,
-        )
-        consecutiveFailures = status.nextFastFailureCount(consecutiveFailures, fastSections)
-        if (status.canDispatchNotifications()) {
-          notificationDispatcher.dispatch(previous = before, current = capturePayloads(session.studentId))
+    try {
+      withAccountWork(work) {
+        val settings = settingsStore.settings.first()
+        if (!settings.periodicSyncEnabled) {
+          sessionStore.commitAccountWork(work) { SyncWorkScheduler.cancel(applicationContext) }
+          return@withAccountWork
         }
-      } else {
-        consecutiveFailures = 0
+        val before = capturePayloads(work.session.studentId)
+        val fastSections = BackgroundSyncPolicy.fastSections(settings.notificationPreferences)
+        if (fastSections.isNotEmpty()) {
+          val status = syncCoordinator.refreshCurrentSchoolYearForNotifications(
+            force = true, sections = fastSections, mode = BackgroundSyncMode.FAST,
+          )
+          consecutiveFailures = status.nextFastFailureCount(consecutiveFailures, fastSections)
+          if (status.canDispatchNotifications()) {
+            val current = capturePayloads(work.session.studentId)
+            sessionStore.commitAccountWork(work) {
+              notificationDispatcher.dispatch(previous = before, current = current)
+            }
+          }
+        } else consecutiveFailures = 0
+        if (maintenanceDue(work.session.studentId)) {
+          val maintenanceSections = BackgroundSyncPolicy.maintenanceSections()
+          val status = syncCoordinator.refreshCurrentSchoolYearMaintenance(force = true)
+          if (status.shouldAdvanceMaintenanceWindow(maintenanceSections)) markMaintenanceCompleted(work)
+          if (status.state == SyncState.IDLE) regenerateTemplateIfStale()
+        }
       }
-
-      if (maintenanceDue(session.studentId)) {
-        val maintenanceSections = BackgroundSyncPolicy.maintenanceSections()
-        val status = syncCoordinator.refreshCurrentSchoolYearMaintenance(force = true)
-        if (status.shouldAdvanceMaintenanceWindow(maintenanceSections)) {
-          markMaintenanceCompleted(session.studentId)
-        }
-        if (status.state == SyncState.IDLE) {
-          // Rigenera il template orario al massimo una volta ogni 24h, in background.
-          runCatching { regenerateTemplateIfStale() }
-        }
-      }
-    }.onFailure {
+    } catch (cancelled: CancellationException) {
+      throw cancelled
+    } catch (_: Exception) {
       consecutiveFailures += 1
     }
-    notifyExternalDashboardInvalidators()
-    if (settingsStore.settings.first().periodicSyncEnabled) {
-      SyncWorkScheduler.scheduleNext(applicationContext, consecutiveFailures)
+    // Reads may suspend; admission is checked again when each external effect is actually made.
+    try {
+      sessionStore.commitAccountWork(work) { notifyExternalDashboardInvalidators() }
+      val enabled = settingsStore.settings.first().periodicSyncEnabled
+      if (enabled) sessionStore.commitAccountWork(work) {
+        SyncWorkScheduler.scheduleNext(applicationContext, consecutiveFailures)
+      }
+    } catch (cancelled: CancellationException) {
+      throw cancelled
+    } catch (_: Exception) {
+      // Logout, terminal authentication rejection, or a newer account owns these effects now.
     }
     return Result.success()
   }
@@ -110,15 +114,16 @@ class SchoolSyncWorker @AssistedInject constructor(
     return System.currentTimeMillis() - lastCompletedAt > MaintenanceIntervalMillis
   }
 
-  private suspend fun markMaintenanceCompleted(studentId: String) {
+  private suspend fun markMaintenanceCompleted(work: AccountWork) {
+    val studentId = work.session.studentId
     val currentYear = schoolYearStore.currentSchoolYearRef()
-    snapshotCacheDao.upsert(
+    sessionStore.commitAccountWork(work) { snapshotCacheDao.upsert(
       SnapshotCacheEntity(
         cacheKey = maintenanceCacheKey(studentId, currentYear.id),
         payload = "{}",
         updatedAtEpochMillis = System.currentTimeMillis(),
       ),
-    )
+    ) }
   }
 
   private suspend fun regenerateTemplateIfStale() {

@@ -114,6 +114,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearReposito
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.ThemeMode
 import dev.antigravity.classevivaexpressive.core.domain.model.UserSession
+import dev.antigravity.classevivaexpressive.core.domain.model.AuthenticationState
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -379,7 +380,17 @@ class SettingsViewModel @Inject constructor(
   }
 
   fun logout() {
-    viewModelScope.launch { authRepository.logout() }
+    viewModelScope.launch {
+      try {
+        authRepository.logout()
+      } catch (cancelled: CancellationException) {
+        throw cancelled
+      } catch (_: Exception) {
+        lastMessage.value = if (authRepository.session.value == null)
+          "Sei uscito dall’account. La pulizia dei dati locali non è stata completata."
+        else "Non è stato possibile salvare l’uscita dall’account. Riprova."
+      }
+    }
   }
 
   fun selectSchoolYear(year: SchoolYearRef) {
@@ -411,46 +422,45 @@ class SettingsViewModel @Inject constructor(
     return "classeviva-expressive-backup-$timestamp.json"
   }
 
-  fun exportBackup(uri: Uri) {
+  fun backupAuthenticationEpoch(): Long? = authRepository.session.value?.let { authRepository.authenticationEpoch() }
+
+  fun exportBackup(uri: Uri?, expectedAuthenticationEpoch: Long?) {
+    if (uri == null || expectedAuthenticationEpoch == null) return
     viewModelScope.launch {
-      appBackupRepository.exportBackup()
-        .onSuccess { payload ->
-          runCatching {
-            withContext(Dispatchers.IO) {
-              applicationContext.contentResolver.openOutputStream(uri)?.use { stream ->
-                stream.write(payload.encodeToByteArray())
-              } ?: error("Impossibile aprire il file di destinazione.")
-            }
-          }.onSuccess {
-            lastMessage.value = "Backup esportato correttamente."
-          }.onFailure {
-            lastMessage.value = it.message ?: "Esportazione backup non riuscita."
+      try {
+        appBackupRepository.exportBackupTo(expectedAuthenticationEpoch) { payload ->
+          withContext(Dispatchers.IO) {
+            applicationContext.contentResolver.openOutputStream(uri)?.use { stream ->
+              stream.write(payload.encodeToByteArray())
+            } ?: error("Impossibile aprire il file di destinazione.")
           }
-        }
-        .onFailure {
-          lastMessage.value = it.message ?: "Creazione backup non riuscita."
-        }
+        }.getOrThrow()
+        lastMessage.value = "Backup esportato correttamente."
+      } catch (cancelled: CancellationException) {
+        throw cancelled
+      } catch (_: Exception) {
+        lastMessage.value = "Esportazione backup non riuscita."
+      }
     }
   }
 
-  fun importBackup(uri: Uri) {
+  fun importBackup(uri: Uri?, expectedAuthenticationEpoch: Long?) {
+    if (uri == null || expectedAuthenticationEpoch == null) return
     viewModelScope.launch {
-      val payload = runCatching {
-        withContext(Dispatchers.IO) {
-          applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
-            stream.readBytes().decodeToString()
-          } ?: error("Impossibile aprire il file selezionato.")
-        }
-      }.getOrElse {
-        lastMessage.value = it.message ?: "Lettura backup non riuscita."
-        return@launch
+      try {
+        val summary = appBackupRepository.importBackupFrom(expectedAuthenticationEpoch) {
+          withContext(Dispatchers.IO) {
+            applicationContext.contentResolver.openInputStream(uri)?.use { stream ->
+              stream.readBytes().decodeToString()
+            } ?: error("Impossibile aprire il file selezionato.")
+          }
+        }.getOrThrow()
+        lastMessage.value = summary.describe()
+      } catch (cancelled: CancellationException) {
+        throw cancelled
+      } catch (_: Exception) {
+        lastMessage.value = "Importazione backup non riuscita."
       }
-
-      appBackupRepository.importBackup(payload)
-        .onSuccess { summary -> lastMessage.value = summary.describe() }
-        .onFailure {
-          lastMessage.value = it.message ?: "Importazione backup non riuscita."
-        }
     }
   }
 }
@@ -465,6 +475,11 @@ fun SettingsRoute(
   onSkipUpdate: (String) -> Unit = {},
   onOpenAssistantConsent: () -> Unit = {},
   onOpenAssistantHistory: (() -> Unit)? = null,
+  authentication: AuthenticationState = AuthenticationState(),
+  authenticating: Boolean = false,
+  onReauthenticate: () -> Unit = {},
+  onCieLogin: () -> Unit = {},
+  onLogout: (() -> Unit)? = null,
   viewModel: SettingsViewModel = hiltViewModel(),
   assistantViewModel: AssistantSettingsViewModel = hiltViewModel(),
 ) {
@@ -492,14 +507,14 @@ fun SettingsRoute(
     FluidAlert(
       onDismissRequest = { confirmLogout = false },
       title = "Disconnettere questo dispositivo?",
-      message = "I dati scaricati su questo dispositivo vengono cancellati, e per rientrare serviranno di nuovo codice utente e password.",
+      message = "I dati scaricati, gli eventi personali, l’analisi studente e l’orario personalizzato su questo dispositivo vengono cancellati. Puoi conservarli prima in un backup. Per rientrare servirà un nuovo accesso con le credenziali o la CIE.",
       actions = listOf(
         FluidAlertAction("Annulla", { confirmLogout = false }),
         FluidAlertAction(
           "Disconnetti",
           {
             confirmLogout = false
-            viewModel.logout()
+            onLogout?.invoke() ?: viewModel.logout()
           },
           FluidAlertAction.Emphasis.Destructive,
         ),
@@ -509,11 +524,21 @@ fun SettingsRoute(
   val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
     viewModel.refresh()
   }
+  // In-memory ownership is deliberately discarded on recreation/process death. A pending result
+  // must never infer its owner from the account that happens to be active when SAF returns.
+  var pendingExportEpoch by remember { mutableStateOf<Long?>(null) }
+  var pendingImportEpoch by remember { mutableStateOf<Long?>(null) }
   val exportBackupLauncher = rememberLauncherForActivityResult(
     ActivityResultContracts.CreateDocument("application/json"),
-  ) { uri -> uri?.let(viewModel::exportBackup) }
+  ) { uri ->
+    val expectedEpoch = pendingExportEpoch
+    pendingExportEpoch = null
+    viewModel.exportBackup(uri, expectedEpoch)
+  }
   val importBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-    uri?.let(viewModel::importBackup)
+    val expectedEpoch = pendingImportEpoch
+    pendingImportEpoch = null
+    viewModel.importBackup(uri, expectedEpoch)
   }
   val navigateBack: () -> Unit = {
     if (section != null) {
@@ -609,8 +634,15 @@ fun SettingsRoute(
           )
         }
         item {
-          FluidSectionHeader(title = "Anno scolastico")
+          AccountAccessActions(
+            method = state.session?.authMethod ?: dev.antigravity.classevivaexpressive.core.domain.model.AuthMethod.PASSWORD,
+            authentication = authentication,
+            busy = authenticating,
+            onCredentials = onReauthenticate,
+            onCie = onCieLogin,
+          )
         }
+        item { FluidSectionHeader(title = "Anno scolastico") }
         item {
           // Gli anni si escludono a vicenda: e' un controllo segmentato, non una nuvola di filtri.
           FluidSegmentedControl(
@@ -795,7 +827,12 @@ fun SettingsRoute(
         item {
           FluidButton(
             text = "Esporta backup",
-            onClick = { exportBackupLauncher.launch(viewModel.backupFileName()) },
+            onClick = {
+              if (pendingExportEpoch == null) viewModel.backupAuthenticationEpoch()?.let { epoch ->
+                pendingExportEpoch = epoch
+                exportBackupLauncher.launch(viewModel.backupFileName())
+              }
+            },
             style = FluidButtonStyle.Tinted,
             fillWidth = true,
             leading = { Icon(Icons.Rounded.FileDownload, contentDescription = null) },
@@ -804,7 +841,12 @@ fun SettingsRoute(
         item {
           FluidButton(
             text = "Importa backup",
-            onClick = { importBackupLauncher.launch(arrayOf("application/json", "text/*", "*/*")) },
+            onClick = {
+              if (pendingImportEpoch == null) viewModel.backupAuthenticationEpoch()?.let { epoch ->
+                pendingImportEpoch = epoch
+                importBackupLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+              }
+            },
             style = FluidButtonStyle.Filled,
             fillWidth = true,
             leading = { Icon(Icons.Rounded.FileUpload, contentDescription = null) },
@@ -842,6 +884,8 @@ fun SettingsRoute(
         // la OFL di Inter chiedono che l'avviso viaggi con la distribuzione: un file di licenza in
         // un repository non e' la distribuzione. L'elenco vive nell'engine, quindi non puo' restare
         // indietro qui mentre e' aggiornato altrove.
+        item { FluidSectionHeader(title = "Ringraziamenti") }
+        item { CieContributionCredit() }
         fluidLicensesSection()
       }
 

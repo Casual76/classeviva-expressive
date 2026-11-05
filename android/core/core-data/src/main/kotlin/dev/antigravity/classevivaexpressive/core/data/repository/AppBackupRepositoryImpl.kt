@@ -1,5 +1,10 @@
 package dev.antigravity.classevivaexpressive.core.data.repository
 
+import dev.antigravity.classevivaexpressive.core.datastore.SessionStore
+import dev.antigravity.classevivaexpressive.core.data.sync.captureAccountWork
+import dev.antigravity.classevivaexpressive.core.data.sync.commitAccountWork
+import dev.antigravity.classevivaexpressive.core.data.sync.withAccountWork
+
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -29,6 +34,11 @@ import dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRef
 import dev.antigravity.classevivaexpressive.core.domain.model.TimetableTemplate
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -148,19 +158,53 @@ class DefaultAppBackupRepository @Inject constructor(
   private val changeHistoryDao: ChangeHistoryDao,
   private val snapshotCacheDao: SnapshotCacheDao,
   private val transactionRunner: BackupTransactionRunner,
+  private val sessionStore: SessionStore,
 ) : AppBackupRepository {
 
-  /**
-   * Il backup, come stringa.
-   *
-   * Il payload si costruisce intero in memoria. Con due anni di voti sono qualche centinaio di
-   * kilobyte e non e' un problema; se un giorno qualcuno arrivasse a qualche megabyte la risposta e'
-   * `Json.encodeToStream` sull'`OutputStream` che la schermata ha gia' in mano — ed e' **questa
-   * firma** a dover cambiare, non il resto.
-   */
-  override suspend fun exportBackup(): Result<String> = runCatching {
+  override suspend fun exportBackupTo(expectedAuthenticationEpoch: Long, write: suspend (String) -> Unit): Result<Unit> = backupResult("Esportazione backup non riuscita.") {
+    val work = sessionStore.captureAccountWork(allowOffline = true, expectedAuthenticationEpoch = expectedAuthenticationEpoch)
+    withContext(Dispatchers.IO) { withAccountWork(work) {
+      // Reads may suspend without holding up logout. An obsolete payload can never reach SAF.
+      val payload = createPayload()
+      sessionStore.commitAccountWork(work) { write(payload) }
+    } }
+  }
+
+  override suspend fun importBackupFrom(expectedAuthenticationEpoch: Long, read: suspend () -> String): Result<AppBackupImportSummary> = importBackupFromOwned(expectedAuthenticationEpoch, read)
+
+  private suspend fun importBackupFromOwned(expectedAuthenticationEpoch: Long?, read: suspend () -> String): Result<AppBackupImportSummary> = backupResult("Importazione backup non riuscita.") {
+    val work = sessionStore.captureAccountWork(allowOffline = true, expectedAuthenticationEpoch = expectedAuthenticationEpoch)
+    withContext(Dispatchers.IO) { withAccountWork(work) {
+      val payload = read()
+      currentCoroutineContext().ensureActive()
+      val backup = json.decodeFromString<AppBackupPayload>(payload)
+      if (backup.version !in 1..BackupVersion) throw UnsupportedBackupVersionException()
+      sessionStore.commitAccountWork(work) { applyBackup(backup) }
+    } }
+  }
+
+  override suspend fun exportBackup(): Result<String> = backupResult("Creazione backup non riuscita.") {
+    val work = sessionStore.captureAccountWork(allowOffline = true)
+    withContext(Dispatchers.IO) { sessionStore.commitAccountWork(work) { createPayload() } }
+  }
+
+  override suspend fun importBackup(payload: String): Result<AppBackupImportSummary> = importBackupFromOwned(null) { payload }
+
+  private suspend fun <T> backupResult(message: String, block: suspend () -> T): Result<T> = try {
+    Result.success(block())
+  } catch (cancelled: CancellationException) {
+    throw cancelled
+  } catch (unsupported: UnsupportedBackupVersionException) {
+    Result.failure(unsupported)
+  } catch (_: Exception) {
+    Result.failure(IllegalStateException(message))
+  }
+
+  private class UnsupportedBackupVersionException : IllegalArgumentException("Backup creato con una versione non supportata.")
+
+  private suspend fun createPayload(): String {
     val grades = gradeDao.getAll()
-    json.encodeToString(
+    return json.encodeToString(
       AppBackupPayload(
         exportedAtEpochMillis = System.currentTimeMillis(),
         settings = settingsStore.readSettings(),
@@ -183,10 +227,7 @@ class DefaultAppBackupRepository @Inject constructor(
     )
   }
 
-  override suspend fun importBackup(payload: String): Result<AppBackupImportSummary> = runCatching {
-    val backup = json.decodeFromString<AppBackupPayload>(payload)
-    require(backup.version in 1..BackupVersion) { "Backup creato con una versione non supportata." }
-
+  private suspend fun applyBackup(backup: AppBackupPayload): AppBackupImportSummary {
     // DataStore prima, e fuori dalla transazione: Room non lo sa annullare, e fingere che tutto sia
     // atomico sarebbe peggio che dirlo. Sono scritture idempotenti, quindi un secondo tentativo dopo
     // un errore piu' avanti non fa danni.
@@ -211,7 +252,7 @@ class DefaultAppBackupRepository @Inject constructor(
     }
 
     val ownerStudentId = backup.exportedByStudentId
-    AppBackupImportSummary(
+    return AppBackupImportSummary(
       settingsImported = true,
       timetableTemplates = backup.timetableTemplates.size,
       customEvents = backup.customEvents.size,

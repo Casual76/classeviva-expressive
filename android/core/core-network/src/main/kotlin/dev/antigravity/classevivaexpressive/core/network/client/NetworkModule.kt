@@ -7,8 +7,11 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.antigravity.classevivaexpressive.core.datastore.SessionStorage
+import dev.antigravity.classevivaexpressive.core.datastore.AccountSessionLease
 import dev.antigravity.classevivaexpressive.core.datastore.SettingsStore
 import dev.antigravity.classevivaexpressive.core.network.BuildConfig
+import dev.antigravity.classevivaexpressive.core.domain.model.RestAuthenticationState
+import java.io.IOException
 import javax.inject.Named
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
@@ -28,6 +31,22 @@ import retrofit2.converter.gson.GsonConverterFactory
 private const val GatewayFallbackBaseUrl = "http://127.0.0.1/"
 const val DevApiKey = "Tg1NWEwNGIgIC0K"
 const val UserAgent = "CVVS/std/4.1.7 Android/10"
+
+internal data class RestRequestAccount(val lease: AccountSessionLease)
+
+/** Bind before OkHttp's BridgeInterceptor, which restores the user request on its response. */
+internal class RestAccountInterceptor(
+  private val sessionStore: SessionStorage,
+  private val originPolicy: RestOriginPolicy = OfficialRestOriginPolicy,
+) : Interceptor {
+  override fun intercept(chain: Interceptor.Chain): Response {
+    val request = chain.request()
+    if (!originPolicy.allows(request.url) || request.header(SkipAuthHeader) == "true") return chain.proceed(request)
+    val account = request.tag(RestRequestAccount::class.java)
+      ?: RestRequestAccount(expectedAccountLease() ?: sessionStore.captureAuthSnapshot().lease)
+    return chain.proceed(request.newBuilder().tag(RestRequestAccount::class.java, account).build())
+  }
+}
 
 internal class ClassevivaHeadersInterceptor(
   private val originPolicy: RestOriginPolicy = OfficialRestOriginPolicy,
@@ -70,9 +89,22 @@ internal class AuthTokenInterceptor(
       return chain.proceed(original)
     }
 
-    val token = sessionStore.readCurrentSession()?.token
+    val capture = sessionStore.captureAuthSnapshot()
+    val snapshot = capture.snapshot
+    val session = snapshot?.session
+    if (session == null || snapshot.authenticationState.rest != RestAuthenticationState.READY) {
+      throw IOException("Accesso da rinnovare prima di aggiornare i dati.")
+    }
+    val account = original.tag(RestRequestAccount::class.java)
+      ?: throw IOException("Contesto dell'accesso assente.")
+    if (!sessionStore.accountGuard.isCurrent(account.lease)) throw IOException("La sessione è cambiata.")
+    val studentIndex = original.url.pathSegments.indexOf("students")
+    if (studentIndex >= 0 && original.url.pathSegments.getOrNull(studentIndex + 1) != session.studentId) {
+      throw IOException("Richiesta relativa a un'altra sessione.")
+    }
     val request = original.newBuilder().apply {
-      token?.takeIf(String::isNotBlank)?.let { header("Z-Auth-Token", it) }
+      header("Z-Auth-Token", session.token)
+      tag(RestRequestAccount::class.java, account)
     }.build()
     return chain.proceed(request)
   }
@@ -117,9 +149,12 @@ internal class SessionAuthenticator(
     if (!originPolicy.allows(response.request.url)) return null
     if (response.request.header(SkipRefreshHeader) == "true") return null
     if (responseCount(response) >= 2) return null
+    val account = response.request.tag(RestRequestAccount::class.java) ?: return null
+    if (!apiSessionManager.isCurrentAccount(account.lease)) return null
 
     val failedToken = response.request.header("Z-Auth-Token")
     val refreshedToken = apiSessionManager.refreshTokenBlocking(failedToken = failedToken) ?: return null
+    if (!apiSessionManager.isCurrentAccount(account.lease)) return null
     if (refreshedToken == failedToken) return null
 
     return response.request.newBuilder()
@@ -157,11 +192,8 @@ object NetworkModule {
   @Singleton
   fun provideLoggingInterceptor(): HttpLoggingInterceptor {
     return HttpLoggingInterceptor().apply {
-      level = if (BuildConfig.DEBUG) {
-        HttpLoggingInterceptor.Level.BASIC
-      } else {
-        HttpLoggingInterceptor.Level.NONE
-      }
+      // Even BASIC includes account IDs in authenticated URL paths.
+      level = HttpLoggingInterceptor.Level.NONE
     }
   }
 
@@ -195,6 +227,9 @@ object NetworkModule {
     headersInterceptor: Interceptor,
   ): OkHttpClient {
     return OkHttpClient.Builder()
+      // 307/308 can forward a POST body, even when a network interceptor strips its headers.
+      .followRedirects(false)
+      .followSslRedirects(false)
       .addNetworkInterceptor(headersInterceptor)
       .addInterceptor(loggingInterceptor)
       .build()
@@ -208,8 +243,10 @@ object NetworkModule {
     headersInterceptor: Interceptor,
     @Named("authTokenInterceptor") authTokenInterceptor: Interceptor,
     authenticator: Authenticator,
+    sessionStore: SessionStorage,
   ): OkHttpClient {
     return OkHttpClient.Builder()
+      .addInterceptor(RestAccountInterceptor(sessionStore))
       // Network interceptors are re-applied to redirects, preventing custom credentials
       // from following an official response to a different origin.
       .addNetworkInterceptor(authTokenInterceptor)
@@ -257,7 +294,7 @@ object NetworkModule {
   ): Retrofit {
     return Retrofit.Builder()
       .baseUrl(ClassevivaRestBaseUrl)
-      .client(client)
+      .callFactory(ExpectedAccountCallFactory(client))
       .addConverterFactory(GsonConverterFactory.create(gson))
       .build()
   }

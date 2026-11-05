@@ -32,7 +32,7 @@ internal fun logHomeworksIndexAttempt(route: String, code: Int, contentType: Str
  */
 internal fun logHomeworksIndexFailure(route: String, error: Throwable) {
   runCatching {
-    Log.i(HomeworksIndexLogTag, "$route -> ${error::class.simpleName}: ${error.message.orEmpty().take(120)}")
+    Log.i(HomeworksIndexLogTag, "$route -> ${error::class.simpleName}")
   }
 }
 

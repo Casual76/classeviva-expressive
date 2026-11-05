@@ -1,10 +1,14 @@
 package dev.antigravity.classevivaexpressive.core.data.sync
 
 import android.util.Log
+import dev.antigravity.classevivaexpressive.core.data.testSessionStore
 import dev.antigravity.classevivaexpressive.core.data.repository.AgendaSection
 import dev.antigravity.classevivaexpressive.core.data.repository.GradesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkSection
 import dev.antigravity.classevivaexpressive.core.data.repository.MaterialsSection
+import dev.antigravity.classevivaexpressive.core.data.repository.MeetingTeachersSection
+import dev.antigravity.classevivaexpressive.core.data.repository.MeetingSlotsSection
+import dev.antigravity.classevivaexpressive.core.data.repository.MeetingBookingsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.DocumentsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.NotesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.SchoolbooksSection
@@ -66,6 +70,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -79,7 +84,7 @@ class SchoolSyncCoordinatorTest {
 
   private val restClient = mockk<ClassevivaRestClient>(relaxed = true)
   private val portalClient = mockk<PortalClient>(relaxed = true)
-  private val sessionStore = mockk<SessionStore>(relaxed = true)
+  private val sessionStore = testSessionStore(null)
   private val schoolYearStore = mockk<SchoolYearStore>(relaxed = true)
   private val timetableTemplateStore = mockk<TimetableTemplateStore>(relaxed = true)
   private val snapshotCacheDao = mockk<SnapshotCacheDao>(relaxed = true)
@@ -106,6 +111,7 @@ class SchoolSyncCoordinatorTest {
     selectedYears: Flow<SchoolYearRef> = flowOf(currentYear),
     calendarCurrentYear: SchoolYearRef = currentYear,
   ): SchoolSyncCoordinator {
+    sessionStore.writeSession(session)
     every { schoolYearStore.observeSelectedSchoolYear() } returns selectedYears
     every { schoolYearStore.currentSchoolYearRef() } returns calendarCurrentYear
     every { timetableTemplateStore.observeTemplate(currentYear.id) } returns flowOf(TimetableTemplate())
@@ -129,8 +135,81 @@ class SchoolSyncCoordinatorTest {
       documentDao = documentDao,
       privateAssetStore = privateAssetStore,
       predictiveTimetableUseCase = predictiveTimetableUseCase,
+      customEventDao = mockk(relaxed = true),
+      studentScoreDao = mockk(relaxed = true),
     ).also {
       it.attachSession(session)
+    }
+  }
+
+  @Test
+  fun logoutDuringSelectedYearReadCannotStartRefreshForTheReplacementAccount() = runTest {
+    stubLog()
+    val entered = CompletableDeferred<Unit>()
+    val release = CompletableDeferred<Unit>()
+    val coordinator = buildCoordinator(selectedYears = flow {
+      entered.complete(Unit)
+      release.await()
+      emit(currentYear)
+    })
+    val request = async { runCatching { coordinator.refreshSections(force = true, sections = setOf(MaterialsSection)) } }
+    entered.await()
+    sessionStore.clear()
+    sessionStore.writeSession(session.copy(studentId = "99", token = "replacement"))
+    release.complete(Unit)
+
+    assertTrue(request.await().isFailure)
+    coVerify(exactly = 0) { restClient.getMaterials() }
+    coVerify(exactly = 0) { materialDao.replaceByYear(any(), any(), any()) }
+  }
+
+  @Test
+  fun refreshMaterials_preservesInFlightSnapshotAcrossTransparentTokenRotation() = runTest {
+    stubLog()
+    val coordinator = buildCoordinator()
+    val initialLease = sessionStore.accountGuard.capture()
+    coEvery { restClient.getMaterials() } coAnswers {
+      sessionStore.writeSession(session.copy(token = "rotated-token"))
+      emptyList()
+    }
+
+    val status = coordinator.refreshSections(force = true, sections = setOf(MaterialsSection))
+
+    assertEquals(initialLease, sessionStore.accountGuard.capture())
+    assertEquals(SyncState.IDLE, status.state)
+    coVerify(exactly = 1) { materialDao.replaceByYear(session.studentId, currentYear.id, emptyList()) }
+  }
+
+  @Test
+  fun refreshMeetings_unavailableOrLoginHtmlNeverReplacesSavedCache() = runTest {
+    stubLog()
+    val coordinator = buildCoordinator()
+    val sections = setOf(MeetingTeachersSection, MeetingSlotsSection, MeetingBookingsSection)
+    coEvery { portalClient.getMeetingsPageHtml() } returns null
+    coordinator.refreshSections(force = true, sections = sections)
+    coEvery { portalClient.getMeetingsPageHtml() } returns ("<h3>Colloqui</h3><form><input type='password'></form>" to "https://web.spaggiari.eu/")
+    coordinator.refreshSections(force = true, sections = sections)
+    coEvery { portalClient.getMeetingsPageHtml() } returns ("<html>Service unavailable</html>" to "https://web.spaggiari.eu/")
+    coordinator.refreshSections(force = true, sections = sections)
+    coEvery { portalClient.getMeetingsPageHtml() } throws ClassevivaNetworkException("offline")
+    coordinator.refreshSections(force = true, sections = sections)
+
+    coVerify(exactly = 0) {
+      snapshotCacheDao.upsert(match { row -> sections.any { row.cacheKey == yearScopedCacheKey(session.studentId, it, currentYear) } })
+    }
+  }
+
+  @Test
+  fun refreshMeetings_explicitlyEmptyValidPageCanReplaceSavedCache() = runTest {
+    stubLog()
+    val coordinator = buildCoordinator()
+    val sections = setOf(MeetingTeachersSection, MeetingSlotsSection, MeetingBookingsSection)
+    coEvery { portalClient.getMeetingsPageHtml() } returns ("<html><p>Nessun colloquio disponibile</p></html>" to "https://web.spaggiari.eu/")
+
+    coordinator.refreshSections(force = true, sections = sections)
+
+    sections.forEach { section ->
+      coVerify(exactly = 1) { snapshotCacheDao.upsert(match { it.cacheKey == yearScopedCacheKey(session.studentId, section, currentYear) && it.payload == "[]" }) }
     }
   }
 
@@ -1207,6 +1286,8 @@ class SchoolSyncCoordinatorTest {
       username = "student-b",
       profile = session.profile.copy(id = "99"),
     )
+    sessionStore.clear()
+    sessionStore.writeSession(accountB)
     coordinator.attachSession(null)
     coordinator.attachSession(accountB)
     releaseFetch.complete(Unit)
@@ -1247,7 +1328,7 @@ class SchoolSyncCoordinatorTest {
     every { stream.mimeType } returns "application/pdf"
     every { stream.byteStream() } returns ByteArrayInputStream("account-a".encodeToByteArray())
     every { privateAssetStore.find(session.studentId, currentYear.id, cacheId) } returns null
-    every {
+    coEvery {
       privateAssetStore.store(
         studentId = session.studentId,
         schoolYearId = currentYear.id,
@@ -1256,8 +1337,9 @@ class SchoolSyncCoordinatorTest {
         mimeType = "application/pdf",
         input = any(),
         validateBeforeCommit = any(),
+        admitCommit = any(),
       )
-    } answers {
+    } coAnswers {
       @Suppress("UNCHECKED_CAST")
       (invocation.args[6] as () -> Unit).invoke()
       "content://private/account-a.pdf"
@@ -1271,14 +1353,15 @@ class SchoolSyncCoordinatorTest {
 
     val open = async { coordinator.openMaterial(material) }
     streamStarted.await()
+    sessionStore.clear()
+    val accountB = session.copy(token = "token-b", studentId = "99", username = "student-b")
+    sessionStore.writeSession(accountB)
     coordinator.attachSession(null)
-    coordinator.attachSession(
-      session.copy(token = "token-b", studentId = "99", username = "student-b"),
-    )
+    coordinator.attachSession(accountB)
     releaseStream.complete(Unit)
 
     assertTrue(open.await().isFailure)
-    verify(exactly = 1) { privateAssetStore.delete(session.studentId, currentYear.id, cacheId) }
+    verify(exactly = 0) { privateAssetStore.delete(session.studentId, currentYear.id, cacheId) }
   }
 
   @Test
@@ -1300,7 +1383,7 @@ class SchoolSyncCoordinatorTest {
     every { stream.mimeType } returns "application/pdf"
     every { stream.byteStream() } returns ByteArrayInputStream("pdf-body".encodeToByteArray())
     every { privateAssetStore.find(session.studentId, currentYear.id, any()) } returns null
-    every {
+    coEvery {
       privateAssetStore.store(
         studentId = session.studentId,
         schoolYearId = currentYear.id,
@@ -1309,8 +1392,9 @@ class SchoolSyncCoordinatorTest {
         mimeType = "application/pdf",
         input = any(),
         validateBeforeCommit = any(),
+        admitCommit = any(),
       )
-    } answers {
+    } coAnswers {
       @Suppress("UNCHECKED_CAST")
       (invocation.args[6] as () -> Unit).invoke()
       "content://private/dispensa.pdf"
@@ -1357,7 +1441,7 @@ class SchoolSyncCoordinatorTest {
     assertEquals(externalUrl, asset.externalUrl)
     assertEquals(null, asset.contentUri)
     coVerify(exactly = 0) { restClient.openMaterialStream(any()) }
-    verify(exactly = 0) { privateAssetStore.store(any(), any(), any(), any(), any(), any(), any()) }
+    coVerify(exactly = 0) { privateAssetStore.store(any(), any(), any(), any(), any(), any(), any(), any()) }
   }
 
   @Test

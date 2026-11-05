@@ -12,6 +12,8 @@ import java.io.InputStream
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Stores authenticated school assets in app-private, account-isolated storage. */
 @Singleton
@@ -21,8 +23,7 @@ class PrivateAssetStore @Inject constructor(
   private val root: File
     get() = File(context.filesDir, RootDirectory)
 
-  @Synchronized
-  fun store(
+  suspend fun store(
     studentId: String,
     schoolYearId: String,
     assetId: String,
@@ -30,29 +31,44 @@ class PrivateAssetStore @Inject constructor(
     mimeType: String?,
     input: InputStream,
     validateBeforeCommit: () -> Unit = {},
-  ): String {
+    admitCommit: suspend (() -> String) -> String = { effect -> effect() },
+  ): String = withContext(Dispatchers.IO) {
     require(studentId.isNotBlank()) { "studentId is required for private asset storage" }
-    val accountDirectory = File(root, privateAccountPathPart(studentId))
-    val yearDirectory = File(accountDirectory, stablePathPart(schoolYearId)).apply { mkdirs() }
-    val target = File(
-      yearDirectory,
-      "${stablePathPart(assetId)}-${sanitizeFileName(displayName, mimeType)}",
-    )
-    validateBeforeCommit()
-    if (target.isFile && target.length() > 0L) return contentUri(target)
-    val temporary = File(yearDirectory, "${target.name}.part")
+    val accountPart = privateAccountPathPart(studentId)
+    // Allocation is admitted before copying. Logout can unlink this staging file while the
+    // network input is still in flight; no account directory is recreated by an old operation.
+    var temporary: File? = null
+    var output: java.io.OutputStream? = null
     try {
-      input.use { source ->
-        temporary.outputStream().buffered().use(source::copyTo)
+      admitCommit {
+        validateBeforeCommit()
+        val staging = File(context.cacheDir, "school_asset_staging").apply { mkdirs() }
+        val allocated = File.createTempFile("$accountPart-", ".part", staging)
+        temporary = allocated
+        // Open under the same admission: an old operation must not reopen a pathname that
+        // logout has already unlinked while it was waiting for its network input.
+        output = allocated.outputStream().buffered()
+        allocated.absolutePath
       }
-      validateBeforeCommit()
-      check(temporary.renameTo(target) || run {
-        temporary.copyTo(target, overwrite = true)
-        temporary.delete()
-      }) { "Impossibile salvare il file nella cache privata." }
-      return contentUri(target)
+      input.use { source ->
+        checkNotNull(output).use(source::copyTo)
+      }
+      admitCommit { synchronized(this@PrivateAssetStore) {
+        validateBeforeCommit()
+        val staged = checkNotNull(temporary)
+        val yearDirectory = File(File(root, accountPart), stablePathPart(schoolYearId)).apply { mkdirs() }
+        val target = File(yearDirectory, "${stablePathPart(assetId)}-${sanitizeFileName(displayName, mimeType)}")
+        if (!target.isFile || target.length() == 0L) {
+          check(staged.renameTo(target) || run {
+            staged.copyTo(target, overwrite = true)
+            staged.delete()
+          }) { "Impossibile salvare il file nella cache privata." }
+        }
+        contentUri(target)
+      } }
     } finally {
-      temporary.delete()
+      runCatching { output?.close() }
+      temporary?.delete()
     }
   }
 
@@ -73,12 +89,18 @@ class PrivateAssetStore @Inject constructor(
     )
   }
 
+  @Synchronized
   fun clearStudent(studentId: String) {
     if (studentId.isBlank()) return
+    var deleted = true
     val accountDirectory = File(root, privateAccountPathPart(studentId))
     if (accountDirectory.canonicalFile.parentFile == root.canonicalFile) {
-      accountDirectory.deleteRecursively()
+      deleted = accountDirectory.deleteRecursively() && deleted
     }
+    File(context.cacheDir, "school_asset_staging").listFiles()
+      ?.filter { it.name.startsWith("${privateAccountPathPart(studentId)}-") }
+      ?.forEach { deleted = it.delete() && deleted }
+    if (!deleted) throw java.io.IOException("Impossibile completare la pulizia dei file privati.")
   }
 
   @Synchronized
@@ -136,21 +158,37 @@ class PrivateSessionDataCleaner @Inject constructor(
   private val downloadManager: DownloadManager,
 ) {
   suspend fun clear(studentId: String?) {
+    runCatching { dev.antigravity.classevivaexpressive.core.data.sync.SyncWorkScheduler.cancel(context) }
+    runCatching { context.getSystemService(android.app.NotificationManager::class.java)?.cancelAll() }
     val targetStudentId = studentId?.takeIf(String::isNotBlank) ?: return
+    var failure: Exception? = null
+    suspend fun attempt(block: suspend () -> Unit) {
+      try { block() } catch (error: Exception) {
+        if (failure == null) failure = error else failure?.addSuppressed(error)
+      }
+    }
     val accountPath = privateAccountPathPart(targetStudentId)
     val downloadPrefix = "$targetStudentId::"
-    val activeDownloadIds = downloadRecordDao.getByPrefix(downloadPrefix)
-      .mapNotNull { record -> record.id.removePrefix(downloadPrefix).toLongOrNull() }
+    var activeDownloadIds = emptyList<Long>()
+    attempt { activeDownloadIds = downloadRecordDao.getByPrefix(downloadPrefix)
+      .mapNotNull { record -> record.id.removePrefix(downloadPrefix).toLongOrNull() } }
     if (activeDownloadIds.isNotEmpty()) {
-      downloadManager.remove(*activeDownloadIds.toLongArray())
+      attempt { downloadManager.remove(*activeDownloadIds.toLongArray()) }
     }
-    privateAssetStore.clearStudent(targetStudentId)
-    File(context.filesDir, "attachment_cache/$accountPath").deleteRecursively()
-    context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-      ?.resolve(accountPath)
-      ?.deleteRecursively()
-    attachmentCacheDao.deleteByPrefix("$targetStudentId::")
-    downloadRecordDao.deleteByPrefix(downloadPrefix)
+    attempt { privateAssetStore.clearStudent(targetStudentId) }
+    attempt {
+      if (!File(context.filesDir, "attachment_cache/$accountPath").deleteRecursively()) {
+        throw java.io.IOException("Impossibile completare la pulizia degli allegati.")
+      }
+    }
+    attempt {
+      if (context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.resolve(accountPath)?.deleteRecursively() == false) {
+        throw java.io.IOException("Impossibile completare la pulizia dei download.")
+      }
+    }
+    attempt { attachmentCacheDao.deleteByPrefix("$targetStudentId::") }
+    attempt { downloadRecordDao.deleteByPrefix(downloadPrefix) }
+    failure?.let { throw it }
   }
 }
 

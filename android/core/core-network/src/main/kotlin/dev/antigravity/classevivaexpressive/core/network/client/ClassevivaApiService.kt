@@ -4,6 +4,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 import okhttp3.ResponseBody
+import okhttp3.RequestBody
 import retrofit2.Call
 import retrofit2.Response
 import retrofit2.http.Body
@@ -27,7 +28,9 @@ data class LoginRequestDto(
   @SerializedName("app") val app: String = "CVVS",
   @SerializedName("login") val login: String = "0",
   @SerializedName("multipleToken") val multipleToken: String = "multiple",
-)
+) {
+  override fun toString(): String = "LoginRequestDto(redacted)"
+}
 
 data class LoginResponseDto(
   @SerializedName("token") val token: String? = null,
@@ -36,7 +39,10 @@ data class LoginResponseDto(
   @SerializedName("userId") val alternateUserId: String? = null,
   @SerializedName("firstName") val firstName: String? = null,
   @SerializedName("lastName") val lastName: String? = null,
-)
+  @SerializedName("expire") val expiresAt: String? = null,
+) {
+  override fun toString(): String = "LoginResponseDto(redacted)"
+}
 
 data class StatusPayloadDto(
   @SerializedName("remains") val remains: Int? = null,
@@ -50,6 +56,14 @@ interface ClassevivaAuthService {
   @POST("v1/auth/login")
   @Headers(SkipAuthHeaderValue, SkipRefreshHeaderValue)
   fun login(@Body body: LoginRequestDto): Call<LoginResponseDto>
+
+  @POST("v1/auth/spidlogin")
+  @Headers(SkipAuthHeaderValue, SkipRefreshHeaderValue)
+  fun spidLogin(@Body body: RequestBody): Call<LoginResponseDto>
+
+  @POST("v1/auth/spidrf")
+  @Headers(SkipAuthHeaderValue, SkipRefreshHeaderValue)
+  fun spidRefresh(@Body body: RequestBody): Call<LoginResponseDto>
 
   @GET("v1/auth/status")
   @Headers(SkipAuthHeaderValue, SkipRefreshHeaderValue)

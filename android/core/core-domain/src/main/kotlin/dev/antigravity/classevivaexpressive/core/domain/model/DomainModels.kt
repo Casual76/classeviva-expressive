@@ -2,6 +2,7 @@ package dev.antigravity.classevivaexpressive.core.domain.model
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -272,12 +273,33 @@ data class StudentProfile(
 )
 
 @Serializable
+enum class AuthMethod { PASSWORD, CIE }
+
+@Serializable
+enum class RestAuthenticationState { SIGNED_OUT, READY, REAUTHENTICATION_REQUIRED, STORAGE_UNAVAILABLE }
+
+@Serializable
+enum class PortalAuthenticationState { UNAVAILABLE, READY, REAUTHENTICATION_REQUIRED }
+
+/** Authentication availability is independent from the identity and its locally cached data. */
+@Serializable
+data class AuthenticationState(
+  val rest: RestAuthenticationState = RestAuthenticationState.SIGNED_OUT,
+  val portal: PortalAuthenticationState = PortalAuthenticationState.UNAVAILABLE,
+)
+
+@Serializable
 data class UserSession(
   val token: String,
   val studentId: String,
   val username: String,
   val profile: StudentProfile,
-)
+  val authMethod: AuthMethod = AuthMethod.PASSWORD,
+  /** The original server identity; a portal route ID is a different identifier. */
+  val ident: String? = null,
+) {
+  override fun toString(): String = "UserSession(authMethod=$authMethod)"
+}
 
 @Serializable
 data class Grade(
@@ -910,8 +932,20 @@ data class AppSettings(
 
 interface AuthRepository {
   val session: StateFlow<UserSession?>
+  val authenticationState: Flow<AuthenticationState>
+    get() = session.map {
+      AuthenticationState(rest = if (it == null) RestAuthenticationState.SIGNED_OUT else RestAuthenticationState.READY)
+    }
   suspend fun restore(): UserSession?
+  /** Non-secret generation captured before an external authentication flow begins. */
+  fun authenticationEpoch(): Long = 0L
   suspend fun login(username: String, password: String): Result<UserSession>
+  suspend fun loginWithCie(
+    pa: String,
+    portalCookieHeader: String = "",
+    expectedEpoch: Long? = null,
+  ): Result<UserSession> =
+    Result.failure(UnsupportedOperationException("Accesso CIE non disponibile."))
   suspend fun logout()
 }
 
@@ -1008,7 +1042,9 @@ interface AbsencesRepository {
   ): Result<List<AbsenceRecord>>
 }
 
-data class PortalCookieDto(val name: String, val value: String)
+data class PortalCookieDto(val name: String, val value: String) {
+  override fun toString(): String = "PortalCookieDto(redacted)"
+}
 
 interface MeetingsRepository {
   fun observeMeetingTeachers(): Flow<List<MeetingTeacher>>
@@ -1050,6 +1086,17 @@ interface StudentScoreRepository {
 }
 
 interface AppBackupRepository {
+  /**
+   * Captures the owning account before I/O and admits the complete file write with logout.
+   * [expectedAuthenticationEpoch] belongs to the action that opened the file picker.
+   * [write] performs file I/O only; it must not re-enter account or repository mutations.
+   */
+  suspend fun exportBackupTo(expectedAuthenticationEpoch: Long, write: suspend (String) -> Unit): Result<Unit>
+
+  /** Reads outside the gate, retaining the account epoch captured before opening the picker. */
+  suspend fun importBackupFrom(expectedAuthenticationEpoch: Long, read: suspend () -> String): Result<AppBackupImportSummary>
+
+  /** In-memory payload only; file exports must use [exportBackupTo] to retain account ownership. */
   suspend fun exportBackup(): Result<String>
   suspend fun importBackup(payload: String): Result<AppBackupImportSummary>
 }
