@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" tests="17" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:51.610Z" hostname="PC_FISSO" time="0.183">
+  <properties/>
+  <testcase name="lateRejectionCannotInvalidateNewPortalForTheSameStudent" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.043"/>
+  <testcase name="failedImportDoesNotErasePreviouslyVerifiedPortalSession" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.005"/>
+  <testcase name="successfulSavedCookieVerificationCannotOverwriteAConcurrentRotation" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.009"/>
+  <testcase name="serverCookieRotationPreservesRealAttributesAndDistinctPaths" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.004"/>
+  <testcase name="restoredCookiesAreRevalidatedBeforePortalData" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.007"/>
+  <testcase name="initialHeaderDoesNotInventCookieAttributesOrAcceptDuplicates" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.001"/>
+  <testcase name="mismatchedOrUnavailableWhoamiCannotEnableCandidateCookiesOrInvalidateRest" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.004"/>
+  <testcase name="failedCookieRotationCommitCannotBeUsedByTheNextRequest" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.007"/>
+  <testcase name="suspendedDataOperationCannotStartPortalAuthenticationUnderANewAccount" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.004"/>
+  <testcase name="expiredPortalCookieRequiresOnlyPortalReauthentication" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.005"/>
+  <testcase name="lateFormCannotSubmitAcrossPortalReplacementForTheSameStudent" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.054"/>
+  <testcase name="lateActionHtmlCannotSubmitOldUsersTextWithNewAccountsCookies" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.009"/>
+  <testcase name="lateRejectedOperationCannotInvalidateNewAccountsPortal" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.009"/>
+  <testcase name="identityParserSeparatesRouteIdAndRejectsAmbiguousOrParentIdentities" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.001"/>
+  <testcase name="rejectedSavedCookieVerificationCannotEraseAConcurrentRotation" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.01"/>
+  <testcase name="importValidatesWhoamiAndUsesPortalRoutingId" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.004"/>
+  <testcase name="failedInitialCookieCommitNeverActivatesCandidatesInMemory" classname="dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

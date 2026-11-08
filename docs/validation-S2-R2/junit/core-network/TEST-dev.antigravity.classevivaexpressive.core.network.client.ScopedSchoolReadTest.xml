@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.network.client.ScopedSchoolReadTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:53.049Z" hostname="PC_FISSO" time="0.003">
+  <properties/>
+  <testcase name="explicitEmptyArrayIsValidButUnknownPayloadIsNotEmpty" classname="dev.antigravity.classevivaexpressive.core.network.client.ScopedSchoolReadTest" time="0.002"/>
+  <testcase name="notesRequireCategoryArraysAndRejectErrorOrPartlyMalformedPayloads" classname="dev.antigravity.classevivaexpressive.core.network.client.ScopedSchoolReadTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

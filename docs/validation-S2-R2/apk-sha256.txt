@@ -1,0 +1,2 @@
+6735de345e46a279597a6dd2569bfed38543a8cc2535cd0ffc1f83d70f99a7a9  android/app/build/outputs/apk/debug/app-debug.apk
+size=46582793

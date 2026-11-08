@@ -294,6 +294,9 @@ interface SyncMetadataDao {
 
 @Dao
 interface CustomEventDao {
+  @Query("SELECT * FROM custom_events WHERE id = :id LIMIT 1")
+  suspend fun getById(id: String): CustomEventEntity?
+
   @Query("SELECT * FROM custom_events ORDER BY date ASC, time ASC")
   fun observeAll(): Flow<List<CustomEventEntity>>
 

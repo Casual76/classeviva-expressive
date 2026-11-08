@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:57.128Z" hostname="PC_FISSO" time="0.039">
+  <properties/>
+  <testcase name="meetingsFeature_isPortalMode" classname="dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest" time="0.028"/>
+  <testcase name="gradesFeature_isDirectRestForCurrentYear" classname="dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest" time="0.001"/>
+  <testcase name="loginSessionFeature_isAlwaysDirectRest" classname="dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest" time="0.001"/>
+  <testcase name="noticeboardReplyFeature_isPortalMode" classname="dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest" time="0.001"/>
+  <testcase name="absenceJustificationsFeature_isPortalMode" classname="dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest" time="0.001"/>
+  <testcase name="sportelloFeature_isTenantOptional" classname="dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest" time="0.001"/>
+  <testcase name="notificationsFeature_isAlwaysDirectRest" classname="dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest" time="0.001"/>
+  <testcase name="gradesFeature_staysDirectRestForPreviousYear" classname="dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest" time="0.001"/>
+  <testcase name="questionnairesFeature_isTenantOptional" classname="dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

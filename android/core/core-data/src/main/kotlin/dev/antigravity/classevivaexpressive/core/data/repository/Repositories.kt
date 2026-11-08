@@ -178,6 +178,7 @@ class SchoolAuthRepository @Inject constructor(
   override val session: StateFlow<UserSession?> = sessionStore.session
   override val authenticationState = sessionStore.authenticationState
   override fun authenticationEpoch(): Long = sessionStore.captureAuthSnapshot().authenticationEpoch
+  override fun dataEpoch(): Long = sessionStore.accountGuard.capture().epoch
 
   override suspend fun restore(): UserSession? {
     apiSessionManager.restoreValidSession()
@@ -732,9 +733,21 @@ class SchoolDataRepository @Inject constructor(
     }
   }.flowOn(Dispatchers.Default)
 
-  override suspend fun addCustomEvent(event: CustomEvent) {
-    val work = sessionStore.captureAccountWork(allowOffline = true)
+  override suspend fun addCustomEvent(event: CustomEvent) = persistCustomEvent(event, null)
+
+  override suspend fun addScopedCustomEvent(event: CustomEvent, expectedAuthenticationEpoch: Long, expectedDataEpoch: Long?) =
+    persistCustomEvent(event, expectedAuthenticationEpoch, expectedDataEpoch)
+
+  private suspend fun persistCustomEvent(event: CustomEvent, expectedAuthenticationEpoch: Long?, expectedDataEpoch: Long? = null) {
+    val work = sessionStore.captureAccountWork(allowOffline = true, expectedAuthenticationEpoch = expectedAuthenticationEpoch)
     sessionStore.commitAccountWork(work) {
+    require(expectedDataEpoch == null || work.lease.epoch == expectedDataEpoch) { "account_changed" }
+    val existing = customEventDao.getById(event.id)
+    if (existing != null && event.id.startsWith("cv-event:")) {
+      val saved = json.decodeFromString<CustomEvent>(existing.payload)
+      require(saved.copy(createdAt = null) == event.copy(createdAt = null)) { "operation_id_conflict" }
+      return@commitAccountWork
+    }
     val createdAt = event.createdAt ?: java.time.LocalDateTime.now().toString().take(16)
     customEventDao.upsert(
       CustomEventEntity(
@@ -1594,6 +1607,9 @@ object PlatformModule {
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class RepositoryModule {
+  @Binds
+  abstract fun bindSchoolDataAccess(impl: ScopedSchoolDataAccess): dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataAccess
+
   @Binds abstract fun bindAuthRepository(impl: SchoolAuthRepository): AuthRepository
   @Binds abstract fun bindDashboardRepository(impl: SchoolDataRepository): DashboardRepository
   @Binds abstract fun bindGradesRepository(impl: SchoolDataRepository): GradesRepository

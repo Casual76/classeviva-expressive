@@ -1,0 +1,44 @@
+{
+  "status": "released",
+  "releasedTo": "ROOT",
+  "releaseAcknowledgedByRoot": true,
+  "releaseDate": "2026-11-08",
+  "allOwnedInvocationsEnded": true,
+  "noFurtherOwnedCompilerOrVerificationWork": true,
+  "javaHome": "C:/Program Files/Android/Android Studio/jbr",
+  "maxWorkers": 1,
+  "noDaemon": true,
+  "invocations": [
+    {
+      "sessionId": 98130,
+      "tasks": [":core:core-assistant:testDebugUnitTest --rerun"],
+      "exitCode": 0,
+      "log": "assistant-test.log",
+      "freshTests": 62,
+      "proofTestsIncluded": 28,
+      "scopedSchoolTestsIncluded": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "sessionId": 95562,
+      "tasks": [":app:assembleRelease", ":app:lintRelease", ":core:core-assistant:lintRelease"],
+      "exitCode": 0,
+      "log": "release-build-lint.log"
+    },
+    {
+      "name": "Public APK apksigner and aapt verification",
+      "exitCode": 0,
+      "allCommandsTerminal": true
+    }
+  ],
+  "remainingPreexistingProcessesObserved": [
+    {"pid": 14932, "kind": "GradleDaemon", "startedAtUtc": "2026-11-08T09:28:27.004Z", "modified": false},
+    {"pid": 42844, "kind": "KotlinCompileDaemon", "startedAtUtc": "2026-11-08T09:28:50.495Z", "modified": false}
+  ],
+  "runtime": "NV",
+  "deviceOrLiveSchoolApiActions": false,
+  "published": false,
+  "committedOrPushed": false
+}

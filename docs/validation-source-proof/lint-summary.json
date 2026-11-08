@@ -1,0 +1,12 @@
+{
+  "core-assistant": {
+    "errors": 0,
+    "warnings": 6,
+    "errorLocations": []
+  },
+  "app": {
+    "errors": 0,
+    "warnings": 84,
+    "errorLocations": []
+  }
+}

@@ -1,0 +1,475 @@
+{
+  "core-assistant": {
+    "totals": {
+      "tests": 62,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.assistant.AssistantConfigTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.assistant.math.GradeMathTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.assistant.pampai.RegistroSourceProofTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest",
+        "tests": 26,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.assistant.prompt.PreRouterTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.assistant.prompt.PromptBuilderTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.assistant.tools.SchoolDataProviderTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.assistant.tools.SchoolDataToolsTest",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.assistant.tools.ToolSupportTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "core-domain": {
+    "totals": {
+      "tests": 53,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.domain.change.ChangeDiffTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.domain.change.TextDiffTest",
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.domain.model.AuthenticationRedactionTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataPagingTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.domain.model.SubjectKeysTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest",
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "core-data": {
+    "totals": {
+      "tests": 181,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.change.ChangeComparisonTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkNotificationFilterTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.notifications.NotificationDeepLinksTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.preview.PrivateAssetAccountRaceTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.preview.PrivateSessionDataCleanerTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.AgendaCategoryOverrideTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.AgendaHomeworkMergeTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest",
+        "tests": 22,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.CapabilityResolverTest",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.RepositoryHelpersTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.SchoolAuthRepositoryLogoutTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.ScopedCustomEventTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolRestBoundaryTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.SettingsColorMutationTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.repository.StudentScoreCalculatorTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.AccountSyncSchedulerTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.AccountWorkTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.BackgroundSyncPolicyTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.CommunicationReadMergeTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.HomeworkSourceMergeTest",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.PasswordLoginBootstrapTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest",
+        "tests": 43,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncWorkerAccountTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.SyncStatusFactoryTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.data.sync.SyncStatusPersistenceTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "core-datastore": {
+    "totals": {
+      "tests": 33,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.datastore.DurableSessionPreferencesTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStoreTest",
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest",
+        "tests": 20,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.datastore.SettingsStoreTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.datastore.ViewPreferencesStoreTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "core-network": {
+    "totals": {
+      "tests": 137,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.network.client.AuthenticationRedactionTest",
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest",
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.network.client.CiePortalNetworkTest",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest",
+        "tests": 56,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest",
+        "tests": 34,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.classevivaexpressive.core.network.client.ScopedSchoolReadTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "engine-ai-bridge": {
+    "totals": {
+      "tests": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "suites": [
+      {
+        "name": "dev.antigravity.fluidengine.ai.bridge.BridgeProtocolTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.fluidengine.ai.bridge.ManifestTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.fluidengine.ai.bridge.RemoteToolTest",
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "name": "dev.antigravity.fluidengine.ai.bridge.TypedProtocolTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  }
+}

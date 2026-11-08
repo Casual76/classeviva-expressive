@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.assistant.tools.ToolSupportTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:19.503Z" hostname="PC_FISSO" time="0.005">
+  <properties/>
+  <testcase name="il peso del registro si legge in tutte le sue forme" classname="dev.antigravity.classevivaexpressive.core.assistant.tools.ToolSupportTest" time="0.0"/>
+  <testcase name="le etichette portano il giorno della settimana" classname="dev.antigravity.classevivaexpressive.core.assistant.tools.ToolSupportTest" time="0.001"/>
+  <testcase name="le materie si trovano da come le dice lo studente" classname="dev.antigravity.classevivaexpressive.core.assistant.tools.ToolSupportTest" time="0.002"/>
+  <testcase name="l'intervallo ha un default e mette in ordine gli estremi" classname="dev.antigravity.classevivaexpressive.core.assistant.tools.ToolSupportTest" time="0.0"/>
+  <testcase name="la ricerca larga conta le parole trovate, quella stretta le vuole tutte" classname="dev.antigravity.classevivaexpressive.core.assistant.tools.ToolSupportTest" time="0.0"/>
+  <testcase name="il confronto fra testi ignora accenti e maiuscole" classname="dev.antigravity.classevivaexpressive.core.assistant.tools.ToolSupportTest" time="0.0"/>
+  <testcase name="le date si leggono in ogni forma che il modello usa" classname="dev.antigravity.classevivaexpressive.core.assistant.tools.ToolSupportTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

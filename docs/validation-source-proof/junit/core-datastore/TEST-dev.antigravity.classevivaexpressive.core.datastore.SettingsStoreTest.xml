@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.datastore.SettingsStoreTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:25.997Z" hostname="PC_FISSO" time="0.079">
+  <properties/>
+  <testcase name="emptyStore_usesDomainCustomAccentDefault" classname="dev.antigravity.classevivaexpressive.core.datastore.SettingsStoreTest" time="0.016"/>
+  <testcase name="dynamicColorSelection_remainsCoherentForAFreshCollectorAfterAnotherWrite" classname="dev.antigravity.classevivaexpressive.core.datastore.SettingsStoreTest" time="0.017"/>
+  <testcase name="subjectColors_surviveAnUnrelatedUpdate" classname="dev.antigravity.classevivaexpressive.core.datastore.SettingsStoreTest" time="0.031"/>
+  <testcase name="update_preservesIgnoredStableUpdateVersionInsideTransaction" classname="dev.antigravity.classevivaexpressive.core.datastore.SettingsStoreTest" time="0.015"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

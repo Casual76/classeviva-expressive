@@ -1,0 +1,1673 @@
+{
+  "capturedAtUtc": "2026-11-08T16:59:19.226972+00:00",
+  "head": "7f0891ed18c295125528737c5aee03e3c76a0841",
+  "remoteDefaultHead": "7f0891ed18c295125528737c5aee03e3c76a0841",
+  "engineHead": "a055257fc4b559bee54b9ce114f265bcd237adfd",
+  "version": "7.17.0-beta.2",
+  "versionCode": 2026110801,
+  "packageName": "dev.antigravity.classevivaexpressive",
+  "channel": "beta",
+  "runtime": "NV",
+  "productionProofChangesInThisAudit": false,
+  "soleBuildChange": "android/app/build.gradle version metadata",
+  "compilerStatus": "held pending explicit ROOT runner transfer",
+  "scope": "app/core/feature source and regression inputs plus app-owned modified bridge/tool engine inputs; secrets and local configuration excluded",
+  "files": {
+    "android/app/build.gradle": {
+      "sha256": "6d748f4a07c62499e93e767925a1a8e14d3e83ff9770749a2e097a4ce1049a09",
+      "size": 4257
+    },
+    "android/app/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/cie/CieBrowserCleanupTest.kt": {
+      "sha256": "da0fde63e0718edf5a3db42e4e81de81da8f3f6d5e4439c451bc6738604e8d08",
+      "size": 2840
+    },
+    "android/app/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/cie/CieBrowserSecurityTest.kt": {
+      "sha256": "998f74395658fdf130b0c542e4a8d59910f2bb4aaff245956ff8bce64d8fbc39",
+      "size": 5925
+    },
+    "android/app/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/cie/CieProxyOverrideTest.kt": {
+      "sha256": "b5ae23d12752c36a91e1ad68dc682cefe37fa48a99f60b82970eea147d758507",
+      "size": 9471
+    },
+    "android/app/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/FluidColorDotUiTest.kt": {
+      "sha256": "cc9c868698989a93bd85707083775b9a5a141adf8f8ce284e91b63058a10c2fb",
+      "size": 2889
+    },
+    "android/app/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/FluidNotificationUiTest.kt": {
+      "sha256": "87a0f6d0e7ec9acc61ef91dfd8306b66c1c0e039e4d9289573ba470dcba8f67d",
+      "size": 2132
+    },
+    "android/app/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/MainAppUiTest.kt": {
+      "sha256": "29a12890dbdce66e33202f34aed3dc2739a0a2b073c235c85b898170903ffb39",
+      "size": 23913
+    },
+    "android/app/src/debug/AndroidManifest.xml": {
+      "sha256": "a39f2408db4c26b383b69e5b705580e63a70567317b166f4663078ab0912ad0c",
+      "size": 73
+    },
+    "android/app/src/debugOptimized/AndroidManifest.xml": {
+      "sha256": "524511ea714502e140d5b5d013cd27b68f4f92e127d84d9441fa8b4841c6d9c7",
+      "size": 381
+    },
+    "android/app/src/main/AndroidManifest.xml": {
+      "sha256": "2d84c53364525bf4710d94ba51327d9d95786b392887b0a5b647ed8b69f8459e",
+      "size": 3327
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/AdaptiveListDetail.kt": {
+      "sha256": "a65243159716bc0bfacb400f7c5a8a15eb3c6335121838db0763c31a5b6173dc",
+      "size": 4759
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/AuthenticationSheet.kt": {
+      "sha256": "6374b0b0f9ca845707fe8f31e292ac239ff6d9684ab88be2b9130f2d266cd87c",
+      "size": 3394
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/cie/CieBrowserSession.kt": {
+      "sha256": "ff114153fd69066c7da08c772a39e566ee50f9de0f8ebe29debabef723102982",
+      "size": 3805
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/cie/CieConnectProxy.kt": {
+      "sha256": "cb81355ec0df9951408e9d8abc98575a728e82c1919aeebcabacbacab7296467",
+      "size": 7306
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/cie/CieLoginActivity.kt": {
+      "sha256": "d2074f8e46f2bbcecd99866bbd832e5c3adc504a35bb072e22c21969ad2f31d3",
+      "size": 18926
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/cie/CieLoginResult.kt": {
+      "sha256": "74fa5941a72a061e6d6f203005214c36ad1ac46f2f69e703c1b0ef2f8cdfa73f",
+      "size": 246
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/cie/CieNavigationPolicy.kt": {
+      "sha256": "e91837de934c3933b65b69c6a5c73df4e486adb7394424f6df87079af3adbce4",
+      "size": 4154
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/cie/CieProxyOverride.kt": {
+      "sha256": "9facf4978ae33c3db0cf7c0b35f48b090b1ff06e7feaedcb8fbe40bbfd8bbec1",
+      "size": 1262
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/cie/CieWebSecurity.kt": {
+      "sha256": "86cc92b850f81d70042dc5e1fc91dc81559e0cda978c1101db311242e3521c12",
+      "size": 2957
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/ClassevivaExpressiveApp.kt": {
+      "sha256": "bbc54bec1bb5c10cb5aa42c10a6e83385b08dc4b1e67545f40e64e6f2a8c770e",
+      "size": 1250
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/MainActivity.kt": {
+      "sha256": "b8919bb427ced1ff91ebbded18ce30a867b83777915095c8e454b0e66e1ff70a",
+      "size": 3768
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/MainApp.kt": {
+      "sha256": "b603c45d6d6ee639c77b0eb7b0689a2a8d54acd928318aafe50e1b9fb6282ed7",
+      "size": 78016
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/MainViewModel.kt": {
+      "sha256": "b7e7c963ec37583779f5c2ba7e8abac7e77164842f5ead8a1fe92ef44b0e2243",
+      "size": 17646
+    },
+    "android/app/src/main/kotlin/dev/antigravity/classevivaexpressive/TopLevelOrder.kt": {
+      "sha256": "548a6bd623d081807c0dc6d1b8c103e60f16751f3a084fa04136db024b82aad8",
+      "size": 1194
+    },
+    "android/app/src/main/res/drawable/ic_launcher_background.xml": {
+      "sha256": "011a87abac1f8636d23aff6e8ca7e49837d92f4fe48a911a87e31bbee99769c3",
+      "size": 250
+    },
+    "android/app/src/main/res/drawable/ic_launcher_background_adaptive.xml": {
+      "sha256": "13d9d113c20c809fb3c2361a2b08e84fe02eaa4bed7124a47f86c4cea80b4de4",
+      "size": 165
+    },
+    "android/app/src/main/res/drawable/ic_launcher_foreground.xml": {
+      "sha256": "894facbee27e2612008875849db9c9ee4043a6aa43db2a32436f3626bcee49c2",
+      "size": 1473
+    },
+    "android/app/src/main/res/drawable/ic_launcher_monochrome.xml": {
+      "sha256": "0074b8a7340fe3e89da7cf2a1e5985c67c4ef11b7e672fcbba7035e5374836b8",
+      "size": 948
+    },
+    "android/app/src/main/res/drawable/ic_stat_logo.xml": {
+      "sha256": "d1de4f4e7098ba1d171c2450d7feb1ec96c67119c15d78bca5328f516db8554b",
+      "size": 952
+    },
+    "android/app/src/main/res/mipmap-anydpi-v26/ic_app_icon.xml": {
+      "sha256": "8a290f89d1074c4a32677dbd6bef29202813787b5a6f81898b5ed9f94eca20a3",
+      "size": 262
+    },
+    "android/app/src/main/res/mipmap-anydpi-v26/ic_app_icon_round.xml": {
+      "sha256": "8a290f89d1074c4a32677dbd6bef29202813787b5a6f81898b5ed9f94eca20a3",
+      "size": 262
+    },
+    "android/app/src/main/res/mipmap-anydpi-v26/ic_expressive_logo.xml": {
+      "sha256": "da8c3d7264c2f2cbc9ba96af514fe39d1264212bdeace89f899972cba4442099",
+      "size": 268
+    },
+    "android/app/src/main/res/mipmap-anydpi-v26/ic_expressive_logo_round.xml": {
+      "sha256": "da8c3d7264c2f2cbc9ba96af514fe39d1264212bdeace89f899972cba4442099",
+      "size": 268
+    },
+    "android/app/src/main/res/values/colors.xml": {
+      "sha256": "7a17d94d628ab2d6f4046e92f15e018a6e6b875ea7e0c14a23daaeae4cc9e1ba",
+      "size": 278
+    },
+    "android/app/src/main/res/values/strings.xml": {
+      "sha256": "c4cd51d8bf64ccd372698104c2984d8793772ac7c840d695de7166bdea7eb6ad",
+      "size": 85
+    },
+    "android/app/src/main/res/values/styles.xml": {
+      "sha256": "7a8433943386f5c2b99b0bbb2394e8bec803b15f2b071d473e3bd456354a432c",
+      "size": 566
+    },
+    "android/app/src/main/res/values-night/colors.xml": {
+      "sha256": "7378f8b72777ce246c0365ec8f617098c87368258d545945cd139da90b34e193",
+      "size": 82
+    },
+    "android/app/src/main/res/xml/file_paths.xml": {
+      "sha256": "d7f690bce9fd1eec5187c3da0730dca67f486763e30e19eb9213d02ea3fb0352",
+      "size": 628
+    },
+    "android/app/src/main/res/xml/network_security_config.xml": {
+      "sha256": "a38e7e9d6f27ecca5b66639a28bda2a63f14a0c57046cad892c3b2d3c36e4ca6",
+      "size": 292
+    },
+    "android/app/src/test/kotlin/dev/antigravity/classevivaexpressive/cie/CieConnectProxyTest.kt": {
+      "sha256": "6ff114224bebacff9ee268637375aac494085734e8ade6a6fc68b98a9739c64b",
+      "size": 7269
+    },
+    "android/app/src/test/kotlin/dev/antigravity/classevivaexpressive/cie/CieNavigationPolicyTest.kt": {
+      "sha256": "50408cc4c7cfd51037761c2fee68599cc60fc2a7458f83d55d9254ad4c4b3547",
+      "size": 3619
+    },
+    "android/app/src/test/kotlin/dev/antigravity/classevivaexpressive/MainLogoutBarrierIntegrationTest.kt": {
+      "sha256": "76c4478394c90cda28a487ae125d3a2f1318e2d3c807233d96d119df69708c22",
+      "size": 9590
+    },
+    "android/app/src/test/kotlin/dev/antigravity/classevivaexpressive/MainViewModelTest.kt": {
+      "sha256": "180643f56b68e404cbddb96bd865861aca7cb63d468e8387d0e1720aee1653e7",
+      "size": 26095
+    },
+    "android/app/src/test/kotlin/dev/antigravity/classevivaexpressive/TopLevelOrderTest.kt": {
+      "sha256": "e6794cf3c7942f21ab9be1cdba94cc734307b093e02efe0579a3fa93223ebfe7",
+      "size": 1575
+    },
+    "android/build.gradle": {
+      "sha256": "b1fe21e7ee873dbe91ec7122f7f51e6c340b1f316428dcb4e1e5677840faba7c",
+      "size": 401
+    },
+    "android/core/core-assistant/build.gradle": {
+      "sha256": "03ca1e624151b37ece87ffab945b8847ab97c2ef268f55bbcb6e7cae42f17e05",
+      "size": 1526
+    },
+    "android/core/core-assistant/src/main/AndroidManifest.xml": {
+      "sha256": "58557f179e258b5b3d6c6e99e7c0182ba39ec31675e19646608d95e01468333e",
+      "size": 1208
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/actions/AssistantActions.kt": {
+      "sha256": "3ee8b8192e3b5eb75fff7989bbbd9b5af252068e5edf2e192538e2fa1c186271",
+      "size": 10138
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/attachments/AttachmentReader.kt": {
+      "sha256": "97d1e3472a9226664bac6e175b67ebcc607e142acea87f2e2e321a52bd3372cd",
+      "size": 8539
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/db/AssistantConversationsRepository.kt": {
+      "sha256": "f3f9b1c73e3df031d5c4cbc9237fe162beb9d084f05cfc6d58eb845f683cdadb",
+      "size": 12618
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/di/AssistantModule.kt": {
+      "sha256": "6a7a78d5babd1858415200e8898e425998436135c969b3dcdfff0b3e71dabbdf",
+      "size": 5399
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/math/GradeMath.kt": {
+      "sha256": "bfabcb9d5933853fcd2f99be8080998c2856e0e48e3822ff65c54b0f7d49d7b6",
+      "size": 4674
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/pampai/RegistroSourceProof.kt": {
+      "sha256": "26b5a7bfb5c22005b363ba62fe74b3ae09bec9f49f14bf33dacbc9eba0965d53",
+      "size": 1359
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/pampai/RegistroToolHostProvider.kt": {
+      "sha256": "d7dc69ae1e75ef5db5f1990d08cff2368a5dda53874c5f7d17650da4f7523290",
+      "size": 5166
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/pampai/SourceProofRegistry.kt": {
+      "sha256": "766fe30ad5939f4cfeead9ba783fc040b193ad6086689e2821eedb8c1237c72a",
+      "size": 12667
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/prompt/PreRouter.kt": {
+      "sha256": "def764adc8d646f90f4d8d7815cdcc883f0bcee718fb9e3718d240dca01b55fe",
+      "size": 4539
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/prompt/PromptBuilder.kt": {
+      "sha256": "88a87d2cb529bcf287220a92786f38d4bda64438001ac341af8afd41abd4c712",
+      "size": 10368
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/runtime/AssistantActionExecutor.kt": {
+      "sha256": "3a81df120513b6b74ff44f854d9edf713cca7ea6f4363848bbb27befd7f1f7cc",
+      "size": 9772
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/runtime/AssistantContextFactory.kt": {
+      "sha256": "a215fcb9c235294eb329ba89d98f6c58526795f59a7e0791489897bc163fe070",
+      "size": 4108
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/runtime/AssistantEngine.kt": {
+      "sha256": "6fc43209a102068c8550ae339761828dc8e55e63204f01e036b33171df377b50",
+      "size": 13873
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/runtime/AssistantRuntime.kt": {
+      "sha256": "b1bd3d4d759bcd98f34374bd85cba6ac695d75bceb23cce67e055bcd6fc010c7",
+      "size": 12244
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/service/AssistantForegroundService.kt": {
+      "sha256": "0ee79d8a0d03f3e3c2367d3fdcd1104ace0113553792f176fd7f99a4cc881f18",
+      "size": 3531
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/service/AssistantNotifications.kt": {
+      "sha256": "60b4beaa8a27a56d36b61ee979841bfa626c49550e1bcae9ef25f55935842efc",
+      "size": 8379
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/AbsenceTools.kt": {
+      "sha256": "5ba64f60e0af0063fa56836da5b2db4e01850a3fccab9738b0d0ee98cc5e74b7",
+      "size": 4664
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/AgendaTools.kt": {
+      "sha256": "95e33e8abce8b353bfa09982bfc0c08dd861cb5e552dd3ec003bee447aab697d",
+      "size": 9936
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/AllTools.kt": {
+      "sha256": "06c081c75f8e67f3823436df0818235811b1fac070cde0c424be744125d607db",
+      "size": 1876
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/AppExtraTools.kt": {
+      "sha256": "ccf600b04439a4a00ca0daed4fa0aa9041c76b9863560d1660deef14fc27d591",
+      "size": 13861
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/AppTools.kt": {
+      "sha256": "f3c615252334544a0c08e28481d61e0dcb6751de32ca9a5c962b5db2a71c1b0a",
+      "size": 20183
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/AssistantToolContext.kt": {
+      "sha256": "ad99250e593d127bb3f7840fab56dbf5dfdc4ded41b0bd52a5ef53f482e39f4c",
+      "size": 5264
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/BoardExtraTools.kt": {
+      "sha256": "23369ff2d1939c858e8d6a49dc18e7c6954761c648ae76fc6f3213a90a12e423",
+      "size": 3882
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/BoardTools.kt": {
+      "sha256": "640785131c0d1fd687305badbf4043542339bf2b8a89854cd9c1d6bf77b28c25",
+      "size": 14040
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/DayTools.kt": {
+      "sha256": "595dee522f42785cb524ca5dcb59755cda08c473fd8a125f17ca0f6d9565845a",
+      "size": 8786
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/GradesTools.kt": {
+      "sha256": "c77cfe27ca00c9131e13afae735221a94975ee65a602aacd62899275a168b419",
+      "size": 16819
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/LessonsTools.kt": {
+      "sha256": "098ccb055813ff5150ac8b1575621d2ccb1180b150943a747ac12543a2eb1c8f",
+      "size": 5422
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/MaterialsTools.kt": {
+      "sha256": "d0165986b145ee31e29692e4536f49e2c932def774817e69079dc44bc48992ad",
+      "size": 4224
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/RegistroToolGroup.kt": {
+      "sha256": "d4383cfc82161a39ab1fcedf6ffabfd4d1cf042f058d1ed8c80b3c68cc77030b",
+      "size": 2961
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/SchoolDataTools.kt": {
+      "sha256": "5ed1a1c75181be21c4fbfc7a079c80641fdbfe161eb464e350d3b429a1b76abb",
+      "size": 5786
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/StatsTools.kt": {
+      "sha256": "dca813512b225c611e34b948fc81721e9090083a6e0fafb0c67b128d64a5d973",
+      "size": 6484
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/ToolSupport.kt": {
+      "sha256": "954dcaf03387ba3ad699d97dd37a3c5bdd0a0489c5feee915f2e9526df927d77",
+      "size": 8256
+    },
+    "android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/ToolTracing.kt": {
+      "sha256": "7bada80593cd92022a087aa5844dbdb6f5463be61684a9244e06b3c96cee7515",
+      "size": 4538
+    },
+    "android/core/core-assistant/src/test/kotlin/dev/antigravity/classevivaexpressive/core/assistant/AssistantConfigTest.kt": {
+      "sha256": "684745f2944c7359e98ea6e779f14ed7c197163b1ce3e18cdc95b9d7a41a86e2",
+      "size": 1718
+    },
+    "android/core/core-assistant/src/test/kotlin/dev/antigravity/classevivaexpressive/core/assistant/math/GradeMathTest.kt": {
+      "sha256": "6b1d345438decfae70dc1263e6b707e23469b808d6d5bd693b91c856a2c7bfee",
+      "size": 3399
+    },
+    "android/core/core-assistant/src/test/kotlin/dev/antigravity/classevivaexpressive/core/assistant/pampai/RegistroSourceProofTest.kt": {
+      "sha256": "033bbda41bf8302798cf8f65577c45068c685db515ae39b1a8f3494a69de06c8",
+      "size": 4058
+    },
+    "android/core/core-assistant/src/test/kotlin/dev/antigravity/classevivaexpressive/core/assistant/pampai/SourceProofRegistryTest.kt": {
+      "sha256": "2e493d4ad3d7777736714eaf8de43418f3e3077d98bcfea23e7840eebbacf5e2",
+      "size": 18823
+    },
+    "android/core/core-assistant/src/test/kotlin/dev/antigravity/classevivaexpressive/core/assistant/prompt/PreRouterTest.kt": {
+      "sha256": "f0c1dd097b0d6e5b37b1c1432ba599d3a137fa6372857f8ac4e7d4f0ed420515",
+      "size": 2132
+    },
+    "android/core/core-assistant/src/test/kotlin/dev/antigravity/classevivaexpressive/core/assistant/prompt/PromptBuilderTest.kt": {
+      "sha256": "df842da566f0b8f25320c769c45f85e1047b525075d7944f787d6c0d00e9c646",
+      "size": 3072
+    },
+    "android/core/core-assistant/src/test/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/SchoolDataProviderTest.kt": {
+      "sha256": "a1fa4d20ae2c52934a0bf3b92b33c704359c14407ed341bca110efd1370129ce",
+      "size": 3995
+    },
+    "android/core/core-assistant/src/test/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/SchoolDataToolsTest.kt": {
+      "sha256": "fe6008fdd614aa2b6714e49b7e58897b4a25cd0a82ce9fc7152278f49d6f77d2",
+      "size": 10371
+    },
+    "android/core/core-assistant/src/test/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/ToolSupportTest.kt": {
+      "sha256": "ef27fd57525837cbe7d945b0eaff21fdb1df1ad5c138bbdbe7804178a145be5e",
+      "size": 4403
+    },
+    "android/core/core-data/build.gradle": {
+      "sha256": "644a5c96c77ba588ee801e3e9a78e2191d52a284719e7a856dd21e259cc93eef",
+      "size": 1478
+    },
+    "android/core/core-data/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/change/ChangeComparison.kt": {
+      "sha256": "e70f3905f596753c7cf3208e28104caa50620d0e319193d42456410048254dc3",
+      "size": 5254
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/external/ExternalDashboardInvalidator.kt": {
+      "sha256": "c4d25b3944f5116bfdbb495cb35805d13ca044ac24cc507d7982d39a02a673d0",
+      "size": 484
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/notifications/HomeworkNotificationFilter.kt": {
+      "sha256": "136a3dcd88486b323fb8ed3a7e6cd726c7ed0b89fbf46677caca9a664bb82dbf",
+      "size": 1856
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/notifications/NotificationSupport.kt": {
+      "sha256": "e9662155733aacdf0e5672365c8f1a657b4760fec3b04c1a2b7867a6937be14f",
+      "size": 58435
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/preview/PreviewFileStore.kt": {
+      "sha256": "88f2dd3a7cfe0386bdad91da8fa7ad351e32702a83b81edb4c1606dc0ce045f3",
+      "size": 1904
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/preview/PrivateAssetStore.kt": {
+      "sha256": "a807ccd78a19e889168935f998fdfdf5852937d7705806240514d703c9db6001",
+      "size": 8253
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/AgendaHomeworkMerge.kt": {
+      "sha256": "34e73935e08009341dad5f922ca574fd351a1c3ceb902db38458fe68b3e33f53",
+      "size": 3957
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/AppBackupRepositoryImpl.kt": {
+      "sha256": "862c98c79369a4c4936877a9fbfd44731f9de1dd24a829624a84ee8032189e0e",
+      "size": 18805
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/CapabilitySupport.kt": {
+      "sha256": "ed526656af6624d752bb244e6a7fcf5b20c24e3a78d8e1e2f9c40f5513ce4620",
+      "size": 5658
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/Repositories.kt": {
+      "sha256": "949c07047a1309527f326cc39236d4122df1c3b282135aa724fc5917fed404de",
+      "size": 80835
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/ScopedSchoolDataAccess.kt": {
+      "sha256": "7e98acc2a2612282347c6b422910030d6b122f1e497185bec329911b7214d421",
+      "size": 5677
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/SnapshotSections.kt": {
+      "sha256": "a9f6396cb07c178c6cbcb04239f7f5a40c48d7069af50285fa74f6c647264154",
+      "size": 1526
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/AccountSyncScheduler.kt": {
+      "sha256": "939a22047431849d0d6a7681e5a778a1bac8b4bcb985c89588b535339a30760f",
+      "size": 1747
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/AccountWork.kt": {
+      "sha256": "358d02ff8b6c51898e6114bd3af2a5796415ea33dfbf80c3c3efeee0fd279b00",
+      "size": 2252
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/BackgroundSyncPolicy.kt": {
+      "sha256": "d34de8a0d508066a0d5a994f5cd172993f0efdf1ee8dc1d4da34548be78fc693",
+      "size": 2946
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/CommunicationReadMerge.kt": {
+      "sha256": "d9971e42b0403f558557d13eb87f64876095dbbea445ad561db59260b4bd4d41",
+      "size": 534
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/HomeworkSourceMerge.kt": {
+      "sha256": "c7306530eb5c596845ffc27cb040d4b91b47ef1b9fbaccb6e9a212a1a036f3fd",
+      "size": 4880
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/SchoolSyncCoordinator.kt": {
+      "sha256": "52490192c4d7450a2b583efeac106cb19ad3e30f31099d8201aa764a2e4fbe68",
+      "size": 100448
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/SchoolSyncWorker.kt": {
+      "sha256": "bf61cc4b91731db1b8eb19e6d44047c3ba0d5d43f7f402e994c071d8ab1e92a9",
+      "size": 10624
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/SyncErrors.kt": {
+      "sha256": "c1e43baec7b0325bc10a820c8723cfd8a1d6912aa8c00f2332866fd0d4ccfb62",
+      "size": 3994
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/SyncStatusFactory.kt": {
+      "sha256": "4cbf8e9c65c99525ec4ff2c1f7d16d04f382877d796b064cd97d342ae5b206dd",
+      "size": 4842
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/SyncStatusPersistence.kt": {
+      "sha256": "b44c05315dbdd456c34314d61e7d8b266234f3673f4b4c635c12efac6c8ed965",
+      "size": 4112
+    },
+    "android/core/core-data/src/main/kotlin/dev/antigravity/classevivaexpressive/core/data/update/AppUpdateModule.kt": {
+      "sha256": "d274c7428b5bbb1b021411dddc3b0de7aecc8a1ee007b29463d21b40cc30efb0",
+      "size": 1621
+    },
+    "android/core/core-data/src/main/res/drawable/ic_stat_logo.xml": {
+      "sha256": "d1de4f4e7098ba1d171c2450d7feb1ec96c67119c15d78bca5328f516db8554b",
+      "size": 952
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/change/ChangeComparisonTest.kt": {
+      "sha256": "067884e7948e45afea6801b314e6db5890ee6810d9e4e8589c755e6816458edd",
+      "size": 6277
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/notifications/HomeworkNotificationFilterTest.kt": {
+      "sha256": "4f01f83c0820bc0e4b64d164480b7b413406b63a549b5d2f9394bccaef408694",
+      "size": 2413
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/notifications/NotificationDeepLinksTest.kt": {
+      "sha256": "98b4ebaf5eef9659633517aa4c81ec427bf56a4a4d68701d3387c0891c335fa0",
+      "size": 1112
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/preview/PrivateAssetAccountRaceTest.kt": {
+      "sha256": "c1ef7f6ab1128a42f6164f980bdb1ac1ef3d9e45cdb7f7d534b14c15ec9461c1",
+      "size": 2689
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/preview/PrivateSessionDataCleanerTest.kt": {
+      "sha256": "10424a0a4e5e04856c8dabbcbfbeefe1b9978adc21ef45b7d74bb9f6b5f237e5",
+      "size": 4274
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/AgendaCategoryOverrideTest.kt": {
+      "sha256": "e424733992e7917a28df20ec698367ea84af06b1802b0f0f3ad96545396145eb",
+      "size": 1774
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/AgendaHomeworkMergeTest.kt": {
+      "sha256": "7c5cf4d8dab8ce4ec097f53fdfcf7bdf334582e0c9efc3af2f449480e1cb8dd4",
+      "size": 3642
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/AppBackupRepositoryTest.kt": {
+      "sha256": "31a63deb6193d0e12f11163c63fc23df9225efcf2766aed3adb8861cdb48484e",
+      "size": 26401
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/CapabilityResolverTest.kt": {
+      "sha256": "0caefc9e376669717a926371726c47d2b9567df40ebac98196e4b9a73fdb3468",
+      "size": 4055
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/RepositoryHelpersTest.kt": {
+      "sha256": "7dc5f39480f9291790976c569c73859c94c5f944269920798bfbe6af2f555d2e",
+      "size": 4956
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/SchoolAuthRepositoryLogoutTest.kt": {
+      "sha256": "e23f62af7e8e4a48da1858ddc866f45f010b942e345abce6ecb132d7160c8e45",
+      "size": 1562
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/ScopedCustomEventTest.kt": {
+      "sha256": "d2071c4ead18590e244ad4e87a111ee4bc5d30be7cc132b7aac526b9278dfc25",
+      "size": 5459
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/ScopedSchoolDataAccessTest.kt": {
+      "sha256": "5e15abafdaaee9998378edd8dada6dcaf72c4d13d53301342a83083708850a02",
+      "size": 6980
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/ScopedSchoolRestBoundaryTest.kt": {
+      "sha256": "19a79db523ba1a50c99cd19bdf812a20e4d0dc296cf1176a0dcb8771a4694b57",
+      "size": 3006
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/SettingsColorMutationTest.kt": {
+      "sha256": "4d6365e24402b18ee5e3d592b55c0a11653b5c9125f60c48e7963da8ca3f1e73",
+      "size": 2042
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/StudentScoreCalculatorTest.kt": {
+      "sha256": "5d095e69ce6db9b0a96f123d24f2b9a1b5e68a5a400f39d4e1331fc4e2d3314c",
+      "size": 1857
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/AccountSyncSchedulerTest.kt": {
+      "sha256": "15b164e89d0e1dcf98505548b80ceddfa84e61494bf8cde31b35798648422202",
+      "size": 2495
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/AccountWorkTest.kt": {
+      "sha256": "8a7393e0291d1e86dcddd1ed52cef2a784453c3d4e100057693178463e072c5a",
+      "size": 3359
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/BackgroundSyncPolicyTest.kt": {
+      "sha256": "63fe0151d03ba712073077d58bda7461222ee47166dd143a15ea5426cdfd0c28",
+      "size": 3484
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/CieLoginBootstrapTest.kt": {
+      "sha256": "259bfab505fbffd25012d1b97380d9595127274f8b4f9339620a2ba97db91314",
+      "size": 11122
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/CommunicationReadMergeTest.kt": {
+      "sha256": "6dfb8dd5cf049e040c5c22c56479a297c054fefb6965c55dfd9fe639cfd84e41",
+      "size": 1288
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/HomeworkSourceMergeTest.kt": {
+      "sha256": "0b247ad44c4bcb2c5daa2e0b44af705e6107b8b9cfb8c0b3825f8146eb115ae9",
+      "size": 3555
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/PasswordLoginBootstrapTest.kt": {
+      "sha256": "aa1354fa5c3f0d6a8471caa9c560e76d813609790ac11d019310e198e7cdd492",
+      "size": 7611
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/SchoolSyncCoordinatorTest.kt": {
+      "sha256": "85572b957072a16b13378fa315d7ef6d26996b21e5f1aa326575e2a2ac460a6a",
+      "size": 61084
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/SchoolSyncWorkerAccountTest.kt": {
+      "sha256": "091039a5f3396ea56a7e631a210daaa8c4dafe6ebd870e4e3467237efd20f977",
+      "size": 3369
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/SyncStatusFactoryTest.kt": {
+      "sha256": "51c9e3067b872802cb1287a370391d528ef8e44c47819146e6cf4020084c2232",
+      "size": 4384
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/sync/SyncStatusPersistenceTest.kt": {
+      "sha256": "a64d34b293a0bbfdd1429fe92f4eb9829a6c741117df64f2e2db6147494d956e",
+      "size": 2889
+    },
+    "android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/TestSessionStore.kt": {
+      "sha256": "a4ec417ed3693d1b206ae0938fb12e85e1410e5be38e19361816354f2a606dd9",
+      "size": 1284
+    },
+    "android/core/core-database/build.gradle": {
+      "sha256": "031ab4cf926e6d2c6b5ea8938a014a299130dcd14ec9fa2320218dffcd8827d3",
+      "size": 1368
+    },
+    "android/core/core-database/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/core/database/CustomEventDaoTest.kt": {
+      "sha256": "25397b50d0bf779b1838c2061fb9e1cc091932008148584b6afd724b4b923dcf",
+      "size": 4243
+    },
+    "android/core/core-database/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/core/database/DownloadRecordDaoTest.kt": {
+      "sha256": "6e234012cf1ced5b4b49aed0c45157a9a0c3b8982bfbb908ffde6f9a7e5d9e22",
+      "size": 3781
+    },
+    "android/core/core-database/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/core/database/IsolationMigrationDatabase.kt": {
+      "sha256": "067b367f524162261d281f1855cdfdada71e389914492d1389c6f1e815be4b30",
+      "size": 1900
+    },
+    "android/core/core-database/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/core/database/SchoolDatabaseMigrationTest.kt": {
+      "sha256": "aa863cde8968fa48c1b7065cb376af3097f21e9fca59767afcccd35ea7d3ffe1",
+      "size": 13837
+    },
+    "android/core/core-database/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/core/database/SeenGradeDaoTest.kt": {
+      "sha256": "5dcd1404889811fd69d346df79a59e6ca1282924bc3f2669c323e1a0c1d8b362",
+      "size": 3401
+    },
+    "android/core/core-database/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/core/database/SnapshotCacheDaoTest.kt": {
+      "sha256": "479d0b3b2c2d66c5c4412fcfe090f42e0b225416b187545acd0a07b8857270c7",
+      "size": 3111
+    },
+    "android/core/core-database/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/core/database/StudentScoreDaoTest.kt": {
+      "sha256": "e5a343ee5244d2a0fd974a8e0bee7137d2aed43257e46cf573674fbc7f4760a7",
+      "size": 4140
+    },
+    "android/core/core-database/src/androidTest/kotlin/dev/antigravity/classevivaexpressive/core/database/SubjectGoalDaoTest.kt": {
+      "sha256": "bfb628bdb3fbedc3b5fb885e648d210ea97cfa1ac02325b6cb1300a7fb9e5819",
+      "size": 5134
+    },
+    "android/core/core-database/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/core/core-database/src/main/kotlin/dev/antigravity/classevivaexpressive/core/database/database/AssistantEntities.kt": {
+      "sha256": "2320b8c7cecc416b8d1afb76c892489b7723438255a951c5a78bd8cbd7c39421",
+      "size": 5878
+    },
+    "android/core/core-database/src/main/kotlin/dev/antigravity/classevivaexpressive/core/database/database/BackupTransactionRunner.kt": {
+      "sha256": "70c45beaa553702cfc4a3cc3637dee070cf0a4cbf94bb53268c2cb8e2c7a3f57",
+      "size": 1410
+    },
+    "android/core/core-database/src/main/kotlin/dev/antigravity/classevivaexpressive/core/database/database/SchoolDatabase.kt": {
+      "sha256": "9e1b582f0ead9fc4944f2a6ff89e8b28e0d255d36752fb3662a6bab041a81dd7",
+      "size": 30692
+    },
+    "android/core/core-datastore/build.gradle": {
+      "sha256": "de6caeb1b81c80d48cafccc99087957779ea04292413c65890dfc1ff5eef900c",
+      "size": 874
+    },
+    "android/core/core-datastore/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/core/core-datastore/src/main/kotlin/dev/antigravity/classevivaexpressive/core/datastore/AccountSessionGuard.kt": {
+      "sha256": "41536ce02f98b3168034b508fe163386d613c6408bc88c98fd595f2364a8afeb",
+      "size": 3467
+    },
+    "android/core/core-datastore/src/main/kotlin/dev/antigravity/classevivaexpressive/core/datastore/AuthSnapshot.kt": {
+      "sha256": "21a3c3673579ab93eebdce51b2264a25cc8a3bf2cca95394faa3a7a03ea27a37",
+      "size": 4445
+    },
+    "android/core/core-datastore/src/main/kotlin/dev/antigravity/classevivaexpressive/core/datastore/DurableSessionPreferences.kt": {
+      "sha256": "c38b42de79804b014a0626a7fcfa3c8256ce57dbc65d7d54463f8b47dd3131fb",
+      "size": 2713
+    },
+    "android/core/core-datastore/src/main/kotlin/dev/antigravity/classevivaexpressive/core/datastore/SessionStore.kt": {
+      "sha256": "3d97897817d45dc220f3eb75a791144214ab56a0c112c1b694683535f6eef1d4",
+      "size": 12178
+    },
+    "android/core/core-datastore/src/main/kotlin/dev/antigravity/classevivaexpressive/core/datastore/Stores.kt": {
+      "sha256": "4d1f77c0f966d13e4db369a3eae7a448553f9d1a71fb321b9d8045f80f609716",
+      "size": 18289
+    },
+    "android/core/core-datastore/src/test/kotlin/dev/antigravity/classevivaexpressive/core/datastore/DurableSessionPreferencesTest.kt": {
+      "sha256": "82f9d0fe10e9a3b610a2830540910d5d51778838972dc59d669da9579d6088fe",
+      "size": 6561
+    },
+    "android/core/core-datastore/src/test/kotlin/dev/antigravity/classevivaexpressive/core/datastore/SchoolYearStoreTest.kt": {
+      "sha256": "43874976bb96e2ff20976d0814459ad4ae423cd1610bb3a3d6b183a06cb3e60a",
+      "size": 3290
+    },
+    "android/core/core-datastore/src/test/kotlin/dev/antigravity/classevivaexpressive/core/datastore/SessionStoreTest.kt": {
+      "sha256": "c7164eb960a5b2edbfe8f01b53c98b4930d6a6cdf87aa6fd48fd453e8618518f",
+      "size": 19728
+    },
+    "android/core/core-datastore/src/test/kotlin/dev/antigravity/classevivaexpressive/core/datastore/SettingsStoreTest.kt": {
+      "sha256": "8dc5d56b4b29b0372bd0b65d926d15d2fe63346ea494839c7b4626d208a1ee96",
+      "size": 3445
+    },
+    "android/core/core-datastore/src/test/kotlin/dev/antigravity/classevivaexpressive/core/datastore/ViewPreferencesStoreTest.kt": {
+      "sha256": "0dd3a6da12fc869babdc8f78669ee9deac4285a896ff6cbdfe12925f2258f797",
+      "size": 1104
+    },
+    "android/core/core-designsystem/build.gradle": {
+      "sha256": "c53c89aac6eef5c66494d9409a73e07b8e1123df0740ce214a54dbbdc91d79a6",
+      "size": 996
+    },
+    "android/core/core-designsystem/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/AppTheme.kt": {
+      "sha256": "a2f063a6fdf52f53be3f3cd742378cfd0319c2d363a0b32f623ff7f1bc59fa3a",
+      "size": 6097
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/ChangeTimeline.kt": {
+      "sha256": "f1a7512ac9b443d5430786870dd147d4513cc7f015619890f015dc6472681ada",
+      "size": 13240
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/ClassevivaHeroCard.kt": {
+      "sha256": "c8764557c432db8a7abdbcf53917355cf17f0c4c9d4ad023b0d08f2c6217e2b1",
+      "size": 2670
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/FeatureHero.kt": {
+      "sha256": "6401c6e275ef6b50c45485b09a4663556eccca45bb792028f92bc310c019284c",
+      "size": 4335
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/GradeBand.kt": {
+      "sha256": "680abf2cd28cb35c2c3a6d107c476a0fde24a1834749c2dd6514f484425d135f",
+      "size": 8723
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/GradeCard.kt": {
+      "sha256": "fe7bba69506c87dd6dd6c0142ed2209d2d7b929c802e2673c679dc7665915613",
+      "size": 6035
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/GradeDates.kt": {
+      "sha256": "eab376903aa1ecd712d6715378bb1ed4fc5496e030e1c97b68ea71e5544a5bc1",
+      "size": 2303
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/GradeDetail.kt": {
+      "sha256": "d5e0a2212b9196aca4f16daf74371eb5fe5ec0e323019b39b12045812fdf5d3c",
+      "size": 4406
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/GradePill.kt": {
+      "sha256": "9f44a42f520d3a207890dd7ffb56e11e96665d0c7c66fec52f10ab7b8dfc463a",
+      "size": 1195
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/MinuteTicker.kt": {
+      "sha256": "c155e990b95366c4c8aa856ccdfb887ef14ced8069392e5e1c97e3f1080e6cd9",
+      "size": 2213
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/Plurals.kt": {
+      "sha256": "30270ee65638fdf061483a8b424bdf72510a891c9d5ff2d84413b46fb95a27bc",
+      "size": 525
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/SubjectColors.kt": {
+      "sha256": "0f6edd83fe422e1bfaaf4503c8d6cd95d1e56f2a97f842d04b8ca3b831e71d92",
+      "size": 15850
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/SyncStatusBridge.kt": {
+      "sha256": "e7bd7f02272ee064af42620827a6cc88d01b5b8236685f04643dc3da24da6c63",
+      "size": 2646
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/VividSurfaces.kt": {
+      "sha256": "96d0db03749bd8df091e6cf7e5bad3fb9d26b77bd07097ec53f181ef32add701",
+      "size": 4653
+    },
+    "android/core/core-designsystem/src/main/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/WeekTimeGrid.kt": {
+      "sha256": "4e5659f7baee244b187c33b8b4404c11958a2c8ee645798cfcb1476d8be33188",
+      "size": 13035
+    },
+    "android/core/core-designsystem/src/test/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/AppThemeAccentTest.kt": {
+      "sha256": "d59d252b81cec70263352844c510825c0058bd75743b2d6341551ec2d571f30e",
+      "size": 2844
+    },
+    "android/core/core-designsystem/src/test/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/ChangeTimelineTextTest.kt": {
+      "sha256": "ba0df5720252dba9c67a2bc7f5f18b8dfe0ab9317c9aab95e19206491a71065f",
+      "size": 2082
+    },
+    "android/core/core-designsystem/src/test/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/GradeBandTest.kt": {
+      "sha256": "2799b441ce5cdd362c816d3e726469ddaf382be43e61469247b181f101edcc75",
+      "size": 8047
+    },
+    "android/core/core-designsystem/src/test/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/MinuteTickerTest.kt": {
+      "sha256": "7df1d52e5d07ac2d0ad089f18471e74bf50422e8d01c43e969bc7eec6a5b138d",
+      "size": 1215
+    },
+    "android/core/core-designsystem/src/test/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/SubjectPaletteTest.kt": {
+      "sha256": "de7e96221a0f96af1cd8e5e10e1c5e1375a94a0f1de537cfc20206c0792e9736",
+      "size": 2610
+    },
+    "android/core/core-designsystem/src/test/kotlin/dev/antigravity/classevivaexpressive/core/designsystem/theme/WeekTimeGridMathTest.kt": {
+      "sha256": "1d53b3c18631ae3f8fb061e76fc58006795c50826c3a30663d20fd251f243a53",
+      "size": 2366
+    },
+    "android/core/core-domain/build.gradle": {
+      "sha256": "490f925aaea1e89411124403be296358e007c6f1d40da9e3a9bc3911415dbb93",
+      "size": 588
+    },
+    "android/core/core-domain/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/core/core-domain/src/main/kotlin/dev/antigravity/classevivaexpressive/core/domain/change/ChangeDiff.kt": {
+      "sha256": "13de802fd1a2fa386e8bf543ae2aff4b19a360f338f55cb005df0870723fab32",
+      "size": 8459
+    },
+    "android/core/core-domain/src/main/kotlin/dev/antigravity/classevivaexpressive/core/domain/change/ChangeText.kt": {
+      "sha256": "c26bc488176780e6f50853e194e8795a2069ff42a3835896559a0f466e0580ec",
+      "size": 3021
+    },
+    "android/core/core-domain/src/main/kotlin/dev/antigravity/classevivaexpressive/core/domain/change/TextDiff.kt": {
+      "sha256": "248f96329606cf8c361d107174f06e5939b7c7ae14e01c83b509583ff3781526",
+      "size": 5530
+    },
+    "android/core/core-domain/src/main/kotlin/dev/antigravity/classevivaexpressive/core/domain/model/DomainModels.kt": {
+      "sha256": "4b3802d799179ed5b1bd1f3f320b15ff5cef06b7e6c8c74dc36b3d1bf313d338",
+      "size": 37666
+    },
+    "android/core/core-domain/src/main/kotlin/dev/antigravity/classevivaexpressive/core/domain/model/SchoolDataAccess.kt": {
+      "sha256": "14b29fb586373b01358599772760fa0fd2f110fab512983ff1ed2e99061b9085",
+      "size": 4793
+    },
+    "android/core/core-domain/src/main/kotlin/dev/antigravity/classevivaexpressive/core/domain/model/SubjectKeys.kt": {
+      "sha256": "b19663d8038558f0cdd297c55ab8d485e1ea58f1c0d35821f2fb3cd6297c0603",
+      "size": 4969
+    },
+    "android/core/core-domain/src/main/kotlin/dev/antigravity/classevivaexpressive/core/domain/usecase/PredictiveTimetableUseCase.kt": {
+      "sha256": "0302067299275011d944ae91001f27de94c7c3b35c798dc104a2e99b05650d02",
+      "size": 19652
+    },
+    "android/core/core-domain/src/main/kotlin/dev/antigravity/classevivaexpressive/core/domain/util/ParsingUtils.kt": {
+      "sha256": "75a2029c66403278b2995e5028b8d7d4709aaeaa1fa702b15f6fbd693419d7cd",
+      "size": 673
+    },
+    "android/core/core-domain/src/test/kotlin/dev/antigravity/classevivaexpressive/core/domain/change/ChangeDiffTest.kt": {
+      "sha256": "65a8677d39ea0b83781077cea91c1ffc591bcf146564d5d33eb86a01c9c34e5e",
+      "size": 4463
+    },
+    "android/core/core-domain/src/test/kotlin/dev/antigravity/classevivaexpressive/core/domain/change/TextDiffTest.kt": {
+      "sha256": "6977632e30f6ba1ca7d2c0d36967cd111056c97d064df98680d54c3a1e514048",
+      "size": 3034
+    },
+    "android/core/core-domain/src/test/kotlin/dev/antigravity/classevivaexpressive/core/domain/model/AuthenticationRedactionTest.kt": {
+      "sha256": "d46b03e2f05b2fa91901bd4bdd925721e10533f54f3225072c286516713d57e2",
+      "size": 453
+    },
+    "android/core/core-domain/src/test/kotlin/dev/antigravity/classevivaexpressive/core/domain/model/SchoolDataPagingTest.kt": {
+      "sha256": "7dde450b70c9cebd4cc2156de36566d236e4841a5ed5d7aecb31339df4f58a38",
+      "size": 3099
+    },
+    "android/core/core-domain/src/test/kotlin/dev/antigravity/classevivaexpressive/core/domain/model/SchoolYearRefTest.kt": {
+      "sha256": "e249ea6cad7813b30f7d71f4d28caa4e84439aa627a04f02eb456825fb99872f",
+      "size": 2693
+    },
+    "android/core/core-domain/src/test/kotlin/dev/antigravity/classevivaexpressive/core/domain/model/SubjectKeysTest.kt": {
+      "sha256": "20b1060b2ec3457f188fca69770df076803e632f96089b90555faee11059f8f3",
+      "size": 3214
+    },
+    "android/core/core-domain/src/test/kotlin/dev/antigravity/classevivaexpressive/core/domain/usecase/PredictiveTimetableUseCaseTest.kt": {
+      "sha256": "3134d9274a4d6f2d6062c73a481bf3c0b76420925b6ebdac73f9589f90fd1c1f",
+      "size": 9273
+    },
+    "android/core/core-network/build.gradle": {
+      "sha256": "61eb555b0e077a2b7ee0169121e2eedc5a0f0b363ef84eb5f2f333e136907ff7",
+      "size": 1397
+    },
+    "android/core/core-network/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/ApiSessionManager.kt": {
+      "sha256": "8c4a91a7e562567cd278ec6686557f6839f54139d4e192163af1d143f3a761f7",
+      "size": 7189
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/CiePortalSupport.kt": {
+      "sha256": "0d9b8a462285ba346baf55feb2513206df01e4ed9082a3f72a09fea7a98bbe0d",
+      "size": 3009
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/CieProtocol.kt": {
+      "sha256": "77d00b8410ea3deba10537bcd917d26072bd05bc4a3246a6bd3d6c595cde95de",
+      "size": 3386
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/ClassevivaApiService.kt": {
+      "sha256": "1c56340642e52852475eb3d91bcadfd721f27e3f9be7b82bb7c166a2b3094df0",
+      "size": 7478
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/ExpectedAccountContext.kt": {
+      "sha256": "58196f97507d1254346acfd1b3d26f4cd1515d66d43a9cdcf3327913fe7acc32",
+      "size": 1628
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/GatewayClient.kt": {
+      "sha256": "6c82c279f7342ff28e0e55ae9c1e1c867b2f0d5aa15ffb04db6abc5d2668b0de",
+      "size": 13910
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/HomeworksIndexSupport.kt": {
+      "sha256": "e7e56609f622e19a4a9f38d984a34618605ae619cead4dbcf28572f7b0260174",
+      "size": 2534
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/NetworkModule.kt": {
+      "sha256": "8a3a30affe9e3af3bd99b57d5bbbdffa1392d5c87f6cfd6a45ae64557eb7c8e2",
+      "size": 11811
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/NetworkParsers.kt": {
+      "sha256": "964501648145f60e1d746c5d8d8921b64e854ed6eb92c36585af09443e051c57",
+      "size": 58607
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/PortalClient.kt": {
+      "sha256": "241bb38dea704710c8bae90065d0a922eccf1ee4abab536e9e860103fe7bf19c",
+      "size": 57194
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/RestClient.kt": {
+      "sha256": "4cc3497712641ff808c080c21a240083de6a5fd32d3031a88bc390e29ccc269a",
+      "size": 30649
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/RestOriginPolicy.kt": {
+      "sha256": "7090d94a2dc2521a2beaf2708d19707c77a6ec21e80e38c28a7edcea9dd3314b",
+      "size": 1635
+    },
+    "android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/ScopedSchoolRead.kt": {
+      "sha256": "3aedabe5944ca044c4435c896a85fcc661bc903371f0b50eabd939c34fb2c1aa",
+      "size": 7285
+    },
+    "android/core/core-network/src/test/kotlin/dev/antigravity/classevivaexpressive/core/network/client/AuthenticationRedactionTest.kt": {
+      "sha256": "64a5bde885c88ac046cd1cced39bb690373b280d0ccd468812975b5293c606d2",
+      "size": 792
+    },
+    "android/core/core-network/src/test/kotlin/dev/antigravity/classevivaexpressive/core/network/client/CieAuthenticationNetworkTest.kt": {
+      "sha256": "c5135bd1b693b2c6a9d3ac8ea0974377ef6c075286cfd5941c930e3e5ed8290c",
+      "size": 13124
+    },
+    "android/core/core-network/src/test/kotlin/dev/antigravity/classevivaexpressive/core/network/client/CiePortalNetworkTest.kt": {
+      "sha256": "ed6dca462fba05c6c8410299f1e49d791c558c225a4ae6908398c4b3e118872d",
+      "size": 17499
+    },
+    "android/core/core-network/src/test/kotlin/dev/antigravity/classevivaexpressive/core/network/client/NetworkParsersTest.kt": {
+      "sha256": "cc2ffd643436905c4d14e7a7407c211838e5c5dd1856d8b722703de44fd95444",
+      "size": 40681
+    },
+    "android/core/core-network/src/test/kotlin/dev/antigravity/classevivaexpressive/core/network/client/PortalClientNetworkTest.kt": {
+      "sha256": "4b370e4bab4c434fb7c33aed3463142c912da87b8ba289a7a2393f77e746c9d0",
+      "size": 16194
+    },
+    "android/core/core-network/src/test/kotlin/dev/antigravity/classevivaexpressive/core/network/client/RestClientNetworkTest.kt": {
+      "sha256": "4f81600386c9dc9578f4dbc45548c4c7512e89b026023d9d454d0969e12ff20e",
+      "size": 37356
+    },
+    "android/core/core-network/src/test/kotlin/dev/antigravity/classevivaexpressive/core/network/client/ScopedSchoolReadTest.kt": {
+      "sha256": "9b20b8f9ce3d86a0b30e05ae42160fb1359071c6764d57ffdcac6f1cf247bff6",
+      "size": 1459
+    },
+    "android/engine/engine-ai/build.gradle": {
+      "sha256": "271f0558e62f9c0273d79e280b20e398d417bd5c17c563604e117208c1e6c1e0",
+      "size": 1119
+    },
+    "android/engine/engine-ai/src/main/AndroidManifest.xml": {
+      "sha256": "aff1ab6bd0302e1ca896bfae40a21a801f5c6dbe9d19e07e99d90deafa8661fe",
+      "size": 373
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/keys/AiDataStores.kt": {
+      "sha256": "b9b86a96c3dcb8491539e1528e2bcc6b6937084e1133da3fa8c935c02cb9e7b5",
+      "size": 2347
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/keys/AiKeyStore.kt": {
+      "sha256": "3bc5331d09e5870f5ef328c5efd1060c06c4726666e9449573f80043bc61308d",
+      "size": 4730
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/keys/AiKeyVerifier.kt": {
+      "sha256": "1af926baa033ed662a999e21966f662bedad28f2230bc815fb90d99aaaba3d37",
+      "size": 19278
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/keys/AiSettingsStore.kt": {
+      "sha256": "baae141fe5f07775e9c843b2106d2de4ed3eb8fd89eda15214a2a779247e1996",
+      "size": 17052
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/keys/SecretCipher.kt": {
+      "sha256": "e052de67a1cff828b72c445f520bf1c1cca5fe10565bdaa3907908425e93572b",
+      "size": 3836
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/net/AiError.kt": {
+      "sha256": "d391607474366bdeb8b687c719e13aa6ad57c387802499d1f2d248faa937ba83",
+      "size": 4484
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/net/AiErrorMapper.kt": {
+      "sha256": "3a6eb9d739442dec5a8e06d674d15fa85eb1c6bbb399219cfc1027b010051587",
+      "size": 11373
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/net/AiHttp.kt": {
+      "sha256": "be58648f0e49682d5dd3da82a7bed558c7b3732ce2b5a30c65473b25cbe61e0e",
+      "size": 8732
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/net/Json.kt": {
+      "sha256": "fc6f8e7ae462fca0939ba011a77bf08785dce91ea4ab7c252547db1a740a934d",
+      "size": 1176
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/net/MultipartBody.kt": {
+      "sha256": "81ef73a58fac20dd02724b9adf028cf843facf7ae6c674b94b36d36fdeee21e7",
+      "size": 1553
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/net/SseParser.kt": {
+      "sha256": "def43e1d8b44598e17b758445fbe25d2119d4a7289e647cfa631669d436bb51a",
+      "size": 1204
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiConfirmationGate.kt": {
+      "sha256": "2b9b9b3c9f5e925b9a31a8e47347c54a03de35cc6c9c78931ac0532626a51dc5",
+      "size": 9874
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiDiagnosticsLog.kt": {
+      "sha256": "b37198e037cb3166d854b5faff3094990dced1138226fb724c9fbd558b2b3fc6",
+      "size": 4652
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiOrchestrator.kt": {
+      "sha256": "90410004963a6c47c784c15d3b78d0521693a0367d3ccc346eb05829e6c44cf9",
+      "size": 62008
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiRouter.kt": {
+      "sha256": "bb0fe63d5781e0e600a723c5654df03808af01a50f469e0cde071f5d133963a2",
+      "size": 14286
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiUsageSink.kt": {
+      "sha256": "98b2e415af3b3ec04fa13f8abc59a6a3351b4da1bb00b01716bcae43b191a06e",
+      "size": 1494
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AssistantState.kt": {
+      "sha256": "69bb7435c1bc42dc6504611f8751918801cec771b4ee8f12f35957e0cf06b2fb",
+      "size": 6810
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/orchestrator/Conversation.kt": {
+      "sha256": "888f54b4603e3635a324670f4fc38a3ecad487491b1b62488e2051c292dcf8ce",
+      "size": 5780
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/orchestrator/FailoverPolicy.kt": {
+      "sha256": "2b40f5ad5fc412626b3c36adba480fdc99110ab432169ec0b8b35828a738c2e2",
+      "size": 8711
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/orchestrator/FailureKinds.kt": {
+      "sha256": "16f9b783ffc5bd9bf20c0d3565cf1f077b1a13a8fe0cefbb1a5a7d2291e6b08f",
+      "size": 1918
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/Capabilities.kt": {
+      "sha256": "bb1b1c5db4dc27d232e85da491d4bddd0fcd6057519c495e676c9719939d30c0",
+      "size": 4392
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/GeminiProvider.kt": {
+      "sha256": "0ffcf13c5904f08d4c950dea21152f4207fe280521c01cfb8d59656350b6cc18",
+      "size": 19421
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/GroqProvider.kt": {
+      "sha256": "ccf456bd6f2655c7241910ea09a17d1a1a38852bec42144df6c4387dbce4a47a",
+      "size": 3124
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/Model.kt": {
+      "sha256": "d469de39283204ce6d8d2465c489c5ab95fe60a56280f5bd5a2454bd4ec68765",
+      "size": 9485
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/ModelCatalog.kt": {
+      "sha256": "736fccabe30f99e332c5148d1a4bb3b2fbc3a3715611a8899a1ad3a9531ae578",
+      "size": 7130
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/OpenAiCompatCodec.kt": {
+      "sha256": "f923142d2640770ad404ca9ec4e01f61b970b0ba0200100027144dd110092a4d",
+      "size": 11390
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/OpenAiCompatProvider.kt": {
+      "sha256": "b58cfcbad0294299e08bcd314b20e591e757b8582d99acd218c6b0e21e825014",
+      "size": 6006
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/OpenRouterCatalog.kt": {
+      "sha256": "47e222732f4022338feadbf48df1de9754f3754c981508bf6a4b2833ed542f3c",
+      "size": 2499
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/OpenRouterProvider.kt": {
+      "sha256": "b9ea3c9cd44462b756089d253b6d7173496f5d1487810d9e91c743b09105e20d",
+      "size": 6330
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/ProviderFactory.kt": {
+      "sha256": "f51a2b65b984d2904d4ca85174f0992b71b5cedff74504da3778b09eff74e715",
+      "size": 4282
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/ProviderId.kt": {
+      "sha256": "54942cb292f0c4344b3c572f41328aa1bbee7b7b21086308d59c9a20341f25e5",
+      "size": 804
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/provider/ToolCallAssembler.kt": {
+      "sha256": "2ac3d301361a87d2e26a613416e1c1357dd6164d1a684b05c53db0d594677ed2",
+      "size": 2278
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/speech/AndroidPcmSource.kt": {
+      "sha256": "5be40c465b647e4a6ea91f7f1b940f7fbb101b834a02c22a2ee513cd904ce9a1",
+      "size": 5133
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/speech/SpeechCapture.kt": {
+      "sha256": "423eddc09135045d9a2553d9484972d4fab27ce863fa1dd6c1ad1c2ca98e8779",
+      "size": 12658
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/speech/Transcriber.kt": {
+      "sha256": "b567480995b75440f2e5a394979e574274ffa4cce7233c3b962a3b9319ce25f2",
+      "size": 2414
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/tools/ToolArgumentValidator.kt": {
+      "sha256": "f40a4814c2536771082c4e301f258451ca064470f5c0d5bde85ed4d8d549cd7c",
+      "size": 5255
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/tools/ToolResults.kt": {
+      "sha256": "42737f260aa1030987c7c536ba68e97c81cd5a47bff8b72bf7eb19d8454226d0",
+      "size": 3078
+    },
+    "android/engine/engine-ai/src/main/kotlin/dev/antigravity/fluidengine/ai/tools/Tools.kt": {
+      "sha256": "6da5ac8faf63581c76ae47bea77343f31dd1a75d32b5c415cab76f515c2dcd3d",
+      "size": 19368
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/keys/AiKeyStoreTest.kt": {
+      "sha256": "6f279f8bb383d5d633c6a2174bd8286efb69acf579d03995985afacc47cd83a6",
+      "size": 3853
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/keys/AiSettingsDefaultsTest.kt": {
+      "sha256": "f58394cf10e192f0ba47f98db3478367eb360814af10bf100ebc8f87d7270ace",
+      "size": 9255
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/keys/AiSettingsStoreTest.kt": {
+      "sha256": "0e0e211c1b86ceeefb27577c2d516f3445afa63fc91603d68e31352cdd69a71c",
+      "size": 2148
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/keys/AvoidListTest.kt": {
+      "sha256": "cf0475935158831a19a725043b3eea7c8066017f78c668d540390cd427cc67f5",
+      "size": 9649
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/keys/GroqReconcileTest.kt": {
+      "sha256": "d7cb925923efe0c3c5eee288e08ee54e6337a304bbe90019a0845e9f1be027a2",
+      "size": 8032
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/net/AiErrorMapperTest.kt": {
+      "sha256": "f31a0b49c84acdec0a085b3c02decf4c2902ab1400b94aeb82a42914ec36862c",
+      "size": 13009
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/net/AiHttpServerTest.kt": {
+      "sha256": "3b5c88f809a650e681f41ce6c224675cd36ceaef1bebce21f3ac924ec5750def",
+      "size": 6361
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/net/MultipartBodyTest.kt": {
+      "sha256": "d7e92953b194463a67e303ba9788dc19824b6b35e60bad90fb407e615344961a",
+      "size": 1447
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/net/SseParserTest.kt": {
+      "sha256": "917d5514c4c889f25ac440d57f2a278302ec77746bf4bde7356303f5b5a72d44",
+      "size": 1419
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/net/StreamTimeoutTest.kt": {
+      "sha256": "4f508930a4d5b7342d5120878b3477b2032650c438a30bb4eb97d4d91c5ef75f",
+      "size": 6871
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/net/TinyHttpServer.kt": {
+      "sha256": "1c94570132dd0d4a34dd80b6b829df12ed75d470f39d3ef8e3de5924a7b224c2",
+      "size": 4811
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiConfirmationGateTest.kt": {
+      "sha256": "95f3d0c6315c4f771b5d9067f2a3124bdb02ebb3ddbb7364d530e4e8fb3400e0",
+      "size": 17162
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiDeepTierTest.kt": {
+      "sha256": "8932df732c3afaa32bceeb4eeb14e87623593378972014b077ccd3d9f62e6b13",
+      "size": 11387
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiFailoverOrchestratorTest.kt": {
+      "sha256": "0274c6a281308ec604fd59834314e2458f8e38814c130f0a2bc706afe1df7399",
+      "size": 18050
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiHierarchyTest.kt": {
+      "sha256": "521382467d566f65e23be1570a2c428d677741b5f8a571fd894c438e5d0c5293",
+      "size": 19115
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiOrchestratorTest.kt": {
+      "sha256": "28885246e4601c2d579d7ce51685f9361a7fcc08749a430f2baa45b22058a3e8",
+      "size": 27214
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiRouterTest.kt": {
+      "sha256": "10bd44961dd7e2cc80a2a84c9269c957b8623729794148ec75a3cb38b8d0c64e",
+      "size": 6054
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/orchestrator/AiToolTimeoutTest.kt": {
+      "sha256": "4dca2e0bc480aa578e51230409e041f46708c08c50b32828c7f7c527e02ce18c",
+      "size": 18085
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/orchestrator/FailoverAndCompactorTest.kt": {
+      "sha256": "973747ec61be87341b2c170ebe6686f23334faa60bbf136d9e8b74f9820e57c3",
+      "size": 9847
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/orchestrator/FailoverTableTest.kt": {
+      "sha256": "709046e337bb776ec8e88d129809bb9e0d6a17e6e4e36ee056173c99bfb7b4b8",
+      "size": 6171
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/orchestrator/FailureKindsTest.kt": {
+      "sha256": "4f05ba10ce6c61aca534dfae9d34473d2aa2e606121e5d70e45f45d322be6dc6",
+      "size": 7377
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/provider/CodecTest.kt": {
+      "sha256": "2ed0dcc9fc144c094ad25cb7ea78b25ee787188576e1e5173cbe0be2aa02e31f",
+      "size": 11208
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/provider/ContentPartsTest.kt": {
+      "sha256": "be00aa722fa0c99edd3d7508be9cdccbf82627e79f3d68a587c3e7db0be9ba72",
+      "size": 6981
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/provider/FailureCodecTest.kt": {
+      "sha256": "b0c8a80c9a51d3c603aa287a7f376e92cb872f0fba6f19781648fbf8b54c8906",
+      "size": 2327
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/provider/OpenRouterDataPolicyTest.kt": {
+      "sha256": "67ad63baffb70cf302a00b8bc12c761eb4fab3bc87b4b7c2d48d877ebd14db65",
+      "size": 2020
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/provider/WebSearchCodecTest.kt": {
+      "sha256": "09cfc32645351ea514009e0e4cb5cce43dfd96046c60de1262790d957cbf721e",
+      "size": 6154
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/speech/SpeechCaptureTest.kt": {
+      "sha256": "bb965e839faa590882a9c390534b2c4717ca0015363f7e1a92e83611a1c64c07",
+      "size": 11642
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/tools/ModelToolTextTest.kt": {
+      "sha256": "722c39e81c72fa3aa23279b69ff317c934e9f175fa324c0fbb888b0952ab7e9a",
+      "size": 891
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/tools/SmallPartsTest.kt": {
+      "sha256": "e949275220725b320b147ad528b8beeeafcf7045ef272ad6861374bc050b1181",
+      "size": 4677
+    },
+    "android/engine/engine-ai/src/test/kotlin/dev/antigravity/fluidengine/ai/tools/ToolContractsTest.kt": {
+      "sha256": "1d7cf48530ccb29b1599c1b52ec4229d08dee9f57a531e978715b38a4d3195fa",
+      "size": 2950
+    },
+    "android/engine/engine-ai-bridge/build.gradle": {
+      "sha256": "1fcb4fe4a31a2e813198217f3156e88a21559a9745f89141c68f2ef25574180f",
+      "size": 901
+    },
+    "android/engine/engine-ai-bridge/src/main/AndroidManifest.xml": {
+      "sha256": "676da27d3507caa8ea9def131f2804126bd58afe11495c1160f27a3af13ee61a",
+      "size": 613
+    },
+    "android/engine/engine-ai-bridge/src/main/kotlin/dev/antigravity/fluidengine/ai/bridge/AiToolClient.kt": {
+      "sha256": "29276531d41e5bc5c2c61b151bab0842c5bf5aad144b22995ef0530fe38d087d",
+      "size": 8194
+    },
+    "android/engine/engine-ai-bridge/src/main/kotlin/dev/antigravity/fluidengine/ai/bridge/AiToolHostProvider.kt": {
+      "sha256": "8966f4ac9a5a907e39e89d96542075f54314121877e2333f18f8385bf12c9ebd",
+      "size": 17693
+    },
+    "android/engine/engine-ai-bridge/src/main/kotlin/dev/antigravity/fluidengine/ai/bridge/BridgeProtocol.kt": {
+      "sha256": "195b5a04de82ade4ca0cb9ff9d169439371b016d2af0788b016963899365a82e",
+      "size": 15614
+    },
+    "android/engine/engine-ai-bridge/src/main/kotlin/dev/antigravity/fluidengine/ai/bridge/RemoteTools.kt": {
+      "sha256": "709b699dda718eff03a6ab26cd0ec50491fec40729c707813bf3472b9bd325c1",
+      "size": 10205
+    },
+    "android/engine/engine-ai-bridge/src/main/kotlin/dev/antigravity/fluidengine/ai/bridge/TypedResultCodec.kt": {
+      "sha256": "3d71a4eb02a323656827c48bf313ec896bd767e5822682ef5fc91ac46220c8b4",
+      "size": 3147
+    },
+    "android/engine/engine-ai-bridge/src/test/kotlin/dev/antigravity/fluidengine/ai/bridge/BridgeProtocolTest.kt": {
+      "sha256": "cf04ee23dbc222a56a9c8cdb3ed8a0130efa394ccec8a6c1c7c7e96d4114f482",
+      "size": 6866
+    },
+    "android/engine/engine-ai-bridge/src/test/kotlin/dev/antigravity/fluidengine/ai/bridge/ManifestTest.kt": {
+      "sha256": "eb48f765b28a3581f49eb55a3290860d080c30425117d9be2de6dda07c3a0210",
+      "size": 1739
+    },
+    "android/engine/engine-ai-bridge/src/test/kotlin/dev/antigravity/fluidengine/ai/bridge/RemoteToolTest.kt": {
+      "sha256": "496ef27eed935ef209c7dcab3a43b54d12c3f786825b4ddf3457722f4dfae2af",
+      "size": 9839
+    },
+    "android/engine/engine-ai-bridge/src/test/kotlin/dev/antigravity/fluidengine/ai/bridge/TypedProtocolTest.kt": {
+      "sha256": "09f9c8e2656f62edd994127b53b888cedf5b8c5272268c16aff7a8ae6792314c",
+      "size": 3637
+    },
+    "android/engine/ENGINE_VERSION": {
+      "sha256": "7d382987ade2f3d3bc4154eeb9b086cef6032585d3de86f2feb89cd2c217640e",
+      "size": 5
+    },
+    "android/engine.properties": {
+      "sha256": "dfa33b3509c044fdf720b06093a8bffcd3b25957b4f022e48379f4b048143e84",
+      "size": 348
+    },
+    "android/feature/feature-absences/build.gradle": {
+      "sha256": "1ffc273ff67c6e4ee018ef49a36ff7a97d6c75bd91cdf7cb6c5a05799375fb26",
+      "size": 1063
+    },
+    "android/feature/feature-absences/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/feature/feature-absences/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/absences/AbsencesScreen.kt": {
+      "sha256": "985df093c96518515d8e345287198386328149a528180989b718c8a81b0466c9",
+      "size": 19165
+    },
+    "android/feature/feature-absences/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/absences/AbsencesLogicTest.kt": {
+      "sha256": "78d80497a28a1a14a55e8d9da65dc317387946000556f0fcebec8d45b9dbe751",
+      "size": 3336
+    },
+    "android/feature/feature-absences/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/absences/AbsencesViewModelTest.kt": {
+      "sha256": "3e1c2c9c2d92efb78e80fecf8f9ac52775f9d204a208d21089a4d2caa34564e8",
+      "size": 6142
+    },
+    "android/feature/feature-agenda/build.gradle": {
+      "sha256": "08353de04ec8db76199e17b3fc388a150a55b29a2f2982c3d86bac7a650d019f",
+      "size": 1061
+    },
+    "android/feature/feature-agenda/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/feature/feature-agenda/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/agenda/AgendaScreen.kt": {
+      "sha256": "a3efa2e2efa1fdd65fbb8b79b27c2de1ddcf3c34755840b291b2810231c3b201",
+      "size": 67603
+    },
+    "android/feature/feature-agenda/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/agenda/AgendaWeekLayout.kt": {
+      "sha256": "3cdac018a59ab009392697298fc97066b289912fa2c18e09da600ca1b7c5e9da",
+      "size": 4672
+    },
+    "android/feature/feature-agenda/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/agenda/AgendaUpcomingAssessmentTest.kt": {
+      "sha256": "631bd54394d9a9aa6d989780598a35e9bc5cc0a5d86960788e753a9d19404cb4",
+      "size": 2688
+    },
+    "android/feature/feature-agenda/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/agenda/AgendaViewModelTest.kt": {
+      "sha256": "675f49767c3b78f571422fb6047fc7391d84a7be11cbd59b9565a3d6d8613eda",
+      "size": 7622
+    },
+    "android/feature/feature-agenda/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/agenda/AgendaWeekLayoutTest.kt": {
+      "sha256": "c0e818616b6913c1fb40e174723751e385a47229e707f5d604715e3e3ff4bf4b",
+      "size": 2869
+    },
+    "android/feature/feature-assistant/build.gradle": {
+      "sha256": "4c55694a889bf786e65f383832b1f99ac12112736da5be1680778870ff06fd94",
+      "size": 1024
+    },
+    "android/feature/feature-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/assistant/bar/AssistantBarButton.kt": {
+      "sha256": "f179376ca3caca29c3d96a877c748e64f48f59d873f03dc535a957bbf9fcb4ea",
+      "size": 6227
+    },
+    "android/feature/feature-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/assistant/consent/AssistantConsentRoute.kt": {
+      "sha256": "8bd9dcad5db35ec149ae08cef4439c954207079b8c104e33b9af709b8af83b5b",
+      "size": 4594
+    },
+    "android/feature/feature-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/assistant/history/AssistantConversationRoute.kt": {
+      "sha256": "aec8c1ae4396ac146b3f5e154fcee5715ffe66ffc92a88de8a536659ce6ecf5b",
+      "size": 15787
+    },
+    "android/feature/feature-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/assistant/history/AssistantHistoryRoute.kt": {
+      "sha256": "bbb867001ff454934d78609fe886a214ce04299c3659ddd77eee9c898d75f395",
+      "size": 5844
+    },
+    "android/feature/feature-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/assistant/history/AssistantHistoryViewModels.kt": {
+      "sha256": "32d323017bea109f59440c5e6b802c1cee6069355506190e59a8a2cd02912dd3",
+      "size": 6684
+    },
+    "android/feature/feature-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/assistant/overlay/AssistantOverlay.kt": {
+      "sha256": "3de5ffc1e9e0c8836fff7c081f4e841db6672781023759a70d560198bc424c2b",
+      "size": 3223
+    },
+    "android/feature/feature-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/assistant/overlay/AssistantOverlayViewModel.kt": {
+      "sha256": "69182902fe65465866ec738ff845af76fb6c740b6c58c6de9cace5ff3756bde2",
+      "size": 3055
+    },
+    "android/feature/feature-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/assistant/overlay/AssistantTexts.kt": {
+      "sha256": "818c434cfab76f84b02e4fe76741b221932da6d551898564a1e1359030ce6ac6",
+      "size": 3245
+    },
+    "android/feature/feature-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/assistant/settings/AssistantSettingsItems.kt": {
+      "sha256": "32f0b2e08d6a4e394af763f5ca003d49416dd0335d3f48cdfed92dba610e3306",
+      "size": 4297
+    },
+    "android/feature/feature-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/assistant/settings/AssistantSettingsViewModel.kt": {
+      "sha256": "c2f10b313d1c462da323a0d65062a095e5621cd901cd534e25a712ac32f9d3a1",
+      "size": 5660
+    },
+    "android/feature/feature-communications/build.gradle": {
+      "sha256": "2a179c4fc52f8fc764baa7a73437089cf694e63294cb666197ca8c7b019408bb",
+      "size": 1098
+    },
+    "android/feature/feature-communications/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/feature/feature-communications/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/communications/CommunicationsScreen.kt": {
+      "sha256": "8523e501cb6dbdb778579c06a4e32a7c781ddf4a096c585d925dd0ac21a454d0",
+      "size": 64545
+    },
+    "android/feature/feature-communications/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/communications/CommunicationsSections.kt": {
+      "sha256": "d6b132ba1a783e6232ef3a535814b256bdc044e3f3f6dcd2d32822405c193331",
+      "size": 3006
+    },
+    "android/feature/feature-communications/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/communications/CommunicationActionHeuristicsTest.kt": {
+      "sha256": "3d508fd3fa1067d42ca269bc9e14510d35854b47c0ab5cb6821af3b698db1aa8",
+      "size": 3432
+    },
+    "android/feature/feature-communications/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/communications/CommunicationsLaunchRequestTest.kt": {
+      "sha256": "28f4609f5dcbc44da4b975a4805957d44b4126be72d908f3d5dc4413e491caf4",
+      "size": 1575
+    },
+    "android/feature/feature-communications/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/communications/CommunicationsSectionsTest.kt": {
+      "sha256": "0c8aaa3c21522586ed3942c62d3a881c158cc1338f0d0322e98171bd3440e1b6",
+      "size": 2671
+    },
+    "android/feature/feature-communications/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/communications/CommunicationsViewModelTest.kt": {
+      "sha256": "73cbd199dc5dd9eb319b6126bf9b752b38b27c02499d581b74f6c9fca9c79598",
+      "size": 13483
+    },
+    "android/feature/feature-dashboard/build.gradle": {
+      "sha256": "36ce8ca2ecdbde89dfab75992c0a6b871776ea2e079174b504f2ebedc4a41165",
+      "size": 1064
+    },
+    "android/feature/feature-dashboard/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/feature/feature-dashboard/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/dashboard/DashboardScreen.kt": {
+      "sha256": "3c08534499d859cfd33c9ee906904b2ef59a19e6e655e1bf9fa226237882d586",
+      "size": 32557
+    },
+    "android/feature/feature-dashboard/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/dashboard/SecondaryScreens.kt": {
+      "sha256": "74b2bec35d591834e3650064fb912a33f1fc3a8898b16a957d96b730b706e1ec",
+      "size": 78529
+    },
+    "android/feature/feature-dashboard/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/dashboard/TodayMoment.kt": {
+      "sha256": "d5c58961ae30f28f4a8b2e0cd4846594e214879974e9be961a9d2078e39972e6",
+      "size": 3270
+    },
+    "android/feature/feature-dashboard/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/dashboard/DashboardLessonPresentationTest.kt": {
+      "sha256": "5407db48ac03504ff31f95120f38e5762f5c0cbb2c139b179baa9c9adc12eef7",
+      "size": 1971
+    },
+    "android/feature/feature-dashboard/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/dashboard/DashboardTodayMomentTest.kt": {
+      "sha256": "ea7fc87699acfe86d6f6753063566dc928ca7f443302f5e8441c596e4b3049d3",
+      "size": 1799
+    },
+    "android/feature/feature-dashboard/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/dashboard/DashboardViewModelTest.kt": {
+      "sha256": "4f5722db539556c291fc038808be14237b7cc7ccf3391fe6bca334cee38b5cea",
+      "size": 4547
+    },
+    "android/feature/feature-dashboard/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/dashboard/SecondaryScreensToneTest.kt": {
+      "sha256": "80d492bd02c230559edf07a8d9441450806988408103ffde2837d360abee0562",
+      "size": 4044
+    },
+    "android/feature/feature-dashboard/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/dashboard/SecondaryScreensViewModelTest.kt": {
+      "sha256": "5dd6344dd94001c10525864795ca12e88ea90a84f2a98736a89ab6ef1c5d6e8a",
+      "size": 4765
+    },
+    "android/feature/feature-grades/build.gradle": {
+      "sha256": "3864fdb906b3f15564367c4a4cececdef482004b56c8df6af046790ef623a169",
+      "size": 1063
+    },
+    "android/feature/feature-grades/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/feature/feature-grades/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/grades/GradesScreen.kt": {
+      "sha256": "064326db7e7cd8b3e9549edce0230b5eaee5d95ebb00362d88ea3386b49d5c9a",
+      "size": 41225
+    },
+    "android/feature/feature-grades/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/grades/GradesLogicTest.kt": {
+      "sha256": "387f4cef216956c80d700c40ce0a50c0e7728b6160cdaaf89c515137db165121",
+      "size": 7504
+    },
+    "android/feature/feature-grades/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/grades/GradesViewModelTest.kt": {
+      "sha256": "b37609aac1a48318b7a8e79af62f584f3990eecd1342a115d8d4a911dc2e5137",
+      "size": 4782
+    },
+    "android/feature/feature-lessons/build.gradle": {
+      "sha256": "5c4e31a90bacd0f40925710d3322deef69f9d51763106d14d0ac67f80c502e61",
+      "size": 1062
+    },
+    "android/feature/feature-lessons/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/feature/feature-lessons/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/lessons/LessonsScreen.kt": {
+      "sha256": "7bea718af9b687730eb88717208122436c5e7b99d4075ac21e5857dca5e34be2",
+      "size": 61834
+    },
+    "android/feature/feature-lessons/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/lessons/ProfessorsScreen.kt": {
+      "sha256": "f4df047ae0f9660e59432398170f73bb64c54c97f4a335b66c186555c5a655e0",
+      "size": 35597
+    },
+    "android/feature/feature-lessons/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/lessons/LessonsLiveSlotTest.kt": {
+      "sha256": "61c60d0a547f185634094f9cd04359aac19e03f5bfdd46f7cc8da7167e67283f",
+      "size": 4243
+    },
+    "android/feature/feature-lessons/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/lessons/LessonsTimelineTest.kt": {
+      "sha256": "9f98a186ebe277c705c8576052729440147781c93f0e95bde156518493ea0987",
+      "size": 2715
+    },
+    "android/feature/feature-lessons/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/lessons/LessonsViewModelTest.kt": {
+      "sha256": "185fad91a09e69150e92f42055e752f74ef5a1345c1d71270e429622fa992bf6",
+      "size": 4638
+    },
+    "android/feature/feature-settings/build.gradle": {
+      "sha256": "679742ddd9fc3a422e6fa74e06d91f2bd3ff803ef1999d7242778a4f05cf8ca6",
+      "size": 1119
+    },
+    "android/feature/feature-settings/src/main/AndroidManifest.xml": {
+      "sha256": "8bd85a8fc13f61efab68aeec94a7c3a76cd1946ba63dd01109278e817cf717e5",
+      "size": 14
+    },
+    "android/feature/feature-settings/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/settings/AccountAccess.kt": {
+      "sha256": "7e012974642a25eab68e1a2777615b2b99ad67a5798d7eda2ea8c15b654dddc7",
+      "size": 3213
+    },
+    "android/feature/feature-settings/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/settings/SettingsScreen.kt": {
+      "sha256": "258afd750c769b6b3314e14d32c723599971636702ff0850507cf7a4fa4ce53f",
+      "size": 58350
+    },
+    "android/feature/feature-settings/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/settings/BackupSummaryTest.kt": {
+      "sha256": "650fc56a55943156ea85f624e00575d15a649b1120ea210f3734390a3554843d",
+      "size": 1646
+    },
+    "android/feature/feature-settings/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/settings/SettingsAppearanceStateTest.kt": {
+      "sha256": "35f40209fc82e9026e090de74a554a85beac30fb36706ac2589afba7eae06c2a",
+      "size": 1256
+    },
+    "android/feature/feature-settings/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/settings/SettingsViewModelTest.kt": {
+      "sha256": "ae9589e1285d09f89663c4196328e588e39df1f353d6d02b2f303db96096db2b",
+      "size": 19952
+    },
+    "android/feature/feature-widgets/build.gradle": {
+      "sha256": "db57a8c36917f57386abf7c28715266e1a1db7bdd9b629fb08472cc1ae499aba",
+      "size": 1434
+    },
+    "android/feature/feature-widgets/src/main/AndroidManifest.xml": {
+      "sha256": "480344a482e71d83653ea47e2deb2d5f84b05313ec069ecc25e2ea37fdf533f5",
+      "size": 791
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/RefreshWidgetAction.kt": {
+      "sha256": "ff81750460bebd0b67daafd1daebe5ef12daf21ff3fb6ff81004f5f7f5a63d91",
+      "size": 733
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/SchoolOverviewWidget.kt": {
+      "sha256": "46321b19778f3c332322c8e77990590860eae8903642fd1db7504fd7815e639c",
+      "size": 17886
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/SchoolOverviewWidgetReceiver.kt": {
+      "sha256": "9d9d7434f486872304edb20dfcef9ce0caf175e7a5e992f6100100b9a5eb7dd4",
+      "size": 309
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/SchoolWidgetInvalidator.kt": {
+      "sha256": "420b2fba5139b368039c46f5100541b472efa6b4ff5802ed1cd73c1b3ca5d497",
+      "size": 1002
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/SchoolWidgetMapper.kt": {
+      "sha256": "0b8b539e893de3282f56e31376730cb4984dbf7b403a3bf7ae42ea9ac68a9cfa",
+      "size": 9745
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/SchoolWidgetPreferences.kt": {
+      "sha256": "9df89ed4a97362e0a37056599f05831df45a27a55c432fa781ed4b798c5ebe67",
+      "size": 3838
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/WidgetAppearanceWatcher.kt": {
+      "sha256": "aac1395891d1da28b0167f39f8a50ee2115a2682d441e1485579edcb13a2d8c8",
+      "size": 2217
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/WidgetConfigurationActivity.kt": {
+      "sha256": "b7343c1682cbcc01f8f7fd9fd5ddc63b62a010a07aee9a0f6f182af628bcafd0",
+      "size": 9680
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/WidgetLayout.kt": {
+      "sha256": "753376b7b3e25cb0f5371ede1893f371477ae4415737f00bf410f35ba6b1d358",
+      "size": 3499
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/WidgetRefreshWorker.kt": {
+      "sha256": "4652fe59ef86d142af6e9fcd6d3eb6ab70c0c35f6849b9116e1694d8a7d81fca",
+      "size": 2338
+    },
+    "android/feature/feature-widgets/src/main/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/WidgetTheme.kt": {
+      "sha256": "f39288b90a548990ff348c4866bdab162f2b69cb4dd6bef328cb95437e8e5dd8",
+      "size": 7057
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/ic_widget_alert.xml": {
+      "sha256": "3820748d7131f0acd67e002372f2ec31412c40e8c773f13a907de4da06da8863",
+      "size": 608
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/ic_widget_assessment.xml": {
+      "sha256": "6313e4dfcc87b0c36e2a38a1e96494d3a075450dafa61bdfb45c78f6fb935fd8",
+      "size": 560
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/ic_widget_event.xml": {
+      "sha256": "3327d555de7e2e660a608bd9b238c74e8beea0c0971cfe35c05a37e85c0bf042",
+      "size": 781
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/ic_widget_homework.xml": {
+      "sha256": "ea7ed7e07f2d37b2423a8cca43a88aa0aedd8723ec80581100faf70234228907",
+      "size": 825
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/ic_widget_refresh.xml": {
+      "sha256": "0db17932e320112cf06f33664cdf6128c22b85dfb292d719d3d6156d2cdb5f95",
+      "size": 699
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/widget_preview_card.xml": {
+      "sha256": "b7526df3c114c1c2c03dda0194718c3faa0c6e54d2ccf2920ded7de61d97dc8d",
+      "size": 224
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/widget_preview_container.xml": {
+      "sha256": "281742a9eebbabd511212ec84e191e551e438fe8d271f0f075ab8cdab054d320",
+      "size": 230
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/widget_preview_pill.xml": {
+      "sha256": "78f9bee5a1a301bace5ddd0c9e23dfd49cdfcf48bff4d4f992a995cc30c9f330",
+      "size": 236
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/widget_preview_pill_secondary.xml": {
+      "sha256": "9eb7eef025392c432fa6d106736210fcda6e28ca61239c46359aa675910edf94",
+      "size": 239
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/widget_preview_tile_assessment.xml": {
+      "sha256": "00ea0e734bc7d8c8799e1cc5090d10faa120eb82b54ad323e9a458cecf4fe31c",
+      "size": 234
+    },
+    "android/feature/feature-widgets/src/main/res/drawable/widget_preview_tile_homework.xml": {
+      "sha256": "511595cdaf1047aaa6f81418fbf03555cefce63b23d2d016aa95a9643007a48f",
+      "size": 232
+    },
+    "android/feature/feature-widgets/src/main/res/layout/school_overview_widget_loading.xml": {
+      "sha256": "ddf294e1d327d25e439aeb068ff5ab5a4431ddd550ac67b38e8fcad3fcd718cc",
+      "size": 1140
+    },
+    "android/feature/feature-widgets/src/main/res/layout/school_overview_widget_preview.xml": {
+      "sha256": "23f7732c8cee455625b5544aa000459149bd20176dd1ede93aafaaff9c92ec52",
+      "size": 9268
+    },
+    "android/feature/feature-widgets/src/main/res/values/colors.xml": {
+      "sha256": "d2bb14852eb39143f36751d576f1a522d2490c482a78065195ba7f2a3f57242a",
+      "size": 1064
+    },
+    "android/feature/feature-widgets/src/main/res/values/strings.xml": {
+      "sha256": "d0d31051b69374ff3e50a2bed0a35d2421794296e5b52ec823a3de6f49061a7e",
+      "size": 1206
+    },
+    "android/feature/feature-widgets/src/main/res/values/styles.xml": {
+      "sha256": "375b057668f497d94d7bdc2f02781945db7762ea00311f618144e2d806dd634e",
+      "size": 651
+    },
+    "android/feature/feature-widgets/src/main/res/values-night/colors.xml": {
+      "sha256": "c52310388d3801afc414ffa68e606ec5976fb3c6d65a057e4bc426e6a3768ef4",
+      "size": 731
+    },
+    "android/feature/feature-widgets/src/main/res/values-night/styles.xml": {
+      "sha256": "0b9c49b3435e513d66565b2908e7692762b74aaa0119d272764964f6d59f3013",
+      "size": 283
+    },
+    "android/feature/feature-widgets/src/main/res/xml/school_overview_widget_info.xml": {
+      "sha256": "b71374a47adca111dbc4e2ca8139c1761bb751e48648f64baae2532a4c204ec1",
+      "size": 799
+    },
+    "android/feature/feature-widgets/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/SchoolWidgetMapperTest.kt": {
+      "sha256": "d67b78da555636a93306f6be859bb749dfb691b381acc9df9f716feaeb784a66",
+      "size": 7955
+    },
+    "android/feature/feature-widgets/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/WidgetLayoutTest.kt": {
+      "sha256": "c44c7406974366f7df9350e4db5aeab21e453cc2079cc00c33f61e51b3219774",
+      "size": 3022
+    },
+    "android/feature/feature-widgets/src/test/kotlin/dev/antigravity/classevivaexpressive/feature/widgets/WidgetRefreshWorkerTest.kt": {
+      "sha256": "a9e39b82d71bdfdfee65e012470973a08cabd4b33006873371212cc0383f4d12",
+      "size": 632
+    },
+    "android/gradle/libs.versions.toml": {
+      "sha256": "bb4b6cb9f98e8f595208ccd306808f1f482326ad73c4cb190d1630bb6ddd2bb1",
+      "size": 7287
+    },
+    "android/gradle/wrapper/gradle-wrapper.properties": {
+      "sha256": "1cd0520711f5dd7978f549f69fbeb387c2ca331d133ac95b2403acc214ef43e4",
+      "size": 260
+    },
+    "android/gradle.properties": {
+      "sha256": "634a7cd248e35f4cb686427c885c952c93dbdd4b9c1e82b9cbb3df7ee1ae37b4",
+      "size": 428
+    },
+    "android/settings.gradle": {
+      "sha256": "6273c04f4eb67321362d4094f9b657140f19a9776fc6c7b32116f0375d0d3152",
+      "size": 1364
+    },
+    "docs/cv-memory-integration-handoff.md": {
+      "sha256": "323eafbfa5ecd83817ffb9ccf08f907b456b1ed45ed1a54b99ea6830e9f6b690",
+      "size": 7682
+    },
+    "docs/releases/7.17.0-beta.2.md": {
+      "sha256": "30ff88b0080a891f340a1585f21d09c6a4a358b0caec3b116131ba37ee6f2493",
+      "size": 2210
+    }
+  }
+}

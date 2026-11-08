@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.assistant.math.GradeMathTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:17.249Z" hostname="PC_FISSO" time="0.024">
+  <properties/>
+  <testcase name="l'andamento confronta la prima meta' dell'anno con la seconda" classname="dev.antigravity.classevivaexpressive.core.assistant.math.GradeMathTest" time="0.016"/>
+  <testcase name="il voto che serve per arrivare a una media si calcola, e si dice quando non basta uno" classname="dev.antigravity.classevivaexpressive.core.assistant.math.GradeMathTest" time="0.0"/>
+  <testcase name="la ponderata usa il peso, peso zero non conta, percentuali diventano frazioni" classname="dev.antigravity.classevivaexpressive.core.assistant.math.GradeMathTest" time="0.0"/>
+  <testcase name="i numeri si scrivono senza zeri inutili" classname="dev.antigravity.classevivaexpressive.core.assistant.math.GradeMathTest" time="0.007"/>
+  <testcase name="la media semplice e' quella dell'app e ignora i voti senza valore" classname="dev.antigravity.classevivaexpressive.core.assistant.math.GradeMathTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

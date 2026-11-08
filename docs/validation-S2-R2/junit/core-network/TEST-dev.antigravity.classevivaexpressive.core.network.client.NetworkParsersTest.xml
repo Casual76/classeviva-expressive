@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" tests="56" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:51.796Z" hostname="PC_FISSO" time="0.048">
+  <properties/>
+  <testcase name="normalizeLesson_marksClassevivaSignedLessonEvenWithoutTopic" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeHomework_readsHomeworksIndexItem" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.002"/>
+  <testcase name="normalizeGrade_parsesWeightFactor" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeAbsence_parsesJustifiedAbsence" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.002"/>
+  <testcase name="normalizeCommunication_readsClassevivaReadStatusLabelsAndActionFlags" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.006"/>
+  <testcase name="normalizeMaterialAsset_exposesValidatedExternalSourceForLink" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeAgendaItem_detectsHomeworkCategoryFromTitle" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeAgendaItem_detectsAssessmentCategoryFromTitle" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeAgendaItem_classifiesOfficialHomeworkRows" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeGrade_handlesTextualGradeWithNullNumericValue" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeCommunicationDetail_preservesPortalUrlsForGateway" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.002"/>
+  <testcase name="normalizeLesson_derivesClockTimeFromClassevivaHourPosition" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeMaterialAsset_keepsOfficialSourceWhenPreviewIsMissing" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeCommunicationDetail_keepsOfficialRestUrls" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeDocumentAsset_marksHtmlPreviewAsAvailable" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeSchoolbooksPayload_parsesDirectBooksWithMetadataAndFlags" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.005"/>
+  <testcase name="normalizeAbsence_parsesExitWithHour" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeStudentId_keepsRealIdsAndRefusesEverythingElse" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeLesson_fallsBackToDefaultDurationWhenMissing" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeAgendaItem_defaultsToEventCategoryForUnknownTitle" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeSchoolbooksPayload_generatesStableNonBlankBookIdWhenRemoteIdAndIsbnAreMissing" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.002"/>
+  <testcase name="normalizeAbsence_parsesLateEntryNotJustified" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeAgendaItem_stripsIsoPrefixAndDuplicateDetail" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeGrade_hasPeriodCodeNullWhenMissing" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeCommunicationDetail_readsOfficialReadPayloadText" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="noticeboardAttachmentUrls_useFileIndexForDownloads" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.003"/>
+  <testcase name="normalizeHomeworkIndex_prefixesIdsAndMarksDedicated" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="parseWhoAmIStudentId_readsNumericIdOrIdentity" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeSchoolbookCourse_parsesMultipleBooks" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeAbsence_mapsLateAndExitSeparately" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeMaterialsPayload_acceptsDirectRootArray" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeDocument_marksAvailableWhenOfficialViewUrlPresent" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeGrade_parsesNumericGrade" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeAgendaItem_fallsBackToFriendlySubjectWhenMateriaIsClassLabel" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeAgendaItem_usesCreatedAtAndTeacherWhenAvailable" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeHomework_parsesDueDateAndDescription" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeCommunication_prefersCntIdAsStableIdAndKeepsPubId" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeMaterialsPayload_parsesLegacyWrapperWithDirectFolderAndContentArrays" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="restOriginPolicy_rejectsLookalikeHostsHttpAndUnexpectedPorts" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeLesson_keepsPlannedLessonUnsignedEvenWithTeacher" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeHomework_withoutDueDateDoesNotDefaultToToday" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeSubject_readsTheTeacherArrayThatClassevivaActuallySends" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.002"/>
+  <testcase name="normalizeDocument_marksUnavailableWhenNoOfficialUrl" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeDocumentsPayload_combinesDocumentsAndSchoolReports" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeAbsence_prefersEvtCodeMappingOverText" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeCommunicationDetail_readsNestedClassevivaContentAndJoinFlag" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeLesson_parsesStandardLesson" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeAbsence_preservesPortalJustificationUrlsForGateway" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeLesson_handlesDateTimeBeginAsDate" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeMaterialsPayload_generatesStableNonBlankIdWhenRemoteIdIsMissing" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeHomework_hasEmptyAttachmentsByDefault" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeMaterialsPayload_preservesValidatedExternalLinkWithoutTreatingItAsPortalAsset" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeCommunication_marksAckActionsAsAvailableWhenHandledInApp" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.001"/>
+  <testcase name="normalizeNote_mapsCategoryCodesToProductLabels" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="normalizeSchoolbookCourse_returnsEmptyBooksListWhenNoBooksPresent" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <testcase name="externalMaterialUrlPolicy_acceptsOnlyCredentialFreeHttpsOutsideAuthenticatedRest" classname="dev.antigravity.classevivaexpressive.core.network.client.NetworkParsersTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

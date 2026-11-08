@@ -939,6 +939,7 @@ interface AuthRepository {
   suspend fun restore(): UserSession?
   /** Non-secret generation captured before an external authentication flow begins. */
   fun authenticationEpoch(): Long = 0L
+  fun dataEpoch(): Long = 0L
   suspend fun login(username: String, password: String): Result<UserSession>
   suspend fun loginWithCie(
     pa: String,
@@ -970,6 +971,7 @@ interface AgendaRepository {
   fun observeAgenda(): Flow<List<AgendaItem>>
   fun observeCustomEvents(): Flow<List<CustomEvent>>
   suspend fun addCustomEvent(event: CustomEvent)
+  suspend fun addScopedCustomEvent(event: CustomEvent, expectedAuthenticationEpoch: Long, expectedDataEpoch: Long? = null) { throw UnsupportedOperationException("Scoped event writes unavailable") }
   suspend fun removeCustomEvent(id: String)
   suspend fun setCategoryOverride(itemId: String, category: AgendaCategory)
   suspend fun refreshAgenda(force: Boolean = false): Result<List<AgendaItem>>

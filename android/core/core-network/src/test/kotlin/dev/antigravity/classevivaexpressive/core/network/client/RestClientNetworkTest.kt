@@ -795,4 +795,133 @@ class RestClientNetworkTest {
       credentials = null
     }
   }
+  @Test fun strictAgendaRejectsInventedRowsAndEveryMalformedSiblingWhileLegacyRemainsCompatible() = runBlocking {
+    setActiveSession(token = "fixture", studentId = "312345")
+    for (body in listOf(
+      """{"agenda":[{}]}""",
+      """{"agenda":[],"events":[{}]}""",
+      """{"agenda":{"error":[]}}""",
+      """{"agenda":[{"id":"1","date":"2026-02-30","title":"x"}]}"""
+    )) {
+      server.enqueue(jsonResponse(body))
+      try { withStrictSchoolRead { restClient.getAgenda("2026-03-01", "2026-03-07") }; fail(body) }
+      catch (_: ClassevivaNetworkException) { }
+    }
+    server.enqueue(jsonResponse("""{"agenda":[]}"""))
+    assertTrue(withStrictSchoolRead { restClient.getAgenda("2026-03-01", "2026-03-07") }.isEmpty())
+    server.enqueue(jsonResponse("""{"agenda":[{}]}"""))
+    assertEquals(1, restClient.getAgenda("2026-03-01", "2026-03-07").size)
+  }
+
+  @Test fun strictNestedMaterialsAndDocumentSiblingsAreValidatedThroughNetwork() = runBlocking {
+    setActiveSession(token = "fixture", studentId = "312345")
+    server.enqueue(jsonResponse(javaClass.classLoader!!.getResource("fixtures/didactics_direct_arrays.json")!!.readText()))
+    assertEquals(1, withStrictSchoolRead { restClient.getMaterials() }.size)
+    server.enqueue(jsonResponse(javaClass.classLoader!!.getResource("fixtures/documents_combined.json")!!.readText()))
+    assertEquals(2, withStrictSchoolRead { restClient.getDocuments() }.size)
+    for (body in listOf(
+      """{"didactics":[{"folders":[{"contents":[{}]}]}]}""",
+      """{"didactics":[],"teachers":[{"folders":{}}]}"""
+    )) {
+      server.enqueue(jsonResponse(body))
+      try { withStrictSchoolRead { restClient.getMaterials() }; fail(body) } catch (_: ClassevivaNetworkException) { }
+    }
+    server.enqueue(jsonResponse("""{"documents":[],"schoolReports":[{}]}"""))
+    try { withStrictSchoolRead { restClient.getDocuments() }; fail("malformed report accepted") } catch (_: ClassevivaNetworkException) { }
+  }
+
+  @Test fun strictEverySectionRejectsRowsMissingRequiredSemanticFields() = runBlocking {
+    setActiveSession(token = "fixture", studentId = "312345")
+    val cases: List<Pair<String, suspend () -> Any>> = listOf(
+      """{"grades":[{"id":"g","evtDate":"2026-11-07","subjectDesc":"Math"}]}""" to { restClient.getGrades() },
+      """{"lessons":[{"id":"l","date":"2026-11-07"}]}""" to { restClient.getLessons("2026-11-01", "2026-11-07") },
+      """{"events":[{"id":"a","evtDate":"bad","evtCode":"ABA"}]}""" to { restClient.getAbsences() },
+      """{"items":[{"cntId":"c","evtDate":"2026-11-07"}]}""" to { restClient.getCommunications() },
+      """{"NTTE":[{"evtId":"n","evtDate":"2026-11-07"}]}""" to { restClient.getNotes() }
+    )
+    for ((body, read) in cases) {
+      server.enqueue(jsonResponse(body))
+      try { withStrictSchoolRead { read() }; fail(body) } catch (_: ClassevivaNetworkException) { }
+    }
+  }
+
+  @Test fun strictCollectionSelectionUsesTheSameRowsAsExtraction() = runBlocking {
+    setActiveSession(token = "fixture", studentId = "312345")
+    val row = """{"id":"real-1","date":"2026-11-07","title":"Assessment"}"""
+    for (body in listOf("""{"data":[$row]}""", """{"agenda":{"data":[$row]}}""",
+      """{"agenda":[],"events":[$row]}""", """{"agenda":[$row],"events":[]}""")) {
+      server.enqueue(jsonResponse(body))
+      val result = withStrictSchoolRead { restClient.getAgenda("2026-11-01", "2026-11-07") }.single()
+      assertEquals("real-1", result.id); assertEquals("Assessment", result.title)
+    }
+    for (body in listOf("""{"agenda":[],"events":[],"data":{"items":[]}}""", """{"data":[]}""")) {
+      server.enqueue(jsonResponse(body))
+      assertTrue(withStrictSchoolRead { restClient.getAgenda("2026-11-01", "2026-11-07") }.isEmpty())
+    }
+    for (body in listOf("""{"agenda":[$row],"events":[$row]}""", """{"agenda":[],"data":{"unknown":[]}}""",
+      """{"agenda":[],"events":{"error":[]}}""", """{"unknown":[$row]}""")) {
+      server.enqueue(jsonResponse(body))
+      try { withStrictSchoolRead { restClient.getAgenda("2026-11-01", "2026-11-07") }; fail(body) }
+      catch (_: ClassevivaNetworkException) { }
+    }
+    server.enqueue(jsonResponse("""{"agenda":[],"events":[$row]}"""))
+    assertTrue(restClient.getAgenda("2026-11-01", "2026-11-07").isEmpty())
+  }
+
+  @Test fun strictAliasTypesRejectMalformedEarlierValuesAndKeepNullFallback() = runBlocking {
+    setActiveSession(token = "fixture", studentId = "312345")
+    for (bad in listOf("false", "{}", "[]")) {
+      for (fields in listOf(""""id":$bad,"evtId":"real-1","date":"2026-11-07","title":"Assessment"""",
+        """"id":"real-1","date":$bad,"evtDate":"2026-11-07","title":"Assessment"""",
+        """"id":"real-1","date":"2026-11-07","title":$bad,"evtTitle":"Assessment"""",
+        """"id":"real-1","date":"2026-11-07","title":"Assessment","subjectDesc":$bad,"subject":"Math"""")) {
+        val body = """{"agenda":[{$fields}]}"""
+        server.enqueue(jsonResponse(body))
+        try { withStrictSchoolRead { restClient.getAgenda("2026-11-01", "2026-11-07") }; fail(body) }
+        catch (_: ClassevivaNetworkException) { }
+      }
+    }
+    server.enqueue(jsonResponse("""{"agenda":[{"id":null,"evtId":"real-1","date":null,"evtDate":"2026-11-07","title":null,"evtTitle":"Assessment"}]}"""))
+    val row = withStrictSchoolRead { restClient.getAgenda("2026-11-01", "2026-11-07") }.single()
+    assertEquals("real-1", row.id); assertEquals("Assessment", row.title); assertEquals("2026-11-07", row.date)
+    server.enqueue(jsonResponse("""{"agenda":[{"id":false,"evtId":"real-1","date":"2026-11-07","title":false,"evtTitle":"Assessment"}]}"""))
+    val legacy = restClient.getAgenda("2026-11-01", "2026-11-07").single()
+    assertEquals("false", legacy.id); assertEquals("false", legacy.title)
+  }
+
+  @Test fun strictGradeAliasesKeepTextLabelsButRejectBooleanObjectsAndArrays() = runBlocking {
+    setActiveSession(token = "fixture", studentId = "312345")
+    for (field in listOf("grade", "displayValue", "decimalValue", "subjectDesc", "id", "evtDate")) {
+      for (bad in listOf("true", "{}", "[]")) {
+        val values = linkedMapOf("id" to "\"g\"", "grade" to "\"Ottimo\"", "value" to "\"Buono\"", "evtDate" to "\"2026-11-07\"", "subjectDesc" to "\"Math\"")
+        values[field] = bad
+        val body = "{\"grades\":[{" + values.entries.joinToString(",") { "\"${it.key}\":${it.value}" } + "}]}"
+        server.enqueue(jsonResponse(body))
+        try { withStrictSchoolRead { restClient.getGrades() }; fail(body) } catch (_: ClassevivaNetworkException) { }
+      }
+    }
+    server.enqueue(jsonResponse("""{"grades":[{"id":null,"evtId":"g","grade":null,"value":"Ottimo","evtDate":null,"date":"2026-11-07","subjectDesc":null,"subject":"Math"}]}"""))
+    val grade = withStrictSchoolRead { restClient.getGrades() }.single()
+    assertEquals("g", grade.id); assertEquals("Ottimo", grade.valueLabel); assertNull(grade.numericValue)
+    assertEquals("Math", grade.subject); assertEquals("2026-11-07", grade.date)
+  }
+
+  @Test fun strictMaterialAndDocumentBranchesCannotDropNonemptySiblings() = runBlocking {
+    setActiveSession(token = "fixture", studentId = "312345")
+    val content = """{"id":"m","contentName":"Lesson","shareDT":"2026-11-07"}"""
+    val teacher = """{"teacherId":"t","folders":[],"contents":[$content]}"""
+    server.enqueue(jsonResponse("""{"didactics":[],"data":[$teacher]}"""))
+    assertEquals("m", withStrictSchoolRead { restClient.getMaterials() }.single().id)
+    val folder = """{"folderId":"f","contents":[],"items":[$content]}"""
+    server.enqueue(jsonResponse("""{"didactics":[{"teacherId":"t","folders":[$folder]}]}"""))
+    assertEquals("m", withStrictSchoolRead { restClient.getMaterials() }.single().id)
+    server.enqueue(jsonResponse("""{"didactics":[$teacher],"teachers":[$teacher]}"""))
+    try { withStrictSchoolRead { restClient.getMaterials() }; fail("ambiguous teachers") } catch (_: ClassevivaNetworkException) { }
+    val doc = """{"id":"d","title":"Document"}"""
+    server.enqueue(jsonResponse("""{"data":{"documents":[$doc],"schoolReports":[]}}"""))
+    assertEquals("d", withStrictSchoolRead { restClient.getDocuments() }.single().id)
+    server.enqueue(jsonResponse("""{"documents":[],"data":[$doc]}"""))
+    try { withStrictSchoolRead { restClient.getDocuments() }; fail("unsupported mixed document envelopes") } catch (_: ClassevivaNetworkException) { }
+  }
+
 }

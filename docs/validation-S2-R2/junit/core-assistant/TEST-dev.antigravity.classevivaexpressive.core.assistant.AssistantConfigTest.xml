@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.assistant.AssistantConfigTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:50:03.631Z" hostname="PC_FISSO" time="0.013">
+  <properties/>
+  <testcase name="theGateTakesItsWindowFromTheSameConfig" classname="dev.antigravity.classevivaexpressive.core.assistant.AssistantConfigTest" time="0.011"/>
+  <testcase name="onlyTheAppGroupWaitsForConfirmations" classname="dev.antigravity.classevivaexpressive.core.assistant.AssistantConfigTest" time="0.001"/>
+  <testcase name="toolCeilingIsTheWorkTimeNotTheConfirmationWindow" classname="dev.antigravity.classevivaexpressive.core.assistant.AssistantConfigTest" time="0.0"/>
+  <testcase name="theWholeQuestionStillFitsTheForegroundService" classname="dev.antigravity.classevivaexpressive.core.assistant.AssistantConfigTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

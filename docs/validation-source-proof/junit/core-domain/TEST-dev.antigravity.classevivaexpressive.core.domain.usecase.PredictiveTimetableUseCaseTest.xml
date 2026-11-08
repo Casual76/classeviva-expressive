@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:22.174Z" hostname="PC_FISSO" time="0.019">
+  <properties/>
+  <testcase name="getScheduleForDate_keepsActualLessonOverPredictedDuplicate" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.01"/>
+  <testcase name="crossSubjectTeacher_normalizesEducazioneCivica" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.001"/>
+  <testcase name="bellGridDiscovery_findsMultipleSlotsAndSnaps" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.001"/>
+  <testcase name="multiHourLesson_spreadsAcrossBellSlots" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.001"/>
+  <testcase name="generateTimetableTemplate_prefersRecentRecurringPattern" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.0"/>
+  <testcase name="roomMode_picksMostFrequentRoom" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.001"/>
+  <testcase name="getScheduleForDate_returnsEmpty_whenNoData" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.0"/>
+  <testcase name="emptyOrInvalidLessons_returnEmptyTemplate" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.0"/>
+  <testcase name="changeDetection_recentTeacherChangeBeatsHistory" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.001"/>
+  <testcase name="confidence_reflectsBothFrequencyAndShare" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.002"/>
+  <testcase name="substituteTeacher_doesNotOverrideRegularTeacher" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.0"/>
+  <testcase name="isolatedSpecialEvent_doesNotPolluteTemplate" classname="dev.antigravity.classevivaexpressive.core.domain.usecase.PredictiveTimetableUseCaseTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

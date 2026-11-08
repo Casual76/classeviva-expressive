@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStoreTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:25.578Z" hostname="PC_FISSO" time="0.342">
+  <properties/>
+  <testcase name="automaticFallback_isAtomicDurableAcknowledgedAndCannotRepeatFromTarget" classname="dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStoreTest" time="0.326"/>
+  <testcase name="legacySelectionTwoYearsBehind_isNormalisedToTheSupportedCurrentYear" classname="dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStoreTest" time="0.012"/>
+  <testcase name="currentAndAvailableYears_areRecalculatedFromTheProvidedDate" classname="dev.antigravity.classevivaexpressive.core.datastore.SchoolYearStoreTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

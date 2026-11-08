@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" tests="34" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:51.935Z" hostname="PC_FISSO" time="1.113">
+  <properties/>
+  <testcase name="getAgenda_formatsDatesAndInjectsToken" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.817"/>
+  <testcase name="openDocumentStream_usesRemoteHashWithoutBufferingBody" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.007"/>
+  <testcase name="confirmNoticeboard_callsReadEndpointDirectly" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.009"/>
+  <testcase name="strictCollectionSelectionUsesTheSameRowsAsExtraction" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.019"/>
+  <testcase name="getDocuments_postsWithoutBodyAndCombinesCollectionsUsingRemoteHash" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.008"/>
+  <testcase name="getProfile_maps500ToDomainError" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.005"/>
+  <testcase name="getProfile_retriesAfter401WithStatusReloginAndRetry" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.012"/>
+  <testcase name="getCommunicationDetail_postsOfficialPayloadToReadEndpoint" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.007"/>
+  <testcase name="checkDocument_postsRemoteHashInsteadOfLocalDocumentId" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.006"/>
+  <testcase name="strictAliasTypesRejectMalformedEarlierValuesAndKeepNullFallback" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.025"/>
+  <testcase name="getMaterials_mapsClosedSchoolYearToTypedError" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.007"/>
+  <testcase name="strictNestedMaterialsAndDocumentSiblingsAreValidatedThroughNetwork" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.013"/>
+  <testcase name="getAbsencesInRange_404OnBothMeansNoAbsences" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.01"/>
+  <testcase name="getProfile_keepsUnrecognised422AsAGenericError" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.006"/>
+  <testcase name="checkDocument_rejectsMissingRemoteHashWithoutNetworkCall" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.003"/>
+  <testcase name="strictMaterialAndDocumentBranchesCannotDropNonemptySiblings" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.014"/>
+  <testcase name="login_sendsOfficialHeadersAndPayload" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.005"/>
+  <testcase name="getHomeworksIndex_callsW1WithTokenAndParsesItems" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.007"/>
+  <testcase name="strictAgendaRejectsInventedRowsAndEveryMalformedSiblingWhileLegacyRemainsCompatible" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.012"/>
+  <testcase name="getAbsencesInRange_otherErrorsStillFail" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.005"/>
+  <testcase name="linkMaterial_resolvesOnlySafeExternalHttpsUrlAndNeverStartsAuthenticatedDownload" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.004"/>
+  <testcase name="getDocuments_doesNotSynthesizeRestUrlsWhenHashIsMissing" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.005"/>
+  <testcase name="openMaterialStream_leavesAuthenticatedBodyForCallerConsumption" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.006"/>
+  <testcase name="strictGradeAliasesKeepTextLabelsButRejectBooleanObjectsAndArrays" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.03"/>
+  <testcase name="getHomeworksIndex_rejectsLoginPageServedAsSuccess" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.006"/>
+  <testcase name="strictEverySectionRejectsRowsMissingRequiredSemanticFields" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.015"/>
+  <testcase name="getProfile_maps404ToDomainError" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.005"/>
+  <testcase name="getMaterials_acceptsLegacyWrapperAndDirectNestedArrays" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.005"/>
+  <testcase name="getDocuments_retriesWithGetOnlyFor400InvalidPayload" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.006"/>
+  <testcase name="getAbsencesInRange_404FallsBackToFullListInsideRange" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.007"/>
+  <testcase name="getHomeworksIndex_doesNotRefreshTheRestSessionOnRejection" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.005"/>
+  <testcase name="getDocuments_doesNotRetryOther400Responses" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.005"/>
+  <testcase name="getSchoolbooks_acceptsTopLevelBooksArray" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.006"/>
+  <testcase name="dynamicRestUrl_rejectsHostileOriginWhileOfficialOriginReceivesCredentials" classname="dev.antigravity.classevivaexpressive.core.network.client.RestClientNetworkTest" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[WARNING: A Java agent has been loaded dynamically (C:\Users\casua\.gradle\caches\modules-2\files-2.1\net.bytebuddy\byte-buddy-agent\1.14.17\e3c251a39dc90badaf71c83427ba46840f219d8d\byte-buddy-agent-1.14.17.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+]]></system-err>
+</testsuite>

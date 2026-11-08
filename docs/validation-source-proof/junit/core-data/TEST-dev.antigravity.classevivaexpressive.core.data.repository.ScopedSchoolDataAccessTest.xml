@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:57.481Z" hostname="PC_FISSO" time="0.151">
+  <properties/>
+  <testcase name="invalidatedAuthenticationCanReadStaleCacheButCannotRefresh" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.086"/>
+  <testcase name="historicalRefreshUsesExplicitDatesAndNeverSelectionStore" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.008"/>
+  <testcase name="currentLoginDoesNotMakeOldCacheFreshOrAuthValidated" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.004"/>
+  <testcase name="legacyStudentCacheCannotBeRelabeledForScopedRead" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.007"/>
+  <testcase name="logoutDuringNetworkCannotWriteOrReturnOldData" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.005"/>
+  <testcase name="dedicatedCacheKeysSeparateAccountsAndYearsForSameStudent" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.006"/>
+  <testcase name="mismatchedAccountAndStudentNeverAccessNetworkOrCache" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.003"/>
+  <testcase name="failedStrictRefreshPreservesKnownCache" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.007"/>
+  <testcase name="outOfYearRequestsRejectBeforeCacheOrNetworkEvenWhenSourceIsEmpty" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.005"/>
+  <testcase name="absentCacheIsUnavailableAndNeverKnownEmpty" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.003"/>
+  <testcase name="missingAuthAndNetworkErrorAreDistinct" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.003"/>
+  <testcase name="sameStudentAccountSwitchDuringRefreshCannotCommitPreviousAccountData" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.006"/>
+  <testcase name="accountInvalidationDuringCacheReadDiscardsResult" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.004"/>
+  <testcase name="historicalNonYearEndpointNeverSubstitutesCurrentData" classname="dev.antigravity.classevivaexpressive.core.data.repository.ScopedSchoolDataAccessTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

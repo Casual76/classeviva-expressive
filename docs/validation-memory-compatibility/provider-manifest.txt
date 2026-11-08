@@ -1,0 +1,8 @@
+      E: provider (line=158)
+        A: android:name(0x01010003)="dev.antigravity.classevivaexpressive.core.assistant.pampai.RegistroToolHostProvider" (Raw: "dev.antigravity.classevivaexpressive.core.assistant.pampai.RegistroToolHostProvider")
+        A: android:exported(0x01010010)=(type 0x12)0xffffffff
+        A: android:authorities(0x01010018)="dev.antigravity.classevivaexpressive.ai.tools" (Raw: "dev.antigravity.classevivaexpressive.ai.tools")
+        A: android:grantUriPermissions(0x0101001b)=(type 0x12)0xffffffff
+        E: meta-data (line=163)
+          A: android:name(0x01010003)="dev.antigravity.fluidengine.ai.TOOL_HOST" (Raw: "dev.antigravity.fluidengine.ai.TOOL_HOST")
+          A: android:value(0x01010024)=(type 0x10)0x1

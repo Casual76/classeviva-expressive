@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.data.change.ChangeComparisonTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:54.848Z" hostname="PC_FISSO" time="0.03">
+  <properties/>
+  <testcase name="gradeComparison_detectsOneSidedTextOnlyAfterBaseline" classname="dev.antigravity.classevivaexpressive.core.data.change.ChangeComparisonTest" time="0.023"/>
+  <testcase name="agendaComparison_ignoresMetadataOnlyChanges" classname="dev.antigravity.classevivaexpressive.core.data.change.ChangeComparisonTest" time="0.005"/>
+  <testcase name="gradeComparison_detectsRealValueChange" classname="dev.antigravity.classevivaexpressive.core.data.change.ChangeComparisonTest" time="0.0"/>
+  <testcase name="agendaComparison_detectsOneSidedTextOnlyAfterBaseline" classname="dev.antigravity.classevivaexpressive.core.data.change.ChangeComparisonTest" time="0.0"/>
+  <testcase name="gradeComparison_ignoresPeriodOnlyChanges" classname="dev.antigravity.classevivaexpressive.core.data.change.ChangeComparisonTest" time="0.001"/>
+  <testcase name="gradeComparison_ignoresParserBaselineAndFormattingChanges" classname="dev.antigravity.classevivaexpressive.core.data.change.ChangeComparisonTest" time="0.0"/>
+  <testcase name="agendaComparison_detectsTeacherTextChange" classname="dev.antigravity.classevivaexpressive.core.data.change.ChangeComparisonTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

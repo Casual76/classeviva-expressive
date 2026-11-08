@@ -1,0 +1,3 @@
+All four owned Gradle command sessions exited: 23757 (failure), 57743 (failure), 99357 (success), 10502 (success).
+Post-build java.exe process inventory: none. No owned active processes, no process termination needed.
+Sole compiler/Gradle runner RELEASED. Explicit root transfer required for the next owner.

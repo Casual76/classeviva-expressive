@@ -135,7 +135,7 @@ class ClassevivaRestClient @Inject constructor(
   suspend fun getGrades(): List<Grade> = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {
-      extractArray(apiService.getGrades(session.studentId).toPayload(), "grades", "events", "items")
+      extractArray(apiService.getGrades(session.studentId).toPayload().let { validatedSchoolPayload(it, "grades", "events", "items") }, "grades", "events", "items")
         .map(::normalizeGrade)
     }
   }
@@ -148,7 +148,7 @@ class ClassevivaRestClient @Inject constructor(
           studentId = session.studentId,
           start = toApiDateParam(startDate),
           end = toApiDateParam(endDate),
-        ).toPayload(),
+        ).toPayload().let { validatedSchoolPayload(it, "lessons", "agenda", "items") },
         "lessons",
         "agenda",
         "items",
@@ -196,7 +196,7 @@ class ClassevivaRestClient @Inject constructor(
   suspend fun getAbsences(): List<dev.antigravity.classevivaexpressive.core.domain.model.AbsenceRecord> = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {
-      extractArray(apiService.getAbsences(session.studentId).toPayload(), "events", "absences", "items")
+      extractArray(apiService.getAbsences(session.studentId).toPayload().let { validatedSchoolPayload(it, "events", "absences", "items") }, "events", "absences", "items")
         .map(::normalizeAbsence)
     }
   }
@@ -210,7 +210,7 @@ class ClassevivaRestClient @Inject constructor(
             studentId = session.studentId,
             begin = toApiDateParam(startDate),
             end = toApiDateParam(endDate),
-          ).toPayload(),
+          ).toPayload().let { validatedSchoolPayload(it, "events", "absences", "items") },
           "events",
           "absences",
           "items",
@@ -221,11 +221,11 @@ class ClassevivaRestClient @Inject constructor(
       // settembre, cioe' per settimane — invece di una lista vuota. L'elenco completo e' l'unico
       // modo di distinguere "niente da mostrare" da "risorsa davvero sparita": se anche quello e'
       // 404, non ci sono assenze; se risponde, si tiene la parte dentro l'intervallo.
-      if (!exception.isHttpNotFound()) throw exception
+      if (!exception.isHttpNotFound() || isStrictSchoolRead()) throw exception
       try {
         getAbsences().filter { absence -> absence.date.take(10) in startDate.take(10)..endDate.take(10) }
       } catch (fallback: ClassevivaNetworkException) {
-        if (fallback.isHttpNotFound()) emptyList() else throw fallback
+        if (fallback.isHttpNotFound() && !isStrictSchoolRead()) emptyList() else throw fallback
       }
     }
   }
@@ -233,7 +233,7 @@ class ClassevivaRestClient @Inject constructor(
   suspend fun getCommunications(): List<Communication> = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {
-      extractArray(apiService.getNoticeboard(session.studentId).toPayload(), "items", "noticeboard", "communications")
+      extractArray(apiService.getNoticeboard(session.studentId).toPayload().let { validatedSchoolPayload(it, "items", "noticeboard", "communications") }, "items", "noticeboard", "communications")
         .map(::normalizeCommunication)
         .map { communication -> communication.withOfficialAttachmentUrls(session.studentId) }
     }
@@ -320,7 +320,7 @@ class ClassevivaRestClient @Inject constructor(
           studentId = session.studentId,
           begin = toApiDateParam(startDate),
           end = toApiDateParam(endDate),
-        ).toPayload(),
+        ).toPayload().let { validatedSchoolPayload(it, "agenda", "events", "items") },
         "agenda",
         "events",
         "items",
@@ -331,7 +331,7 @@ class ClassevivaRestClient @Inject constructor(
   suspend fun getNotes(): List<Note> = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {
-      val root = apiService.getNotes(session.studentId).toPayload()
+      val root = apiService.getNotes(session.studentId).toPayload().also { validateSchoolNotes(it) }
       root.entries
         .flatMap { (categoryCode, items) ->
           items.array().map { normalizeNote(it.obj(), categoryCode) }
@@ -359,7 +359,7 @@ class ClassevivaRestClient @Inject constructor(
   suspend fun getMaterials(): List<MaterialItem> = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {
-      normalizeMaterialsPayload(apiService.getDidactics(session.studentId).toPayloadElement())
+      normalizeMaterialsPayload(apiService.getDidactics(session.studentId).toPayloadElement().let { validatedSchoolPayload(it, "didacticts", "didactics", "teachers", "items", "data", "folders", "contents") })
     }
   }
 
@@ -394,7 +394,7 @@ class ClassevivaRestClient @Inject constructor(
   suspend fun getDocuments(): List<DocumentItem> = withContext(Dispatchers.IO) {
     val session = requireSession()
     apiCall {
-      normalizeDocumentsPayload(fetchDocumentsPayload(session.studentId).toPayloadElement())
+      normalizeDocumentsPayload(fetchDocumentsPayload(session.studentId).toPayloadElement().let { validatedSchoolPayload(it, "documents", "schoolReports", "data", "items", "result") })
         .map { document ->
           val remoteHash = document.remoteHash?.takeIf(String::isNotBlank)
           document.copy(

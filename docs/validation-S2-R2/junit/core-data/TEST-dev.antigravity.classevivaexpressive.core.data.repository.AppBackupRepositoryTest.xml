@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" tests="22" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:56.468Z" hostname="PC_FISSO" time="0.658">
+  <properties/>
+  <testcase name="exportSerializationThatLosesOwnershipCannotOpenTheSafDestination" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.29"/>
+  <testcase name="admittedBlockingSafWriteKeepsLogoutWaitingEvenWhenExportCallerIsCancelled" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.01"/>
+  <testcase name="futureVersionIsRejected" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.003"/>
+  <testcase name="gradeEntryDecodesWithOnlyItsRequiredFields" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.001"/>
+  <testcase name="agendaAndHomeworkHistoryRoundTripWithTheirKind" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.015"/>
+  <testcase name="cancelledBlockingSafReadCannotCommitItsLatePayload" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.013"/>
+  <testcase name="pickerResultFromPreviousLoginOfSameStudentCannotOpenAnySafReaderOrWriter" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.007"/>
+  <testcase name="exportCarriesPeriodsAndSubjectsOfEveryYearWithGrades" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.021"/>
+  <testcase name="importReportsGradesFromAnotherStudent" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.009"/>
+  <testcase name="importReaderFromPreviousLoginCannotCommitAfterSameStudentReentry" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.016"/>
+  <testcase name="pickerResultFromAnotherAccountCannotOpenAnySafReaderOrWriter" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.002"/>
+  <testcase name="backupAndCoherentSnapshotCaptureOnRealMainNeverWaitSynchronouslyForSafGate" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.015"/>
+  <testcase name="gradeHistoryRoundTrips" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.008"/>
+  <testcase name="zeroOrNegativeVersionIsRejected" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.002"/>
+  <testcase name="gradesRoundTripThroughExportAndImport" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.007"/>
+  <testcase name="safCallbacksPropagateCancellationAndDoNotTurnItIntoFailureResults" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.006"/>
+  <testcase name="safAndMalformedPayloadFailuresDoNotExposeProviderPathsOrPayloadText" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.006"/>
+  <testcase name="importRunsEveryRoomWriteInOneTransaction" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.008"/>
+  <testcase name="v1PayloadStillImports" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.002"/>
+  <testcase name="importReaderFromPreviousAccountCannotCommitSettingsTemplatesOrRowsToReplacement" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.005"/>
+  <testcase name="realMainLogoutKeepsHeartbeatRunningWhileAnAdmittedSafWriterOwnsTheGate" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.202"/>
+  <testcase name="importRebuildsTheGradesSnapshot" classname="dev.antigravity.classevivaexpressive.core.data.repository.AppBackupRepositoryTest" time="0.009"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

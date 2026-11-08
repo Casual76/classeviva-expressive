@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:58.105Z" hostname="PC_FISSO" time="0.261">
+  <properties/>
+  <testcase name="logoutDuringExchangePreventsAnyLateSnapshotPortalOrAttachment" classname="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" time="0.162"/>
+  <testcase name="durableStorageFailureDoesNotPublishCandidate" classname="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" time="0.013"/>
+  <testcase name="freshRestWithoutVerifiedNewCookiesDoesNotResurrectExpiredPortalSession" classname="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" time="0.014"/>
+  <testcase name="backgroundRefreshRejectionDuringBrowserAndExchangeDoesNotInvalidateFreshCie" classname="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" time="0.01"/>
+  <testcase name="cieCommitsExclusiveDurableReadySnapshotBeforePortalAndOptionalProfile" classname="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" time="0.011"/>
+  <testcase name="reauthenticationKeepsLocalTemplatesButRemovesPasswordMaterial" classname="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" time="0.01"/>
+  <testcase name="browserFromPreviousEpochIsRejectedBeforeExchangingPaEvenForSameStudent" classname="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" time="0.008"/>
+  <testcase name="anotherStudentCannotReplaceValidAccountOrClearItsDerivedData" classname="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" time="0.009"/>
+  <testcase name="signedOutAdmissionCleansLegacyUnownedGlobalsBeforePublishingStudent" classname="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" time="0.01"/>
+  <testcase name="cancellationDuringExchangeLeavesPreviousValidSessionUntouched" classname="dev.antigravity.classevivaexpressive.core.data.sync.CieLoginBootstrapTest" time="0.013"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.assistant.prompt.PreRouterTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:18.787Z" hostname="PC_FISSO" time="0.013">
+  <properties/>
+  <testcase name="una domanda che nomina un solo gruppo salta il router" classname="dev.antigravity.classevivaexpressive.core.assistant.prompt.PreRouterTest" time="0.011"/>
+  <testcase name="le azioni contano solo se sono attive, e non decidono mai da sole" classname="dev.antigravity.classevivaexpressive.core.assistant.prompt.PreRouterTest" time="0.0"/>
+  <testcase name="senza parole note non si decide niente" classname="dev.antigravity.classevivaexpressive.core.assistant.prompt.PreRouterTest" time="0.001"/>
+  <testcase name="un'analisi su tutte le materie chiede i voti e parte dal livello profondo" classname="dev.antigravity.classevivaexpressive.core.assistant.prompt.PreRouterTest" time="0.0"/>
+  <testcase name="una domanda ambigua suggerisce i candidati senza decidere" classname="dev.antigravity.classevivaexpressive.core.assistant.prompt.PreRouterTest" time="0.0"/>
+  <testcase name="gli allegati della bacheca chiedono il livello profondo" classname="dev.antigravity.classevivaexpressive.core.assistant.prompt.PreRouterTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

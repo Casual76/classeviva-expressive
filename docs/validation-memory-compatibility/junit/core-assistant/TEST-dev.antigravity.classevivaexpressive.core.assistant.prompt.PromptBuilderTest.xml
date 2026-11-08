@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.assistant.prompt.PromptBuilderTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-08T17:05:37.174Z" hostname="PC_FISSO" time="0.017">
+  <properties/>
+  <testcase name="i chip ammessi sono le pagine note e i dettagli con un id" classname="dev.antigravity.classevivaexpressive.core.assistant.prompt.PromptBuilderTest" time="0.001"/>
+  <testcase name="il prompt porta chi, quando e cosa c'e' da vedere" classname="dev.antigravity.classevivaexpressive.core.assistant.prompt.PromptBuilderTest" time="0.016"/>
+  <testcase name="a voce si chiede una risposta breve, con le azioni spente si dice che si legge e basta" classname="dev.antigravity.classevivaexpressive.core.assistant.prompt.PromptBuilderTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

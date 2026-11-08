@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" tests="26" skipped="0" failures="0" errors="0" timestamp="2026-11-08T17:05:37.100Z" hostname="PC_FISSO" time="0.062">
+  <properties/>
+  <testcase name="callerMapSaturationFailsClosedWithoutEvictingRenewableIdentities" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.015"/>
+  <testcase name="expirationIsMonotonicAndValidationDoesNotRenew" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.002"/>
+  <testcase name="missingOldAndUnknownCapabilityFailBeforeDispatch" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="sameAccountPublicationReplacementRejectsEvenWhenDataEpochIsUnchanged" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.002"/>
+  <testcase name="processRecreationRejectsSameNumberGenerationAndOpaqueHandles" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="unknownCallerAndSignedOutStateHaveNoProof" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="sameAccountReauthDataEpochChangeRejectsOldProof" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="sourceCapabilityTravelsOnlyThroughNegotiatedTypedResultEnvelope" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.007"/>
+  <testcase name="exactAccountAndFiltersRejectWithoutSelectingAnything" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.002"/>
+  <testcase name="queryScopeChangesDoNotRotateAuthorizationOrExpandExistingLeaseScope" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="fragmentIsBoundToLeaseThatActuallyProducedSnapshot" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.002"/>
+  <testcase name="opaqueCapabilityAndTypedReceiptContainNoGenerationOrCredentials" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.002"/>
+  <testcase name="expiryRenewalKeepsAuthorizationButNeverRevivesOldHandles" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.002"/>
+  <testcase name="unknownAndMisclassifiedWritesAreDeniedEvenWithReadMetadata" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="callerCannotReuseAnotherCallersLease" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="observedUnavailableTransitionCannotRestoreAnOldAuthorizationIdentity" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="cieAliasTransitionRejectsOldDataGeneration" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="continuationChangesDoNotExpandScope" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="generationAccountStudentAndPublicationChangesRotateAuthorizationAndRevokeHandles" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.002"/>
+  <testcase name="capabilityEvictionDoesNotChangeAuthorizationOrRestoreEvictedHandles" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.004"/>
+  <testcase name="recordingRevocationOrDeletionDuringProductionDiscardsLateResult" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.002"/>
+  <testcase name="everyReceiptCarriesTheCapabilityAuthorizationIdentity" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.002"/>
+  <testcase name="missingLeaseAndUnknownFieldsFailClosed" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="cvRequiresExplicitStudentYearAndSectionAndKeepsThemExact" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.002"/>
+  <testcase name="authorizationIsCallerBoundAndStableForEachCallerAcrossRenewal" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <testcase name="processRestartRotatesIncarnationAndAuthorizationDespiteIdenticalSourceState" classname="dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

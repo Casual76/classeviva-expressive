@@ -48,6 +48,8 @@ class AssistantContextFactory @Inject constructor(
   private val schoolYear: SchoolYearRepository,
   private val capabilities: CapabilityResolver,
   private val attachments: AttachmentReader,
+  private val schoolData: dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataAccess,
+  private val auth: dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository,
 ) {
 
   fun create(
@@ -57,6 +59,8 @@ class AssistantContextFactory @Inject constructor(
     zone: ZoneId = ZoneId.systemDefault(),
     today: LocalDate = LocalDate.now(zone),
   ): AssistantToolContext = AssistantToolContext(
+    schoolData = schoolData,
+    auth = auth,
     grades = grades,
     agenda = agenda,
     homework = homework,

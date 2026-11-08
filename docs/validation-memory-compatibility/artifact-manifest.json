@@ -1,0 +1,30 @@
+{
+  "version": "7.17.0-beta.2",
+  "versionCode": 2026110801,
+  "channel": "beta",
+  "packageName": "dev.antigravity.classevivaexpressive",
+  "published": false,
+  "runtime": "NV",
+  "artifacts": {
+    "android/build/release-beta-7.17.0-beta.2/classeviva-expressive-7.17.0-beta.2.apk": {
+      "sha256": "90d26155cd6e83438d217b20e29251ba40f0158a0bb6ba7d5a9bdc91832acbb6",
+      "size": 34606010,
+      "certificateSha256": "825738500ce9605429ffba3c4019228f992f2c37d1b70a2230a7ce2c25637e43"
+    },
+    "android/app/build/outputs/apk/release/app-release.apk": {
+      "sha256": "90d26155cd6e83438d217b20e29251ba40f0158a0bb6ba7d5a9bdc91832acbb6",
+      "size": 34606010
+    },
+    "docs/validation-memory-compatibility/source-freeze.json": {
+      "sha256": "b26c4bde70a49a8a72ff886e5604566c0ef44597e4582fa1ffa916e26a03ceb7",
+      "fileCount": 414,
+      "postBuildDrift": 0
+    },
+    "android/app/build.gradle": {
+      "sha256": "6d748f4a07c62499e93e767925a1a8e14d3e83ff9770749a2e097a4ce1049a09"
+    },
+    "docs/releases/7.17.0-beta.2.md": {
+      "sha256": "30ff88b0080a891f340a1585f21d09c6a4a358b0caec3b116131ba37ee6f2493"
+    }
+  }
+}

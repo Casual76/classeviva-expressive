@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:51.845Z" hostname="PC_FISSO" time="0.087">
+  <properties/>
+  <testcase name="openSchoolReport_rejectsHtmlAssetAndFallsBackFromViewToConfirm" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.009"/>
+  <testcase name="portalLogin_fallsBackToLoginFormWhenAuthApiIsMissing" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.006"/>
+  <testcase name="portalLogin_usesAuthApiWithoutTouchingTheLoginPage" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.005"/>
+  <testcase name="openSchoolReport_logsInCarriesCookieAndPreservesServerMetadata" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.01"/>
+  <testcase name="homeworksIndex_logsInAgainOnceWhenTheSessionIsRejected" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.008"/>
+  <testcase name="openSchoolReport_neverReturnsHtmlWhenBothCandidatesAreInvalid" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.006"/>
+  <testcase name="openSchoolReport_skipsCrossOriginViewAndUsesSameOriginConfirm" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.005"/>
+  <testcase name="openSchoolReport_usesConfirmUrlWhenViewUrlIsMissing" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.005"/>
+  <testcase name="homeworksIndex_failsOnLoginPageInsteadOfReturningNothing" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.006"/>
+  <testcase name="openSchoolReport_doesNotFollowRedirectAndUsesConfirmWithoutContactingRedirectOrigin" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.006"/>
+  <testcase name="portalLogin_reportsRejectedCredentialsFromAuthApi" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.005"/>
+  <testcase name="homeworksIndex_usesFallbackIdWhenWhoAmIFails" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.005"/>
+  <testcase name="openSchoolReport_refreshesRejectedSessionOnceBeforeRetryingAsset" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.006"/>
+  <testcase name="homeworksIndex_logsInResolvesWhoAmIAndCarriesCookie" classname="dev.antigravity.classevivaexpressive.core.network.client.PortalClientNetworkTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -52,7 +52,12 @@ class AssistantToolContext(
   val actions: AssistantActionSink,
   /** Cosa il modello profondo del provider in uso sa prendere: decide la forma di un allegato. */
   val deepCapabilities: ModelCapabilities,
+  val schoolData: dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataAccess? = null,
+  val auth: dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository? = null,
 ) {
+  /** Set only from the signature-checked provider RemoteCall; never model arguments. */
+  internal var sourceProofCaller: String? = null
+
   private val traceList = java.util.Collections.synchronizedList(mutableListOf<AssistantToolTrace>())
 
   /** Le chiamate agli strumenti di questa domanda, nell'ordine in cui sono finite. */

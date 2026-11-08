@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.domain.change.ChangeDiffTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:22.068Z" hostname="PC_FISSO" time="0.045">
+  <properties/>
+  <testcase name="versionChainDropsAVersionIdenticalToTheOneAfterIt" classname="dev.antigravity.classevivaexpressive.core.domain.change.ChangeDiffTest" time="0.039"/>
+  <testcase name="timelinePairsEachVersionWithTheOneThatFollowedNewestFirst" classname="dev.antigravity.classevivaexpressive.core.domain.change.ChangeDiffTest" time="0.003"/>
+  <testcase name="oneSidedTextCountsOnlyWhenAllowed" classname="dev.antigravity.classevivaexpressive.core.domain.change.ChangeDiffTest" time="0.0"/>
+  <testcase name="versionChainKeepsAVersionThatWasLaterRestored" classname="dev.antigravity.classevivaexpressive.core.domain.change.ChangeDiffTest" time="0.0"/>
+  <testcase name="gradeTimelineReportsTheValue" classname="dev.antigravity.classevivaexpressive.core.domain.change.ChangeDiffTest" time="0.002"/>
+  <testcase name="latestTitleDiffIsNullWhenOnlyTheDateMoved" classname="dev.antigravity.classevivaexpressive.core.domain.change.ChangeDiffTest" time="0.0"/>
+  <testcase name="aMovedAssessmentReportsTheDateWithItsValues" classname="dev.antigravity.classevivaexpressive.core.domain.change.ChangeDiffTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

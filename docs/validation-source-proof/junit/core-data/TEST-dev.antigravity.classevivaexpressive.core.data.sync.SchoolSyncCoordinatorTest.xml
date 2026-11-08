@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" tests="43" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:58.447Z" hostname="PC_FISSO" time="0.806">
+  <properties/>
+  <testcase name="refreshAll_recordsPreviousGradeVersionWhenExistingGradeChanges" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.183"/>
+  <testcase name="refreshAll_recordsAgendaHistoryWithStableLocalIdWhenRemoteIdChanges" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.024"/>
+  <testcase name="refreshAll_ignoresGradeParserBaselineChangesAfterAppUpdate" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.013"/>
+  <testcase name="refreshSections_schoolYearNotStartedFallsBackOnceAndNeverWalksTheArchive" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.035"/>
+  <testcase name="refreshMeetings_unavailableOrLoginHtmlNeverReplacesSavedCache" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.013"/>
+  <testcase name="refreshCurrentSchoolYearMaintenance_partialDoesNotPublishGlobalPartialWhenSomeSectionsSucceed" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.009"/>
+  <testcase name="refreshDocuments_namespacesSameRemoteIdByDocumentKind" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.008"/>
+  <testcase name="refreshSchoolbooks_persistsSectionFailureInsteadOfAnAuthenticEmptyState" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.009"/>
+  <testcase name="refreshHomeworks_foldsAgendaTwinIntoDedicatedHomework" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.008"/>
+  <testcase name="refreshSections_manualPartialPublishesGlobalPartial" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.008"/>
+  <testcase name="markAllCommunicationsReadRemotely_marksOnlySuccessfulItemsAndFailsWhenSomeCallsFail" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.013"/>
+  <testcase name="acknowledgeCommunication_success" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.047"/>
+  <testcase name="refreshMaterials_replacesTheRoomYearAtomically" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.007"/>
+  <testcase name="refreshAll_doesNotUseSemanticMatchWhenGradeIdentityIsAmbiguous" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.017"/>
+  <testcase name="openMaterial_discardsTemporaryAssetWhenLogoutAndAccountSwitchWinTheRace" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.114"/>
+  <testcase name="refreshCurrentSchoolYearMaintenance_neverMutatesSelectionOnTyped422" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.011"/>
+  <testcase name="refreshHomeworks_keepsCreatedAtFromAgendaWhenRestHomeworkIsDuplicate" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.011"/>
+  <testcase name="refreshCurrentSchoolYearForNotifications_doesNotRewriteUnchangedSnapshotPayload" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.008"/>
+  <testcase name="openMaterial_returnsSafeExternalUrlForUppercaseLinkWithoutStartingAStream" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.007"/>
+  <testcase name="refreshAll_ignoresDerivedGradeChangesWhenCoreContentIsSame" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.012"/>
+  <testcase name="refreshAll_keepsDistinctLocalIdsForDuplicateGradesWithoutRemoteIds" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.017"/>
+  <testcase name="refreshAll_preservesLocalGradeIdWhenRemoteIdChangesAndContentChanges" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.014"/>
+  <testcase name="refreshHomeworks_keepsCachedDedicatedHomeworkWhenTheSectionStopsAnswering" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.006"/>
+  <testcase name="refreshCurrentSchoolYearForNotifications_partialFastSyncDoesNotPublishGlobalPartialWhenSomeSectionsSucceed" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.006"/>
+  <testcase name="refreshAll_recordsAgendaHistoryWhenTeacherAddsTextAfterBaseline" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.011"/>
+  <testcase name="refreshMaterials_preservesInFlightSnapshotAcrossTransparentTokenRotation" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.005"/>
+  <testcase name="refreshHomeworks_usesAgendaHomeworkItemsWhenHomeworkEndpointIsEmpty" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.006"/>
+  <testcase name="refreshMaterials_discardsAccountAResponseAfterSessionChangesToAccountB" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.009"/>
+  <testcase name="openDocument_returnsAccountScopedCachedAssetWithoutNetwork" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.009"/>
+  <testcase name="refreshHomeworks_recordsPreviousVersionWhenDedicatedHomeworkChanges" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.007"/>
+  <testcase name="refreshCurrentSchoolYearForNotifications_fastSyncSkipsMaintenanceSectionsAndReusesAgendaFetch" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.01"/>
+  <testcase name="refreshHomeworks_triesTheTokenWhenThePortalRefuses" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.01"/>
+  <testcase name="markAllCommunicationsReadRemotely_marksLocalOnlyEntriesWithoutCallingRest" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.008"/>
+  <testcase name="refreshHomeworks_doesNotRecordHistoryForTheDoneFlagOrTheFirstRead" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.013"/>
+  <testcase name="refreshHomeworks_readsTheSectionThroughThePortalFirst" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.007"/>
+  <testcase name="openMaterial_streamsAuthenticatedBodyDirectlyIntoPrivateAccountCache" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.008"/>
+  <testcase name="refreshSections_automaticPartialDoesNotPublishGlobalPartialWhenSomeSectionsSucceed" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.008"/>
+  <testcase name="refreshCurrentSchoolYearForNotifications_neverMutatesSelectionOnTyped422" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.005"/>
+  <testcase name="getCommunicationDetail_marksReadWhenOpeningDetail" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.041"/>
+  <testcase name="refreshMeetings_explicitlyEmptyValidPageCanReplaceSavedCache" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.018"/>
+  <testcase name="logoutDuringSelectedYearReadCannotStartRefreshForTheReplacementAccount" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.01"/>
+  <testcase name="refreshAll_matchesAgendaByDateCategoryAndTimeWhenSubjectIsMissing" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.013"/>
+  <testcase name="refreshHomeworks_keepsAgendaHomeworkWhenEveryHomeworkEndpointFails" classname="dev.antigravity.classevivaexpressive.core.data.sync.SchoolSyncCoordinatorTest" time="0.007"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

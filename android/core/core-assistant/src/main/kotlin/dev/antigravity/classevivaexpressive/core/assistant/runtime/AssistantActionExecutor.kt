@@ -128,7 +128,8 @@ class AssistantActionExecutor @Inject constructor(
       communications.acknowledgeCommunication(detail).fold({ ActionResult(ActionOutcome.DONE) }, { ActionResult(ActionOutcome.FAILED, it.message) })
     }
     is AssistantAction.AddCustomEvent -> {
-      agenda.addCustomEvent(action.event)
+      if (action.expectedAuthenticationEpoch != null) agenda.addScopedCustomEvent(action.event, action.expectedAuthenticationEpoch, action.expectedDataEpoch)
+      else agenda.addCustomEvent(action.event)
       ActionResult(ActionOutcome.DONE)
     }
     is AssistantAction.SaveGoal -> {

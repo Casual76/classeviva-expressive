@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:29.275Z" hostname="PC_FISSO" time="0.243">
+  <properties/>
+  <testcase name="missingRequiredArgumentsNeverLeaveClientOrAskConfirmation" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.203"/>
+  <testcase name="confirmationIsAskedByTheCallerAndPassedToTheHost" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.003"/>
+  <testcase name="anErrorFromTheHostStaysAnError" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.002"/>
+  <testcase name="aRefusedConfirmationNeverReachesTheHost" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.002"/>
+  <testcase name="actionsOffStopTheCallBeforeItLeavesTheApp" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.002"/>
+  <testcase name="aLongJobIsFollowedUntilItFinishes" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.004"/>
+  <testcase name="stableSuppliedOperationIdentitySurvivesSeparateRetriesAndLegacyIsUnknown" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.001"/>
+  <testcase name="twoArgumentWriteCannotInventIdentityButReadRemainsLegacyCompatible" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.002"/>
+  <testcase name="cancellationCancelsRunningRemoteJobOnceAndPropagates" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.017"/>
+  <testcase name="partsComeBackAsContentForTheModel" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.002"/>
+  <testcase name="aFailedJobBecomesAnError" classname="dev.antigravity.fluidengine.ai.bridge.RemoteToolTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

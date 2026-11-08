@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.13.2">
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.home())"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1218"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.settings())"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1222"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.grades())"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1226"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.grades(gradeId))"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1230"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.agenda(date = LocalDate.now().toString()))"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1234"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.agenda(agendaId = agendaId, date = date))"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1238"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.homework())"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1242"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.homework(homeworkId))"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1246"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.communications())"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1250"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.communications(pubId = pubId, evtCode = evtCode))"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1254"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.notes())"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1258"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.notes(noteId = noteId, categoryCode = categoryCode))"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1262"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.absences())"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1266"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.absences(absenceId))"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1270"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        severity="Warning"
+        message="Use the KTX extension function `String.toUri` instead?"
+        category="Productivity"
+        priority="6"
+        summary="Use KTX extension function"
+        explanation="The Android KTX libraries decorates the Android platform SDK as well as various libraries with more convenient extension functions available from Kotlin, allowing you to use default parameters, named parameters, and more."
+        errorLine1="    override fun uri(): Uri = Uri.parse(NotificationDeepLinks.lessons())"
+        errorLine2="                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="C:\VibeCoded Projects\classeviva-expressive\android\core\core-data\src\main\kotlin\dev\antigravity\classevivaexpressive\core\data\notifications\NotificationSupport.kt"
+            line="1274"
+            column="31"/>
+    </issue>
+
+</issues>

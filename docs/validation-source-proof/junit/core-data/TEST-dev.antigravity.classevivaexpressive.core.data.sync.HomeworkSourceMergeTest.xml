@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.data.sync.HomeworkSourceMergeTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:58.371Z" hostname="PC_FISSO" time="0.005">
+  <properties/>
+  <testcase name="shortTextsMustMatchExactly" classname="dev.antigravity.classevivaexpressive.core.data.sync.HomeworkSourceMergeTest" time="0.003"/>
+  <testcase name="agendaTextWithAPrefixStillFindsItsTwin" classname="dev.antigravity.classevivaexpressive.core.data.sync.HomeworkSourceMergeTest" time="0.0"/>
+  <testcase name="dedicatedWinsOverAgendaDuplicateWithoutSubject" classname="dev.antigravity.classevivaexpressive.core.data.sync.HomeworkSourceMergeTest" time="0.0"/>
+  <testcase name="dropsHomeworkWithoutDueDateOrText" classname="dev.antigravity.classevivaexpressive.core.data.sync.HomeworkSourceMergeTest" time="0.001"/>
+  <testcase name="differentDueDatesOrSubjectsAreNotMerged" classname="dev.antigravity.classevivaexpressive.core.data.sync.HomeworkSourceMergeTest" time="0.0"/>
+  <testcase name="revisionsCompareReadableFieldsButNotTheDoneFlag" classname="dev.antigravity.classevivaexpressive.core.data.sync.HomeworkSourceMergeTest" time="0.001"/>
+  <testcase name="keepsAgendaOnlyHomeworkWithItsStableId" classname="dev.antigravity.classevivaexpressive.core.data.sync.HomeworkSourceMergeTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

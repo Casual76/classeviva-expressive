@@ -179,23 +179,49 @@ class AgendaAggiungiEventoTool : AiTool<AssistantToolContext> {
     return dev.antigravity.fluidengine.ai.tools.ConfirmationText("Aggiungere in agenda?", "${args.str("titolo")} · ${Dates.label(date)}${args.str("ora")?.let { " $it" } ?: ""}")
   }
 
-  override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput {
-    if (!ctx.actionsEnabled) return ToolOutput(ACTIONS_OFF)
-    val title = args.str("titolo") ?: return ToolOutput.error("titolo mancante")
-    val date = Dates.parse(args.str("data"), ctx.today) ?: return ToolOutput.error("data non capita: usa aaaa-mm-gg o una parola come domani, venerdi")
-    val time = args.str("ora")?.takeIf { Regex("^\\d{1,2}:\\d{2}$").matches(it) }
-    val subjectArg = args.str("materia")
-    val subject = subjectArg?.let { Subjects.match(it, ctx.grades.observeSubjects().first().map { s -> s.description }) ?: it }
-    val event = CustomEvent(
-      id = UUID.randomUUID().toString(),
-      title = title,
-      description = args.str("note").orEmpty(),
-      subject = subject.orEmpty(),
-      date = date.toString(),
-      time = time,
-    )
-    val result = ctx.actions.perform(AssistantAction.AddCustomEvent(event))
-    return ToolOutput(result.toolText("fatto: \"$title\" aggiunto in agenda il ${Dates.label(date)}${time?.let { " alle $it" } ?: ""}"))
+  override suspend fun run(args: JsonObject, ctx: AssistantToolContext): ToolOutput =
+    run(args, ctx, dev.antigravity.fluidengine.ai.tools.ToolExecution(UUID.randomUUID().toString()))
+
+  override suspend fun run(args: JsonObject, ctx: AssistantToolContext, execution: dev.antigravity.fluidengine.ai.tools.ToolExecution): ToolOutput {
+    dev.antigravity.fluidengine.ai.tools.ToolArgumentValidator.error(args, parameters)?.let { return ToolOutput.error(it) }
+    if (!ctx.actionsEnabled) return ToolOutput.error(ACTIONS_OFF)
+    val auth = ctx.auth ?: return ToolOutput.error("auth_missing")
+    val dataEpoch = auth.dataEpoch()
+    val epoch = auth.authenticationEpoch()
+    val session = auth.session.value ?: return ToolOutput.error("auth_missing")
+    val title = args.str("titolo")?.trim()?.takeIf { it.isNotEmpty() } ?: return ToolOutput.error("titolo mancante")
+    val date = Dates.parse(args.str("data"), ctx.today) ?: return ToolOutput.error("data non valida")
+    val time = args.str("ora")
+    if (time != null && runCatching { java.time.LocalTime.parse(time) }.isFailure) return ToolOutput.error("ora non valida: hh:mm")
+    val identity = "cv-event:" + UUID.nameUUIDFromBytes("${session.username}:${session.studentId}:${execution.operationId}".toByteArray())
+    val event = CustomEvent(id = identity, title = title, description = args.str("note").orEmpty(),
+      subject = args.str("materia").orEmpty(), date = date.toString(), time = time)
+    val result = ctx.actions.perform(AssistantAction.AddCustomEvent(event, epoch, dataEpoch))
+    if (auth.authenticationEpoch() != epoch || auth.dataEpoch() != dataEpoch) return ToolOutput.error("account_changed")
+    val saved = if(result.outcome == dev.antigravity.classevivaexpressive.core.assistant.actions.ActionOutcome.DONE) {
+      try { ctx.agenda.observeCustomEvents().first().firstOrNull { it.id == identity } }
+      catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+      catch (_: Exception) { null } // The accepted write still has an uncertain effect if readback fails.
+    } else null
+    if (auth.authenticationEpoch() != epoch || auth.dataEpoch() != dataEpoch) return ToolOutput.error("account_changed")
+    val complete = saved?.copy(createdAt = null) == event
+    val outcome = when {
+      complete -> dev.antigravity.fluidengine.ai.tools.ToolOutcome.COMPLETED
+      result.outcome == dev.antigravity.classevivaexpressive.core.assistant.actions.ActionOutcome.DONE -> dev.antigravity.fluidengine.ai.tools.ToolOutcome.UNCERTAIN
+      result.outcome == dev.antigravity.classevivaexpressive.core.assistant.actions.ActionOutcome.FAILED -> dev.antigravity.fluidengine.ai.tools.ToolOutcome.UNCERTAIN
+      else -> dev.antigravity.fluidengine.ai.tools.ToolOutcome.ERROR
+    }
+    val data = saved?.let { kotlinx.serialization.json.buildJsonObject {
+      put("id", kotlinx.serialization.json.JsonPrimitive(it.id)); put("title", kotlinx.serialization.json.JsonPrimitive(it.title))
+      put("date", kotlinx.serialization.json.JsonPrimitive(it.date)); it.time?.let { t -> put("time", kotlinx.serialization.json.JsonPrimitive(t)) }
+      put("description", kotlinx.serialization.json.JsonPrimitive(it.description)); put("subject", kotlinx.serialization.json.JsonPrimitive(it.subject))
+      put("readbackVerified", kotlinx.serialization.json.JsonPrimitive(complete))
+    } }
+    return ToolOutput(if(complete) "Evento ${saved!!.id} salvato e riletto: ${saved.title}, ${saved.date}" else result.toolText("scrittura accettata; rilettura non verificata"),
+      result = dev.antigravity.fluidengine.ai.tools.ToolResultDetails(outcome, data = data,
+        entities = if(complete) listOf(dev.antigravity.fluidengine.ai.tools.ToolEntityRef("cv", "custom_event", identity)) else emptyList(),
+        operation = dev.antigravity.fluidengine.ai.tools.ToolOperationRef(execution.operationId, "cv"),
+        error = if(complete) null else dev.antigravity.fluidengine.ai.tools.ToolError("event_unverified", result.message ?: "effetto non verificato")))
   }
 }
 

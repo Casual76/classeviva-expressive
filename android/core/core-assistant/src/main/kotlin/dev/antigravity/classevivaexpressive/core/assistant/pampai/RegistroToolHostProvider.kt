@@ -29,12 +29,13 @@ internal interface RegistroBridgeEntryPoint {
   fun contextFactory(): AssistantContextFactory
   fun executor(): AssistantActionExecutor
   fun auth(): AuthRepository
+  fun sourceSessionStore(): dev.antigravity.classevivaexpressive.core.datastore.SessionStore
   fun grades(): GradesRepository
 }
 
 /**
- * Il registro visto da PampAI/Aria: gli stessi strumenti dell'assistente interno, eseguiti qui —
- * dove ci sono la sessione e i dati — e protetti dal permesso `signature` del bridge, cioe' da
+ * Il registro visto da PampAI/Aria: gli stessi strumenti dell'assistente interno, eseguiti qui â€”
+ * dove ci sono la sessione e i dati â€” e protetti dal permesso `signature` del bridge, cioe' da
  * un'app firmata con la stessa chiave.
  *
  * Le conferme le chiede il chiamante (con `describe`, che qui torna le parole vere: il titolo
@@ -48,7 +49,12 @@ class RegistroToolHostProvider : AiToolHostProvider<AssistantToolContext>() {
     EntryPointAccessors.fromApplication(context!!.applicationContext, RegistroBridgeEntryPoint::class.java)
   }
 
-  override fun registry(): ToolRegistry<AssistantToolContext> = entry.registry()
+  private val proofTools by lazy {
+    registroSourceProofRegistry(entry.registry(), "${context!!.packageName}.ai.tools") {
+      entry.sourceSessionStore().captureAuthSnapshot()
+    }
+  }
+  override fun registry(): ToolRegistry<AssistantToolContext> = proofTools
 
   override suspend fun context(call: RemoteCall): AssistantToolContext = entry.contextFactory().create(
     actionsEnabled = true,
@@ -56,7 +62,7 @@ class RegistroToolHostProvider : AiToolHostProvider<AssistantToolContext>() {
     // Il chiamante ha un modello profondo suo e sa cosa farsene: gli allegati partono nella forma
     // piena (PDF e immagini), e se il suo modello non li regge ci pensa lui a tradurli.
     deepCapabilities = ModelCapabilities(vision = true, documents = true),
-  )
+  ).also { it.sourceProofCaller = call.callingPackage }
 
   override fun domain(): String = "cv"
 

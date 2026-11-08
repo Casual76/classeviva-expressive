@@ -1,0 +1,3 @@
+core-network: {'tests': 137, 'failures': 0, 'errors': 0, 'skipped': 0}; timestamps 2026-11-07T18:49:51.205Z .. 2026-11-07T18:49:53.049Z
+core-data: {'tests': 181, 'failures': 0, 'errors': 0, 'skipped': 0}; timestamps 2026-11-07T18:49:54.848Z .. 2026-11-07T18:49:59.527Z
+core-assistant: {'tests': 34, 'failures': 0, 'errors': 0, 'skipped': 0}; timestamps 2026-11-07T18:50:03.631Z .. 2026-11-07T18:50:05.220Z

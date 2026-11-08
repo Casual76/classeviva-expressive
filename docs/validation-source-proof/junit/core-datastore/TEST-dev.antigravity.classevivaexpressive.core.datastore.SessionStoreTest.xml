@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" tests="20" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:25.923Z" hostname="PC_FISSO" time="0.073">
+  <properties/>
+  <testcase name="blockedFailedCommitNeverPublishesCandidateOrAdvancesAnyCapturedEpoch" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.027"/>
+  <testcase name="terminalRestRejectionKeepsOfflineAccountAndInvalidatesInFlightEffects" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.005"/>
+  <testcase name="staleLogoutCannotClearOrCleanANewerAccount" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.003"/>
+  <testcase name="noNewAccountCanBeCommittedUntilLogoutCleanupFinishes" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.005"/>
+  <testcase name="cieRotationPersistsEveryFieldAndRemovesPasswordAcrossRestart" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.001"/>
+  <testcase name="accountCommitAndLogoutCleanupAreOneBarrier" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.005"/>
+  <testcase name="providerAttemptSurvivesCredentialExpiryWithoutRevivingOldDataOperations" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.001"/>
+  <testcase name="logoutAndReentryOfTheSameIdentityInvalidatePendingProviderAttempts" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.002"/>
+  <testcase name="corruptedOrUnavailableArchiveIsNotDeletedOrReplaced" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.001"/>
+  <testcase name="portalExpiryDoesNotInvalidateRestLease" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.001"/>
+  <testcase name="failedMigrationPreservesLegacyAndCanBeRetriedOnNextOpen" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.0"/>
+  <testcase name="captureDuringBlockedDurableCommitReturnsPreviousCoherentPublicationWithoutWaiting" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.007"/>
+  <testcase name="failedWriteDoesNotPublishUndurableTokenOrReplacePreviousSnapshot" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.0"/>
+  <testcase name="malformedMixedSecretsAndCrossAccountCookiesNeverReachDisk" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.0"/>
+  <testcase name="cookieMetadataIsPreservedAndSecretsAreRedactedInDiagnostics" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.003"/>
+  <testcase name="acceptingSnapshotDoesNotRetainCallerOwnedCookieList" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.001"/>
+  <testcase name="captureDuringLogoutCleanupReturnsSignedOutPublicationAndReentryNeverMixesLeases" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.003"/>
+  <testcase name="sameIdentityRefreshKeepsLeaseButLogoutAndReentryInvalidateIt" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.0"/>
+  <testcase name="migratesLegacySessionAndSeparateCredentialsInOneDurableCommit" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.001"/>
+  <testcase name="migratesPasswordEmbeddedInOldSessionWithoutKeepingItInUserSession" classname="dev.antigravity.classevivaexpressive.core.datastore.SessionStoreTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

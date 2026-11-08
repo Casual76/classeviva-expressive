@@ -30,6 +30,8 @@ dependencies {
   // I tool del registro esposti a un assistente esterno (PampAI/Aria), a permesso `signature`.
   implementation project(":engine-ai-bridge")
   implementation project(":core:core-domain")
+  // Source proof uses the existing in-memory auth publication; no credential values.
+  implementation project(":core:core-datastore")
   implementation project(":core:core-data")
   implementation project(":core:core-database")
 
@@ -42,6 +44,7 @@ dependencies {
 
   ksp libs.hilt.compiler
 
+  testImplementation libs.mockk
   testImplementation libs.junit4
   testImplementation libs.kotlinx.coroutines.test
 }

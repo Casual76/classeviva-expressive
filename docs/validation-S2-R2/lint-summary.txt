@@ -1,0 +1,4 @@
+app: {'Fatal': 0, 'Error': 0, 'Warning': 84, 'Information': 0}
+core-network: {'Fatal': 0, 'Error': 0, 'Warning': 0, 'Information': 0}
+core-data: {'Fatal': 0, 'Error': 0, 'Warning': 15, 'Information': 0}
+core-assistant: {'Fatal': 0, 'Error': 0, 'Warning': 6, 'Information': 0}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataPagingTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:22.127Z" hostname="PC_FISSO" time="0.034">
+  <properties/>
+  <testcase name="changedScopeSnapshotOrFiltersRejectCursor" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataPagingTest" time="0.023"/>
+  <testcase name="tiedDatesUseStableIdsAndCursorCanBeRepeated" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataPagingTest" time="0.001"/>
+  <testcase name="filtersAndAggregatesUseAllMatchingRows" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataPagingTest" time="0.005"/>
+  <testcase name="emptyIsKnownAndHasNoCursor" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataPagingTest" time="0.001"/>
+  <testcase name="malformedCursorAndRangeFail" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataPagingTest" time="0.002"/>
+  <testcase name="changedContentsAtSameTimestampRejectCursor" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolDataPagingTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

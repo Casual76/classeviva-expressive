@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.data.preview.PrivateSessionDataCleanerTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:56.218Z" hostname="PC_FISSO" time="0.237">
+  <properties/>
+  <testcase name="clear_removesOnlyTheRequestedAccountsFilesAndRows" classname="dev.antigravity.classevivaexpressive.core.data.preview.PrivateSessionDataCleanerTest" time="0.227"/>
+  <testcase name="clear_attemptsRemainingCleanupAfterOnePermanentFailureAndSurfacesIt" classname="dev.antigravity.classevivaexpressive.core.data.preview.PrivateSessionDataCleanerTest" time="0.01"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

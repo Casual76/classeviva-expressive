@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-11-07T18:49:51.231Z" hostname="PC_FISSO" time="0.377">
+  <properties/>
+  <testcase name="passwordReauthenticationTrustsReturnedIdentityOverDigitsInUsername" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.266"/>
+  <testcase name="authRedirectCannotForwardSecretPostBody" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.025"/>
+  <testcase name="nestedDataOperationCannotAdoptANewAccountLease" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.007"/>
+  <testcase name="loginRejectsParentIdentityAndMalformedExpiryWithoutChangingAccount" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.007"/>
+  <testcase name="refreshPreservesOriginalPaAndRotatesHeader" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.006"/>
+  <testcase name="delayed401FromOldAccountNeverRetriesUsingNewAccountsToken" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.012"/>
+  <testcase name="simultaneousUnauthorizedRequestsShareOneRefresh" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.005"/>
+  <testcase name="loginUsesExplicitNullAndReadsOnlyRefreshResponseHeader" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.004"/>
+  <testcase name="loginDoesNotTreatTokenApOrBodyRefreshAsRefreshHeader" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.004"/>
+  <testcase name="suspendedDataOperationCannotStartARetrofitRequestUnderANewAccount" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.016"/>
+  <testcase name="refreshResponseCannotResurrectLoggedOutAccount" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.004"/>
+  <testcase name="restRequestStopsAfterOneRetryEvenWhenFreshTokenIsRejected" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.007"/>
+  <testcase name="transientRefreshErrorsKeepSessionAndTerminalErrorsKeepOfflineIdentity" classname="dev.antigravity.classevivaexpressive.core.network.client.CieAuthenticationNetworkTest" time="0.011"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[nov 07, 2026 7:49:51 PM okhttp3.mockwebserver.MockWebServer$SocketHandler handle
+AVVERTENZA: MockWebServer[51822] connection from /127.0.0.1 didn't make a request
+]]></system-err>
+</testsuite>

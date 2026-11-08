@@ -1,0 +1,8 @@
+3aedabe5944ca044c4435c896a85fcc661bc903371f0b50eabd939c34fb2c1aa  android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/ScopedSchoolRead.kt
+964501648145f60e1d746c5d8d8921b64e854ed6eb92c36585af09443e051c57  android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/NetworkParsers.kt
+4cc3497712641ff808c080c21a240083de6a5fd32d3031a88bc390e29ccc269a  android/core/core-network/src/main/kotlin/dev/antigravity/classevivaexpressive/core/network/client/RestClient.kt
+4f81600386c9dc9578f4dbc45548c4c7512e89b026023d9d454d0969e12ff20e  android/core/core-network/src/test/kotlin/dev/antigravity/classevivaexpressive/core/network/client/RestClientNetworkTest.kt
+644a5c96c77ba588ee801e3e9a78e2191d52a284719e7a856dd21e259cc93eef  android/core/core-data/build.gradle
+19a79db523ba1a50c99cd19bdf812a20e4d0dc296cf1176a0dcb8771a4694b57  android/core/core-data/src/test/kotlin/dev/antigravity/classevivaexpressive/core/data/repository/ScopedSchoolRestBoundaryTest.kt
+7bada80593cd92022a087aa5844dbdb6f5463be61684a9244e06b3c96cee7515  android/core/core-assistant/src/main/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/ToolTracing.kt
+fe6008fdd614aa2b6714e49b7e58897b4a25cd0a82ce9fc7152278f49d6f77d2  android/core/core-assistant/src/test/kotlin/dev/antigravity/classevivaexpressive/core/assistant/tools/SchoolDataToolsTest.kt

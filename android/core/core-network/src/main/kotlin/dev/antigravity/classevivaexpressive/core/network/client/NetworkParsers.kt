@@ -943,7 +943,7 @@ internal fun normalizeAttachments(
 
 internal fun JsonObject.string(vararg keys: String): String? {
   keys.forEach { key ->
-    val primitive = this[key] as? JsonPrimitive ?: return@forEach
+    val primitive = (if (isStrictSchoolRead()) strictTextPrimitive(this[key]) else this[key] as? JsonPrimitive) ?: return@forEach
     val candidate = primitive.contentOrNull?.trim()
     if (!candidate.isNullOrBlank()) return candidate
   }
@@ -952,7 +952,7 @@ internal fun JsonObject.string(vararg keys: String): String? {
 
 internal fun JsonObject.double(vararg keys: String): Double? {
   keys.forEach { key ->
-    val primitive = this[key] as? JsonPrimitive ?: return@forEach
+    val primitive = (if (isStrictSchoolRead()) strictTextPrimitive(this[key]) else this[key] as? JsonPrimitive) ?: return@forEach
     primitive.doubleOrNull?.let { return it }
     primitive.contentOrNull?.parseDecimal()?.let { return it }
   }

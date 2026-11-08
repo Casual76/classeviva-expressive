@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.datastore
 
 import dev.antigravity.classevivaexpressive.core.domain.model.RestAuthenticationState
+import dev.antigravity.classevivaexpressive.core.domain.model.AuthMethod
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -19,6 +20,8 @@ class AccountSessionGuard {
   private data class State(
     val epoch: Long = 0,
     val studentId: String? = null,
+    val username: String? = null,
+    val authMethod: AuthMethod? = null,
     val ready: Boolean = false,
     val authenticationEpoch: Long = 0,
   )
@@ -52,12 +55,20 @@ class AccountSessionGuard {
   internal fun accept(snapshot: StoredAuthSnapshot?, forceInvalidation: Boolean = false) {
     val previous = state
     val studentId = snapshot?.session?.studentId
+    val username = snapshot?.session?.username
+    val authMethod = snapshot?.session?.authMethod
     val ready = snapshot?.authenticationState?.rest == RestAuthenticationState.READY
-    val identityChanged = forceInvalidation || previous.studentId != studentId
-    val changed = identityChanged || previous.ready != ready
+    val usernameChanged = previous.username != username
+    // Password -> CIE reauthentication for the same student changes the login alias,
+    // but must preserve the browser authentication epoch. Cache work is still fenced.
+    val identityChanged = forceInvalidation || previous.studentId != studentId ||
+      (usernameChanged && previous.authMethod == authMethod)
+    val changed = identityChanged || usernameChanged || previous.authMethod != authMethod || previous.ready != ready
     state = State(
       epoch = if (changed) previous.epoch + 1 else previous.epoch,
       studentId = studentId,
+      username = username,
+      authMethod = authMethod,
       ready = ready,
       authenticationEpoch = if (identityChanged) previous.authenticationEpoch + 1 else previous.authenticationEpoch,
     )

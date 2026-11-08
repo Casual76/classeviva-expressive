@@ -1,0 +1,14 @@
+{
+  "android\\core\\core-assistant\\src\\main\\kotlin\\dev\\antigravity\\classevivaexpressive\\core\\assistant\\pampai\\SourceProofRegistry.kt": {
+    "sha256": "766fe30ad5939f4cfeead9ba783fc040b193ad6086689e2821eedb8c1237c72a",
+    "size": 12667
+  },
+  "android\\core\\core-assistant\\src\\main\\kotlin\\dev\\antigravity\\classevivaexpressive\\core\\assistant\\pampai\\RegistroSourceProof.kt": {
+    "sha256": "26b5a7bfb5c22005b363ba62fe74b3ae09bec9f49f14bf33dacbc9eba0965d53",
+    "size": 1359
+  },
+  "android\\app\\build\\outputs\\apk\\debug\\app-debug.apk": {
+    "sha256": "b01d0b301105e5cff60e02b6708be3df12cf465d2687e5d9249053e1f9926209",
+    "size": 46582793
+  }
+}

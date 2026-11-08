@@ -7,6 +7,7 @@ import dev.antigravity.fluidengine.ai.tools.ToolRegistry
 object AllTools {
   fun registry(): ToolRegistry<AssistantToolContext> = ToolRegistry(
     tools = traced(
+      RegistroDatiTool(),
       // voti
       VotiElencoTool(), VotiMediaTool(), VotiAndamentoTool(), VotiServeTool(), VotiDettaglioTool(), MaterieTool(), ObiettiviTool(),
       // agenda

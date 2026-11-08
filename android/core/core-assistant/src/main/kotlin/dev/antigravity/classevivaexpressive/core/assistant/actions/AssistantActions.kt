@@ -137,7 +137,7 @@ sealed interface AssistantAction {
     override val detail get() = communicationTitle
   }
 
-  data class AddCustomEvent(val event: CustomEvent) : AssistantAction {
+  data class AddCustomEvent(val event: CustomEvent, val expectedAuthenticationEpoch: Long? = null, val expectedDataEpoch: Long? = null) : AssistantAction {
     override val needsConfirmation = true
     override val title get() = "Aggiungere in agenda?"
     override val detail get() = buildString {

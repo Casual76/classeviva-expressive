@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.datastore.DurableSessionPreferencesTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:25.399Z" hostname="PC_FISSO" time="0.177">
+  <properties/>
+  <testcase name="recoveryRollbackUsesKnownDurableImageInsteadOfUncertainProcessCache" classname="dev.antigravity.classevivaexpressive.core.datastore.DurableSessionPreferencesTest" time="0.076"/>
+  <testcase name="exceptionAfterCacheMutationAlsoRestoresPreviousDurableImage" classname="dev.antigravity.classevivaexpressive.core.datastore.DurableSessionPreferencesTest" time="0.0"/>
+  <testcase name="failedMigrationRestoresAllLegacyValuesIncludingCache" classname="dev.antigravity.classevivaexpressive.core.datastore.DurableSessionPreferencesTest" time="0.095"/>
+  <testcase name="failedCommitRestoresBothCacheAndDiskBeforeAnotherStoreCanOpen" classname="dev.antigravity.classevivaexpressive.core.datastore.DurableSessionPreferencesTest" time="0.002"/>
+  <testcase name="failedRollbackBlocksProcessCacheReadsAcrossWrapperReopen" classname="dev.antigravity.classevivaexpressive.core.datastore.DurableSessionPreferencesTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

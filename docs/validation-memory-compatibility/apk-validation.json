@@ -1,0 +1,83 @@
+{
+  "validatedAtUtc": "2026-11-08T17:12:26.209914+00:00",
+  "apkPath": "C:\\VibeCoded Projects\\classeviva-expressive\\android\\build\\release-beta-7.17.0-beta.2\\classeviva-expressive-7.17.0-beta.2.apk",
+  "originalApkPath": "C:\\VibeCoded Projects\\classeviva-expressive\\android\\app\\build\\outputs\\apk\\release\\app-release.apk",
+  "sha256": "90d26155cd6e83438d217b20e29251ba40f0158a0bb6ba7d5a9bdc91832acbb6",
+  "sizeBytes": 34606010,
+  "packageName": "dev.antigravity.classevivaexpressive",
+  "versionName": "7.17.0-beta.2",
+  "versionCode": 2026110801,
+  "debuggable": false,
+  "certificateSha256": "825738500ce9605429ffba3c4019228f992f2c37d1b70a2230a7ce2c25637e43",
+  "matchesExpectedPampaiStoreSigner": true,
+  "matchesPhoneCvPublicApkSigner": true,
+  "phoneCvVersion": "7.16.1",
+  "phoneCvCode": 2026110501,
+  "signatureVerification": "APK Signature Scheme v2 verified; one signer",
+  "provider": {
+    "class": "dev.antigravity.classevivaexpressive.core.assistant.pampai.RegistroToolHostProvider",
+    "authority": "dev.antigravity.classevivaexpressive.ai.tools",
+    "exported": true,
+    "metadataName": "dev.antigravity.fluidengine.ai.TOOL_HOST",
+    "metadataIntegerType": "0x10",
+    "metadataValue": 1,
+    "manifestPermissionAbsent": true,
+    "runtimeCallerSignatureGate": "verified in source only; Binder runtime NV"
+  },
+  "dexMarkers": {
+    "source_capabilities": [
+      "classes4.dex"
+    ],
+    "source_lease": [
+      "classes4.dex"
+    ],
+    "source_validate": [
+      "classes4.dex"
+    ],
+    "source_read": [
+      "classes4.dex"
+    ],
+    "aria.source-proof": [
+      "classes4.dex"
+    ],
+    "authorization": [
+      "classes3.dex",
+      "classes4.dex",
+      "classes5.dex"
+    ],
+    "source_authorization_capacity": [
+      "classes4.dex"
+    ],
+    "Ldev/antigravity/classevivaexpressive/core/assistant/pampai/SourceProofRegistry;": [
+      "classes4.dex"
+    ],
+    "Ldev/antigravity/classevivaexpressive/core/assistant/pampai/RegistroSourceProofKt;": [
+      "classes4.dex"
+    ],
+    "Ldev/antigravity/classevivaexpressive/core/assistant/pampai/RegistroToolHostProvider;": [
+      "classes4.dex"
+    ],
+    "Ldev/antigravity/classevivaexpressive/core/assistant/tools/RegistroDatiTool;": [
+      "classes4.dex"
+    ]
+  },
+  "lintRelease": {
+    "app": {
+      "Fatal": 0,
+      "Error": 0,
+      "Warning": 86,
+      "Information": 0
+    },
+    "core-assistant": {
+      "Fatal": 0,
+      "Error": 0,
+      "Warning": 6,
+      "Information": 0
+    }
+  },
+  "sourceFreezeFileCount": 414,
+  "sourceFreezeDrift": [],
+  "runtime": "NV",
+  "published": false,
+  "committed": false
+}

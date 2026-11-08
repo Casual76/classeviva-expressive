@@ -1,0 +1,96 @@
+{
+  "invocation": "assistant-test.log",
+  "task": ":core:core-assistant:testDebugUnitTest",
+  "forcedExecution": "task option --rerun",
+  "exitCode": 0,
+  "fresh": true,
+  "totals": {
+    "tests": 62,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": [
+    {
+      "suite": "dev.antigravity.classevivaexpressive.core.assistant.AssistantConfigTest",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "timestamp": "2026-11-08T17:05:35.752Z",
+      "xmlSha256": "0840c87add94a3e6779aaa65d2c72f2d6249a0a95fa7c66bdf5fb8f1a297dab9"
+    },
+    {
+      "suite": "dev.antigravity.classevivaexpressive.core.assistant.math.GradeMathTest",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "timestamp": "2026-11-08T17:05:35.772Z",
+      "xmlSha256": "cb36031b6766060d06c6b6ff4eab9fece2151e578df74d54b5a48c7e94e2aafe"
+    },
+    {
+      "suite": "dev.antigravity.classevivaexpressive.core.assistant.pampai.RegistroSourceProofTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "timestamp": "2026-11-08T17:05:35.801Z",
+      "xmlSha256": "9dae7b89250bb2ca42b150909ffe018f8b85599f0d4657a3194d16b4e96abf61"
+    },
+    {
+      "suite": "dev.antigravity.classevivaexpressive.core.assistant.pampai.SourceProofRegistryTest",
+      "tests": 26,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "timestamp": "2026-11-08T17:05:37.100Z",
+      "xmlSha256": "a3e4f207db6b365197f0542fbefdb4ca00416c34674ef3111f1b8db15cce84fb"
+    },
+    {
+      "suite": "dev.antigravity.classevivaexpressive.core.assistant.prompt.PreRouterTest",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "timestamp": "2026-11-08T17:05:37.163Z",
+      "xmlSha256": "bc6f61a599318507b790db670e7b2dea769dad633230842f8a07474108dd17a2"
+    },
+    {
+      "suite": "dev.antigravity.classevivaexpressive.core.assistant.prompt.PromptBuilderTest",
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "timestamp": "2026-11-08T17:05:37.174Z",
+      "xmlSha256": "0ad17f9bb568cedf4261783e2fa04032aad7876a377a9b07b237d0141bc0b925"
+    },
+    {
+      "suite": "dev.antigravity.classevivaexpressive.core.assistant.tools.SchoolDataProviderTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "timestamp": "2026-11-08T17:05:37.192Z",
+      "xmlSha256": "8493074995517d433127b7cbedfdcfa9457a7400a8d0ab27da26ab6c8a504103"
+    },
+    {
+      "suite": "dev.antigravity.classevivaexpressive.core.assistant.tools.SchoolDataToolsTest",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "timestamp": "2026-11-08T17:05:37.251Z",
+      "xmlSha256": "c6e7ade5cab22af71c9ba6f6c64492c758aef6a13ccb178d3644217eae5516df"
+    },
+    {
+      "suite": "dev.antigravity.classevivaexpressive.core.assistant.tools.ToolSupportTest",
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "timestamp": "2026-11-08T17:05:37.556Z",
+      "xmlSha256": "54571b24eaa3a249535918712969ca35c1d01e84095e58bebebbcedb998dc1d8"
+    }
+  ]
+}

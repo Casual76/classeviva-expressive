@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:16:22.162Z" hostname="PC_FISSO" time="0.003">
+  <properties/>
+  <testcase name="september_doesNotOfferTheFollowingSchoolYear" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest" time="0.0"/>
+  <testcase name="september_startsTheNewYear" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest" time="0.0"/>
+  <testcase name="juneThroughAugust_offerOnlyUpcomingAndItsImmediatePredecessor" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest" time="0.0"/>
+  <testcase name="labelAndId_areStableAcrossTheBoundary" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest" time="0.002"/>
+  <testcase name="december_staysInTheYearThatStartedInSeptember" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest" time="0.0"/>
+  <testcase name="previousOf_stepsBackOneYear" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest" time="0.0"/>
+  <testcase name="automaticFallback_onlyMovesNewestOfferedYearBackOnce" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest" time="0.001"/>
+  <testcase name="august_stillBelongsToTheYearThatIsEnding" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest" time="0.0"/>
+  <testcase name="midYear_monthsBeforeSeptemberBelongToTheYearThatStartedLastAutumn" classname="dev.antigravity.classevivaexpressive.core.domain.model.SchoolYearRefTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
