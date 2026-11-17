@@ -119,8 +119,10 @@ class SessionStore(private val persistence: SecureSessionPersistence) : SessionS
   private val snapshot: StoredAuthSnapshot? get() = publication.snapshot
   private val sessionFlow = MutableStateFlow<UserSession?>(null)
   private val authenticationFlow = MutableStateFlow(AuthenticationState())
+  private val dataEpochFlow = MutableStateFlow(publication.lease.epoch)
   val session: StateFlow<UserSession?> = sessionFlow
   val authenticationState: StateFlow<AuthenticationState> = authenticationFlow
+  val dataEpoch: StateFlow<Long> = dataEpochFlow
 
   init {
     accountGuard.mutateBlocking {
@@ -232,6 +234,9 @@ class SessionStore(private val persistence: SecureSessionPersistence) : SessionS
     if (publishSession) {
       sessionFlow.value = value?.session
       authenticationFlow.value = value?.authenticationState ?: AuthenticationState()
+      // Publish the generation after the complete durable snapshot and public session. Unlike
+      // the session value, this changes even when logout/relogin returns identical credentials.
+      dataEpochFlow.value = publication.lease.epoch
     }
   }
 

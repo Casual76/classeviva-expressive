@@ -50,7 +50,6 @@ import java.time.LocalTime
 import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 
@@ -97,22 +96,17 @@ internal object NotificationDeepLinks {
     return if (query.isBlank()) base else "$base?$query"
   }
 
+  fun scoped(link: String, scope: NotificationScope?): String {
+    if (scope == null) return link
+    val separator = if ('?' in link) "&" else "?"
+    return link + separator + "studentId=${scope.studentId.encodeUrlPart()}" +
+      "&schoolYearId=${scope.schoolYearId.encodeUrlPart()}"
+  }
+
   private fun String.encodeUrlPart(): String {
     return URLEncoder.encode(this, StandardCharsets.UTF_8.toString()).replace("+", "%20")
   }
 }
-
-data class SyncSnapshotPayloads(
-  val homeworks: String? = null,
-  /** L'ultima lettura della sezione Compiti; null finche' non si e' mai letta. */
-  val dedicatedHomeworks: String? = null,
-  val communications: String? = null,
-  val absences: String? = null,
-  val grades: String? = null,
-  val agenda: String? = null,
-  val notes: String? = null,
-  val lessons: String? = null,
-)
 
 data class ChannelDefinition(
   val id: String,
@@ -377,38 +371,63 @@ class SyncNotificationDispatcher @Inject constructor(
   private val json: Json,
   private val settingsStore: SettingsStore,
 ) {
-  suspend fun dispatch(previous: SyncSnapshotPayloads, current: SyncSnapshotPayloads) {
+  suspend fun dispatch(previous: SyncSnapshotPayloads, current: SyncSnapshotPayloads): SyncSnapshotPayloads {
     val preferences = settingsStore.settings.first().notificationPreferences
-    if (!preferences.enabled) return
-
     val runtime = readNotificationRuntimeState(context)
-    if (!runtime.permissionGranted || !runtime.appNotificationsEnabled) return
+    fun canDeliver(channelId: String): Boolean = runtime.permissionGranted && runtime.appNotificationsEnabled &&
+      runtime.channels.firstOrNull { it.id == channelId }?.enabled == true
+    val scope = current.scope
+    // Ownership stays with the selected category while Android blocks it. Its checkpoint retains
+    // the pending change; routing it to another channel would notify it twice on recovery.
+    val homeworkChannelOn = preferences.enabled && preferences.homework
+    val agendaChannelOn = preferences.enabled && preferences.agenda
+    val homeworkCheckpoint = advanceHomeworkNotificationCheckpoint(
+      previous, current, preferences.enabled && preferences.homework, canDeliver(HomeworkChannelId),
+      deliver = { before, after, dedicatedPrimed ->
+        dispatchHomeworks(before, after, dedicatedPrimed, agendaChannelOn, scope).isSuccess
+      },
+    )
 
-    AppNotificationChannels.create(context)
-
-    if (preferences.grades) {
-      dispatchGrades(previous, current)
-    }
-    if (preferences.agenda) {
-      dispatchAgendaEvents(previous, current, homeworkChannelOn = preferences.homework)
-    }
-    if (preferences.homework) {
-      dispatchHomeworks(previous, current, agendaChannelOn = preferences.agenda)
-    }
-    if (preferences.communications) {
-      dispatchCommunications(previous, current)
-    }
-    if (preferences.absences) {
-      dispatchAbsences(previous, current)
-    }
-    if (preferences.notes) {
-      dispatchNotes(previous, current)
-    }
-    if (preferences.liveTimetable) {
+    val checkpoint = previous.copy(
+      scope = scope,
+      grades = advanceNotificationCheckpoint(
+        previous.grades, current.grades, preferences.enabled && preferences.grades, canDeliver(GradesChannelId),
+        decode = { decodeListOrNull<Grade>(it) },
+        deliver = { before, after -> dispatchGrades(before, after, scope).isSuccess },
+      ),
+      agenda = advanceNotificationCheckpoint(
+        previous.agenda, current.agenda, preferences.enabled && preferences.agenda, canDeliver(AgendaChannelId),
+        decode = { decodeListOrNull<AgendaItem>(it) },
+        deliver = { before, after ->
+          dispatchAgendaEvents(before, after, current, homeworkChannelOn, scope).isSuccess
+        },
+      ),
+      homeworks = homeworkCheckpoint.homeworks,
+      dedicatedHomeworks = homeworkCheckpoint.dedicatedHomeworks,
+      communications = advanceNotificationCheckpoint(
+        previous.communications, current.communications,
+        preferences.enabled && preferences.communications, canDeliver(CommunicationsChannelId),
+        decode = { decodeListOrNull<Communication>(it) },
+        deliver = { before, after -> dispatchCommunications(before, after, scope).isSuccess },
+      ),
+      absences = advanceNotificationCheckpoint(
+        previous.absences, current.absences, preferences.enabled && preferences.absences, canDeliver(AbsencesChannelId),
+        decode = { decodeListOrNull<AbsenceRecord>(it) },
+        deliver = { before, after -> dispatchAbsences(before, after, scope).isSuccess },
+      ),
+      notes = advanceNotificationCheckpoint(
+        previous.notes, current.notes, preferences.enabled && preferences.notes, canDeliver(NotesChannelId),
+        decode = { decodeListOrNull<Note>(it) },
+        deliver = { before, after -> dispatchNotes(before, after, scope).isSuccess },
+      ),
+      lessons = current.lessons,
+    )
+    if (preferences.enabled && preferences.liveTimetable && canDeliver(LiveTimetableChannelId)) {
       dispatchLiveTimetable(current)
     } else {
       NotificationManagerCompat.from(context).cancel(LiveTimetableNotificationId)
     }
+    return checkpoint
   }
 
   private fun dispatchLiveTimetable(
@@ -443,39 +462,44 @@ class SyncNotificationDispatcher @Inject constructor(
       notification = buildLiveTimetableNotification(
         context = context,
         snapshot = snapshot,
-        launchIntent = launchPendingIntent(context, NotificationDestination.Lessons),
+        launchIntent = launchPendingIntent(context, NotificationDestination.Lessons, current.scope),
       ),
     )
   }
 
   private fun dispatchGrades(
-    previous: SyncSnapshotPayloads,
-    current: SyncSnapshotPayloads,
-  ) {
-    val before = decodeList<Grade>(previous.grades)
-    val after = decodeList<Grade>(current.grades)
-    val beforeById = before.associateBy { it.id }
-    val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id } }
-    val updatedItems = if (newItems.isEmpty()) {
-      after.filter { candidate ->
-        beforeById[candidate.id]?.let { previousGrade ->
-          candidate.hasMeaningfulNotificationChangeComparedTo(previousGrade)
-        } == true
-      }
-    } else {
-      emptyList()
+    before: List<Grade>,
+    after: List<Grade>,
+    scope: NotificationScope?,
+  ): Result<Unit> {
+    val changes = gradeNotificationChanges(before, after)
+    if (changes.newItems.isEmpty() && changes.updatedItems.isEmpty()) return Result.success(Unit)
+    val notification = when {
+      changes.newItems.isNotEmpty() && changes.updatedItems.isNotEmpty() -> buildMixedGradesNotification(changes, scope)
+      changes.newItems.isNotEmpty() -> buildNewGradesNotification(changes.newItems, scope)
+      else -> buildUpdatedGradesNotification(changes.updatedItems, scope)
     }
-    if (newItems.isEmpty() && updatedItems.isEmpty()) return
-
-    val notification = if (newItems.isNotEmpty()) {
-      buildNewGradesNotification(newItems)
-    } else {
-      buildUpdatedGradesNotification(updatedItems)
-    }
-    notifyCompat(context, GradesNotificationId, notification)
+    return notifyCompat(context, GradesNotificationId, notification)
   }
 
-  private fun buildNewGradesNotification(newItems: List<Grade>): Notification {
+  private fun buildMixedGradesNotification(changes: GradeNotificationChanges, scope: NotificationScope?): Notification {
+    val newLabel = if (changes.newItems.size == 1) "1 nuovo voto" else "${changes.newItems.size} nuovi voti"
+    val updatedLabel = if (changes.updatedItems.size == 1) "1 voto aggiornato" else "${changes.updatedItems.size} voti aggiornati"
+    val inbox = NotificationCompat.InboxStyle().setSummaryText("Registro Voti")
+    changes.newItems.forEach { inbox.addLine("Nuovo - ${it.valueLabel} - ${it.subject}") }
+    changes.updatedItems.forEach { inbox.addLine("Aggiornato - ${it.valueLabel} - ${it.subject}") }
+    return NotificationCompat.Builder(context, GradesChannelId)
+      .setSmallIcon(dev.antigravity.classevivaexpressive.core.data.R.drawable.ic_stat_logo)
+      .setContentTitle("$newLabel e $updatedLabel")
+      .setContentText((changes.newItems + changes.updatedItems).take(2).joinToString(" - ") { "${it.valueLabel} in ${it.subject}" })
+      .setStyle(inbox)
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setAutoCancel(true)
+      .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grades, scope))
+      .build()
+  }
+
+  private fun buildNewGradesNotification(newItems: List<Grade>, scope: NotificationScope?): Notification {
     return if (newItems.size == 1) {
       val grade = newItems.first()
       val emoji = gradeEmoji(grade.numericValue)
@@ -501,7 +525,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grade(grade.id)))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grade(grade.id), scope))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -517,12 +541,12 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grades))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grades, scope))
         .build()
     }
   }
 
-  private fun buildUpdatedGradesNotification(updatedItems: List<Grade>): Notification {
+  private fun buildUpdatedGradesNotification(updatedItems: List<Grade>, scope: NotificationScope?): Notification {
     return if (updatedItems.size == 1) {
       val grade = updatedItems.first()
       val emoji = gradeEmoji(grade.numericValue)
@@ -544,7 +568,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grade(grade.id)))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grade(grade.id), scope))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -559,18 +583,18 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grades))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Grades, scope))
         .build()
     }
   }
 
   private fun dispatchAgendaEvents(
-    previous: SyncSnapshotPayloads,
+    before: List<AgendaItem>,
+    after: List<AgendaItem>,
     current: SyncSnapshotPayloads,
     homeworkChannelOn: Boolean,
-  ) {
-    val before = decodeList<AgendaItem>(previous.agenda)
-    val after = decodeList<AgendaItem>(current.agenda)
+    scope: NotificationScope?,
+  ): Result<Unit> {
     // Una riga d'agenda che e' anche un compito della sezione Compiti la annuncia il canale dei compiti.
     val coveredByHomework = if (homeworkChannelOn) {
       agendaIdsCoveredByDedicatedHomework(decodeList<Homework>(current.homeworks))
@@ -582,11 +606,12 @@ class SyncNotificationDispatcher @Inject constructor(
       .filterNot { it.category == AgendaCategory.HOMEWORK && it.id in coveredByHomework }
     val prevRelevant = before.filter { it.category == AgendaCategory.ASSESSMENT || it.category == AgendaCategory.HOMEWORK }
     val newItems = newRelevant.filterNot { candidate -> prevRelevant.any { it.id == candidate.id } }
-    if (newItems.isEmpty()) return
+    if (newItems.isEmpty()) return Result.success(Unit)
 
     val assessments = newItems.filter { it.category == AgendaCategory.ASSESSMENT }
     val homeworks = newItems.filter { it.category == AgendaCategory.HOMEWORK }
 
+    var successful = true
     if (assessments.isNotEmpty()) {
       val notification = if (assessments.size == 1) {
         val item = assessments.first()
@@ -603,7 +628,7 @@ class SyncNotificationDispatcher @Inject constructor(
           )
           .setPriority(NotificationCompat.PRIORITY_HIGH)
           .setAutoCancel(true)
-          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.AgendaItem(item.id, item.date)))
+          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.AgendaItem(item.id, item.date), scope))
           .build()
       } else {
         val inboxStyle = NotificationCompat.InboxStyle()
@@ -618,10 +643,10 @@ class SyncNotificationDispatcher @Inject constructor(
           .setStyle(inboxStyle)
           .setPriority(NotificationCompat.PRIORITY_HIGH)
           .setAutoCancel(true)
-          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Agenda))
+          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Agenda, scope))
           .build()
       }
-      notifyCompat(context, 4500, notification)
+      if (notifyCompat(context, 4500, notification).isFailure) successful = false
     }
 
     if (homeworks.isNotEmpty()) {
@@ -640,7 +665,7 @@ class SyncNotificationDispatcher @Inject constructor(
           )
           .setPriority(NotificationCompat.PRIORITY_DEFAULT)
           .setAutoCancel(true)
-          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.AgendaItem(item.id, item.date)))
+          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.AgendaItem(item.id, item.date), scope))
           .build()
       } else {
         val inboxStyle = NotificationCompat.InboxStyle()
@@ -655,25 +680,28 @@ class SyncNotificationDispatcher @Inject constructor(
           .setStyle(inboxStyle)
           .setPriority(NotificationCompat.PRIORITY_DEFAULT)
           .setAutoCancel(true)
-          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Agenda))
+          .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Agenda, scope))
           .build()
       }
-      notifyCompat(context, 4501, notification)
+      if (notifyCompat(context, 4501, notification).isFailure) successful = false
     }
+    return if (successful) Result.success(Unit) else Result.failure(IllegalStateException("Invio notifiche agenda non riuscito."))
   }
 
   private fun dispatchHomeworks(
-    previous: SyncSnapshotPayloads,
-    current: SyncSnapshotPayloads,
+    before: List<Homework>,
+    after: List<Homework>,
+    dedicatedPrimed: Boolean,
     agendaChannelOn: Boolean,
-  ) {
+    scope: NotificationScope?,
+  ): Result<Unit> {
     val newItems = homeworksToNotify(
-      before = decodeList(previous.homeworks),
-      after = decodeList(current.homeworks),
-      dedicatedPrimed = previous.dedicatedHomeworks != null,
+      before = before,
+      after = after,
+      dedicatedPrimed = dedicatedPrimed,
       agendaChannelOn = agendaChannelOn,
     )
-    if (newItems.isEmpty()) return
+    if (newItems.isEmpty()) return Result.success(Unit)
 
     val notification = if (newItems.size == 1) {
       val hw = newItems.first()
@@ -689,7 +717,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.HomeworkItem(hw.id)))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.HomeworkItem(hw.id), scope))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -704,22 +732,21 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Homework))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Homework, scope))
         .build()
     }
-    notifyCompat(context, 4100, notification)
+    return notifyCompat(context, 4100, notification)
   }
 
   private fun dispatchCommunications(
-    previous: SyncSnapshotPayloads,
-    current: SyncSnapshotPayloads,
-  ) {
-    val before = decodeList<Communication>(previous.communications)
-    val after = decodeList<Communication>(current.communications)
+    before: List<Communication>,
+    after: List<Communication>,
+    scope: NotificationScope?,
+  ): Result<Unit> {
     val newItems = after.filterNot { candidate ->
       before.any { it.id == candidate.id && it.pubId == candidate.pubId }
     }
-    if (newItems.isEmpty()) return
+    if (newItems.isEmpty()) return Result.success(Unit)
 
     val notification = if (newItems.size == 1) {
       val comm = newItems.first()
@@ -743,7 +770,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Communication(comm.pubId, comm.evtCode)))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Communication(comm.pubId, comm.evtCode), scope))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -758,18 +785,17 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Communications))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Communications, scope))
         .build()
     }
-    notifyCompat(context, 4200, notification)
+    return notifyCompat(context, 4200, notification)
   }
 
   private fun dispatchAbsences(
-    previous: SyncSnapshotPayloads,
-    current: SyncSnapshotPayloads,
-  ) {
-    val before = decodeList<AbsenceRecord>(previous.absences)
-    val after = decodeList<AbsenceRecord>(current.absences)
+    before: List<AbsenceRecord>,
+    after: List<AbsenceRecord>,
+    scope: NotificationScope?,
+  ): Result<Unit> {
     val newItems = after.filterNot { candidate ->
       before.any { existing ->
         existing.id == candidate.id &&
@@ -777,7 +803,7 @@ class SyncNotificationDispatcher @Inject constructor(
           existing.type == candidate.type
       }
     }
-    if (newItems.isEmpty()) return
+    if (newItems.isEmpty()) return Result.success(Unit)
 
     val notification = if (newItems.size == 1) {
       val record = newItems.first()
@@ -794,7 +820,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Absence(record.id)))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Absence(record.id), scope))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -810,20 +836,19 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Absences))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Absences, scope))
         .build()
     }
-    notifyCompat(context, 4300, notification)
+    return notifyCompat(context, 4300, notification)
   }
 
   private fun dispatchNotes(
-    previous: SyncSnapshotPayloads,
-    current: SyncSnapshotPayloads,
-  ) {
-    val before = decodeList<Note>(previous.notes)
-    val after = decodeList<Note>(current.notes)
+    before: List<Note>,
+    after: List<Note>,
+    scope: NotificationScope?,
+  ): Result<Unit> {
     val newItems = after.filterNot { candidate -> before.any { it.id == candidate.id } }
-    if (newItems.isEmpty()) return
+    if (newItems.isEmpty()) return Result.success(Unit)
 
     val notification = if (newItems.size == 1) {
       val note = newItems.first()
@@ -843,7 +868,7 @@ class SyncNotificationDispatcher @Inject constructor(
         )
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Note(note.id, note.categoryCode)))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Note(note.id, note.categoryCode), scope))
         .build()
     } else {
       val inboxStyle = NotificationCompat.InboxStyle()
@@ -858,16 +883,17 @@ class SyncNotificationDispatcher @Inject constructor(
         .setStyle(inboxStyle)
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
-        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Notes))
+        .applyLaunchIntent(launchPendingIntent(context, NotificationDestination.Notes, scope))
         .build()
     }
-    notifyCompat(context, 4600, notification)
+    return notifyCompat(context, 4600, notification)
   }
 
-  private inline fun <reified T> decodeList(payload: String?): List<T> {
-    val source = payload?.takeIf { it.isNotBlank() } ?: return emptyList()
-    return runCatching { json.decodeFromString<List<T>>(source) }.getOrDefault(emptyList())
-  }
+  private inline fun <reified T> decodeListOrNull(payload: String): List<T>? =
+    runCatching { json.decodeFromString<List<T>>(payload) }.getOrNull()
+
+  private inline fun <reified T> decodeList(payload: String?): List<T> =
+    payload?.let { decodeListOrNull<T>(it) }.orEmpty()
 
   private fun absenceLabel(record: AbsenceRecord): String = when (record.type) {
     AbsenceType.ABSENCE -> "Assenza"
@@ -1166,7 +1192,7 @@ suspend fun refreshLiveTimetableNotification(
     }
     return
   }
-  val launchIntent = launchPendingIntentInternal(context)
+  val launchIntent = launchPendingIntent(context, NotificationDestination.Lessons, NotificationScope(studentId, currentYear.id))
   sessionStore.accountGuard.withCurrentAccount(work.lease, requireReady = false) {
     notifyCompat(
       context = context,
@@ -1174,10 +1200,6 @@ suspend fun refreshLiveTimetableNotification(
       notification = buildLiveTimetableNotification(context, snapshot, launchIntent),
     )
   }
-}
-
-private fun launchPendingIntentInternal(context: Context): PendingIntent? {
-  return launchPendingIntent(context, NotificationDestination.Lessons)
 }
 
 internal fun gradeEmoji(numericValue: Double?): String = when {
@@ -1196,14 +1218,15 @@ internal fun readableDate(value: String): String {
 private fun launchPendingIntent(
   context: Context,
   destination: NotificationDestination = NotificationDestination.Home,
+  scope: NotificationScope? = null,
 ): PendingIntent? {
   val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
   intent.action = Intent.ACTION_VIEW
-  intent.data = destination.uri()
+  intent.data = Uri.parse(NotificationDeepLinks.scoped(destination.uri().toString(), scope))
   intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
   return PendingIntent.getActivity(
     context,
-    destination.requestCode(),
+    intent.data.toString().hashCode(),
     intent,
     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
   )
@@ -1211,8 +1234,6 @@ private fun launchPendingIntent(
 
 private sealed interface NotificationDestination {
   fun uri(): Uri
-
-  fun requestCode(): Int = uri().toString().hashCode()
 
   data object Home : NotificationDestination {
     override fun uri(): Uri = Uri.parse(NotificationDeepLinks.home())
@@ -1288,72 +1309,6 @@ private fun hasNotificationPermission(context: Context): Boolean {
   }
 }
 
-private fun Grade.hasMeaningfulNotificationChangeComparedTo(previous: Grade): Boolean {
-  if (gradeValueChanged(previous.numericValue, previous.valueLabel, numericValue, valueLabel)) return true
-  if (requiredTextChanged(previous.date, date)) return true
-  if (comparableTextChanged(previous.subject, subject)) return true
-  if (comparableTextChanged(significantGradeType(previous.type), significantGradeType(type))) return true
-  if (comparableNumberChanged(previous.weight, weight)) return true
-  if (coreTextChanged(previous.description, description)) return true
-  if (coreTextChanged(previous.notes, notes)) return true
-  return false
-}
-
-private fun gradeValueChanged(
-  firstNumber: Double?,
-  firstLabel: String?,
-  secondNumber: Double?,
-  secondLabel: String?,
-): Boolean {
-  if (firstNumber != null && secondNumber != null) {
-    return abs(firstNumber - secondNumber) > 0.0001
-  }
-  val parsedFirst = firstNumber ?: parseGradeValue(firstLabel)
-  val parsedSecond = secondNumber ?: parseGradeValue(secondLabel)
-  if (parsedFirst != null && parsedSecond != null) {
-    return abs(parsedFirst - parsedSecond) > 0.0001
-  }
-  return comparableTextChanged(firstLabel, secondLabel)
-}
-
-private fun comparableNumberChanged(first: Double?, second: Double?): Boolean {
-  return first != null && second != null && abs(first - second) > 0.0001
-}
-
-private fun requiredTextChanged(first: String?, second: String?): Boolean {
-  val normalizedFirst = normalizedNotificationText(first)
-  val normalizedSecond = normalizedNotificationText(second)
-  return normalizedFirst.isNotBlank() && normalizedSecond.isNotBlank() && normalizedFirst != normalizedSecond
-}
-
-private fun comparableTextChanged(first: String?, second: String?): Boolean {
-  val normalizedFirst = normalizedNotificationText(first)
-  val normalizedSecond = normalizedNotificationText(second)
-  return normalizedFirst.isNotBlank() && normalizedSecond.isNotBlank() && normalizedFirst != normalizedSecond
-}
-
-private fun coreTextChanged(first: String?, second: String?): Boolean {
-  return normalizedNotificationText(first) != normalizedNotificationText(second)
-}
-
-private fun significantGradeType(type: String?): String? {
-  val normalized = normalizedNotificationText(type)
-  return normalized.takeUnless { it.isBlank() || it == "valutazione" || it == "voto" }
-}
-
-private fun normalizedNotificationText(value: String?): String {
-  return value.orEmpty()
-    .trim()
-    .lowercase()
-    .replace(Regex("\\s+"), " ")
-}
-
-private fun parseGradeValue(label: String?): Double? {
-  return normalizedNotificationText(label)
-    .replace(',', '.')
-    .toDoubleOrNull()
-}
-
 @SuppressLint("MissingPermission")
 private fun notifyCompat(
   context: Context,
@@ -1364,6 +1319,12 @@ private fun notifyCompat(
     return Result.failure(SecurityException("Permesso notifiche non concesso."))
   }
   return runCatching {
-    NotificationManagerCompat.from(context).notify(notificationId, notification)
+    val manager = NotificationManagerCompat.from(context)
+    check(manager.areNotificationsEnabled()) { "Notifiche disattivate nelle impostazioni di sistema." }
+    val channel = context.getSystemService(NotificationManager::class.java)?.getNotificationChannel(notification.channelId)
+    check(channel != null && channel.importance != NotificationManager.IMPORTANCE_NONE) {
+      "Canale notifiche disattivato nelle impostazioni di sistema."
+    }
+    manager.notify(notificationId, notification)
   }
 }

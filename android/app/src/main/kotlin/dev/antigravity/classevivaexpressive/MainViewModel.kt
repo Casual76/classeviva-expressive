@@ -126,6 +126,9 @@ class MainViewModel @Inject constructor(
   private var liveTimetableRefreshJob: Job? = null
   private var lastLiveTimetableRefreshAtMillis = 0L
 
+  val selectedSchoolYear = schoolYearRepository.observeSelectedSchoolYear()
+    .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
   private val baseState = combine(
     authRepository.session,
     settingsRepository.observeSettings(),

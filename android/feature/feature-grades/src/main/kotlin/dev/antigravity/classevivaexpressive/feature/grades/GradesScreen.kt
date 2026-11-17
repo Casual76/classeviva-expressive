@@ -61,6 +61,9 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeVividCo
 import dev.antigravity.classevivaexpressive.core.designsystem.theme.gradeTone
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
+import dev.antigravity.classevivaexpressive.core.domain.model.effectiveWeight
+import dev.antigravity.classevivaexpressive.core.domain.model.subjectGradeAverage
+import dev.antigravity.classevivaexpressive.core.domain.model.overallGradeAverage
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Period
 import dev.antigravity.classevivaexpressive.core.domain.model.SubjectGoal
@@ -140,7 +143,7 @@ internal fun buildGradesFacets(grades: List<Grade>, seenGradeIds: Set<String>): 
   val unseen = grades.count { it.id !in seenGradeIds }
   if (unseen > 0) add(if (unseen == 1) "1 voto nuovo" else "$unseen voti nuovi")
   val numeric = grades.mapNotNull { it.numericValue }
-  if (numeric.isNotEmpty()) add("Media ${"%.2f".format(numeric.average())}")
+  calculateOverallAverage(grades)?.let { add("Media ${it.format2()}") }
   val insufficient = numeric.count { it < 6.0 }
   if (insufficient > 0) {
     add(if (insufficient == 1) "1 insufficienza" else "$insufficient insufficienze")
@@ -323,8 +326,8 @@ fun GradesRoute(
     viewModel.openGrade(gradeId)
   }
 
-  val titleFacets = remember(state.grades, state.seenGradeIds) {
-    buildGradesFacets(state.grades, state.seenGradeIds)
+  val titleFacets = remember(filteredGrades, state.seenGradeIds) {
+    buildGradesFacets(filteredGrades, state.seenGradeIds)
   }
 
   val metrics = rememberFluidScreenMetrics()
@@ -937,12 +940,16 @@ internal fun filterGradesByPeriod(
   val start = period.startDate.toLocalDateOrNull()
   val end = period.endDate.toLocalDateOrNull()
   return grades.filter { grade ->
+    // The register's declared period wins over its registration date. Teachers can publish a
+    // first-period mark after the next period has started; it must not count in both periods.
+    val declaredPeriod = periods.firstOrNull { it.code == grade.periodCode }
+      ?: grade.period?.takeIf(String::isNotBlank)?.let { label ->
+        periods.filter {
+          label.equals(it.label, ignoreCase = true) || label.equals(it.description, ignoreCase = true)
+        }.singleOrNull()
+      }
     when {
-      grade.periodCode == periodCode -> true
-      !grade.period.isNullOrBlank() && (
-        grade.period.equals(period.label, ignoreCase = true) ||
-          grade.period.equals(period.description, ignoreCase = true)
-        ) -> true
+      declaredPeriod != null -> declaredPeriod.code == periodCode
       start != null && end != null -> {
         val date = grade.date.toLocalDateOrNull()
         date != null && !date.isBefore(start) && !date.isAfter(end)
@@ -957,7 +964,9 @@ internal fun calculateRequiredGradeMessage(
   targetAverage: Double,
 ): String {
   val numericGrades = grades.mapNotNull { grade ->
-    grade.numericValue?.let { value -> value to (grade.weight ?: 1.0) }
+    val value = grade.numericValue?.takeIf(Double::isFinite) ?: return@mapNotNull null
+    val weight = grade.effectiveWeight().takeIf { it > 0.0 } ?: return@mapNotNull null
+    value to weight
   }
   val currentAverage = numericGrades.takeIf { it.isNotEmpty() }?.let { values ->
     values.sumOf { it.first * it.second } / values.sumOf { it.second }
@@ -1002,17 +1011,11 @@ private fun buildSubjectRows(
 }
 
 internal fun calculateSubjectAverage(grades: List<Grade>): Double? {
-  val numeric = grades.filter { it.numericValue != null }
-  if (numeric.isEmpty()) return null
-  val totalWeight = numeric.sumOf { it.weight ?: 1.0 }
-  return numeric.sumOf { (it.numericValue ?: 0.0) * (it.weight ?: 1.0) } / totalWeight
+  return subjectGradeAverage(grades)
 }
 
 internal fun calculateOverallAverage(grades: List<Grade>): Double? {
-  val bySubject = grades.groupBy { it.subject }
-  val subjectAverages = bySubject.values.mapNotNull { calculateSubjectAverage(it) }
-  if (subjectAverages.isEmpty()) return null
-  return subjectAverages.average()
+  return overallGradeAverage(grades)
 }
 
 private fun effectivePeriodLabel(periods: List<Period>, periodCode: String?): String {

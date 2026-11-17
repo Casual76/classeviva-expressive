@@ -36,4 +36,21 @@ class NotificationDeepLinksTest {
       NotificationDeepLinks.notes(noteId = "nota 1", categoryCode = "cat/2"),
     )
   }
+
+  @Test
+  fun originatingAccountAndYearArePreservedWithoutChangingRecordDestination() {
+    assertEquals(
+      "classevivaexpressive://open/grades?gradeId=grade-42&studentId=student%2F1&schoolYearId=2026-2027",
+      NotificationDeepLinks.scoped(NotificationDeepLinks.grades("grade-42"), NotificationScope("student/1", "2026-2027")),
+    )
+  }
+
+  @Test
+  fun scopeWorksForDestinationsWithoutQueryAndLegacyLinksStayUnchanged() {
+    assertEquals(
+      "classevivaexpressive://open/lessons?studentId=student-1&schoolYearId=2026-2027",
+      NotificationDeepLinks.scoped(NotificationDeepLinks.lessons(), NotificationScope("student-1", "2026-2027")),
+    )
+    assertEquals(NotificationDeepLinks.homework("hw-1"), NotificationDeepLinks.scoped(NotificationDeepLinks.homework("hw-1"), null))
+  }
 }

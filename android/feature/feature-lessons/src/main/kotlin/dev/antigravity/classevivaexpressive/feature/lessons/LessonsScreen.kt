@@ -46,7 +46,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -112,6 +111,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.fluidExpandOrigin
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
+import dev.antigravity.fluidengine.ui.fluid.rememberCurrentDate
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.fluid.FluidTextStyles
@@ -295,6 +295,7 @@ fun LessonsRoute(
   viewModel: LessonsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val today = rememberCurrentDate()
   var selectedTab by rememberSaveable { mutableStateOf(TAB_TIMETABLE) }
   var selectedTemplateDayKey by rememberSaveable { mutableStateOf<String?>(null) }
   var selectedHistoryDayKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -337,7 +338,7 @@ fun LessonsRoute(
     buildTimetableDaySections(visibleDays, templateByDay)
   }
 
-  val currentWeekStart = remember(weekOffset) { schoolWeekStart(weekOffset) }
+  val currentWeekStart = remember(weekOffset, today) { schoolWeekStart(weekOffset, today) }
   val historyDays = remember(currentWeekStart) {
     visibleDays.indices.map { currentWeekStart.plusDays(it.toLong()) }
   }
@@ -355,50 +356,43 @@ fun LessonsRoute(
   }
   val weekLessonCount = remember(historySections) { historySections.sumOf { it.lessons.size } }
 
-  LaunchedEffect(templateDayOptions) {
-    if (selectedTemplateDayKey == null || templateDayOptions.none { it.key == selectedTemplateDayKey }) {
-      val todayKey = LocalDate.now().dayOfWeek.name
-      selectedTemplateDayKey = templateDayOptions.firstOrNull { it.key == todayKey }?.key
-        ?: templateDayOptions.firstOrNull()?.key
-    }
-  }
-  LaunchedEffect(historyDayOptions) {
-    if (selectedHistoryDayKey == null || historyDayOptions.none { it.key == selectedHistoryDayKey }) {
-      val todayKey = LocalDate.now().toString()
-      selectedHistoryDayKey = historyDayOptions.firstOrNull { it.key == todayKey }?.key
-        ?: historyDayOptions.firstOrNull()?.key
-    }
-  }
+  // A null selection follows today across midnight/resume; only an explicit tap pins a day.
+  val effectiveTemplateDayKey = resolveSchoolDayKey(
+    templateDayOptions.map(DayOption::key), selectedTemplateDayKey, today.dayOfWeek.name,
+  )
+  val effectiveHistoryDayKey = resolveSchoolDayKey(
+    historyDayOptions.map(DayOption::key), selectedHistoryDayKey, today.toString(),
+  )
 
   fun selectTemplateDay(key: String) {
-    if (key == selectedTemplateDayKey) return
-    val from = templateDayOptions.indexOfFirst { it.key == selectedTemplateDayKey }
+    if (key == effectiveTemplateDayKey) return
+    val from = templateDayOptions.indexOfFirst { it.key == effectiveTemplateDayKey }
     val to = templateDayOptions.indexOfFirst { it.key == key }
     selectedTemplateDayKey = key
     slideDay(if (to >= from) 1f else -1f)
   }
 
   fun selectHistoryDay(key: String) {
-    if (key == selectedHistoryDayKey) return
-    val from = historyDayOptions.indexOfFirst { it.key == selectedHistoryDayKey }
+    if (key == effectiveHistoryDayKey) return
+    val from = historyDayOptions.indexOfFirst { it.key == effectiveHistoryDayKey }
     val to = historyDayOptions.indexOfFirst { it.key == key }
     selectedHistoryDayKey = key
     slideDay(if (to >= from) 1f else -1f)
   }
 
-  fun changeWeek(targetOffset: Int) {
+  fun changeWeek(targetOffset: Int, selectToday: Boolean = false) {
     if (targetOffset == weekOffset) return
-    val selectedDay = selectedHistoryDayKey?.toLocalDateOrNull()?.dayOfWeek ?: DayOfWeek.MONDAY
-    val targetStart = schoolWeekStart(targetOffset)
+    val selectedDay = effectiveHistoryDayKey?.toLocalDateOrNull()?.dayOfWeek ?: DayOfWeek.MONDAY
+    val targetStart = schoolWeekStart(targetOffset, today)
     val dayIndex = visibleDays.indexOf(selectedDay).coerceAtLeast(0)
-    selectedHistoryDayKey = targetStart.plusDays(dayIndex.toLong()).toString()
+    selectedHistoryDayKey = if (selectToday) null else targetStart.plusDays(dayIndex.toLong()).toString()
     slideDay(if (targetOffset > weekOffset) 1f else -1f)
     weekOffset = targetOffset
   }
 
-  val templateSection = templateSections.firstOrNull { it.day.name == selectedTemplateDayKey }
+  val templateSection = templateSections.firstOrNull { it.day.name == effectiveTemplateDayKey }
     ?: templateSections.firstOrNull()
-  val historySection = historySections.firstOrNull { it.date.toString() == selectedHistoryDayKey }
+  val historySection = historySections.firstOrNull { it.date.toString() == effectiveHistoryDayKey }
     ?: historySections.firstOrNull()
 
   val metrics = rememberFluidScreenMetrics()
@@ -485,7 +479,7 @@ fun LessonsRoute(
       // scheda stai leggendo, ed e' il fatto che la pagina ti deve nell'istante in cui la apri.
       item(key = "lessons:live", contentType = LessonsContentType.Hero) {
         LiveLessonCard(
-          blocksForToday = templateByDay[LocalDate.now().dayOfWeek].orEmpty(),
+          blocksForToday = templateByDay[today.dayOfWeek].orEmpty(),
           now = { nowState.value.toLocalTime() },
         )
       }
@@ -505,7 +499,7 @@ fun LessonsRoute(
             WeekTimetableGrid(
               sections = templateSections,
               timetable = state.timetableTemplate,
-              today = LocalDate.now().dayOfWeek,
+              today = today.dayOfWeek,
               now = { nowState.value.toLocalTime() },
               onConfirm = { block, bounds -> slotOrigin = bounds; viewModel.startConfirming(block.primary) },
               onEdit = { block, bounds -> slotOrigin = bounds; viewModel.startEditing(block.primary) },
@@ -517,7 +511,7 @@ fun LessonsRoute(
           item(key = "lessons:template:selector", contentType = LessonsContentType.DaySelector) {
             FluidPillTabs(
               options = templateDayLabels,
-              selected = templateDayOptions.firstOrNull { it.key == selectedTemplateDayKey }?.label
+              selected = templateDayOptions.firstOrNull { it.key == effectiveTemplateDayKey }?.label
                 ?: templateDayOptions.first().label,
               onSelect = { label ->
                 templateDayOptions.firstOrNull { it.label == label }?.let { selectTemplateDay(it.key) }
@@ -579,11 +573,11 @@ fun LessonsRoute(
               weekOffset = weekOffset,
               onPrevious = { changeWeek(weekOffset - 1) },
               onNext = { if (weekOffset < 0) changeWeek(weekOffset + 1) },
-              onToday = { changeWeek(0) },
+              onToday = { changeWeek(0, selectToday = true) },
             )
           }
           item(key = "lessons:history:week-grid", contentType = LessonsContentType.TimetableRow) {
-            WeekHistoryGrid(sections = historySections, today = LocalDate.now())
+            WeekHistoryGrid(sections = historySections, today = today)
           }
         }
 
@@ -594,13 +588,13 @@ fun LessonsRoute(
               weekOffset = weekOffset,
               onPrevious = { changeWeek(weekOffset - 1) },
               onNext = { if (weekOffset < 0) changeWeek(weekOffset + 1) },
-              onToday = { changeWeek(0) },
+              onToday = { changeWeek(0, selectToday = true) },
             )
           }
           item(key = "lessons:history:selector", contentType = LessonsContentType.DaySelector) {
             FluidPillTabs(
               options = historyDayLabels,
-              selected = historyDayOptions.firstOrNull { it.key == selectedHistoryDayKey }?.label
+              selected = historyDayOptions.firstOrNull { it.key == effectiveHistoryDayKey }?.label
                 ?: historyDayOptions.first().label,
               onSelect = { label ->
                 historyDayOptions.firstOrNull { it.label == label }?.let { selectHistoryDay(it.key) }
@@ -706,6 +700,11 @@ internal fun schoolWeekStart(
 ): LocalDate = today
   .with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
   .plusWeeks(weekOffset.toLong())
+
+internal fun resolveSchoolDayKey(options: List<String>, selectedKey: String?, todayKey: String): String? =
+  selectedKey?.takeIf { it in options }
+    ?: todayKey.takeIf { it in options }
+    ?: options.firstOrNull()
 
 internal fun buildTimetableDaySections(
   visibleDays: List<DayOfWeek>,

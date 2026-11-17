@@ -188,6 +188,31 @@ class SchoolWidgetMapperTest {
     assertEquals(0, model.unreadCommunicationCount)
   }
 
+  @Test
+  fun map_disabledHomeworkDoesNotHideLaterAssessments() {
+    val snapshot = DashboardSnapshot(upcomingItems = (1..8).map {
+      agenda("homework-$it", AgendaCategory.HOMEWORK, today.toString(), "Compito")
+    } + agenda("assessment", AgendaCategory.ASSESSMENT, today.plusDays(1).toString(), "Verifica"))
+    val model = SchoolWidgetMapper.map(
+      snapshot = snapshot,
+      preferences = SchoolWidgetPreferences(showHomework = false),
+      hasSession = true,
+      today = today,
+    )
+    assertEquals(listOf("assessment"), model.upcoming.map { it.id })
+  }
+
+  @Test
+  fun map_repaintingAfterMidnightRemovesExpiredItemsAndUpdatesRelativeDates() {
+    val snapshot = DashboardSnapshot(upcomingItems = listOf(
+      agenda("expired", AgendaCategory.HOMEWORK, today.toString(), "Compito"),
+      agenda("next", AgendaCategory.ASSESSMENT, today.plusDays(1).toString(), "Verifica"),
+    ))
+    val model = SchoolWidgetMapper.map(snapshot, SchoolWidgetPreferences(), hasSession = true, today = today.plusDays(1))
+    assertEquals(listOf("next"), model.upcoming.map { it.id })
+    assertEquals("Oggi", model.upcoming.single().dateLabel)
+  }
+
   private fun agenda(
     id: String,
     category: AgendaCategory,

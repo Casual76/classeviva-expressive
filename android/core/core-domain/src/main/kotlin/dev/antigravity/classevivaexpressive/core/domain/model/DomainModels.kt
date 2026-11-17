@@ -2,6 +2,7 @@ package dev.antigravity.classevivaexpressive.core.domain.model
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import java.time.DayOfWeek
@@ -940,6 +941,8 @@ interface AuthRepository {
   /** Non-secret generation captured before an external authentication flow begins. */
   fun authenticationEpoch(): Long = 0L
   fun dataEpoch(): Long = 0L
+  /** Observe cache admission changes, including a logout/login with the same session values. */
+  fun observeDataEpoch(): Flow<Long> = session.map { dataEpoch() }.distinctUntilChanged()
   suspend fun login(username: String, password: String): Result<UserSession>
   suspend fun loginWithCie(
     pa: String,

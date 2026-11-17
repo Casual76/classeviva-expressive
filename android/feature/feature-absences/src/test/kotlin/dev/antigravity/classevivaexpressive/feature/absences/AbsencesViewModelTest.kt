@@ -9,6 +9,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestCoroutineScheduler
@@ -153,6 +154,51 @@ class AbsencesViewModelTest {
   }
 
   // ─── Refresh ──────────────────────────────────────────────────────────────
+
+  @Test
+  fun repeatedSubmitSendsOnceAndDoesNotCloseAnotherSelectedAbsence() = runTest(testDispatcher) {
+    val first = AbsenceRecord("a1", "2026-11-17", AbsenceType.ABSENCE, justified = false, canJustify = true)
+    val second = first.copy(id = "a2")
+    every { absencesRepository.observeAbsences() } returns flowOf(listOf(first, second))
+    val reply = CompletableDeferred<Result<List<AbsenceRecord>>>()
+    coEvery { absencesRepository.justifyAbsence(first, any(), any()) } coAnswers { reply.await() }
+    val vm = buildViewModel()
+
+    vm.state.test {
+      awaitItem()
+      vm.requestJustification(first)
+      awaitItem()
+      vm.justify("Malattia")
+      vm.justify("Malattia")
+      coVerify(exactly = 1) { absencesRepository.justifyAbsence(first, "Malattia", any()) }
+      vm.requestJustification(second)
+      reply.complete(Result.success(listOf(first.copy(justified = true), second)))
+      testDispatcher.scheduler.advanceUntilIdle()
+      assertEquals("a2", vm.state.value.selectedAbsence?.id)
+      assertEquals(false, vm.state.value.isSubmitting)
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
+  @Test
+  fun cancelledSubmissionClearsBusyStateWithoutAnErrorNotice() = runTest(testDispatcher) {
+    val absence = AbsenceRecord("a1", "2026-11-17", AbsenceType.ABSENCE, justified = false, canJustify = true)
+    every { absencesRepository.observeAbsences() } returns flowOf(listOf(absence))
+    coEvery { absencesRepository.justifyAbsence(any(), any(), any()) } returns
+      Result.failure(kotlinx.coroutines.CancellationException("cancelled"))
+    val vm = buildViewModel()
+    vm.state.test {
+      awaitItem()
+      vm.requestJustification(absence)
+      awaitItem()
+      vm.justify("Motivo")
+      testDispatcher.scheduler.advanceUntilIdle()
+      assertEquals(false, vm.state.value.isSubmitting)
+      assertNull(vm.state.value.lastMessage)
+      assertEquals(absence, vm.state.value.selectedAbsence)
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
 
   @Test
   fun refresh_callsRepositoryRefresh() = runTest {

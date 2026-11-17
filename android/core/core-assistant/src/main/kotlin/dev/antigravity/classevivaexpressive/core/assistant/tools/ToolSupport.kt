@@ -1,6 +1,7 @@
 package dev.antigravity.classevivaexpressive.core.assistant.tools
 
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
+import dev.antigravity.classevivaexpressive.core.domain.model.effectiveWeight
 import java.text.Normalizer
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -189,12 +190,7 @@ fun Grade.toolLine(withSubject: Boolean = true): String = buildString {
 /** Il peso di un voto come lo intende il registro: assente = 1, zero = non conta, percentuale = frazione. */
 object GradeWeights {
   fun effective(grade: Grade): Double {
-    val w = grade.weight ?: return 1.0
-    return when {
-      w <= 0.0 -> 0.0
-      w > 5.0 -> w / 100.0
-      else -> w
-    }
+    return grade.effectiveWeight()
   }
 
   fun format(w: Double): String = if (w == w.toLong().toDouble()) w.toLong().toString() else String.format(Locale.ROOT, "%.2f", w).trimEnd('0').trimEnd('.')

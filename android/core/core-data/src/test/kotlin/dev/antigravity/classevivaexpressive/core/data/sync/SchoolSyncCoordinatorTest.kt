@@ -5,6 +5,7 @@ import dev.antigravity.classevivaexpressive.core.data.testSessionStore
 import dev.antigravity.classevivaexpressive.core.data.repository.AgendaSection
 import dev.antigravity.classevivaexpressive.core.data.repository.GradesSection
 import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkSection
+import dev.antigravity.classevivaexpressive.core.data.repository.LessonsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.MaterialsSection
 import dev.antigravity.classevivaexpressive.core.data.repository.MeetingTeachersSection
 import dev.antigravity.classevivaexpressive.core.data.repository.MeetingSlotsSection
@@ -28,6 +29,7 @@ import dev.antigravity.classevivaexpressive.core.database.database.MaterialDao
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheEntity
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao
 import dev.antigravity.classevivaexpressive.core.database.database.SyncMetadataDao
+import dev.antigravity.classevivaexpressive.core.database.database.SyncMetadataEntity
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaCategory
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItem
 import dev.antigravity.classevivaexpressive.core.domain.model.AgendaItemVersion
@@ -58,6 +60,7 @@ import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaSchool
 import dev.antigravity.classevivaexpressive.core.network.client.NetworkDocumentStream
 import dev.antigravity.classevivaexpressive.core.network.client.PortalClient
 import java.io.ByteArrayInputStream
+import java.time.LocalDate
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -66,6 +69,9 @@ import io.mockk.mockkStatic
 import io.mockk.verify
 import io.mockk.verifyOrder
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -89,6 +95,7 @@ class SchoolSyncCoordinatorTest {
   private val timetableTemplateStore = mockk<TimetableTemplateStore>(relaxed = true)
   private val snapshotCacheDao = mockk<SnapshotCacheDao>(relaxed = true)
   private val syncMetadataDao = mockk<SyncMetadataDao>(relaxed = true)
+  private val metadataRows = mutableMapOf<Triple<String, String, String>, SyncMetadataEntity>()
   private val gradeDao = mockk<GradeDao>(relaxed = true)
   private val agendaDao = mockk<AgendaDao>(relaxed = true)
   private val changeHistoryDao = mockk<ChangeHistoryDao>(relaxed = true)
@@ -98,6 +105,16 @@ class SchoolSyncCoordinatorTest {
   private val documentDao = mockk<DocumentDao>(relaxed = true)
   private val privateAssetStore = mockk<PrivateAssetStore>(relaxed = true)
   private val predictiveTimetableUseCase = mockk<PredictiveTimetableUseCase>(relaxed = true)
+
+  init {
+    // An absent Room row is null, not MockK's relaxed entity with a synthetic success time of 0.
+    coEvery { syncMetadataDao.get(any(), any(), any()) } answers {
+      metadataRows[Triple(firstArg<String>(), secondArg<String>(), thirdArg<String>())]
+    }
+    coEvery { syncMetadataDao.upsert(any()) } answers {
+      firstArg<SyncMetadataEntity>().let { metadataRows[Triple(it.studentId, it.schoolYearId, it.section)] = it }
+    }
+  }
 
   private val currentYear = SchoolYearRef(startYear = 2025, endYear = 2026)
   private val session = UserSession(
@@ -114,7 +131,7 @@ class SchoolSyncCoordinatorTest {
     sessionStore.writeSession(session)
     every { schoolYearStore.observeSelectedSchoolYear() } returns selectedYears
     every { schoolYearStore.currentSchoolYearRef() } returns calendarCurrentYear
-    every { timetableTemplateStore.observeTemplate(currentYear.id) } returns flowOf(TimetableTemplate())
+    every { timetableTemplateStore.observeTemplate(any()) } returns flowOf(TimetableTemplate())
     every { predictiveTimetableUseCase.generateTimetableTemplate(any()) } returns TimetableTemplate()
 
     return SchoolSyncCoordinator(
@@ -211,6 +228,169 @@ class SchoolSyncCoordinatorTest {
     sections.forEach { section ->
       coVerify(exactly = 1) { snapshotCacheDao.upsert(match { it.cacheKey == yearScopedCacheKey(session.studentId, section, currentYear) && it.payload == "[]" }) }
     }
+  }
+
+  @Test
+  fun refreshMeetings_failedSharedFetchFailsEveryRequestedMeetingSection() = runTest {
+    stubLog()
+    val coordinator = buildCoordinator()
+    val sections = setOf(MeetingTeachersSection, MeetingSlotsSection, MeetingBookingsSection)
+    coEvery { portalClient.getMeetingsPageHtml() } throws ClassevivaNetworkException("Colloqui non disponibili.")
+
+    val status = coordinator.refreshSections(force = true, sections = sections)
+
+    assertEquals(sections, status.failedSections.toSet())
+    sections.forEach { section ->
+      coVerify { syncMetadataDao.upsert(match { it.section == section && it.lastError != null && it.lastSuccessAtEpochMillis == null }) }
+    }
+  }
+
+  @Test
+  fun refreshSections_cancellationStopsBeforeTheNextEndpointAndRestoresVisibleStatus() = runTest {
+    stubLog()
+    val coordinator = buildCoordinator()
+    val previous = dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus(lastSuccessfulSyncEpochMillis = 123L)
+    coordinator.syncStatus.value = previous
+    coEvery { restClient.getNotes() } throws CancellationException("refresh cancelled")
+
+    val outcome = runCatching {
+      coordinator.refreshSections(force = true, sections = setOf(NotesSection, MaterialsSection))
+    }
+
+    assertTrue(outcome.exceptionOrNull() is CancellationException)
+    assertEquals(previous, coordinator.syncStatus.value)
+    coVerify(exactly = 0) { restClient.getMaterials() }
+    coVerify(exactly = 0) { syncMetadataDao.upsert(match { it.lastSuccessAtEpochMillis != null }) }
+  }
+
+  @Test
+  fun refreshHomeworks_cancelledPortalFetchDoesNotStartRestFallbackOrAgenda() = runTest {
+    homeworkTestCache()
+    val coordinator = buildCoordinator()
+    coEvery { portalClient.getHomeworksIndex(any()) } throws CancellationException("portal cancelled")
+
+    val outcome = runCatching { coordinator.refreshHomeworks(force = true) }
+
+    assertTrue(outcome.exceptionOrNull() is CancellationException)
+    assertEquals(SyncState.IDLE, coordinator.syncStatus.value.state)
+    coVerify(exactly = 0) { restClient.getHomeworksIndex() }
+    coVerify(exactly = 0) { restClient.getHomeworks() }
+    coVerify(exactly = 0) { restClient.getAgenda(any(), any()) }
+  }
+
+  @Test
+  fun refreshSections_cancelledJobReleasesTheRefreshGateAndAllowsAnImmediateRetry() = runTest {
+    stubLog()
+    val coordinator = buildCoordinator()
+    val entered = CompletableDeferred<Unit>()
+    coEvery { restClient.getNotes() } coAnswers {
+      entered.complete(Unit)
+      awaitCancellation()
+    }
+    val request = async { coordinator.refreshSections(force = true, sections = setOf(NotesSection, MaterialsSection)) }
+    entered.await()
+
+    request.cancelAndJoin()
+
+    assertEquals(SyncState.IDLE, coordinator.syncStatus.value.state)
+    coVerify(exactly = 0) { restClient.getMaterials() }
+    coEvery { restClient.getNotes() } returns emptyList()
+    coordinator.refreshSections(force = false, sections = setOf(NotesSection, MaterialsSection))
+    coVerify(exactly = 2) { restClient.getNotes() }
+    coVerify(exactly = 1) { restClient.getMaterials() }
+  }
+
+  @Test
+  fun refreshSections_unchangedSuccessfulPayloadRemainsFreshAfterCoordinatorRecreation() = runTest {
+    val cache = homeworkTestCache()
+    val key = yearScopedCacheKey(session.studentId, NotesSection, currentYear)
+    cache[key] = SnapshotCacheEntity(key, "[]", 1L)
+    val metadata = mutableMapOf<String, SyncMetadataEntity>()
+    coEvery { syncMetadataDao.get(any(), any(), any()) } answers { metadata[thirdArg<String>()] }
+    coEvery { syncMetadataDao.upsert(any()) } answers {
+      firstArg<SyncMetadataEntity>().also { metadata[it.section] = it }
+    }
+    coEvery { restClient.getNotes() } returns emptyList()
+
+    buildCoordinator().refreshSections(force = true, sections = setOf(NotesSection))
+    buildCoordinator().refreshSections(force = false, sections = setOf(NotesSection))
+
+    coVerify(exactly = 1) { restClient.getNotes() }
+    assertEquals(1L, cache.getValue(key).updatedAtEpochMillis)
+    assertTrue(metadata.getValue(NotesSection).lastSuccessAtEpochMillis != null)
+  }
+
+  @Test
+  fun refreshSections_fastDateWindowDoesNotSuppressFullRefreshOnTheSameCoordinator() = runTest {
+    val cache = homeworkTestCache()
+    val year = liveSchoolYear()
+    val key = yearScopedCacheKey(session.studentId, LessonsSection, year)
+    cache[key] = SnapshotCacheEntity(key, "[]", 1L)
+    coEvery { restClient.getLessons(any(), any()) } returns emptyList()
+    val coordinator = buildCoordinator(flowOf(year), year)
+
+    coordinator.refreshCurrentSchoolYearForNotifications(force = true, sections = setOf(LessonsSection), mode = BackgroundSyncMode.FAST)
+    coordinator.refreshSections(force = false, sections = setOf(LessonsSection))
+
+    coVerify(exactly = 2) { restClient.getLessons(any(), any()) }
+    coVerify(exactly = 1) { restClient.getLessons("${year.startYear}-09-01", "${year.endYear}-08-31") }
+    assertEquals(1L, cache.getValue(key).updatedAtEpochMillis)
+  }
+
+  @Test
+  fun refreshSections_fastSuccessDoesNotCertifyAnnualCacheAfterCoordinatorRecreation() = runTest {
+    val cache = homeworkTestCache()
+    val year = liveSchoolYear()
+    val key = yearScopedCacheKey(session.studentId, LessonsSection, year)
+    cache[key] = SnapshotCacheEntity(key, "[]", 1L)
+    coEvery { restClient.getLessons(any(), any()) } returns emptyList()
+
+    buildCoordinator(flowOf(year), year).refreshCurrentSchoolYearForNotifications(
+      force = true, sections = setOf(LessonsSection), mode = BackgroundSyncMode.FAST,
+    )
+    assertFalse(cache.containsKey(fullRefreshFreshnessCacheKey(session.studentId, LessonsSection, year)))
+    buildCoordinator(flowOf(year), year).refreshSections(force = false, sections = setOf(LessonsSection))
+    buildCoordinator(flowOf(year), year).refreshSections(force = false, sections = setOf(LessonsSection))
+
+    // The first foreground read fetches the year; its unchanged but fully validated result then
+    // remains fresh through another coordinator recreation.
+    coVerify(exactly = 2) { restClient.getLessons(any(), any()) }
+    coVerify(exactly = 1) { restClient.getLessons("${year.startYear}-09-01", "${year.endYear}-08-31") }
+    assertEquals(1L, cache.getValue(key).updatedAtEpochMillis)
+  }
+
+  @Test
+  fun refreshSections_fastPayloadChangeDoesNotExtendAnExpiredFullValidation() = runTest {
+    val cache = homeworkTestCache()
+    val year = liveSchoolYear()
+    val key = yearScopedCacheKey(session.studentId, LessonsSection, year)
+    coEvery { restClient.getLessons(any(), any()) } returns emptyList()
+    buildCoordinator(flowOf(year), year).refreshSections(force = true, sections = setOf(LessonsSection))
+    val validationKey = fullRefreshFreshnessCacheKey(session.studentId, LessonsSection, year)
+    cache[validationKey] = cache.getValue(validationKey).copy(payload = "1", updatedAtEpochMillis = 1L)
+    val recentLesson = dev.antigravity.classevivaexpressive.core.domain.model.Lesson(
+      id = "recent-lesson", date = LocalDate.now().toString(), subject = "Matematica", time = "08:00",
+      durationMinutes = 60,
+    )
+    coEvery { restClient.getLessons(any(), any()) } returns listOf(recentLesson)
+
+    buildCoordinator(flowOf(year), year).refreshCurrentSchoolYearForNotifications(
+      force = true, sections = setOf(LessonsSection), mode = BackgroundSyncMode.FAST,
+    )
+    assertEquals("1", cache.getValue(validationKey).payload)
+    val changedAt = cache.getValue(key).updatedAtEpochMillis
+    assertTrue(changedAt > 1L)
+    buildCoordinator(flowOf(year), year).refreshSections(force = false, sections = setOf(LessonsSection))
+
+    coVerify(exactly = 3) { restClient.getLessons(any(), any()) }
+    coVerify(exactly = 2) { restClient.getLessons("${year.startYear}-09-01", "${year.endYear}-08-31") }
+    assertEquals(changedAt, cache.getValue(key).updatedAtEpochMillis)
+  }
+
+  private fun liveSchoolYear(): SchoolYearRef {
+    val today = LocalDate.now()
+    val start = if (today.monthValue >= 9) today.year else today.year - 1
+    return SchoolYearRef(startYear = start, endYear = start + 1)
   }
 
   @Test
@@ -409,6 +589,75 @@ class SchoolSyncCoordinatorTest {
     val result = coordinator.refreshHomeworks(force = true)
 
     assertEquals(listOf("hw-1"), result.map { it.id })
+  }
+
+  @Test
+  fun refreshHomeworks_allSourcesFailWithoutCreatingAnAuthenticEmptySnapshot() = runTest {
+    val cache = homeworkTestCache()
+    coEvery { portalClient.getHomeworksIndex(any()) } throws ClassevivaNetworkException("Portale non disponibile.")
+    coEvery { restClient.getHomeworksIndex() } throws ClassevivaNetworkException("Compiti non disponibili.")
+    coEvery { restClient.getHomeworks() } throws ClassevivaNetworkException("Compiti non disponibili.")
+    coEvery { restClient.getAgenda(any(), any()) } throws ClassevivaNetworkException("Agenda non disponibile.")
+    val coordinator = buildCoordinator()
+
+    val status = coordinator.refreshSections(force = true, sections = setOf(HomeworkSection))
+
+    assertEquals(listOf(HomeworkSection), status.failedSections)
+    assertFalse(cache.containsKey(yearScopedCacheKey(session.studentId, HomeworkSection, currentYear)))
+    coVerify { syncMetadataDao.upsert(match { it.section == HomeworkSection && it.lastError != null && it.lastSuccessAtEpochMillis == null }) }
+  }
+
+  @Test
+  fun refreshHomeworks_allSourcesFailPreservesTheEntireMergedSnapshot() = runTest {
+    val cache = homeworkTestCache()
+    val key = yearScopedCacheKey(session.studentId, HomeworkSection, currentYear)
+    val saved = listOf(dedicatedHomework().copy(linkedAgendaIds = listOf("old-agenda-twin")))
+    cache.putJson(key, saved)
+    coEvery { portalClient.getHomeworksIndex(any()) } throws ClassevivaNetworkException("offline")
+    coEvery { restClient.getHomeworksIndex() } throws ClassevivaNetworkException("offline")
+    coEvery { restClient.getHomeworks() } throws ClassevivaNetworkException("offline")
+    coEvery { restClient.getAgenda(any(), any()) } throws ClassevivaNetworkException("offline")
+    val coordinator = buildCoordinator()
+
+    val result = coordinator.refreshHomeworks(force = true)
+
+    assertEquals(saved, result)
+    assertEquals(listOf(HomeworkSection), coordinator.syncStatus.value.failedSections)
+    assertEquals(1L, cache.getValue(key).updatedAtEpochMillis)
+  }
+
+  @Test
+  fun refreshHomeworks_failedAgendaKeepsSavedAgendaWhileUpdatingDedicatedAndReportsPartial() = runTest {
+    val cache = homeworkTestCache()
+    val key = yearScopedCacheKey(session.studentId, HomeworkSection, currentYear)
+    val savedAgenda = dedicatedHomework().copy(id = "agenda-saved", description = "Compito agenda", source = HomeworkSource.AGENDA)
+    cache.putJson(key, listOf(savedAgenda))
+    coEvery { portalClient.getHomeworksIndex(any()) } returns listOf(dedicatedHomework(description = "Compito aggiornato"))
+    coEvery { restClient.getAgenda(any(), any()) } throws ClassevivaNetworkException("Agenda non disponibile.")
+    val coordinator = buildCoordinator()
+
+    val result = coordinator.refreshHomeworks(force = true)
+
+    assertEquals(setOf("agenda-saved", "hw-1"), result.map { it.id }.toSet())
+    assertEquals("Compito aggiornato", result.single { it.id == "hw-1" }.description)
+    assertEquals(listOf(HomeworkSection), coordinator.syncStatus.value.failedSections)
+  }
+
+  @Test
+  fun refreshHomeworks_fastDedicatedFailureIsNotRecordedAsFreshSuccess() = runTest {
+    val cache = homeworkTestCache()
+    cache.putJson(dedicatedCacheKey(), listOf(dedicatedHomework()))
+    coEvery { portalClient.getHomeworksIndex(any()) } throws ClassevivaNetworkException("offline")
+    coEvery { restClient.getHomeworksIndex() } throws ClassevivaNetworkException("offline")
+    coEvery { restClient.getHomeworks() } throws ClassevivaNetworkException("offline")
+    coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
+    val coordinator = buildCoordinator()
+
+    val status = coordinator.refreshCurrentSchoolYearForNotifications(force = true, sections = setOf(HomeworkSection), mode = BackgroundSyncMode.FAST)
+
+    assertEquals(listOf(HomeworkSection), status.failedSections)
+    coVerify { syncMetadataDao.upsert(match { it.section == HomeworkSection && it.lastError != null && it.lastSuccessAtEpochMillis == null }) }
+    assertEquals(listOf("hw-1"), Json.decodeFromString<List<Homework>>(cache.getValue(yearScopedCacheKey(session.studentId, HomeworkSection, currentYear)).payload).map { it.id })
   }
 
   @Test

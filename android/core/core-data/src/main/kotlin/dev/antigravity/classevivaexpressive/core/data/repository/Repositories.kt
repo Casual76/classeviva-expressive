@@ -90,6 +90,7 @@ import dev.antigravity.classevivaexpressive.core.domain.model.DocumentsRepositor
 import dev.antigravity.classevivaexpressive.core.domain.model.Grade
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeDistribution
 import dev.antigravity.classevivaexpressive.core.domain.model.GradeVersion
+import dev.antigravity.classevivaexpressive.core.domain.model.overallGradeAverage
 import dev.antigravity.classevivaexpressive.core.domain.model.GradesRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.Homework
 import dev.antigravity.classevivaexpressive.core.domain.model.HomeworkDetail
@@ -174,11 +175,13 @@ class SchoolAuthRepository @Inject constructor(
   private val syncCoordinator: SchoolSyncCoordinator,
   private val apiSessionManager: ApiSessionManager,
   private val privateSessionDataCleaner: PrivateSessionDataCleaner,
+  private val externalDashboardInvalidators: Set<@JvmSuppressWildcards ExternalDashboardInvalidator> = emptySet(),
 ) : AuthRepository {
   override val session: StateFlow<UserSession?> = sessionStore.session
   override val authenticationState = sessionStore.authenticationState
   override fun authenticationEpoch(): Long = sessionStore.captureAuthSnapshot().authenticationEpoch
   override fun dataEpoch(): Long = sessionStore.accountGuard.capture().epoch
+  override fun observeDataEpoch(): Flow<Long> = sessionStore.dataEpoch
 
   override suspend fun restore(): UserSession? {
     apiSessionManager.restoreValidSession()
@@ -193,7 +196,9 @@ class SchoolAuthRepository @Inject constructor(
   override suspend fun loginWithCie(pa: String, portalCookieHeader: String, expectedEpoch: Long?): Result<UserSession> = authResult { syncCoordinator.loginWithCie(pa, portalCookieHeader, expectedEpoch) }
 
   private suspend fun <T> authResult(block: suspend () -> T): Result<T> = try {
-    Result.success(block())
+    val result = block()
+    externalDashboardInvalidators.notifySafely()
+    Result.success(result)
   } catch (cancelled: kotlinx.coroutines.CancellationException) {
     throw cancelled
   } catch (error: Exception) {
@@ -204,6 +209,9 @@ class SchoolAuthRepository @Inject constructor(
     val requestedEpoch = sessionStore.captureAuthSnapshot().authenticationEpoch
     withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) {
       sessionStore.clearAndRunWithPrevious(expectedAuthenticationEpoch = requestedEpoch) { previous ->
+        // Remove already-published private data as soon as the durable account is gone, even
+        // when cleanup is slow or fails. This also wakes dormant external surfaces locally.
+        externalDashboardInvalidators.notifySafely()
         syncCoordinator.attachSession(null)
         syncCoordinator.clearPortalSession()
         var failure: Exception? = null
@@ -461,9 +469,9 @@ class SchoolDataRepository @Inject constructor(
       academicFlow,
       schoolFlow,
       syncStatusFlow,
-    ) { profile, academic, school, syncStatus ->
-      val average = academic.grades.mapNotNull { it.numericValue }.takeIf { it.isNotEmpty() }?.average()
-      val today = java.time.LocalDate.now()
+      observeSchoolDate(),
+    ) { profile, academic, school, syncStatus, today ->
+      val average = overallGradeAverage(academic.grades)
       val scheduleForToday = predictiveTimetableUseCase.getScheduleForDate(today, academic.lessons)
       val todayLessonsList = scheduleForToday.map { slot ->
         dev.antigravity.classevivaexpressive.core.domain.model.Lesson(
@@ -484,7 +492,7 @@ class SchoolDataRepository @Inject constructor(
       val unseenGrades = recentGrades.filterNot { unseenGradeIds.contains(it.id) }
       val unreadCommunications = school.communications.filter { !it.read }.sortedByDescending { it.date }
       val upcoming = academic.agenda
-        .filter { it.category != AgendaCategory.LESSON && it.date >= todayIso() }
+        .filter { it.category != AgendaCategory.LESSON && it.date >= today.toString() }
         .sortedBy { "${it.date}-${it.time.orEmpty()}" }
       DashboardSnapshot(
         profile = profile,
@@ -499,8 +507,10 @@ class SchoolDataRepository @Inject constructor(
         ),
         todayLessons = todayLessonsList,
         recentGrades = recentGrades.take(6),
-        unseenGrades = unseenGrades.take(6),
-        upcomingItems = upcoming.take(8),
+        // Consumers apply their own display limits and category/date preferences. Truncating
+        // here loses unseen-grade counts and can hide an entire widget's enabled categories.
+        unseenGrades = unseenGrades,
+        upcomingItems = upcoming,
         unreadCommunications = unreadCommunications,
         highlightedNotes = school.notes.filter { !it.read }.take(3),
         recentAbsences = academic.absences.sortedByDescending { it.date }.take(3),
@@ -1355,12 +1365,12 @@ class SchoolDataRepository @Inject constructor(
 }
 
 private fun buildStats(grades: List<Grade>, absences: List<AbsenceRecord>, agenda: List<AgendaItem>): StatsSnapshot {
-  val numericValues = grades.mapNotNull { it.numericValue }
+  val numericValues = grades.mapNotNull { it.numericValue?.takeIf(Double::isFinite) }
   val subjectSummaries = grades.groupBy { it.subject }.map { (subject, items) ->
     val values = items.mapNotNull { it.numericValue }
     SubjectSummary(
       subject = subject,
-      average = values.takeIf { it.isNotEmpty() }?.average(),
+      average = dev.antigravity.classevivaexpressive.core.domain.model.subjectGradeAverage(items),
       teacherLabel = items.firstOrNull()?.teacher.orEmpty(),
       count = items.size,
       recentValues = values.takeLast(4),
@@ -1371,7 +1381,7 @@ private fun buildStats(grades: List<Grade>, absences: List<AbsenceRecord>, agend
     grade.numericValue?.let { TimelinePoint(label = grade.subject.take(3).uppercase(), value = it) }
   }.takeLast(8)
   return StatsSnapshot(
-    overallAverage = numericValues.takeIf { it.isNotEmpty() }?.average(),
+    overallAverage = overallGradeAverage(grades),
     subjectSummaries = subjectSummaries,
     gradeDistribution = GradeDistribution(
       insufficient = numericValues.count { it < 6.0 },

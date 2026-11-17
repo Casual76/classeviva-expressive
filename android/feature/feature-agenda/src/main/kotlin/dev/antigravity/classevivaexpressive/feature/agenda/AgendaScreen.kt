@@ -122,6 +122,7 @@ import java.time.LocalTime
 import java.time.OffsetDateTime
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
@@ -380,6 +381,8 @@ fun AgendaRoute(
   }
   var selectedMonthText by rememberSaveable(initialDateValue) { mutableStateOf(YearMonth.from(initialDateValue).toString()) }
   var selectedDateText by rememberSaveable(initialDateValue) { mutableStateOf(initialDateValue.toString()) }
+  var consumedInitialDate by rememberSaveable { mutableStateOf<String?>(null) }
+  var consumedInitialAgendaId by rememberSaveable { mutableStateOf<String?>(null) }
 
   val selectedMonth = remember(selectedMonthText) { YearMonth.parse(selectedMonthText) }
   val selectedDate = remember(selectedDateText) { LocalDate.parse(selectedDateText) }
@@ -412,14 +415,14 @@ fun AgendaRoute(
   }
 
   LaunchedEffect(initialAgendaId, initialDate, entries) {
-    initialDate?.let { date ->
-      runCatching { LocalDate.parse(date) }.getOrNull()?.let {
-        selectedMonthText = YearMonth.from(it).toString()
-        selectedDateText = it.toString()
-      }
+    initialAgendaDateToSelect(initialDate, consumedInitialDate)?.let { date ->
+      consumedInitialDate = initialDate
+      selectedMonthText = YearMonth.from(date).toString()
+      selectedDateText = date.toString()
     }
-    if (!initialAgendaId.isNullOrBlank()) {
+    if (initialAgendaRequestToOpen(initialAgendaId, consumedInitialAgendaId, state.items) != null) {
       entries.firstOrNull { it.id == initialAgendaId }?.let { entry ->
+        consumedInitialAgendaId = initialAgendaId
         entry.date?.let {
           selectedMonthText = YearMonth.from(it).toString()
           selectedDateText = it.toString()
@@ -1761,15 +1764,27 @@ private fun shareEntry(context: android.content.Context, entry: AgendaEntry) {
   }
 }
 
-private fun LocalDate.toEpochMillis(): Long {
-  return atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+/** Material DatePicker stores calendar dates at midnight UTC, independent of the device's zone. */
+internal fun LocalDate.toEpochMillis(): Long {
+  return atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 }
 
-private fun millisToLocalDate(value: Long): LocalDate {
+internal fun millisToLocalDate(value: Long): LocalDate {
   return java.time.Instant.ofEpochMilli(value)
-    .atZone(ZoneId.systemDefault())
+    .atZone(ZoneOffset.UTC)
     .toLocalDate()
 }
+
+internal fun initialAgendaDateToSelect(requestedDate: String?, consumedDate: String?): LocalDate? =
+  requestedDate?.takeUnless { it == consumedDate }?.toLocalDateOrNull()
+
+internal fun initialAgendaRequestToOpen(
+  requestedAgendaId: String?,
+  consumedAgendaId: String?,
+  availableItems: List<AgendaItem>,
+): String? = requestedAgendaId
+  ?.takeIf { it.isNotBlank() && it != consumedAgendaId }
+  ?.takeIf { id -> availableItems.any { it.id == id && it.date.toLocalDateOrNull() != null } }
 
 private fun String.toLocalDateOrNull(): LocalDate? {
   return runCatching { LocalDate.parse(this) }.getOrNull()

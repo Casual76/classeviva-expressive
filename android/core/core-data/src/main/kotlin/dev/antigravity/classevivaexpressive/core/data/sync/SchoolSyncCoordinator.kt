@@ -107,6 +107,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.async
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -124,6 +125,10 @@ private const val InteractiveRefreshCacheMaxAgeMillis = 5L * 60L * 1000L
 
 /** Ogni quanto la sincronizzazione in sottofondo rilegge la sezione Compiti. */
 private const val DedicatedHomeworkFastIntervalMillis = 20L * 60L * 1000L
+
+/** Separate from content and from successful background reads of a limited date window. */
+internal fun fullRefreshFreshnessCacheKey(studentId: String, section: String, schoolYear: SchoolYearRef): String =
+  yearScopedCacheKey(studentId, "full_refresh::$section", schoolYear)
 
 @Singleton
 class SchoolSyncCoordinator @Inject constructor(
@@ -330,7 +335,7 @@ class SchoolSyncCoordinator @Inject constructor(
       val current = sessionStore.readAuthSnapshot()
       val currentSession = current?.session
       if (current != null && currentSession != null && currentSession.studentId == provisional.studentId) {
-        runCatching {
+        runSyncCatching {
           sessionStore.compareAndSetAuthSnapshot(
             current,
             current.copy(session = currentSession.copy(profile = profile)),
@@ -508,7 +513,7 @@ class SchoolSyncCoordinator @Inject constructor(
     val entity = communicationDao.getByPubIdAndEvtCode(pubId, evtCode)
     val base = entity?.toCommunication(json)
     val restDetail = if (base != null) {
-      runCatching { restClient.getCommunicationDetail(base) }
+      runSyncCatching { restClient.getCommunicationDetail(base) }
         .getOrElse {
           // API rejected the read (e.g. 400 for already-acknowledged or 404) —
           // serve the cached version so the sheet still opens with the stored content.
@@ -522,7 +527,7 @@ class SchoolSyncCoordinator @Inject constructor(
       restClient.getCommunicationDetail(pubId, evtCode)
     }
     val detail = enrichCommunicationDetailFromPortalIfNeeded(restDetail)
-    runCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
+    runSyncCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
     detail
   }
 
@@ -544,7 +549,7 @@ class SchoolSyncCoordinator @Inject constructor(
             commitOperation(operation) { communicationDao.markRead(entity.id) }
             null
           } else {
-            runCatching {
+            runSyncCatching {
               restClient.markNoticeboardRead(pubId = entity.pubId, evtCode = entity.evtCode)
               commitOperation(operation) { communicationDao.markRead(entity.id) }
             }.exceptionOrNull()?.let { entity.title.ifBlank { entity.id } }
@@ -565,12 +570,12 @@ class SchoolSyncCoordinator @Inject constructor(
   suspend fun acknowledgeCommunication(detail: CommunicationDetail): Result<CommunicationDetail> = sessionResult { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
 
-    val restResult = runCatching {
+    val restResult = runSyncCatching {
       restClient.confirmNoticeboard(detail.communication)
     }
     val ackUrl = detail.acknowledgeUrl
     val portalResult: Result<Unit>? = if (!ackUrl.isNullOrBlank()) {
-      runCatching {
+      runSyncCatching {
         portalClient.submitPortalAction(
           pageUrl = ackUrl,
           formKeywords = listOf("conferma", "presa", "visione", "sign", "firma", "ack"),
@@ -592,9 +597,9 @@ class SchoolSyncCoordinator @Inject constructor(
       throw ClassevivaNetworkException("Nessuna delle due modalità di conferma è riuscita: $composed")
     }
 
-    runCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
-    runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
-    val updated = runCatching {
+    runSyncCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
+    runSyncCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
+    val updated = runSyncCatching {
       restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
     updated
@@ -609,10 +614,10 @@ class SchoolSyncCoordinator @Inject constructor(
       )
     }
     portalClient.replyNoticeboard(replyUrl = replyUrl, text = text)
-    runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
-    runCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
-    runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
-    val updated = runCatching {
+    runSyncCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
+    runSyncCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
+    runSyncCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
+    val updated = runSyncCatching {
       restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
     updated.copy(replyText = text)
@@ -629,10 +634,10 @@ class SchoolSyncCoordinator @Inject constructor(
     } else {
       portalClient.joinNoticeboard(joinUrl = joinUrl)
     }
-    runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
-    runCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
-    runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
-    runCatching {
+    runSyncCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
+    runSyncCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
+    runSyncCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
+    runSyncCatching {
       restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
   }
@@ -658,17 +663,17 @@ class SchoolSyncCoordinator @Inject constructor(
         base64Content = Base64.getEncoder().encodeToString(bytes),
       ),
     )
-    runCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
-    runCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
-    runCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
-    runCatching {
+    runSyncCatching { restClient.markNoticeboardRead(detail.communication.pubId, detail.communication.evtCode) }
+    runSyncCatching { commitOperation(operation) { communicationDao.markRead(detail.communication.id) } }
+    runSyncCatching { refreshCommunicationsSnapshot(selectedYear, operation) }
+    runSyncCatching {
       restClient.getCommunicationDetail(detail.communication)
     }.getOrDefault(detail)
   }
 
   suspend fun getNoteDetail(id: String, categoryCode: String): Result<NoteDetail> = sessionResult(allowOffline = true) { operation ->
     val selectedYear = schoolYearStore.observeSelectedSchoolYear().first()
-    runCatching {
+    runSyncCatching {
       restClient.getNoteDetail(id, categoryCode)
     }.getOrElse { error ->
       val cached = readYearScopedValue(operation, NotesSection, selectedYear, emptyList<Note>())
@@ -681,7 +686,7 @@ class SchoolSyncCoordinator @Inject constructor(
           ?: cached.title.ifBlank { cached.categoryLabel },
       )
     }.also {
-      runCatching { refreshNotesSnapshot(selectedYear, operation) }
+      runSyncCatching { refreshNotesSnapshot(selectedYear, operation) }
     }
   }
 
@@ -883,30 +888,45 @@ class SchoolSyncCoordinator @Inject constructor(
     val operation = captureSessionOperation()
     return withExpectedAccount(operation.lease) { syncMutex.withLock {
       ensureSessionUnchanged(operation)
-      val status = refreshSchoolYear(
-        selectedYear = selectedYear,
-        force = force,
-        refreshProfile = refreshProfile,
-        sections = sections,
-        mode = mode,
-      )
-      if (!allowAutomaticFallback || !status.schoolYearNotStarted) return@withLock status
-      val fallbackEvent = commitOperation(operation) { schoolYearStore.selectAutomaticFallback(selectedYear) }
-        ?: return@withLock status
-      val fallbackYear = fallbackEvent.selected
+      val previousVisibleStatus = syncStatus.value
+      try {
+        val status = refreshSchoolYear(
+          selectedYear = selectedYear,
+          force = force,
+          refreshProfile = refreshProfile,
+          sections = sections,
+          mode = mode,
+        )
+        if (!allowAutomaticFallback || !status.schoolYearNotStarted) return@withLock status
+        val fallbackEvent = commitOperation(operation) { schoolYearStore.selectAutomaticFallback(selectedYear) }
+          ?: return@withLock status
+        val fallbackYear = fallbackEvent.selected
 
-      // Classeviva will keep refusing this year until the school opens it, so remember the choice:
-      // otherwise every screen would pay for the same rejected round trip on every refresh.
-      val retried = refreshSchoolYear(
-        selectedYear = fallbackYear,
-        force = true,
-        refreshProfile = refreshProfile,
-        sections = sections,
-        mode = mode,
-      )
-      val notice = "L'anno ${selectedYear.label} non è ancora aperto dalla scuola: " +
-        "mostro ${fallbackYear.label}."
-      retried.copy(message = retried.message ?: notice).also { status -> commitOperation(operation) { syncStatus.value = status } }
+        // Classeviva will keep refusing this year until the school opens it, so remember the choice:
+        // otherwise every screen would pay for the same rejected round trip on every refresh.
+        val retried = refreshSchoolYear(
+          selectedYear = fallbackYear,
+          force = true,
+          refreshProfile = refreshProfile,
+          sections = sections,
+          mode = mode,
+        )
+        val notice = "L'anno ${selectedYear.label} non è ancora aperto dalla scuola: " +
+          "mostro ${fallbackYear.label}."
+        retried.copy(message = retried.message ?: notice).also { status -> commitOperation(operation) { syncStatus.value = status } }
+      } catch (error: Throwable) {
+        // Cancellation is not a completed sync. Clear its spinner and throttle only while the
+        // same account still owns them, so the next visible refresh can actually try again.
+        withContext(NonCancellable) {
+          sessionStore.accountGuard.withCurrentAccount(operation.lease, operation.requireReady) {
+            if (mode == BackgroundSyncMode.FULL) {
+              lastInteractiveRefreshAttempts.remove(interactiveRefreshKey(operation, selectedYear, sections ?: allSections()))
+            }
+            if (syncStatus.value.state == SyncState.SYNCING) syncStatus.value = previousVisibleStatus
+          }
+        }
+        throw error
+      }
     } }
   }
 
@@ -923,7 +943,7 @@ class SchoolSyncCoordinator @Inject constructor(
     sections: Set<String>? = null,
     mode: BackgroundSyncMode = BackgroundSyncMode.FULL,
   ): SyncStatus {
-    val operation = runCatching { captureSessionOperation() }.getOrElse {
+    val operation = runSyncCatching { captureSessionOperation() }.getOrElse {
         return SyncStatus(
             state = SyncState.ERROR,
             message = "Sessione assente (Coordinator).",
@@ -962,10 +982,12 @@ class SchoolSyncCoordinator @Inject constructor(
         .also { agendaForWindow = it }
     }
 
-    if (!force && shouldSkipInteractiveRefresh(operation, selectedYear, selectedSections, now)) {
-      return syncStatus.value
+    if (mode == BackgroundSyncMode.FULL) {
+      if (!force && shouldSkipInteractiveRefresh(operation, selectedYear, selectedSections, now)) {
+        return syncStatus.value
+      }
+      recordInteractiveRefreshAttempt(operation, selectedYear, selectedSections, now)
     }
-    recordInteractiveRefreshAttempt(operation, selectedYear, selectedSections, now)
     recordSyncAttempts(operation, selectedYear, selectedSections, now)
 
     val previousStatus = syncStatus.value
@@ -1100,21 +1122,22 @@ class SchoolSyncCoordinator @Inject constructor(
       selectedSections.contains(MeetingSlotsSection) ||
       selectedSections.contains(MeetingBookingsSection)
     ) {
-      runCatching { refreshMeetingsSnapshot(selectedYear, operation) }.onFailure { cause ->
-        errors.record(MeetingBookingsSection, cause)
+      runSyncCatching { refreshMeetingsSnapshot(selectedYear, operation) }.onFailure { cause ->
+        selectedSections.filter { it in setOf(MeetingTeachersSection, MeetingSlotsSection, MeetingBookingsSection) }
+          .forEach { section -> errors.record(section, cause) }
       }
     }
 
     if (mode != BackgroundSyncMode.FAST &&
       (selectedSections.contains(LessonsSection) || selectedSections.contains(AgendaSection))
     ) {
-      runCatching { persistTimetableTemplate(selectedYear, operation) }.onFailure { cause ->
+      runSyncCatching { persistTimetableTemplate(selectedYear, operation) }.onFailure { cause ->
         errors.record(LessonsSection, cause)
       }
     }
 
     val completedAt = System.currentTimeMillis()
-    if (runCatching { ensureSessionUnchanged(operation) }.isFailure) {
+    if (runSyncCatching { ensureSessionUnchanged(operation) }.isFailure) {
       val aborted = SyncStatus(
         state = SyncState.ERROR,
         message = "Sessione cambiata durante l'aggiornamento; risultati scartati.",
@@ -1126,6 +1149,19 @@ class SchoolSyncCoordinator @Inject constructor(
       return aborted
     }
     recordSyncResults(operation, selectedYear, selectedSections, errors, completedAt)
+    if (mode != BackgroundSyncMode.FAST) {
+      selectedSections.filter {
+        it !in errors && it !in unavailableForYear && (it != ProfileSection || refreshProfile)
+      }.forEach { section ->
+        commitOperation(operation) {
+          snapshotCacheDao.upsert(SnapshotCacheEntity(
+            cacheKey = fullRefreshFreshnessCacheKey(session.studentId, section, selectedYear),
+            payload = completedAt.toString(),
+            updatedAtEpochMillis = completedAt,
+          ))
+        }
+      }
+    }
     val hasSuccessfulSection = selectedSections.any { section -> section !in errors }
     val next = SyncStatusFactory.completed(
       failures = errors.reasons,
@@ -1142,7 +1178,7 @@ class SchoolSyncCoordinator @Inject constructor(
     commitOperation(operation) { syncStatus.value = visibleStatus }
     if (hasSuccessfulSection) {
       ensureSessionUnchanged(operation)
-      runCatching { commitOperation(operation) { snapshotCacheDao.recordSuccessfulSync(session.studentId, completedAt) } }
+      runSyncCatching { commitOperation(operation) { snapshotCacheDao.recordSuccessfulSync(session.studentId, completedAt) } }
     }
     return next
   }
@@ -1185,9 +1221,14 @@ class SchoolSyncCoordinator @Inject constructor(
     } else {
       yearScopedCacheKey(operation.session.studentId, section, schoolYear)
     }
-    val updatedAt = snapshotCacheDao.getByKey(cacheKey)?.updatedAtEpochMillis
+    snapshotCacheDao.getByKey(cacheKey) ?: return false
+    val metadata = syncMetadataDao.get(operation.session.studentId, schoolYear.id, section)
+    val fullRefresh = snapshotCacheDao.getByKey(fullRefreshFreshnessCacheKey(operation.session.studentId, section, schoolYear))
     ensureSessionUnchanged(operation)
-    if (updatedAt == null) return false
+    if (metadata?.lastError != null) return false
+    // FAST only validates today-14..today+60 for dated sections. Neither its successful metadata
+    // nor a changed payload can certify the annual cache. Legacy caches revalidate once too.
+    val updatedAt = fullRefresh?.payload?.toLongOrNull() ?: return false
     return now - updatedAt in 0..InteractiveRefreshCacheMaxAgeMillis
   }
 
@@ -1260,7 +1301,7 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   private fun dateInWindow(value: String?, start: LocalDate, end: LocalDate): Boolean {
-    val date = value?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return false
+    val date = value?.let { runSyncCatching { LocalDate.parse(it) }.getOrNull() } ?: return false
     return !date.isBefore(start) && !date.isAfter(end)
   }
 
@@ -1275,7 +1316,7 @@ class SchoolSyncCoordinator @Inject constructor(
     operation: SessionOperation,
     fetch: suspend () -> List<Grade>,
   ) {
-    runCatching {
+    runSyncCatching {
       val session = operation.session
       val grades = fetch()
       val existingGrades = gradeDao.getByYearOnce(session.studentId, schoolYear.id)
@@ -1380,7 +1421,7 @@ class SchoolSyncCoordinator @Inject constructor(
     dateWindow: SyncDateWindow,
     loadAgenda: suspend () -> List<AgendaItem>,
   ) {
-    runCatching {
+    runSyncCatching {
       val previousMerged = readYearScopedValue(operation, HomeworkSection, schoolYear, emptyList<Homework>())
       // Null, e non vuota, quando la sezione non si e' mai letta: e' la differenza fra "nessun
       // compito" e "non lo sappiamo ancora", che decide se registrare lo storico.
@@ -1396,6 +1437,7 @@ class SchoolSyncCoordinator @Inject constructor(
         ?.let { now - it < DedicatedHomeworkFastIntervalMillis } == true
 
       var dedicatedFetchFailed = false
+      var dedicatedRefreshed = false
       val dedicated: List<Homework> = when {
         // La sezione risponde solo per l'anno della sessione, come i voti: un anno passato si legge
         // da quello che c'e'.
@@ -1404,17 +1446,18 @@ class SchoolSyncCoordinator @Inject constructor(
         mode == BackgroundSyncMode.FAST && recentlyFetched -> previousDedicated.orEmpty()
         else -> fetchDedicatedHomeworks().fold(
           onSuccess = { fetched ->
-            commitOperation(operation) { lastDedicatedHomeworkFetch[throttleKey] = now }
             val inYear = filterHomeworksForYear(fetched, schoolYear)
             recordDedicatedHomeworkHistory(operation, schoolYear, previousDedicated, inYear, now)
             storeYearScopedValue(operation, HomeworkDedicatedSection, schoolYear, inYear)
+            commitOperation(operation) { lastDedicatedHomeworkFetch[throttleKey] = now }
+            dedicatedRefreshed = true
             inYear
           },
           onFailure = { cause ->
             dedicatedFetchFailed = true
             // Un guasto si dice solo a chi la sezione l'ha gia' vista funzionare: una scuola che i
             // Compiti non li usa avrebbe altrimenti un avviso di sincronizzazione parziale fisso.
-            if (mode != BackgroundSyncMode.FAST && previousDedicated != null) {
+            if (previousDedicated != null) {
               errors.record(HomeworkSection, cause)
             }
             previousDedicated.orEmpty()
@@ -1423,14 +1466,21 @@ class SchoolSyncCoordinator @Inject constructor(
       }
 
       // La vecchia chiamata v1 resta come ripiego, e solo quando la sezione non ha risposto.
-      val legacy = if (dedicatedFetchFailed) {
-        runCatching { filterHomeworksForYear(restClient.getHomeworks(), schoolYear) }.getOrDefault(emptyList())
+      val legacyResult = if (dedicatedFetchFailed) {
+        runSyncCatching { filterHomeworksForYear(restClient.getHomeworks(), schoolYear) }
       } else {
-        emptyList()
+        null
       }
+      val legacy = legacyResult?.getOrDefault(emptyList()).orEmpty()
 
-      val agendaResult = runCatching {
+      val agendaResult = runSyncCatching {
         loadAgenda().filter { it.category == AgendaCategory.HOMEWORK }.map(::agendaItemToHomework)
+      }
+      agendaResult.exceptionOrNull()?.let { errors.record(HomeworkSection, it) }
+      if (!dedicatedRefreshed && agendaResult.isFailure && legacyResult?.isSuccess != true) {
+        // None of the sources answered. Preserve the complete last snapshot, including links
+        // between its sources, and never turn an unknown first load into a saved empty list.
+        return@runSyncCatching
       }
       val previousAgendaSide = previousMerged.filter { it.source == HomeworkSource.AGENDA }
       val agendaSide = agendaResult.fold(
@@ -1476,9 +1526,9 @@ class SchoolSyncCoordinator @Inject constructor(
    * copre il giorno in cui il portale rifiutasse l'accesso con la password.
    */
   private suspend fun fetchDedicatedHomeworks(): Result<List<Homework>> {
-    val viaPortal = runCatching { portalClient.getHomeworksIndex(restClient.currentStudentId()) }
+    val viaPortal = runSyncCatching { portalClient.getHomeworksIndex(restClient.currentStudentId()) }
     if (viaPortal.isSuccess) return viaPortal
-    val viaRest = runCatching { restClient.getHomeworksIndex() }
+    val viaRest = runSyncCatching { restClient.getHomeworksIndex() }
     if (viaRest.isSuccess) return viaRest
     return Result.failure(
       viaPortal.exceptionOrNull()
@@ -1520,7 +1570,7 @@ class SchoolSyncCoordinator @Inject constructor(
     operation: SessionOperation,
     fetch: suspend () -> List<AgendaItem>,
   ) {
-    runCatching {
+    runSyncCatching {
       val session = operation.session
       val agenda = fetch()
       val existingAgenda = agendaDao.getByYearOnce(session.studentId, schoolYear.id)
@@ -1611,7 +1661,7 @@ class SchoolSyncCoordinator @Inject constructor(
     operation: SessionOperation,
     fetch: suspend () -> List<AbsenceRecord>,
   ) {
-    runCatching {
+    runSyncCatching {
       val session = operation.session
       val absences = fetch()
       val entities = absences.map { record ->
@@ -1644,7 +1694,7 @@ class SchoolSyncCoordinator @Inject constructor(
     operation: SessionOperation,
     fetch: suspend () -> List<Communication>,
   ) {
-    runCatching {
+    runSyncCatching {
       val session = operation.session
       val localReadIds = communicationDao.getReadIds(session.studentId, schoolYear.id).toSet()
       val communications = preserveLocallyReadCommunications(fetch(), localReadIds)
@@ -1685,7 +1735,7 @@ class SchoolSyncCoordinator @Inject constructor(
     operation: SessionOperation,
     fetch: suspend () -> List<MaterialItem>,
   ) {
-    runCatching {
+    runSyncCatching {
       val session = operation.session
       val materials = fetch()
       val entities = materials.map { mat ->
@@ -1719,7 +1769,7 @@ class SchoolSyncCoordinator @Inject constructor(
     operation: SessionOperation,
     fetch: suspend () -> List<DocumentItem>,
   ) {
-    runCatching {
+    runSyncCatching {
       val session = operation.session
       val documents = fetch()
       val entities = documents.map { doc ->
@@ -1753,7 +1803,7 @@ class SchoolSyncCoordinator @Inject constructor(
     errors: SyncErrors,
     crossinline fetch: suspend () -> T,
   ) {
-    runCatching {
+    runSyncCatching {
       val value = fetch()
       upsertSnapshotIfChanged(
         operation,
@@ -1772,7 +1822,7 @@ class SchoolSyncCoordinator @Inject constructor(
     errors: SyncErrors,
     crossinline fetch: suspend () -> T,
   ) {
-    runCatching {
+    runSyncCatching {
       storeYearScopedValue(operation, section, schoolYear, fetch())
     }.onFailure { cause ->
       errors.record(section, cause)
@@ -1828,7 +1878,7 @@ class SchoolSyncCoordinator @Inject constructor(
     )
     ensureSessionUnchanged(operation)
     if (entity == null) return default
-    return runCatching { json.decodeFromString<T>(entity.payload) }.getOrDefault(default)
+    return runSyncCatching { json.decodeFromString<T>(entity.payload) }.getOrDefault(default)
   }
 
   private suspend fun recordSyncAttempts(
@@ -1909,7 +1959,7 @@ class SchoolSyncCoordinator @Inject constructor(
         (detail.communication.needsJoin && detail.joinUrl.isNullOrBlank()) ||
         (detail.communication.needsFile && detail.fileUploadUrl.isNullOrBlank())
     if (hasUsefulContent && !needsPortalActionDiscovery) return detail
-    val portal = runCatching { portalClient.getNoticeboardDetail(portalUrl) }.getOrNull() ?: return detail
+    val portal = runSyncCatching { portalClient.getNoticeboardDetail(portalUrl) }.getOrNull() ?: return detail
     val content = portal.content?.takeIf(String::isNotBlank) ?: detail.content
     val actions = (
       detail.actions +
@@ -2034,7 +2084,7 @@ class SchoolSyncCoordinator @Inject constructor(
     val start = schoolYearStart(schoolYear)
     val end = schoolYearEnd(schoolYear)
     return homeworks.filter { homework ->
-      runCatching { LocalDate.parse(homework.dueDate) }.getOrNull()?.let { dueDate ->
+      runSyncCatching { LocalDate.parse(homework.dueDate) }.getOrNull()?.let { dueDate ->
         !dueDate.isBefore(start) && !dueDate.isAfter(end)
       } ?: false
     }
@@ -2103,7 +2153,7 @@ class SchoolSyncCoordinator @Inject constructor(
     val start = schoolYearStart(schoolYear)
     val end = schoolYearEnd(schoolYear)
     return grades.filter { grade ->
-      runCatching { LocalDate.parse(grade.date) }.getOrNull()?.let { date ->
+      runSyncCatching { LocalDate.parse(grade.date) }.getOrNull()?.let { date ->
         !date.isBefore(start) && !date.isAfter(end)
       } ?: true
     }
@@ -2357,7 +2407,7 @@ class SchoolSyncCoordinator @Inject constructor(
 
   private fun filterByDate(date: String?, start: LocalDate, end: LocalDate): Boolean {
     if (date.isNullOrBlank()) return true
-    return runCatching { LocalDate.parse(date) }.getOrNull()?.let { d ->
+    return runSyncCatching { LocalDate.parse(date) }.getOrNull()?.let { d ->
       !d.isBefore(start) && !d.isAfter(end)
     } ?: true
   }

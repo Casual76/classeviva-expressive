@@ -20,8 +20,12 @@ import dev.antigravity.classevivaexpressive.core.data.notifications.GradesCacheS
 import dev.antigravity.classevivaexpressive.core.data.notifications.HomeworkCacheSection
 import dev.antigravity.classevivaexpressive.core.data.notifications.LessonsCacheSection
 import dev.antigravity.classevivaexpressive.core.data.notifications.NotesCacheSection
+import dev.antigravity.classevivaexpressive.core.data.notifications.NotificationScope
 import dev.antigravity.classevivaexpressive.core.data.notifications.SyncNotificationDispatcher
 import dev.antigravity.classevivaexpressive.core.data.notifications.SyncSnapshotPayloads
+import dev.antigravity.classevivaexpressive.core.data.notifications.decodeNotificationCheckpoint
+import dev.antigravity.classevivaexpressive.core.data.notifications.encodeNotificationCheckpoint
+import dev.antigravity.classevivaexpressive.core.data.notifications.notificationCheckpointCacheKey
 import dev.antigravity.classevivaexpressive.core.data.repository.HomeworkDedicatedSection
 import dev.antigravity.classevivaexpressive.core.data.repository.yearScopedCacheKey
 import dev.antigravity.classevivaexpressive.core.database.database.SnapshotCacheDao
@@ -67,19 +71,30 @@ class SchoolSyncWorker @AssistedInject constructor(
           return@withAccountWork
         }
         val before = capturePayloads(work.session.studentId)
+        val scope = requireNotNull(before.scope)
+        val checkpointKey = notificationCheckpointCacheKey(scope)
+        val checkpoint = decodeNotificationCheckpoint(snapshotCacheDao.getByKey(checkpointKey)?.payload)
+          ?.takeIf { it.scope == scope } ?: before
         val fastSections = BackgroundSyncPolicy.fastSections(settings.notificationPreferences)
         if (fastSections.isNotEmpty()) {
           val status = syncCoordinator.refreshCurrentSchoolYearForNotifications(
             force = true, sections = fastSections, mode = BackgroundSyncMode.FAST,
           )
           consecutiveFailures = status.nextFastFailureCount(consecutiveFailures, fastSections)
-          if (status.canDispatchNotifications()) {
-            val current = capturePayloads(work.session.studentId)
-            sessionStore.commitAccountWork(work) {
-              notificationDispatcher.dispatch(previous = before, current = current)
-            }
-          }
         } else consecutiveFailures = 0
+        // The notification checkpoint is independent of UI/maintenance cache writes. Even if this
+        // network attempt failed, a completed foreground refresh may have left undelivered changes.
+        val current = capturePayloads(work.session.studentId)
+        if (current.scope == scope) sessionStore.commitAccountWork(work) {
+          val acknowledged = notificationDispatcher.dispatch(previous = checkpoint, current = current)
+          snapshotCacheDao.upsert(
+            SnapshotCacheEntity(
+              cacheKey = checkpointKey,
+              payload = encodeNotificationCheckpoint(acknowledged),
+              updatedAtEpochMillis = System.currentTimeMillis(),
+            ),
+          )
+        }
         if (maintenanceDue(work.session.studentId)) {
           val maintenanceSections = BackgroundSyncPolicy.maintenanceSections()
           val status = syncCoordinator.refreshCurrentSchoolYearMaintenance(force = true)
@@ -139,6 +154,7 @@ class SchoolSyncWorker @AssistedInject constructor(
   private suspend fun capturePayloads(studentId: String): SyncSnapshotPayloads {
     val currentYear = schoolYearStore.currentSchoolYearRef()
     return SyncSnapshotPayloads(
+      scope = NotificationScope(studentId, currentYear.id),
       homeworks = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, HomeworkCacheSection, currentYear))?.payload,
       dedicatedHomeworks = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, HomeworkDedicatedSection, currentYear))?.payload,
       communications = snapshotCacheDao.getByKey(yearScopedCacheKey(studentId, CommunicationsCacheSection, currentYear))?.payload,
@@ -199,10 +215,6 @@ object SyncWorkScheduler {
 
 private fun maintenanceCacheKey(studentId: String, schoolYearId: String): String =
   "$studentId::$schoolYearId::background_maintenance"
-
-private fun SyncStatus.canDispatchNotifications(): Boolean {
-  return state != SyncState.ERROR && state != SyncState.OFFLINE
-}
 
 private fun SyncStatus.nextFastFailureCount(current: Int, attemptedSections: Set<String>): Int {
   if (state == SyncState.IDLE) return 0

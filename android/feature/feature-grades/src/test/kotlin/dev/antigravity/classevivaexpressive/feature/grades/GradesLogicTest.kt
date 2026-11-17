@@ -121,6 +121,24 @@ class GradesLogicTest {
   // ─── calculateSubjectAverage ──────────────────────────────────────────────
 
   @Test
+  fun declaredPeriodWinsWhenAMarkIsPublishedInTheNextPeriod() {
+    val periods = listOf(
+      Period("T1", 1, "Trimestre", "Trimestre", false, "2025-09-01", "2026-01-31"),
+      Period("P2", 2, "Pentamestre", "Pentamestre", true, "2026-02-01", "2026-06-10"),
+    )
+    val late = Grade(
+      id = "late", subject = "Matematica", valueLabel = "8", numericValue = 8.0,
+      date = "2026-02-03", type = "Scritto", periodCode = "T1",
+    )
+
+    assertEquals(listOf("late"), filterGradesByPeriod(listOf(late), periods, "T1").map { it.id })
+    assertTrue(filterGradesByPeriod(listOf(late), periods, "P2").isEmpty())
+    assertTrue(filterGradesByPeriod(listOf(late.copy(periodCode = null, period = "Trimestre")), periods, "P2").isEmpty())
+    // Unknown/missing codes still use dates, for schools that publish no matching period metadata.
+    assertEquals(1, filterGradesByPeriod(listOf(late.copy(periodCode = "legacy")), periods, "P2").size)
+  }
+
+  @Test
   fun calculateSubjectAverage_computesWeightedAverage() {
     val grades = listOf(
       Grade(id = "1", subject = "Matematica", valueLabel = "6", numericValue = 6.0, date = "2026-02-10", type = "Scritto", weight = 2.0),
@@ -157,6 +175,29 @@ class GradesLogicTest {
   }
 
   // ─── calculateOverallAverage ──────────────────────────────────────────────
+
+  @Test
+  fun excludedAndInvalidWeightsDoNotProduceNaNOrChangeTargets() {
+    val base = Grade(
+      id = "zero", subject = "Matematica", valueLabel = "4", numericValue = 4.0,
+      date = "2026-03-10", type = "Scritto", weight = 0.0,
+    )
+    val excluded = listOf(base, base.copy(id = "negative", weight = -1.0), base.copy(id = "nan", weight = Double.NaN))
+    assertNull(calculateSubjectAverage(excluded))
+    assertNull(calculateOverallAverage(excluded))
+    assertEquals("Serve almeno 7,0", calculateRequiredGradeMessage(excluded, 7.0))
+    assertEquals(8.0, calculateSubjectAverage(excluded + base.copy(id = "valid", numericValue = 8.0, weight = 1.0))!!, 0.001)
+  }
+
+  @Test
+  fun mixedPercentAndFactorWeightsUseTheSamePolicyAsTheAssistant() {
+    val grades = listOf(
+      Grade(id = "1", subject = "Matematica", valueLabel = "4", numericValue = 4.0, date = "2026-02-10", type = "Scritto", weight = 100.0),
+      Grade(id = "2", subject = "Matematica", valueLabel = "10", numericValue = 10.0, date = "2026-03-10", type = "Orale", weight = 0.5),
+    )
+    assertEquals(6.0, calculateSubjectAverage(grades)!!, 0.001)
+    assertEquals("Serve almeno 8,5", calculateRequiredGradeMessage(grades, 7.0))
+  }
 
   @Test
   fun calculateOverallAverage_averagesSubjectAverages() {

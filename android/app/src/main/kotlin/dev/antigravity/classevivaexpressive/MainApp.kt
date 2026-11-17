@@ -244,10 +244,12 @@ internal val topLevelRoutes = topLevelRouteOrder.toSet()
 fun MainApp(
   viewModel: MainViewModel = hiltViewModel(),
   incomingIntents: Flow<Intent> = emptyFlow(),
+  onIncomingIntentHandled: (Intent) -> Unit = {},
   /** Le scorciatoie di una tastiera fisica: vedi [KeyboardShortcut]. */
   shortcuts: Flow<KeyboardShortcut> = emptyFlow(),
 ) {
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  val selectedSchoolYear by viewModel.selectedSchoolYear.collectAsStateWithLifecycle()
   // L'aggiornamento dall'app: un controllore solo, alla radice, cosi' il foglio (qui) e la sezione delle
   // impostazioni (piu' in basso) parlano dello stesso download. Lo scope e' quello del ViewModel: un
   // download non si ferma cambiando pagina.
@@ -266,6 +268,8 @@ fun MainApp(
   }
   val notificationHostState = rememberFluidNotificationHostState()
   val glassModalHostState = rememberFluidGlassModalHostState()
+  var appLinkError by rememberSaveable { mutableStateOf<String?>(null) }
+  LaunchedEffect(uiState.session?.studentId) { appLinkError = null }
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
     viewModel.onAppResumed()
   }
@@ -391,6 +395,19 @@ fun MainApp(
                   update.reset()
                 },
                 incomingIntents = incomingIntents,
+                onIncomingIntentHandled = { intent ->
+                  appLinkError = null
+                  onIncomingIntentHandled(intent)
+                },
+                studentId = uiState.session?.studentId.orEmpty(),
+                schoolYearId = selectedSchoolYear?.id,
+                onAppLinkRejected = { mismatch ->
+                  appLinkError = when (mismatch) {
+                      AppLinkScopeMismatch.STUDENT -> "Questa notifica appartiene a un altro account. Accedi con l’account che l’ha ricevuta."
+                      AppLinkScopeMismatch.SCHOOL_YEAR -> "Questa notifica riguarda un altro anno scolastico. Seleziona quell’anno nelle impostazioni per consultare i suoi dati."
+                      null -> "Non riesco ad aprire questo collegamento. Puoi raggiungere i dati dalla sezione corrispondente."
+                  }
+                },
                 shortcuts = shortcuts,
                 authentication = uiState.authentication,
                 authenticating = uiState.isAuthenticating,
@@ -399,6 +416,16 @@ fun MainApp(
                 onLogout = viewModel::logout,
               )
             }
+          }
+          // This is the direct result of a tap, so explain it immediately even while an older
+          // session/sync notice is waiting in the transient notification queue.
+          appLinkError?.let { message ->
+            FluidAlert(
+              onDismissRequest = { appLinkError = null },
+              title = "Collegamento non disponibile",
+              message = message,
+              actions = listOf(FluidAlertAction("Chiudi", { appLinkError = null }, FluidAlertAction.Emphasis.Preferred)),
+            )
           }
           AuthenticationSheet(
             visible = reauthenticationVisible && uiState.session != null,
@@ -972,7 +999,20 @@ private fun TopLevelNavigationSuitePreview() {
   }
 }
 
-internal fun NavHostController.handleIncomingIntent(intent: Intent): Boolean = handleDeepLink(intent)
+internal fun NavHostController.handleIncomingIntent(intent: Intent): Boolean {
+  val uri = intent.data ?: return false
+  val link = resolveAppLink(uri.toString())
+  if (link != null) {
+    navigate(link.route) {
+      popUpTo(graph.startDestinationId)
+      launchSingleTop = link.route == "home"
+    }
+    return true
+  }
+  // A malformed internal command must not fall through to a broader deep-link pattern.
+  if (uri.scheme == "classevivaexpressive" && uri.host == "open") return false
+  return handleDeepLink(Intent(intent).setFlags(0))
+}
 
 internal fun pendingGradeRequest(
   requestedGradeId: String?,
@@ -1001,6 +1041,10 @@ private fun AuthenticatedApp(
   update: FluidUpdateController,
   onSkipUpdate: (String) -> Unit,
   incomingIntents: Flow<Intent>,
+  onIncomingIntentHandled: (Intent) -> Unit,
+  studentId: String,
+  schoolYearId: String?,
+  onAppLinkRejected: suspend (AppLinkScopeMismatch?) -> Unit,
   shortcuts: Flow<KeyboardShortcut> = emptyFlow(),
   authentication: AuthenticationState = AuthenticationState(),
   authenticating: Boolean = false,
@@ -1058,9 +1102,21 @@ private fun AuthenticatedApp(
     }
   }
 
-  LaunchedEffect(navController, incomingIntents) {
+  LaunchedEffect(navController, incomingIntents, studentId, schoolYearId) {
     incomingIntents.collect { intent ->
-      navController.handleIncomingIntent(intent)
+      val link = intent.data?.toString()?.let(::resolveAppLink)
+      // School-year preferences can finish loading after authentication. Retain the tap until
+      // the actual selected year is known, instead of comparing it with a temporary default.
+      if (link?.schoolYearId != null && schoolYearId == null) return@collect
+      val mismatch = link?.scopeMismatch(studentId, schoolYearId.orEmpty())
+      if (mismatch != null) {
+        onIncomingIntentHandled(intent)
+        onAppLinkRejected(mismatch)
+      } else {
+        val handled = navController.handleIncomingIntent(intent)
+        onIncomingIntentHandled(intent)
+        if (!handled) onAppLinkRejected(null)
+      }
     }
   }
 

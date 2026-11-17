@@ -75,6 +75,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import dev.antigravity.fluidengine.ui.fluid.FluidAlert
 import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
@@ -201,6 +205,8 @@ class CommunicationsViewModel @Inject constructor(
   private val isRefreshing = MutableStateFlow(false)
   private val pendingOpenUri = MutableStateFlow<Uri?>(null)
   private val attachmentDialog = MutableStateFlow<AttachmentDownloadDialogState?>(null)
+  private var detailRequest: Job? = null
+  private var detailRequestVersion = 0L
 
   private val contentState = combine(
     communicationsRepository.observeCommunications(),
@@ -259,7 +265,10 @@ class CommunicationsViewModel @Inject constructor(
   }
 
   fun openCommunication(pubId: String, evtCode: String) {
-    viewModelScope.launch {
+    val requestVersion = beginDetailRequest()
+    selectedNote.value = null
+    selectedCommunication.value = null
+    detailRequest = viewModelScope.launch {
       val cached = state.value.communications.firstOrNull { it.pubId == pubId && it.evtCode == evtCode }
       if (cached != null) {
         selectedNote.value = null
@@ -269,25 +278,37 @@ class CommunicationsViewModel @Inject constructor(
           actions = cached.actions,
         )
       }
-      communicationsRepository.getCommunicationDetail(pubId, evtCode)
+      val result = communicationsRepository.getCommunicationDetail(pubId, evtCode).rethrowCancellation()
+      currentCoroutineContext().ensureActive()
+      if (requestVersion != detailRequestVersion) return@launch
+      result
         .onSuccess {
           selectedNote.value = null
           selectedCommunication.value = it
         }
         .onFailure { error ->
-          if (cached == null) {
-            lastMessage.value = CommunicationsMessage(
-              text = error.message ?: "Impossibile aprire la comunicazione.",
-              kind = CommunicationsMessageKind.Error,
+          if (cached != null && cached.contentPreview.isBlank()) {
+            selectedCommunication.value = selectedCommunication.value?.copy(
+              content = "Contenuto completo non disponibile. Riprova ad aprire la comunicazione.",
             )
           }
+          lastMessage.value = CommunicationsMessage(
+            text = error.message ?: "Impossibile caricare il contenuto completo della comunicazione.",
+            kind = CommunicationsMessageKind.Error,
+          )
         }
     }
   }
 
   fun openNote(id: String, categoryCode: String) {
-    viewModelScope.launch {
-      communicationsRepository.getNoteDetail(id, categoryCode)
+    val requestVersion = beginDetailRequest()
+    selectedCommunication.value = null
+    selectedNote.value = null
+    detailRequest = viewModelScope.launch {
+      val result = communicationsRepository.getNoteDetail(id, categoryCode).rethrowCancellation()
+      currentCoroutineContext().ensureActive()
+      if (requestVersion != detailRequestVersion) return@launch
+      result
         .onSuccess {
           selectedCommunication.value = null
           selectedNote.value = it
@@ -426,8 +447,17 @@ class CommunicationsViewModel @Inject constructor(
   }
 
   fun dismissDetail() {
+    beginDetailRequest()
     selectedCommunication.value = null
     selectedNote.value = null
+  }
+
+  /** A later tap or dismissal owns the detail even if the earlier network call finishes late. */
+  private fun beginDetailRequest(): Long {
+    detailRequestVersion += 1L
+    detailRequest?.cancel()
+    detailRequest = null
+    return detailRequestVersion
   }
 
   /**
@@ -438,11 +468,13 @@ class CommunicationsViewModel @Inject constructor(
    * chi voleva leggere avrebbe toccato la riga.
    */
   fun acknowledgeFromList(pubId: String, evtCode: String) {
+    if (isSubmittingAction.value) return
+    isSubmittingAction.value = true
     viewModelScope.launch {
-      isSubmittingAction.value = true
-      communicationsRepository.getCommunicationDetail(pubId, evtCode)
+      try {
+        communicationsRepository.getCommunicationDetail(pubId, evtCode).rethrowCancellation()
         .onSuccess { detail ->
-          communicationsRepository.acknowledgeCommunication(detail)
+          communicationsRepository.acknowledgeCommunication(detail).rethrowCancellation()
             .onSuccess {
               lastMessage.value = CommunicationsMessage(
                 text = "Conferma inviata.",
@@ -462,7 +494,9 @@ class CommunicationsViewModel @Inject constructor(
             kind = CommunicationsMessageKind.Error,
           )
         }
-      isSubmittingAction.value = false
+      } finally {
+        isSubmittingAction.value = false
+      }
     }
   }
 
@@ -506,23 +540,37 @@ class CommunicationsViewModel @Inject constructor(
     errorMessage: String,
     block: suspend () -> Result<CommunicationDetail>,
   ) {
+    if (isSubmittingAction.value) return
+    val requestVersion = beginDetailRequest()
+    val selectedId = selectedCommunication.value?.communication?.id
+    isSubmittingAction.value = true
     viewModelScope.launch {
-      isSubmittingAction.value = true
-      block()
-        .onSuccess {
-          selectedCommunication.value = it
-          lastMessage.value = CommunicationsMessage(
-            text = successMessage,
-            kind = CommunicationsMessageKind.Success,
-          )
-        }
-        .onFailure {
-          lastMessage.value = CommunicationsMessage(
-            text = it.message ?: errorMessage,
-            kind = CommunicationsMessageKind.Error,
-          )
-        }
-      isSubmittingAction.value = false
+      try {
+        val result = block().rethrowCancellation()
+        currentCoroutineContext().ensureActive()
+        result
+          .onSuccess {
+            // The server action still completes when the user leaves. Its response must not reopen
+            // the old notice or replace the notice selected while the action was in flight.
+            if (requestVersion == detailRequestVersion && selectedId != null &&
+              selectedCommunication.value?.communication?.id == selectedId
+            ) {
+              selectedCommunication.value = it
+            }
+            lastMessage.value = CommunicationsMessage(
+              text = successMessage,
+              kind = CommunicationsMessageKind.Success,
+            )
+          }
+          .onFailure {
+            lastMessage.value = CommunicationsMessage(
+              text = it.message ?: errorMessage,
+              kind = CommunicationsMessageKind.Error,
+            )
+          }
+      } finally {
+        isSubmittingAction.value = false
+      }
     }
   }
 
@@ -541,6 +589,11 @@ class CommunicationsViewModel @Inject constructor(
       isRefreshing.value = false
     }
   }
+}
+
+private fun <T> Result<T>.rethrowCancellation(): Result<T> = also {
+  val failure = exceptionOrNull()
+  if (failure is CancellationException) throw failure
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

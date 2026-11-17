@@ -201,7 +201,8 @@ class CommunicationsViewModelTest {
     vm.state.test {
       awaitItem()
       vm.acknowledge(detail)
-      val updated = awaitItem()
+      var updated = awaitItem()
+      while (updated.isSubmittingAction || updated.lastMessage == null) updated = awaitItem()
       assertEquals("Conferma inviata.", updated.lastMessage?.text)
       assertEquals(CommunicationsMessageKind.Success, updated.lastMessage?.kind)
       cancelAndIgnoreRemainingEvents()

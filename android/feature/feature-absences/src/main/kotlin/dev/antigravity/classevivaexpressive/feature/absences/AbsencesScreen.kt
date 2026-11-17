@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import dev.antigravity.fluidengine.ui.fluid.FluidAlert
 import dev.antigravity.fluidengine.ui.fluid.FluidAlertAction
 import dev.antigravity.fluidengine.ui.fluid.FluidBarAction
@@ -134,17 +135,22 @@ class AbsencesViewModel @Inject constructor(
 
   fun justify(reason: String) {
     val target = selectedAbsence.value ?: return
+    if (isSubmitting.value) return
+    isSubmitting.value = true
     viewModelScope.launch {
-      isSubmitting.value = true
-      absencesRepository.justifyAbsence(target, reason.ifBlank { null })
-        .onSuccess {
-          selectedAbsence.value = null
-          lastMessage.value = "Giustificazione inviata."
-        }
-        .onFailure {
-          lastMessage.value = it.message ?: "Non sono riuscito a giustificare l'assenza."
-        }
-      isSubmitting.value = false
+      try {
+        absencesRepository.justifyAbsence(target, reason.ifBlank { null })
+          .onSuccess {
+            if (selectedAbsence.value?.id == target.id) selectedAbsence.value = null
+            lastMessage.value = "Giustificazione inviata."
+          }
+          .onFailure {
+            if (it is CancellationException) throw it
+            lastMessage.value = it.message ?: "Non sono riuscito a giustificare l'assenza."
+          }
+      } finally {
+        isSubmitting.value = false
+      }
     }
   }
 
@@ -178,14 +184,16 @@ fun AbsencesRoute(
   val exitCount = remember(state.absences) { state.absences.count { it.type == AbsenceType.EXIT } }
   val pending = remember(state.absences) { state.absences.filter { !it.justified && it.canJustify }.sortedByDescending { it.date } }
   val history = remember(state.absences) { state.absences.sortedByDescending { it.date } }
-
+  var consumedInitialAbsenceId by rememberSaveable { mutableStateOf<String?>(null) }
+  var linkedAbsenceId by rememberSaveable { mutableStateOf<String?>(null) }
 
   LaunchedEffect(initialAbsenceId, state.absences) {
-    if (!initialAbsenceId.isNullOrBlank() && state.selectedAbsence?.id != initialAbsenceId) {
-      state.absences.firstOrNull { it.id == initialAbsenceId && !it.justified && it.canJustify }?.let {
-        viewModel.requestJustification(it)
-      }
-    }
+    val target = state.absences.firstOrNull {
+      !initialAbsenceId.isNullOrBlank() && it.id == initialAbsenceId && it.id != consumedInitialAbsenceId
+    } ?: return@LaunchedEffect
+    consumedInitialAbsenceId = target.id
+    if (!target.justified && target.canJustify) viewModel.requestJustification(target)
+    else linkedAbsenceId = target.id
   }
 
   val metrics = rememberFluidScreenMetrics()
@@ -299,7 +307,7 @@ fun AbsencesRoute(
                   detail = "Quando il registro pubblica assenze, ritardi e uscite, li trovi qui in ordine.",
                 )
               } else {
-                FluidGlassGroup(history.take(20)) { absence ->
+                FluidGlassGroup(history) { absence ->
                   AbsenceRow(
                     absence = absence,
                     onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
@@ -336,7 +344,7 @@ fun AbsencesRoute(
           )
         }
       } else {
-        fluidGlassGroups(history.take(20)) { absence ->
+        fluidGlassGroups(history) { absence ->
           AbsenceRow(
             absence = absence,
             onJustify = if (!absence.justified && absence.canJustify) ({ viewModel.requestJustification(absence) }) else null,
@@ -371,6 +379,26 @@ fun AbsencesRoute(
           modifier = Modifier.fillMaxWidth(),
           label = "Motivazione opzionale",
           minLines = 3,
+        )
+      },
+    )
+  }
+
+  state.absences.firstOrNull { it.id == linkedAbsenceId }?.let { absence ->
+    FluidAlert(
+      onDismissRequest = { linkedAbsenceId = null },
+      title = "${absenceLabel(absence.type)} del ${absence.date.toReadableDate()}",
+      actions = listOf(FluidAlertAction("Chiudi", { linkedAbsenceId = null }, FluidAlertAction.Emphasis.Preferred)),
+      content = {
+        Text(
+          listOfNotNull(
+            if (absence.justified) "Giustificata" else "Da controllare",
+            absence.hours?.let { hoursLabel(absence.type, it) },
+            absence.justificationReason?.takeIf(String::isNotBlank),
+            absence.justificationDate?.let { "Giustificata il ${it.toReadableDate()}" },
+            if (!absence.justified && !absence.canJustify) "La scuola non permette di giustificare dall’app." else null,
+          ).joinToString("\n"),
+          style = MaterialTheme.typography.bodyLarge,
         )
       },
     )

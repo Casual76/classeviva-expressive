@@ -13,6 +13,9 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 @HiltWorker
 class WidgetRefreshWorker @AssistedInject constructor(
@@ -21,13 +24,17 @@ class WidgetRefreshWorker @AssistedInject constructor(
   private val dashboardRepository: DashboardRepository,
 ) : CoroutineWorker(appContext, workerParams) {
   override suspend fun doWork(): Result {
-    val refreshResult = dashboardRepository.refreshDashboard(force = true)
-    updateWidgetRefreshState(
-      context = applicationContext,
-      refreshing = false,
-      error = refreshResult.exceptionOrNull()?.message.orEmpty(),
+    completeWidgetRefresh(
+      start = {
+        updateWidgetRefreshState(context = applicationContext, refreshing = true, error = "")
+        SchoolOverviewWidget().updateAll(applicationContext)
+      },
+      refresh = { dashboardRepository.refreshDashboard(force = true) },
+      finish = { error ->
+        updateWidgetRefreshState(context = applicationContext, refreshing = false, error = error)
+        SchoolOverviewWidget().updateAll(applicationContext)
+      },
     )
-    SchoolOverviewWidget().updateAll(applicationContext)
     return Result.success()
   }
 
@@ -43,9 +50,31 @@ class WidgetRefreshWorker @AssistedInject constructor(
 }
 
 internal const val WidgetRefreshUniqueWorkName = "classeviva-expressive-widget-refresh"
-internal val WidgetRefreshExistingWorkPolicy = ExistingWorkPolicy.REPLACE
+internal val WidgetRefreshExistingWorkPolicy = ExistingWorkPolicy.KEEP
 
 internal fun createWidgetRefreshWorkRequest() = OneTimeWorkRequestBuilder<WidgetRefreshWorker>().build()
+
+/** Cleanup survives cancellation; repeated taps share the running refresh instead of cancelling it. */
+internal suspend fun completeWidgetRefresh(
+  start: suspend () -> Unit = {},
+  refresh: suspend () -> kotlin.Result<*>,
+  finish: suspend (String) -> Unit,
+) {
+  var error = ""
+  try {
+    start()
+    val result = refresh()
+    val failure = result.exceptionOrNull()
+    if (failure is CancellationException) throw failure
+    error = failure?.message.orEmpty()
+  } catch (cancelled: CancellationException) {
+    throw cancelled
+  } catch (failure: Exception) {
+    error = failure.message.orEmpty()
+  } finally {
+    withContext(NonCancellable) { finish(error) }
+  }
+}
 
 private suspend fun updateWidgetRefreshState(
   context: Context,

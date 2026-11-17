@@ -9,16 +9,28 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-  private val incomingIntents = MutableSharedFlow<android.content.Intent>(replay = 1, extraBufferCapacity = 1)
+  private lateinit var incomingIntents: IncomingIntentInbox
   private val shortcuts = MutableSharedFlow<KeyboardShortcut>(extraBufferCapacity = 1)
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    incomingIntents = IncomingIntentInbox(savedInstanceState, intent)
+    // Navigation also inspects Activity.intent while installing its graph. The inbox owns that
+    // delivery, including scope validation and waiting for login; it must never be applied twice.
+    setIntent(android.content.Intent(this, MainActivity::class.java))
     enableEdgeToEdge()
     setContent {
-      MainApp(incomingIntents = incomingIntents, shortcuts = shortcuts)
+      MainApp(
+        incomingIntents = incomingIntents.intents,
+        onIncomingIntentHandled = incomingIntents::consume,
+        shortcuts = shortcuts,
+      )
     }
-    incomingIntents.tryEmit(intent)
+  }
+
+  override fun onSaveInstanceState(outState: Bundle) {
+    incomingIntents.save(outState)
+    super.onSaveInstanceState(outState)
   }
 
   /**
@@ -82,7 +94,6 @@ class MainActivity : ComponentActivity() {
 
   override fun onNewIntent(intent: android.content.Intent) {
     super.onNewIntent(intent)
-    setIntent(intent)
-    incomingIntents.tryEmit(intent)
+    incomingIntents.offer(intent)
   }
 }

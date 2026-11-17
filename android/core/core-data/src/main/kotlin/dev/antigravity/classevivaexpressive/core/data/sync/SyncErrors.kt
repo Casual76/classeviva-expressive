@@ -5,6 +5,16 @@ import dev.antigravity.classevivaexpressive.core.network.client.ClassevivaSchool
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import kotlinx.coroutines.CancellationException
+
+/** A cancelled refresh must stop, including optional portal/REST fallbacks and cache enrichment. */
+internal inline fun <T> runSyncCatching(block: () -> T): Result<T> = try {
+  Result.success(block())
+} catch (cancelled: CancellationException) {
+  throw cancelled
+} catch (error: Throwable) {
+  Result.failure(error)
+}
 
 /**
  * Which sections failed to refresh, and why.
@@ -38,6 +48,7 @@ internal class SyncErrors {
   fun reasonFor(section: String): String? = recorded[section]
 
   fun record(section: String, cause: Throwable?) {
+    if (cause is CancellationException) throw cause
     recorded[section] = describeSyncFailure(cause)
     if (cause.isSchoolYearNotStarted()) schoolYearNotStarted = true
   }

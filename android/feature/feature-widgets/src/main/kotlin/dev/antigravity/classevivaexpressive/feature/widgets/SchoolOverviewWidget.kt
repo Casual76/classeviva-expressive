@@ -4,6 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -14,6 +19,7 @@ import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
+import androidx.glance.currentState
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
@@ -45,14 +51,14 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
-import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
+import dev.antigravity.classevivaexpressive.core.data.repository.observeSchoolDate
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.DashboardRepository
-import dev.antigravity.classevivaexpressive.core.domain.model.DashboardSnapshot
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
-import dev.antigravity.classevivaexpressive.core.domain.model.SyncState
-import dev.antigravity.classevivaexpressive.core.domain.model.SyncStatus
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import androidx.datastore.preferences.core.Preferences
+import java.time.LocalDate
 
 class SchoolOverviewWidget : GlanceAppWidget() {
   override val stateDefinition = PreferencesGlanceStateDefinition
@@ -74,42 +80,38 @@ class SchoolOverviewWidget : GlanceAppWidget() {
   )
 
   override suspend fun provideGlance(context: Context, id: GlanceId) {
-    val preferences = getAppWidgetState(context, PreferencesGlanceStateDefinition, id)
-      .toSchoolWidgetPreferences()
     val entryPoint = EntryPointAccessors.fromApplication(
       context.applicationContext,
       SchoolWidgetEntryPoint::class.java,
     )
-    // The widget is painted before anyone can react to something going wrong, so a failure to read
-    // the settings falls back to the defaults rather than leaving the home screen with a blank cell.
-    val settings = runCatching { entryPoint.settingsRepository().observeSettings().first() }
-      .getOrDefault(AppSettings())
-    val hasSession = entryPoint.authRepository().session.value != null
-    val snapshot = if (hasSession) {
-      runCatching { entryPoint.dashboardRepository().observeDashboard().first() }
-        .getOrElse { error ->
-          DashboardSnapshot(
-            syncStatus = SyncStatus(
-              state = SyncState.ERROR,
-              message = error.message,
-            ),
-          )
-        }
-    } else {
-      DashboardSnapshot()
-    }
-    val model = SchoolWidgetMapper.map(
-      snapshot = snapshot,
-      preferences = preferences,
-      hasSession = hasSession,
-    )
-    val palette = widgetPalette(context, settings)
+    val auth = entryPoint.authRepository()
+    val dashboard = entryPoint.dashboardRepository()
+    val settings = entryPoint.settingsRepository()
+    val initialPreferences = getAppWidgetState(context, PreferencesGlanceStateDefinition, id).toSchoolWidgetPreferences()
+    val initial = observeWidgetPresentation(
+      auth = auth,
+      dashboard = dashboard,
+      settings = settings,
+      preferences = flowOf(initialPreferences),
+      dates = flowOf(LocalDate.now()),
+    ).first { it.content.loaded }
 
     provideContent {
+      // updateAll does not restart provideGlance during an active Glance session. Widget state,
+      // school data, account admission, appearance and calendar must all stay observable here.
+      val preferences = rememberUpdatedState(currentState<Preferences>().toSchoolWidgetPreferences())
+      val presentations = remember(auth, dashboard, settings) {
+        observeWidgetPresentation(
+          auth, dashboard, settings,
+          preferences = snapshotFlow { preferences.value },
+          dates = observeSchoolDate(),
+        )
+      }
+      val presentation by presentations.collectAsState(initial)
       SchoolOverviewWidgetContent(
         context = context,
-        model = model,
-        palette = palette,
+        model = presentation.model(auth),
+        palette = widgetPalette(context, presentation.settings),
       )
     }
   }

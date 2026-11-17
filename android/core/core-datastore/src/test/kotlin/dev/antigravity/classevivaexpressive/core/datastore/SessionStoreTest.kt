@@ -11,6 +11,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
@@ -24,6 +25,26 @@ import java.util.concurrent.TimeUnit
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionStoreTest {
   private val json = Json { encodeDefaults = true }
+
+  @Test fun observableEpochChangesWhenIdenticalLogoutReloginConflatesThePublicSession() = runTest {
+    val store = SessionStore(MemoryPersistence())
+    store.writeAuthSnapshot(passwordSnapshot())
+    val sessions = mutableListOf<UserSession?>()
+    val epochs = mutableListOf<Long>()
+    backgroundScope.launch { store.session.collect { sessions += it } }
+    backgroundScope.launch { store.dataEpoch.collect { epoch ->
+      assertEquals(store.captureAuthSnapshot().lease.epoch, epoch)
+      assertEquals(store.captureAuthSnapshot().snapshot?.session, store.session.value)
+      epochs += epoch
+    } }
+    runCurrent()
+    store.clear()
+    store.writeAuthSnapshot(passwordSnapshot())
+    runCurrent()
+    assertEquals(1, sessions.size)
+    assertEquals(2, epochs.size)
+    assertTrue(epochs.last() > epochs.first())
+  }
 
   @Test fun migratesLegacySessionAndSeparateCredentialsInOneDurableCommit() {
     val persistence = MemoryPersistence(
