@@ -85,7 +85,9 @@ class CieLoginActivity : ComponentActivity() {
         ?: CieLoginOutcome.Cancelled
       val nominal = if (outcome == CieLoginOutcome.Success && resultCode != Activity.RESULT_OK) CieLoginOutcome.Failed else outcome
       val cleaned = runCatching { intent?.getBooleanExtra(CleanupComplete, false) == true }.getOrDefault(false)
-      return CieLoginResult(nominal, cleaned)
+      val diagnostic = runCatching { intent?.getStringExtra(Diagnostic) }.getOrNull()
+        ?.let(::sanitizeDiagnostic)?.takeIf { nominal == CieLoginOutcome.UnsupportedNavigation }
+      return CieLoginResult(nominal, cleaned, diagnostic)
     }
   }
 
@@ -98,6 +100,8 @@ class CieLoginActivity : ComponentActivity() {
   private var deadline = 0L
   private var pageSequence = 0L
   @Volatile private var lastDocument: String? = null
+  /** Last main-frame request target: a server redirect to the callback never commits a document. */
+  @Volatile private var lastMainFrameRequest: String? = null
   @Volatile private var paConsumed = false
   private var loading by mutableStateOf(true)
   private var exchanging by mutableStateOf(false)
@@ -154,18 +158,19 @@ class CieLoginActivity : ComponentActivity() {
       finishWith(CieLoginOutcome.Failed)
       return
     }
-    browser.setDownloadListener { _, _, _, _, _ -> finishWith(CieLoginOutcome.UnsupportedNavigation) }
+    browser.setDownloadListener { url, _, _, _, _ -> refuse("download-${CieNavigationPolicy.hostOf(url)}") }
     browser.webViewClient = object : WebViewClient() {
       override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
         navigate(request.url.toString(), request.isForMainFrame)
 
       override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
         if (terminal.get() || paConsumed) return WebResourceResponse("text/plain", "UTF-8", 403, "Blocked", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
-        val source = lastDocument
+        val target = request.url.toString()
+        if (request.isForMainFrame && CieNavigationPolicy.allowsDocument(target)) lastMainFrameRequest = target
         return interceptCieRequest(request) { url ->
           runOnUiThread {
-            if (CieNavigationPolicy.isCallback(url)) acceptCallback(url, source, true)
-            else finishWith(CieLoginOutcome.UnsupportedNavigation)
+            if (CieNavigationPolicy.isCallback(url)) acceptCallback(url, true)
+            else refuse("documento-${CieNavigationPolicy.hostOf(url)}")
           }
         }
       }
@@ -174,10 +179,11 @@ class CieLoginActivity : ComponentActivity() {
         if (terminal.get()) return
         if (!CieNavigationPolicy.allowsDocument(url)) {
           view.stopLoading()
-          finishWith(CieLoginOutcome.UnsupportedNavigation)
+          refuse("pagina-${CieNavigationPolicy.hostOf(url)}")
           return
         }
         lastDocument = url
+        lastMainFrameRequest = url
         pageSequence++
         provider = CieNavigationPolicy.providerLabel(url)
         loading = true
@@ -273,7 +279,7 @@ class CieLoginActivity : ComponentActivity() {
   private fun navigate(url: String, mainFrame: Boolean): Boolean {
     if (terminal.get() || paConsumed) return true
     if (CieNavigationPolicy.isCallback(url)) {
-      acceptCallback(url, lastDocument, mainFrame)
+      acceptCallback(url, mainFrame)
       return true
     }
     if (!mainFrame) return !CieNavigationPolicy.allowsResource(url)
@@ -284,23 +290,35 @@ class CieLoginActivity : ComponentActivity() {
     if (url.startsWith("intent:")) {
       val parsed = runCatching { Intent.parseUri(url, Intent.URI_INTENT_SCHEME) }.getOrNull()
       val target = parsed?.data?.toString()
-      if ((parsed?.`package` == null || parsed.`package` == CieIdPackage) && target != null &&
-        CieNavigationPolicy.isCieIdHandoff(target) && lastDocument?.let(CieNavigationPolicy::allowsDocument) == true) openCieId(target)
-      else finishWith(CieLoginOutcome.UnsupportedNavigation)
+      val targetPackage = parsed?.`package`
+      when {
+        // The portal returns to «the app» with an intent: URL naming the official package.
+        target != null && CieNavigationPolicy.isCallback(target) &&
+          (targetPackage == null || targetPackage == CieNavigationPolicy.CallbackScheme) -> acceptCallback(target, mainFrame)
+        (targetPackage == null || targetPackage == CieIdPackage) && target != null &&
+          CieNavigationPolicy.isCieIdHandoff(target) && lastDocument?.let(CieNavigationPolicy::allowsDocument) == true -> openCieId(target)
+        else -> refuse("intent-${targetPackage ?: CieNavigationPolicy.hostOf(target)}")
+      }
       return true
     }
     if (!CieNavigationPolicy.allowsDocument(url)) {
-      finishWith(CieLoginOutcome.UnsupportedNavigation)
+      refuse("documento-${CieNavigationPolicy.hostOf(url)}")
       return true
     }
+    lastMainFrameRequest = url
     return false
   }
 
-  private fun acceptCallback(url: String, source: String?, mainFrame: Boolean) {
+  private fun acceptCallback(url: String, mainFrame: Boolean) {
     if (terminal.get() || paConsumed) return
-    val pa = CieNavigationPolicy.callbackPa(url, source, mainFrame)
-    if (pa == null || source != lastDocument) finishWith(CieLoginOutcome.UnsupportedNavigation) else exchange(pa)
+    // The callback is honoured only when the navigation that produced it belongs to the portal:
+    // either the committed page or, for a server redirect, the request that was redirected.
+    val source = lastMainFrameRequest?.takeIf(CieNavigationPolicy::isPortalDocument) ?: lastDocument
+    val (pa, rejection) = CieNavigationPolicy.callbackRejection(url, source, mainFrame)
+    if (pa == null) refuse(rejection ?: "callback") else exchange(pa)
   }
+
+  private fun refuse(diagnostic: String) = finishWith(CieLoginOutcome.UnsupportedNavigation, diagnostic)
 
   private fun exchange(pa: String) {
     if (terminal.get() || paConsumed) return
@@ -338,18 +356,20 @@ class CieLoginActivity : ComponentActivity() {
     runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$CieIdPackage"))) }
   }
 
-  private fun finishWith(outcome: CieLoginOutcome) {
+  private fun finishWith(outcome: CieLoginOutcome, diagnostic: String? = null) {
     if (!terminal.compareAndSet(false, true)) return
     pendingHandoff = null
     lastDocument = null
+    lastMainFrameRequest = null
     pageSequence++
     handler.removeCallbacksAndMessages(null)
     exchangeJob?.cancel()
     lifecycleScope.launch(NonCancellable) {
       val cleaned = runCatching { CieBrowserSession.finish(browserOwner, webView) }.isSuccess
       val destroyed = disposeBrowser()
-      setResult(if (outcome == CieLoginOutcome.Success) Activity.RESULT_OK else Activity.RESULT_CANCELED,
-        Intent().putExtra(Outcome, outcome.name).putExtra(CleanupComplete, cleaned && destroyed && !browserCleanupUncertain))
+      val result = Intent().putExtra(Outcome, outcome.name).putExtra(CleanupComplete, cleaned && destroyed && !browserCleanupUncertain)
+      diagnostic?.let(::sanitizeDiagnostic)?.let { result.putExtra(Diagnostic, it) }
+      setResult(if (outcome == CieLoginOutcome.Success) Activity.RESULT_OK else Activity.RESULT_CANCELED, result)
       finish()
     }
   }
@@ -391,6 +411,10 @@ class CieLoginActivity : ComponentActivity() {
     private const val AttemptEpoch = "cie_attempt_epoch"
     private const val Outcome = "cie_outcome"
     private const val CleanupComplete = "cie_cleanup_complete"
+    private const val Diagnostic = "cie_diagnostic"
+
+    internal fun sanitizeDiagnostic(value: String): String? =
+      value.lowercase(java.util.Locale.ROOT).filter { it in 'a'..'z' || it in '0'..'9' || it == '.' || it == '-' }.take(96).ifEmpty { null }
     private const val CieIdRequest = 4107
     private const val CieIdPackage = "it.ipzs.cieid"
     private const val TimeLimitMillis = 15 * 60_000L

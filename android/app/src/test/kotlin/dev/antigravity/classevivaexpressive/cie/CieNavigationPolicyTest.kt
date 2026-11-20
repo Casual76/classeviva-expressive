@@ -19,10 +19,39 @@ class CieNavigationPolicyTest {
     }
   }
 
-  @Test fun duplicateOrUnexpectedParametersAndMalformedTokensAreRejected() {
-    for (query in listOf("spidToken=$token&spidToken=$token", "spidToken=$token&pa=$token", "pa=$token", "spidToken=", "spidToken=not-a-jwt", "spidToken=a%0Ab.c", "spidToken=${"a".repeat(16_385)}.b.c")) {
-      assertNull(CieNavigationPolicy.callbackPa("eu.spaggiari.classevivastudente://spid-callback?$query", portal, true))
+  @Test fun duplicateOrMissingTokensAndMalformedTokensAreRejected() {
+    for (query in listOf("spidToken=$token&spidToken=$token", "pa=$token", "spidToken=", "spidToken=a%0Ab.c", "spidToken=a%20b.c", "spidToken=${"a".repeat(16_385)}.b.c")) {
+      assertNull(query, CieNavigationPolicy.callbackPa("eu.spaggiari.classevivastudente://spid-callback?$query", portal, true))
     }
+  }
+
+  @Test fun realPortalTokensNeedNotBeJwtsAndExtraParametersAreIgnored() {
+    val base64 = "AbC+d/Ef==.x_y-z~"
+    assertEquals(base64, CieNavigationPolicy.callbackPa("$callback".replace(token, base64), portal, true))
+    assertEquals("opaque-token-123", CieNavigationPolicy.callbackPa("eu.spaggiari.classevivastudente://spid-callback?spidToken=opaque-token-123", portal, true))
+    assertEquals(token, CieNavigationPolicy.callbackPa("$callback&app_package=eu.spaggiari.classevivastudente", portal, true))
+  }
+
+  @Test fun rejectionReasonsCarryNoTokenMaterial() {
+    val (_, source) = CieNavigationPolicy.callbackRejection(callback, "https://eid.istruzione.it/acs?SAMLResponse=secret", true)
+    assertEquals("callback-fonte-eid.istruzione.it", source)
+    val (_, invalid) = CieNavigationPolicy.callbackRejection("eu.spaggiari.classevivastudente://spid-callback?spidToken=se%0Acret", portal, true)
+    assertEquals("callback-token-7", invalid)
+    assertEquals("evil.example", CieNavigationPolicy.hostOf("https://evil.example/path?token=secret"))
+  }
+
+  @Test fun federationSiblingHostsAreAllowedButLookalikesAreNot() {
+    for (value in listOf("https://sso.spaggiari.eu/acs", "https://gateway.eid.istruzione.it/saml/acs", "https://iam.istruzione.it/sso", "https://www.servizicie.interno.gov.it/x")) {
+      assertTrue(value, CieNavigationPolicy.allowsDocument(value))
+    }
+    assertTrue(CieNavigationPolicy.isPortalDocument("https://sso.spaggiari.eu/acs"))
+    assertFalse(CieNavigationPolicy.isPortalDocument("https://iam.istruzione.it/sso"))
+    for (value in listOf("https://evilspaggiari.eu/", "https://spaggiari.eu.evil.example/", "https://istruzione.it.evil.example/", "https://interno.gov.it/", "https://evil.gov.it/")) {
+      assertFalse(value, CieNavigationPolicy.allowsDocument(value))
+    }
+    assertTrue(CieNavigationPolicy.allowsNetworkHost("sso.spaggiari.eu"))
+    assertFalse(CieNavigationPolicy.allowsNetworkHost("web.spaggiari.eu.evil.example"))
+    assertFalse(CieNavigationPolicy.allowsNetworkHost("127.0.0.1"))
   }
 
   @Test fun documentsAndPostTargetsCannotEscapeTheFederationOrigins() {

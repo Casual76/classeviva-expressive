@@ -4,4 +4,6 @@ package dev.antigravity.classevivaexpressive.cie
 data class CieLoginResult(
   val outcome: CieLoginOutcome,
   val browserCleanupComplete: Boolean,
+  /** Host-level reason for a refused navigation (never a path, query, token or cookie). */
+  val diagnostic: String? = null,
 )

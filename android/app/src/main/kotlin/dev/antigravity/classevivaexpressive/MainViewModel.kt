@@ -330,6 +330,10 @@ class MainViewModel @Inject constructor(
 
   fun completeCieLogin(result: CieLoginResult) {
     completeCieLogin(result.outcome)
+    // Host-level code only: lets a refused step of the real federation be reported and fixed.
+    if (result.diagnostic != null && authError.value == result.outcome.message) {
+      authError.value = "${result.outcome.message} Codice: ${result.diagnostic}"
+    }
     if (!result.browserCleanupComplete) viewModelScope.launch {
       accountNotifications.send(FluidNotification(
         id = "cie-cleanup:${syncNoticeSequence.incrementAndGet()}",

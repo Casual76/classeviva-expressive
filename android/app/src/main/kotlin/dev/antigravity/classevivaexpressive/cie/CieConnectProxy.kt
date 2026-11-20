@@ -26,13 +26,12 @@ import java.util.Locale
  * for example, data-only WebRTC/ICE can use UDP independently of an HTTP proxy.
  */
 internal class CieConnectProxy(
-  allowedHosts: Set<String> = CieNavigationPolicy.httpsResourceHosts,
+  private val allowsHost: (String) -> Boolean = CieNavigationPolicy::allowsNetworkHost,
   private val connect: (Socket, String, Int) -> Unit = { socket, host, port ->
     socket.connect(InetSocketAddress(host, port), ConnectTimeoutMillis)
   },
   maxTunnels: Int = 16,
 ) : Closeable {
-  private val hosts = allowedHosts.toSet()
   private val closed = AtomicBoolean()
   private val socketLock = Any()
   private val sockets = mutableSetOf<Socket>()
@@ -147,7 +146,7 @@ internal class CieConnectProxy(
     if (parts.size != 3 || parts[0] != "CONNECT" || parts[2] !in setOf("HTTP/1.0", "HTTP/1.1")) return null
     val authority = parts[1]
     val host = authority.removeSuffix(":443")
-    if (authority != "$host:443" || host !in hosts) return null
+    if (authority != "$host:443" || !allowsHost(host)) return null
     val headers = lines.drop(1).dropLast(2)
     if (headers.any { it.isEmpty() || ':' !in it }) return null
     val names = headers.map { it.substringBefore(':').lowercase(Locale.ROOT) }
