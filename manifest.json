@@ -23,15 +23,24 @@
       "sizeBytes": 34409316
     },
     "beta": {
-      "version": "7.17.0-beta.3",
-      "releaseDate": "2026-11-17",
-      "changelog": "## Notifiche e sincronizzazione\n\n- Toccando una notifica si apre il voto, il compito, l’evento, la comunicazione, la nota o l’assenza a cui si riferisce. Se il collegamento riguarda un altro account o anno, l’app lo spiega subito.\n- Aprire l’app o aggiornare una schermata non fa più perdere le novità alle notifiche. Le novità restano in attesa se Android blocca il canale, e gli aggiornamenti ai voti possono comparire insieme ai nuovi voti.\n- Quando una fonte del registro non risponde, l’app conserva i dati già salvati. L’aggiornamento rapido in sottofondo lascia disponibile la verifica completa dell’anno.\n\n## Consultazione quotidiana\n\n- La Bacheca apre il dettaglio dell’ultimo elemento toccato anche quando le risposte del registro arrivano fuori ordine.\n- L’Agenda mantiene il giorno selezionato. L’orario aggiorna il giorno e la settimana anche se l’app resta aperta.\n- Home, Voti e statistiche usano la stessa media. In ogni materia i voti contribuiscono secondo il loro peso.\n- Le notifiche aprono anche le assenze già giustificate. Lo storico mostra tutte le registrazioni disponibili.\n- Il widget conta tutti i voti da vedere, applica i filtri agli impegni prima di limitarne la visualizzazione e aggiorna il contenuto quando si esce dall’account.\n\n## Limiti della beta\n\nLe prove di navigazione usano dati sintetici su emulatore Android 15. La ricezione in sottofondo su telefoni reali e le operazioni che dipendono dalla scuola restano da collaudare.\n\nL’accesso CIE resta sperimentale. La beta precedente documenta un problema nell’accesso quando l’archivio protetto è illeggibile. Un nuovo login che fallisce al salvataggio può cancellare orari personalizzati, eventi e punteggi offline.",
-      "releaseTag": "beta-classeviva-expressive-v7.17.0-beta.3",
-      "apkAsset": "classeviva-expressive-7.17.0-beta.3.apk",
-      "sizeBytes": 34638821,
-      "sha256": "b8e7bc614334fca5b683f2058171781c19b6127f747ea501ac573a0258a565e2"
+      "version": "7.17.0-beta.4",
+      "releaseDate": "2026-11-20",
+      "changelog": "## Accesso con la CIE\n\n- Il ritorno dal Ministero al registro dopo «Prosegui» non viene più interrotto con «Il portale ha richiesto un collegamento non previsto». L’app ora accetta i passaggi del gateway del Ministero e di Spaggiari anche quando passano da altri indirizzi degli stessi enti (istruzione.it, spaggiari.eu, servizicie.interno.gov.it).\n- Il ritorno all’app viene riconosciuto anche quando il portale lo fa con un reindirizzamento diretto o con un collegamento Android, e anche quando il codice di accesso non ha il formato previsto in origine.\n- Se un passaggio viene ancora rifiutato, il messaggio d’errore riporta un breve codice con il solo nome dell’indirizzo coinvolto, così si può segnalarlo e correggerlo. Il codice non contiene token, cookie o dati personali.\n\n## Limiti della beta\n\nLe correzioni nascono da una prova reale fallita all’ultimo passaggio, ma il percorso completo con CieID non è ancora stato confermato sul telefono. L’accesso CIE resta sperimentale. Resta valido quanto scritto nella beta precedente sul problema dell’archivio protetto illeggibile.",
+      "releaseTag": "beta-classeviva-expressive-v7.17.0-beta.4",
+      "apkAsset": "classeviva-expressive-7.17.0-beta.4.apk",
+      "sizeBytes": 34638831,
+      "sha256": "68b577fdf369800545e05309d467c9bbdb23ea06801f88f550fc0d469e6a8174"
     },
     "history": [
+      {
+        "version": "7.17.0-beta.3",
+        "releaseDate": "2026-11-17",
+        "changelog": "## Notifiche e sincronizzazione\n\n- Toccando una notifica si apre il voto, il compito, l’evento, la comunicazione, la nota o l’assenza a cui si riferisce. Se il collegamento riguarda un altro account o anno, l’app lo spiega subito.\n- Aprire l’app o aggiornare una schermata non fa più perdere le novità alle notifiche. Le novità restano in attesa se Android blocca il canale, e gli aggiornamenti ai voti possono comparire insieme ai nuovi voti.\n- Quando una fonte del registro non risponde, l’app conserva i dati già salvati. L’aggiornamento rapido in sottofondo lascia disponibile la verifica completa dell’anno.\n\n## Consultazione quotidiana\n\n- La Bacheca apre il dettaglio dell’ultimo elemento toccato anche quando le risposte del registro arrivano fuori ordine.\n- L’Agenda mantiene il giorno selezionato. L’orario aggiorna il giorno e la settimana anche se l’app resta aperta.\n- Home, Voti e statistiche usano la stessa media. In ogni materia i voti contribuiscono secondo il loro peso.\n- Le notifiche aprono anche le assenze già giustificate. Lo storico mostra tutte le registrazioni disponibili.\n- Il widget conta tutti i voti da vedere, applica i filtri agli impegni prima di limitarne la visualizzazione e aggiorna il contenuto quando si esce dall’account.\n\n## Limiti della beta\n\nLe prove di navigazione usano dati sintetici su emulatore Android 15. La ricezione in sottofondo su telefoni reali e le operazioni che dipendono dalla scuola restano da collaudare.\n\nL’accesso CIE resta sperimentale. La beta precedente documenta un problema nell’accesso quando l’archivio protetto è illeggibile. Un nuovo login che fallisce al salvataggio può cancellare orari personalizzati, eventi e punteggi offline.",
+        "releaseTag": "beta-classeviva-expressive-v7.17.0-beta.3",
+        "apkAsset": "classeviva-expressive-7.17.0-beta.3.apk",
+        "sizeBytes": 34638821,
+        "sha256": "b8e7bc614334fca5b683f2058171781c19b6127f747ea501ac573a0258a565e2"
+      },
       {
         "version": "7.17.0-beta.2",
         "releaseDate": "2026-11-08",
