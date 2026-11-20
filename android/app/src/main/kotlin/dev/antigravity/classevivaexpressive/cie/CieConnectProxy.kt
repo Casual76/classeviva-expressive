@@ -6,6 +6,7 @@ import java.io.InputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.net.URI
 import java.net.Socket
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ArrayBlockingQueue
@@ -18,7 +19,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.Locale
 
 /**
- * An HTTP proxy for HTTPS CONNECT only. It sees a bounded CONNECT header and then copies opaque
+ * An HTTP proxy for HTTPS CONNECT and, towards the identity federation's own hosts only, plain
+ * HTTP requests (see [plainHttpRequest]). It sees a bounded CONNECT header and then copies opaque
  * bytes; TLS still terminates in WebView and the provider, without a local CA or TLS interception.
  * Every HTTP/HTTPS redirect needing another destination must pass the authority check before DNS or
  * an upstream socket connection. No URLs, headers or tunnel bytes are logged or retained.
@@ -27,6 +29,8 @@ import java.util.Locale
  */
 internal class CieConnectProxy(
   private val allowsHost: (String) -> Boolean = CieNavigationPolicy::allowsNetworkHost,
+  /** Hosts that may also be reached on another port or, as an HTTP request, over plain HTTP. */
+  private val allowsAnyPort: (String) -> Boolean = CieNavigationPolicy::isFederationHost,
   private val connect: (Socket, String, Int) -> Unit = { socket, host, port ->
     socket.connect(InetSocketAddress(host, port), ConnectTimeoutMillis)
   },
@@ -76,19 +80,22 @@ internal class CieConnectProxy(
     var upstream: Socket? = null
     try {
       client.soTimeout = HeaderTimeoutMillis
-      val host = allowedConnectHost(readHeader(client))
-      if (host == null) {
+      val header = readHeader(client)
+      val target = allowedConnectTarget(header)
+      val plain = if (target == null) plainHttpRequest(header) else null
+      val (host, port) = target ?: plain?.first ?: run {
         client.getOutputStream().write(Denied)
         return
       }
       val remote = Socket()
       upstream = remote
       if (!register(remote)) return
-      connect(remote, host, 443)
+      connect(remote, host, port)
       if (closed.get()) return
       remote.soTimeout = TunnelIdleMillis
       client.soTimeout = TunnelIdleMillis
-      client.getOutputStream().write(Connected)
+      if (plain != null) remote.getOutputStream().write(plain.second)
+      else client.getOutputStream().write(Connected)
       // At most one uplink and one downlink per admitted tunnel. No executor queue is unbounded.
       uplinks.execute {
         try { relay(client.getInputStream(), remote) }
@@ -140,19 +147,53 @@ internal class CieConnectProxy(
     return null
   }
 
-  private fun allowedConnectHost(header: String?): String? {
+  private fun allowedConnectTarget(header: String?): Pair<String, Int>? {
     val lines = header?.split("\r\n") ?: return null
     val parts = lines.first().split(' ')
     if (parts.size != 3 || parts[0] != "CONNECT" || parts[2] !in setOf("HTTP/1.0", "HTTP/1.1")) return null
     val authority = parts[1]
-    val host = authority.removeSuffix(":443")
-    if (authority != "$host:443" || !allowsHost(host)) return null
+    val host = authority.substringBeforeLast(':')
+    val port = authority.substringAfterLast(':').toIntOrNull()
+    if (port == null || port !in 1..65_535 || authority != "$host:$port") return null
+    if (!(if (port == 443) allowsHost(host) else allowsAnyPort(host))) return null
     val headers = lines.drop(1).dropLast(2)
     if (headers.any { it.isEmpty() || ':' !in it }) return null
     val names = headers.map { it.substringBefore(':').lowercase(Locale.ROOT) }
     if (names.any { it == "content-length" || it == "transfer-encoding" } || names.count { it == "host" } > 1) return null
     val statedHost = headers.firstOrNull { it.substringBefore(':').equals("host", ignoreCase = true) }?.substringAfter(':')?.trim()
-    return host.takeIf { statedHost == null || statedHost == authority }
+    return (host to port).takeIf { statedHost == null || statedHost == authority }
+  }
+
+  /**
+   * A plain-HTTP proxy request (absolute form) to a federation host. It is rewritten to origin form
+   * with `Connection: close`, so one upstream socket carries exactly this exchange; the body, if
+   * any, is then relayed as opaque bytes, like a tunnel.
+   */
+  private fun plainHttpRequest(header: String?): Pair<Pair<String, Int>, ByteArray>? {
+    val lines = header?.split("\r\n") ?: return null
+    val parts = lines.first().split(' ')
+    if (parts.size != 3 || parts[0] !in setOf("GET", "POST", "HEAD") || parts[2] !in setOf("HTTP/1.0", "HTTP/1.1")) return null
+    val uri = runCatching { URI(parts[1]) }.getOrNull() ?: return null
+    val host = uri.host ?: return null
+    if (uri.scheme != "http" || uri.rawUserInfo != null || uri.rawFragment != null || !allowsAnyPort(host)) return null
+    val port = if (uri.port == -1) 80 else uri.port
+    if (port !in 1..65_535 || uri.rawAuthority != host + if (uri.port == -1) "" else ":${uri.port}") return null
+    val headers = lines.drop(1).dropLast(2)
+    if (headers.any { it.isEmpty() || ':' !in it }) return null
+    val names = headers.map { it.substringBefore(':').trim().lowercase(Locale.ROOT) }
+    if (names.count { it == "host" } > 1 || "content-length" in names && "transfer-encoding" in names) return null
+    val statedHost = headers.firstOrNull { it.substringBefore(':').trim().equals("host", ignoreCase = true) }
+      ?.substringAfter(':')?.trim()
+    if (statedHost != null && !statedHost.equals(uri.rawAuthority, ignoreCase = true)) return null
+    val hopByHop = setOf("connection", "proxy-connection", "keep-alive", "proxy-authorization")
+    val path = uri.rawPath.orEmpty().ifEmpty { "/" } + (uri.rawQuery?.let { "?$it" } ?: "")
+    val rebuilt = buildString {
+      append(parts[0]).append(' ').append(path).append(' ').append(parts[2]).append("\r\n")
+      if (statedHost == null) append("Host: ").append(uri.rawAuthority).append("\r\n")
+      headers.filterIndexed { index, _ -> names[index] !in hopByHop }.forEach { append(it).append("\r\n") }
+      append("Connection: close\r\n\r\n")
+    }
+    return (host to port) to rebuilt.toByteArray(StandardCharsets.US_ASCII)
   }
 
   override fun close() {

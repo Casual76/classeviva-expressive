@@ -20,14 +20,22 @@ class CieConnectProxyTest {
       val headers = listOf(
         "CONNECT evil.example:443 HTTP/1.1\r\n\r\n",
         "CONNECT web.spaggiari.eu.evil.example:443 HTTP/1.1\r\n\r\n",
-        "CONNECT web.spaggiari.eu:80 HTTP/1.1\r\n\r\n",
-        "CONNECT web.spaggiari.eu:444 HTTP/1.1\r\n\r\n",
+        "CONNECT www.google.com:80 HTTP/1.1\r\n\r\n",
+        "CONNECT fonts.gstatic.com:444 HTTP/1.1\r\n\r\n",
+        "CONNECT web.spaggiari.eu:0443 HTTP/1.1\r\n\r\n",
+        "CONNECT web.spaggiari.eu:70000 HTTP/1.1\r\n\r\n",
         "CONNECT user@web.spaggiari.eu:443 HTTP/1.1\r\n\r\n",
         "CONNECT https://web.spaggiari.eu:443 HTTP/1.1\r\n\r\n",
         "CONNECT 127.0.0.1:443 HTTP/1.1\r\n\r\n",
         "CONNECT [::1]:443 HTTP/1.1\r\n\r\n",
-        "GET http://web.spaggiari.eu/ HTTP/1.1\r\nHost: web.spaggiari.eu\r\n\r\n",
-        "POST http://web.spaggiari.eu/ HTTP/1.1\r\nContent-Length: 7\r\n\r\nmarker!",
+        "GET http://www.google.com/ HTTP/1.1\r\nHost: www.google.com\r\n\r\n",
+        "POST http://evil.example/ HTTP/1.1\r\nContent-Length: 7\r\n\r\nmarker!",
+        "GET http://web.spaggiari.eu.evil.example/ HTTP/1.1\r\n\r\n",
+        "GET http://user@eid.istruzione.it/ HTTP/1.1\r\n\r\n",
+        "GET https://eid.istruzione.it/ HTTP/1.1\r\n\r\n",
+        "PUT http://eid.istruzione.it/ HTTP/1.1\r\n\r\n",
+        "GET http://eid.istruzione.it/ HTTP/1.1\r\nHost: evil.example\r\n\r\n",
+        "POST http://eid.istruzione.it/ HTTP/1.1\r\nContent-Length: 1\r\nTransfer-Encoding: chunked\r\n\r\n",
         "CONNECT web.spaggiari.eu:443 HTTP/1.1\r\nHost: evil.example:443\r\n\r\n",
         "CONNECT web.spaggiari.eu:443 HTTP/1.1\r\nHost: web.spaggiari.eu:443\r\nHost: web.spaggiari.eu:443\r\n\r\n",
         "CONNECT web.spaggiari.eu:443 HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n",
@@ -79,6 +87,58 @@ class CieConnectProxyTest {
         }
         server.join(2_000)
       }
+    }
+  }
+
+  @Test fun federationHostsMayUseAnotherHttpsPort() {
+    val ports = mutableListOf<Int>()
+    ServerSocket(0).use { upstream ->
+      thread(isDaemon = true) { runCatching { upstream.accept().use { it.getInputStream().read() } } }
+      CieConnectProxy(connect = { socket, host, port ->
+        assertEquals("eid.istruzione.it", host)
+        ports += port
+        socket.connect(InetSocketAddress("127.0.0.1", upstream.localPort), 2_000)
+      }).use { proxy ->
+        client(proxy).use { connection ->
+          connection.getOutputStream().write("CONNECT eid.istruzione.it:8443 HTTP/1.1\r\n\r\n".toByteArray(US_ASCII))
+          assertTrue(readHeader(connection.getInputStream()).startsWith("HTTP/1.1 200"))
+        }
+      }
+    }
+    assertEquals(listOf(8443), ports)
+  }
+
+  @Test fun plainHttpToAFederationHostIsForwardedInOriginFormWithItsBody() {
+    ServerSocket(0).use { upstream ->
+      val received = CountDownLatch(1)
+      var request = ""
+      thread(isDaemon = true) {
+        upstream.accept().use { remote ->
+          remote.soTimeout = 2_000
+          val header = readHeader(remote.getInputStream())
+          val body = ByteArray(5).also { readExactly(remote.getInputStream(), it) }
+          request = header + String(body, US_ASCII)
+          received.countDown()
+          remote.getOutputStream().write("HTTP/1.1 302 Found\r\nLocation: https://web.spaggiari.eu/x\r\nContent-Length: 0\r\n\r\n".toByteArray(US_ASCII))
+        }
+      }
+      var target: Pair<String, Int>? = null
+      CieConnectProxy(connect = { socket, host, port ->
+        target = host to port
+        socket.connect(InetSocketAddress("127.0.0.1", upstream.localPort), 2_000)
+      }).use { proxy ->
+        client(proxy).use { connection ->
+          connection.getOutputStream().write(
+            "POST http://eid.istruzione.it/acs?x=1 HTTP/1.1\r\nHost: eid.istruzione.it\r\nProxy-Connection: keep-alive\r\nContent-Length: 5\r\n\r\nA=b&c".toByteArray(US_ASCII),
+          )
+          assertTrue(readHeader(connection.getInputStream()).startsWith("HTTP/1.1 302"))
+        }
+        assertTrue(received.await(2, TimeUnit.SECONDS))
+      }
+      assertEquals("eid.istruzione.it" to 80, target)
+      assertTrue(request, request.startsWith("POST /acs?x=1 HTTP/1.1\r\nHost: eid.istruzione.it\r\n"))
+      assertFalse(request, request.contains("Proxy-Connection", ignoreCase = true))
+      assertTrue(request, request.contains("Connection: close\r\n\r\nA=b&c"))
     }
   }
 

@@ -27,21 +27,33 @@ internal object CieNavigationPolicy {
     uri.port in setOf(-1, 443) && uri.host != null &&
     uri.rawAuthority == uri.host + if (uri.port == 443) ":443" else ""
 
+  /**
+   * The federation's own endpoints are taken as the providers publish them: the real flow reached
+   * eid.istruzione.it with a URL that was not plain HTTPS on 443 right after «Prosegui». Plain HTTP
+   * and explicit ports are accepted for these hosts only; every other host stays HTTPS on 443.
+   */
+  private fun safeFederation(uri: URI): Boolean = (uri.scheme == "https" || uri.scheme == "http") &&
+    uri.rawUserInfo == null && uri.host != null && federationHost(uri.host) &&
+    (uri.port == -1 || uri.port in 1..65_535) &&
+    uri.rawAuthority == uri.host + if (uri.port == -1) "" else ":${uri.port}"
+
   private fun inDomain(host: String, domain: String) = host == domain || host.endsWith(".$domain")
   private fun federationHost(host: String?): Boolean = host != null && hostPattern.matches(host) &&
     (host in documentHosts || federationDomains.any { inDomain(host, it) })
 
   /** The CONNECT fence and the document policy agree on the same set of hosts. */
   fun allowsNetworkHost(host: String): Boolean = host in httpsResourceHosts || federationHost(host)
+  /** Hosts that may also be reached over plain HTTP or on a port other than 443. */
+  fun isFederationHost(host: String): Boolean = federationHost(host)
 
-  fun allowsDocument(value: String): Boolean = parse(value)?.let { safeHttps(it) && federationHost(it.host) } == true
+  fun allowsDocument(value: String): Boolean = parse(value)?.let(::safeFederation) == true
   fun isPortalDocument(value: String): Boolean = parse(value)?.let { uri ->
-    safeHttps(uri) && federationHost(uri.host) && inDomain(uri.host, portalDomain)
+    safeFederation(uri) && inDomain(uri.host, portalDomain)
   } == true
   fun allowsResource(value: String): Boolean {
     if (value.startsWith("data:image/")) return true
     if (value.startsWith("blob:")) return allowsDocument(value.removePrefix("blob:"))
-    return parse(value)?.let { safeHttps(it) && allowsNetworkHost(it.host) } == true
+    return parse(value)?.let { safeFederation(it) || safeHttps(it) && allowsNetworkHost(it.host) } == true
   }
 
   fun isCallback(value: String): Boolean = parse(value)?.scheme == CallbackScheme
@@ -86,6 +98,14 @@ internal object CieNavigationPolicy {
       inDomain(host, "servizicie.interno.gov.it") -> "CieID"
       else -> "Accesso con la CIE"
     }
+  }
+
+  /** Scheme, host and explicit port (never path, query or fragment), reduced to a safe alphabet. */
+  fun targetOf(value: String?): String {
+    val uri = value?.let(::parse) ?: return hostOf(value)
+    val port = if (uri.port == -1) "" else "-${uri.port}"
+    val user = if (uri.rawUserInfo != null) "-utente" else ""
+    return "${uri.scheme ?: "x"}-${hostOf(value)}$port$user"
   }
 
   /** A host name only (never path, query or fragment), reduced to a safe alphabet. */

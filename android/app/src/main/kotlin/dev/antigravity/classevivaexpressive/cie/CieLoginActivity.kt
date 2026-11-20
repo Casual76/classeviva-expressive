@@ -158,7 +158,7 @@ class CieLoginActivity : ComponentActivity() {
       finishWith(CieLoginOutcome.Failed)
       return
     }
-    browser.setDownloadListener { url, _, _, _, _ -> refuse("download-${CieNavigationPolicy.hostOf(url)}") }
+    browser.setDownloadListener { url, _, _, _, _ -> refuse("download-${CieNavigationPolicy.targetOf(url)}") }
     browser.webViewClient = object : WebViewClient() {
       override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
         navigate(request.url.toString(), request.isForMainFrame)
@@ -170,7 +170,7 @@ class CieLoginActivity : ComponentActivity() {
         return interceptCieRequest(request) { url ->
           runOnUiThread {
             if (CieNavigationPolicy.isCallback(url)) acceptCallback(url, true)
-            else refuse("documento-${CieNavigationPolicy.hostOf(url)}")
+            else refuse("documento-${CieNavigationPolicy.targetOf(url)}")
           }
         }
       }
@@ -179,7 +179,7 @@ class CieLoginActivity : ComponentActivity() {
         if (terminal.get()) return
         if (!CieNavigationPolicy.allowsDocument(url)) {
           view.stopLoading()
-          refuse("pagina-${CieNavigationPolicy.hostOf(url)}")
+          refuse("pagina-${CieNavigationPolicy.targetOf(url)}")
           return
         }
         lastDocument = url
@@ -302,7 +302,7 @@ class CieLoginActivity : ComponentActivity() {
       return true
     }
     if (!CieNavigationPolicy.allowsDocument(url)) {
-      refuse("documento-${CieNavigationPolicy.hostOf(url)}")
+      refuse("documento-${CieNavigationPolicy.targetOf(url)}")
       return true
     }
     lastMainFrameRequest = url

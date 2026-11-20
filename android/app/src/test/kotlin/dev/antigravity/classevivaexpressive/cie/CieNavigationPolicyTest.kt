@@ -10,7 +10,7 @@ class CieNavigationPolicyTest {
 
   @Test fun callbackRequiresTrustedMainDocumentAndExactAuthority() {
     assertEquals(token, CieNavigationPolicy.callbackPa(callback, portal, true))
-    for (source in listOf(null, "https://web.spaggiari.eu.evil.example/", "https://evil.example/?web.spaggiari.eu", "http://web.spaggiari.eu/", "https://eid.istruzione.it/")) {
+    for (source in listOf(null, "https://web.spaggiari.eu.evil.example/", "https://evil.example/?web.spaggiari.eu", "http://web.spaggiari.eu.evil.example/", "https://eid.istruzione.it/")) {
       assertNull(CieNavigationPolicy.callbackPa(callback, source, true))
     }
     assertNull(CieNavigationPolicy.callbackPa(callback, portal, false))
@@ -49,6 +49,13 @@ class CieNavigationPolicyTest {
     for (value in listOf("https://evilspaggiari.eu/", "https://spaggiari.eu.evil.example/", "https://istruzione.it.evil.example/", "https://interno.gov.it/", "https://evil.gov.it/")) {
       assertFalse(value, CieNavigationPolicy.allowsDocument(value))
     }
+    // The real flow reached eid.istruzione.it with a URL that was not HTTPS on 443.
+    for (value in listOf("http://eid.istruzione.it/acs", "https://eid.istruzione.it:8443/acs", "http://web.spaggiari.eu:8080/x")) {
+      assertTrue(value, CieNavigationPolicy.allowsDocument(value))
+    }
+    assertFalse(CieNavigationPolicy.allowsDocument("https://eid.istruzione.it:0/"))
+    assertEquals("http-eid.istruzione.it", CieNavigationPolicy.targetOf("http://eid.istruzione.it/acs?SAMLResponse=secret"))
+    assertEquals("https-eid.istruzione.it-8443", CieNavigationPolicy.targetOf("https://eid.istruzione.it:8443/acs"))
     assertTrue(CieNavigationPolicy.allowsNetworkHost("sso.spaggiari.eu"))
     assertFalse(CieNavigationPolicy.allowsNetworkHost("web.spaggiari.eu.evil.example"))
     assertFalse(CieNavigationPolicy.allowsNetworkHost("127.0.0.1"))
@@ -58,7 +65,7 @@ class CieNavigationPolicyTest {
     assertTrue(CieNavigationPolicy.allowsDocument(CieNavigationPolicy.StartUrl))
     assertTrue(CieNavigationPolicy.allowsDocument("https://eid.istruzione.it/login"))
     assertTrue(CieNavigationPolicy.allowsDocument("https://idserver.servizicie.interno.gov.it/idp/login/livello2"))
-    for (value in listOf("https://web.spaggiari.eu.attacker.test/", "https://web.spaggiari.eu:444/", "https://user:pass@web.spaggiari.eu/", "http://web.spaggiari.eu/", "file:///etc/passwd", "content://provider/file", "javascript:alert(1)", "https://example.org/form")) {
+    for (value in listOf("https://web.spaggiari.eu.attacker.test/", "https://www.google.com:444/", "https://user:pass@web.spaggiari.eu/", "http://www.google.com/", "ftp://web.spaggiari.eu/", "file:///etc/passwd", "content://provider/file", "javascript:alert(1)", "https://example.org/form")) {
       assertFalse(value, CieNavigationPolicy.allowsDocument(value))
       assertFalse(value, CieNavigationPolicy.allowsResource(value))
     }
