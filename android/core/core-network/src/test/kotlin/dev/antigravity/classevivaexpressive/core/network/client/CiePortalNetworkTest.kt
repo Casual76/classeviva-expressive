@@ -49,12 +49,35 @@ class CiePortalNetworkTest {
   }
 
   @Test fun identityParserSeparatesRouteIdAndRejectsAmbiguousOrParentIdentities() {
-    val identity = parseCiePortalIdentity(Json.parseToJsonElement("""{"id":9123456,"ident":"S1234567X"}"""))
+    fun parse(body: String) = parseCiePortalIdentity(Json.parseToJsonElement(body), "S1234567X")
+    val identity = parse("""{"id":9123456,"ident":"S1234567X"}""")
     assertEquals("9123456", identity?.routeId)
     assertEquals("S1234567X", identity?.ident)
-    assertNull(parseCiePortalIdentity(Json.parseToJsonElement("""{"id":1234567,"ident":"G1234567X"}""")))
-    assertNull(parseCiePortalIdentity(Json.parseToJsonElement("""{"id":1234567}""")))
-    assertNull(parseCiePortalIdentity(Json.parseToJsonElement("""{"id":1234567,"ident":"S1234567X","user":{"ident":"S7654321X"}}""")))
+    assertNull(parse("""{"id":1234567,"ident":"G1234567X"}"""))
+    assertNull(parse("""{"id":1234567}"""))
+    assertNull(parse("""{"id":1234567,"ident":"S1234567X","user":{"ident":"S7654321X"}}"""))
+  }
+
+  /** The shape the real portal returns (values invented): no `ident`, a numeric `id` and a role. */
+  @Test fun realWhoamiWithoutIdentIsBoundByStudentRoleAndNumericId() {
+    fun parse(body: String) = parseCiePortalIdentity(Json.parseToJsonElement(body), "S1234567X")
+    val real = """{"id":"1234567","account_type":"S","sede_codice":"XXXX0000","anno_scol":"2026","cognome":"Rossi","nome":"Mario","login_type":null}"""
+    assertEquals(CiePortalIdentity("S1234567X", "1234567"), parse(real))
+    assertNull(parse(real.replace("\"1234567\"", "\"7654321\"")))
+    assertNull(parse(real.replace("\"S\"", "\"G\"")))
+    assertNull(parse("""{"id":"1234567"}"""))
+    assertNull(parse("""{"id":"1234567","account_type":"S","user":{"account_type":"G"}}"""))
+  }
+
+  @Test fun importAcceptsTheRealWhoamiShapeAndReadsHomeworks() = runBlocking {
+    server.enqueue(json("""{"id":"1234567","account_type":"S","cognome":"Rossi","nome":"Mario","login_type":null}"""))
+    assertTrue(portal.importCieCookies("PHPSESSID=initial", "S1234567X"))
+    assertEquals("/rest/w1/misc/whoami", server.takeRequest().path)
+    assertEquals("1234567", storage.readAuthSnapshot()?.portal?.portalRouteId)
+    assertEquals(PortalAuthenticationState.READY, storage.readAuthSnapshot()?.authenticationState?.portal)
+    server.enqueue(json("""{"homeworks":[]}"""))
+    portal.getHomeworksIndex("1234567")
+    assertEquals("/rest/w1/students/1234567/homeworks/index", server.takeRequest().path)
   }
 
   @Test fun importValidatesWhoamiAndUsesPortalRoutingId() = runBlocking {

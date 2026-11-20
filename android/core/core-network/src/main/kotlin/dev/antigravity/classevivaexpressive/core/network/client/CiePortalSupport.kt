@@ -11,16 +11,29 @@ class ClassevivaPortalReauthenticationException : ClassevivaNetworkException(
 
 internal data class CiePortalIdentity(val ident: String, val routeId: String)
 
-/** The routing ID can differ from the student identity; neither may be guessed from the other. */
-internal fun parseCiePortalIdentity(payload: JsonElement): CiePortalIdentity? {
+/**
+ * The portal identity behind a cookie session, checked against the CIE session's [expectedIdent].
+ *
+ * When WHOAMI states an `ident`, that is the identity and the routing ID is read separately. The
+ * real portal (verified on a phone, Nov 2026) answers instead with `{id, account_type, …}` and no
+ * `ident`: then the account must be a student's (`account_type` "S") and `id` must be exactly the
+ * numeric part of the expected identity, the same number the REST session uses.
+ */
+internal fun parseCiePortalIdentity(payload: JsonElement, expectedIdent: String): CiePortalIdentity? {
   val root = payload.obj()
   val scopes = listOf(root, root["data"].obj(), root["user"].obj(), root["student"].obj())
   val identities = scopes.mapNotNull { it.string("ident", "identity") }.distinct()
-  val ident = identities.singleOrNull()?.takeIf { CieProtocol.studentId(it) != null } ?: return null
   val routeIds = scopes.mapNotNull { it.string("id", "studentId", "usrId", "userId") }
     .filter { it.matches(Regex("[0-9]+")) }.distinct()
   val routeId = routeIds.singleOrNull() ?: return null
-  return CiePortalIdentity(ident, routeId)
+  if (identities.isNotEmpty()) {
+    val ident = identities.singleOrNull()?.takeIf { CieProtocol.studentId(it) != null } ?: return null
+    return CiePortalIdentity(ident, routeId)
+  }
+  val accountTypes = scopes.mapNotNull { it.string("account_type", "accountType") }.distinct()
+  if (accountTypes.size != 1 || !accountTypes.single().equals("S", ignoreCase = true)) return null
+  val expectedId = CieProtocol.studentId(expectedIdent) ?: return null
+  return CiePortalIdentity(expectedIdent, routeId).takeIf { routeId == expectedId }
 }
 
 internal fun Cookie.storageKey(): String = "$domain|$path|$name"

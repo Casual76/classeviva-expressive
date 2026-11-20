@@ -54,6 +54,7 @@ import dev.antigravity.classevivaexpressive.core.designsystem.theme.ClassevivaEx
 import dev.antigravity.classevivaexpressive.core.domain.model.AppSettings
 import dev.antigravity.classevivaexpressive.core.domain.model.AuthRepository
 import dev.antigravity.classevivaexpressive.core.domain.model.SettingsRepository
+import dev.antigravity.classevivaexpressive.core.network.client.logCieDiag
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
@@ -328,6 +329,12 @@ class CieLoginActivity : ComponentActivity() {
     webView?.stopLoading()
     val cookies = try { CookieManager.getInstance().getCookie(CieNavigationPolicy.PortalOrigin).orEmpty() }
       catch (_: Exception) { finishWith(CieLoginOutcome.Failed); return }
+    // Names only: which cookies the browser holds for each portal path at the hand-over.
+    for (probe in CookieProbePaths) runCatching {
+      val names = CookieManager.getInstance().getCookie(probe).orEmpty().split(';').map { it.substringBefore('=').trim() }.filter(String::isNotEmpty)
+      logCieDiag("cookies ${probe.removePrefix("https://")}: ${names.size} [${names.joinToString(",")}]")
+    }
+    logCieDiag("exchange from ${CieNavigationPolicy.targetOf(lastDocument)} via ${CieNavigationPolicy.targetOf(lastMainFrameRequest)}")
     exchangeJob = lifecycleScope.launch {
       try {
         val result = authRepository.loginWithCie(pa, cookies, expectedEpoch = attemptEpoch)
@@ -417,6 +424,10 @@ class CieLoginActivity : ComponentActivity() {
       value.lowercase(java.util.Locale.ROOT).filter { it in 'a'..'z' || it in '0'..'9' || it == '.' || it == '-' }.take(96).ifEmpty { null }
     private const val CieIdRequest = 4107
     private const val CieIdPackage = "it.ipzs.cieid"
+    private val CookieProbePaths = listOf(
+      "https://web.spaggiari.eu/", "https://web.spaggiari.eu/rest/w1/misc/whoami",
+      "https://web.spaggiari.eu/home/app/default/", "https://web.spaggiari.eu/auth-p7/", "https://spaggiari.eu/",
+    )
     private const val TimeLimitMillis = 15 * 60_000L
     private val CompletionScript = """
       (() => {

@@ -461,18 +461,24 @@ class PortalClient private constructor(
   suspend fun importCieCookies(cookieHeader: String, expectedIdent: String): Boolean = withPortalOperation {
     sessionMutex.withLock {
       val capture = sessionStorage.captureAuthSnapshot()
-      val snapshot = capture.snapshot ?: return@withLock false
-      val session = snapshot.session ?: return@withLock false
+      val names = cookieHeader.split(';').map { it.substringBefore('=').trim() }
+      logCieDiag("import: ${names.size} cookie [${names.joinToString(",")}] header=${cookieHeader.length}")
+      val snapshot = capture.snapshot ?: return@withLock false.also { logCieDiag("import: no snapshot") }
+      val session = snapshot.session ?: return@withLock false.also { logCieDiag("import: no session") }
       if (session.authMethod != AuthMethod.CIE || session.ident != expectedIdent ||
-        CieProtocol.studentId(expectedIdent) != session.studentId) return@withLock false
+        CieProtocol.studentId(expectedIdent) != session.studentId) {
+        logCieDiag("import: session mismatch method=${session.authMethod} identMatch=${session.ident == expectedIdent} " +
+          "idMatch=${CieProtocol.studentId(expectedIdent) == session.studentId}")
+        return@withLock false
+      }
       val lease = checkNotNull(operationLease.get())
       requireCurrentOperation(lease)
-      if (capture.lease != lease) return@withLock false
-      val cookies = parseCieCookieHeader(cookieHeader, cookieOrigin) ?: return@withLock false
-      when (verifyCiePortal(lease, expectedIdent, cookies, snapshot.portal, invalidateRejected = false)) {
-        CiePortalVerification.READY -> true
-        else -> false
-      }
+      if (capture.lease != lease) return@withLock false.also { logCieDiag("import: lease changed") }
+      val cookies = parseCieCookieHeader(cookieHeader, cookieOrigin)
+        ?: return@withLock false.also { logCieDiag("import: header rejected duplicates=${names.size - names.distinct().size}") }
+      val outcome = verifyCiePortal(lease, expectedIdent, cookies, snapshot.portal, invalidateRejected = false)
+      logCieDiag("import: verification $outcome")
+      outcome == CiePortalVerification.READY
     }
   }
 
@@ -531,10 +537,15 @@ class PortalClient private constructor(
     requireCurrentOperation(lease)
     val result = when (attempt) {
       is PortalRestAttempt.Success -> attempt
-      is PortalRestAttempt.Failure -> return if (attempt.sessionRejected) rejected() else CiePortalVerification.UNAVAILABLE
+      is PortalRestAttempt.Failure -> {
+        logCieDiag("whoami: failure rejected=${attempt.sessionRejected} ${attempt.error.javaClass.simpleName}: ${attempt.error.message}")
+        return if (attempt.sessionRejected) rejected() else CiePortalVerification.UNAVAILABLE
+      }
     }
-    val identity = parseCiePortalIdentity(result.payload) ?: return rejected()
-    if (identity.ident != expectedIdent) return rejected()
+    logCieDiag("whoami: ${result.code} ${result.contentType} shape=${jsonShape(result.payload)}")
+    val identity = parseCiePortalIdentity(result.payload, expectedIdent)
+      ?: return rejected().also { logCieDiag("whoami: identity not parsed") }
+    if (identity.ident != expectedIdent) return rejected().also { logCieDiag("whoami: other identity") }
     if (!sessionStorage.accountGuard.isCurrent(lease, requireReady = false)) return CiePortalVerification.UNAVAILABLE
     val studentId = CieProtocol.studentId(expectedIdent) ?: return rejected()
     val verified = PortalSessionSnapshot(identity.ident, studentId, identity.routeId,
@@ -842,8 +853,8 @@ class PortalClient private constructor(
       ?: return null
     requireCurrentOperation()
     if (sessionStorage.readCurrentSession()?.authMethod == AuthMethod.CIE) {
-      val identity = parseCiePortalIdentity(result.payload)
-        ?.takeIf { it.ident == sessionStorage.readCurrentSession()?.ident } ?: return null
+      val ident = sessionStorage.readCurrentSession()?.ident ?: return null
+      val identity = parseCiePortalIdentity(result.payload, ident)?.takeIf { it.ident == ident } ?: return null
       return identity.routeId.also { portalStudentId = it }
     }
     return parseWhoAmIStudentId(result.payload)?.also { portalStudentId = it }
