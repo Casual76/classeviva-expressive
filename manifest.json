@@ -23,15 +23,24 @@
       "sizeBytes": 34409316
     },
     "beta": {
-      "version": "7.17.0-beta.5",
+      "version": "7.17.0-beta.6",
       "releaseDate": "2026-11-20",
-      "changelog": "## Accesso con la CIE\n\n- Dopo «Prosegui» l’accesso si fermava ancora con il codice `documento-eid.istruzione.it`. Il gateway del Ministero risponde a un indirizzo che non è HTTPS standard (porta 443). L’app ora accetta per i soli indirizzi del Ministero, di Spaggiari e di CieID anche HTTP semplice e porte diverse. Tutti gli altri indirizzi restano bloccati come prima.\n- Se un passaggio viene ancora rifiutato, il codice d’errore indica ora anche il protocollo e la porta, per esempio `documento-http-eid.istruzione.it`. Non contiene token, cookie o dati personali.\n\n## Limiti della beta\n\nIl percorso completo con CieID non è ancora stato confermato sul telefono: l’accesso CIE resta sperimentale. Resta valido quanto scritto nelle beta precedenti sul problema dell’archivio protetto illeggibile.",
-      "releaseTag": "beta-classeviva-expressive-v7.17.0-beta.5",
-      "apkAsset": "classeviva-expressive-7.17.0-beta.5.apk",
-      "sizeBytes": 34638837,
-      "sha256": "a150b65a48c82e77f76633caf5eaa28771259a334cc611744c969b4fcdeac94d"
+      "changelog": "## Compiti con l’accesso CIE\n\n- Con l’accesso CIE la sezione Compiti restava ferma su «Accesso al portale scaduto». Il portale accettava la sessione, ma l’app non riconosceva la sua risposta perché cercava un campo che il portale reale non invia. Ora lo studente si riconosce dal ruolo e dal numero identificativo, che devono coincidere con quelli dell’accesso CIE.\n- **Dopo l’aggiornamento rifai una volta l’accesso con la CIE**: la sessione del portale dell’accesso precedente non era stata salvata.\n- Il log dell’app (`adb logcat -s CieDiag`) registra il passaggio dalla CIE al portale. Contiene solo nomi dei cookie, codici di risposta e struttura dei dati, mai valori, token o dati personali.\n\n## Limiti della beta\n\nL’accesso CIE funziona sul telefono dalla beta.5. La lettura dei compiti con la sessione CIE è corretta in base a una risposta reale del portale, ma va ancora confermata sul telefono. Resta valido quanto scritto nelle beta precedenti sul problema dell’archivio protetto illeggibile.",
+      "releaseTag": "beta-classeviva-expressive-v7.17.0-beta.6",
+      "apkAsset": "classeviva-expressive-7.17.0-beta.6.apk",
+      "sizeBytes": 34655191,
+      "sha256": "71d37fca720dd87fc3a216ac3d06d5da803a0cc60da026af7a76be2b8e1593ab"
     },
     "history": [
+      {
+        "version": "7.17.0-beta.5",
+        "releaseDate": "2026-11-20",
+        "changelog": "## Accesso con la CIE\n\n- Dopo «Prosegui» l’accesso si fermava ancora con il codice `documento-eid.istruzione.it`. Il gateway del Ministero risponde a un indirizzo che non è HTTPS standard (porta 443). L’app ora accetta per i soli indirizzi del Ministero, di Spaggiari e di CieID anche HTTP semplice e porte diverse. Tutti gli altri indirizzi restano bloccati come prima.\n- Se un passaggio viene ancora rifiutato, il codice d’errore indica ora anche il protocollo e la porta, per esempio `documento-http-eid.istruzione.it`. Non contiene token, cookie o dati personali.\n\n## Limiti della beta\n\nIl percorso completo con CieID non è ancora stato confermato sul telefono: l’accesso CIE resta sperimentale. Resta valido quanto scritto nelle beta precedenti sul problema dell’archivio protetto illeggibile.",
+        "releaseTag": "beta-classeviva-expressive-v7.17.0-beta.5",
+        "apkAsset": "classeviva-expressive-7.17.0-beta.5.apk",
+        "sizeBytes": 34638837,
+        "sha256": "a150b65a48c82e77f76633caf5eaa28771259a334cc611744c969b4fcdeac94d"
+      },
       {
         "version": "7.17.0-beta.4",
         "releaseDate": "2026-11-20",
