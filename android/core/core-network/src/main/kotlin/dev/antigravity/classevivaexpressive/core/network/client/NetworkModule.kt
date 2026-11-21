@@ -338,5 +338,6 @@ object NetworkModule {
   fun providePortalClient(
     sessionStorage: SessionStorage,
     loggingInterceptor: HttpLoggingInterceptor,
-  ): PortalClient = PortalClient(sessionStorage, loggingInterceptor)
+    apiService: ClassevivaApiService,
+  ): PortalClient = PortalClient(sessionStorage, loggingInterceptor) { fetchPortalTicket(apiService) }
 }

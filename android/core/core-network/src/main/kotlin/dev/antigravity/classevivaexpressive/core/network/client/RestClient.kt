@@ -158,9 +158,17 @@ class ClassevivaRestClient @Inject constructor(
 
   suspend fun getHomeworks(): List<Homework> = withContext(Dispatchers.IO) {
     val session = requireSession()
-    apiCall {
-      extractArray(apiService.getHomeworks(session.studentId).toPayload(), "homeworks", "items", "agenda")
-        .map(::normalizeHomework)
+    try {
+      apiCall {
+        val payload = apiService.getHomeworks(session.studentId).toPayload()
+        // The official app (5.12.4) reads its Compiti here with the token: the shape tells whether
+        // this can replace the portal session. Keys and types only, never values.
+        logCieDiag("v1-homeworks: shape=${jsonShape(payload)}")
+        extractArray(payload, "homeworks", "items", "agenda").map(::normalizeHomework)
+      }
+    } catch (error: Exception) {
+      logHomeworksIndexFailure("v1-homeworks", error)
+      throw error
     }
   }
 

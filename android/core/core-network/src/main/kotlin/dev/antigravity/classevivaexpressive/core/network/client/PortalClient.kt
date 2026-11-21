@@ -17,7 +17,6 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
-import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asContextElement
@@ -146,17 +145,20 @@ class PortalClient private constructor(
   private val portalOrigin: HttpUrl,
   private val cookieOrigin: HttpUrl,
   private val nowEpochMillis: () -> Long = System::currentTimeMillis,
+  private val ticketSource: PortalTicketSource = PortalTicketSource { null },
 ) {
-  @Inject
+  /** Built by `NetworkModule.providePortalClient`, which wires the ticket to the REST API. */
   constructor(
     sessionStorage: SessionStorage,
     loggingInterceptor: HttpLoggingInterceptor,
+    ticketSource: PortalTicketSource,
   ) : this(
     sessionStorage = sessionStorage,
     loggingInterceptor = loggingInterceptor,
     portalLoginUrl = PortalLoginUrl,
     portalOrigin = PortalLoginUrl.toHttpUrl(),
     cookieOrigin = PortalLoginUrl.toHttpUrl(),
+    ticketSource = ticketSource,
   )
 
   internal constructor(
@@ -165,6 +167,7 @@ class PortalClient private constructor(
     portalLoginUrl: String,
     cookieOrigin: HttpUrl = portalLoginUrl.toHttpUrl(),
     nowEpochMillis: () -> Long = System::currentTimeMillis,
+    ticketSource: PortalTicketSource = PortalTicketSource { null },
   ) : this(
     sessionStorage = sessionStorage,
     loggingInterceptor = loggingInterceptor,
@@ -172,6 +175,7 @@ class PortalClient private constructor(
     portalOrigin = portalLoginUrl.toHttpUrl(),
     cookieOrigin = cookieOrigin,
     nowEpochMillis = nowEpochMillis,
+    ticketSource = ticketSource,
   )
 
   private val cookieStore = ConcurrentHashMap<String, MutableList<Cookie>>()
@@ -393,6 +397,7 @@ class PortalClient private constructor(
       val ident = currentSession.ident ?: throw ClassevivaPortalReauthenticationException()
       if (forceRefresh) {
         val expected = checkNotNull(operationCookies.get())
+        if (renewCiePortal(lease, ident, expected.portal)) return@withLock
         if (!updateCiePortalState(lease, ident, null, PortalAuthenticationState.REAUTHENTICATION_REQUIRED,
             expected.portal, enforceExpectedPortal = true)) {
           throw ClassevivaNetworkException("L'accesso al portale è cambiato. Ripeti l'operazione.")
@@ -402,10 +407,15 @@ class PortalClient private constructor(
       }
       if (cookieAccountLease == lease && verifiedCieIdent == ident && hasUsablePortalSessionCookie()) return@withLock
       val saved = snapshot.portal?.takeIf { it.ident == ident && it.studentId == currentSession.studentId }
-        ?: throw ClassevivaPortalReauthenticationException()
+      if (saved == null) {
+        if (renewCiePortal(lease, ident, snapshot.portal)) return@withLock
+        throw ClassevivaPortalReauthenticationException()
+      }
       when (verifyCiePortal(lease, ident, saved.cookies, saved, invalidateRejected = true)) {
         CiePortalVerification.READY -> Unit
         CiePortalVerification.REJECTED -> {
+          // The rejection already dropped the saved session: the renewal starts from none.
+          if (renewCiePortal(lease, ident, null)) return@withLock
           throw ClassevivaPortalReauthenticationException()
         }
         CiePortalVerification.UNAVAILABLE -> {
@@ -480,6 +490,60 @@ class PortalClient private constructor(
       logCieDiag("import: verification $outcome")
       outcome == CiePortalVerification.READY
     }
+  }
+
+  /**
+   * A CIE account has no password to log in again with, so an expired portal cookie used to mean
+   * a new CIE login. The REST session renews itself (spidrf), and from it the portal can be opened
+   * again the way the official app does: a one-time ticket from `v1/auth/ticket`, redeemed at
+   * `restbridge.php`. The resulting cookies pass the same WHOAMI check as the imported ones.
+   */
+  private suspend fun renewCiePortal(
+    lease: AccountSessionLease,
+    ident: String,
+    expectedPortal: PortalSessionSnapshot?,
+  ): Boolean {
+    val ticket = runCatching { ticketSource.ticket() }.getOrNull()
+    if (ticket == null) {
+      logCieDiag("renew: no ticket")
+      return false
+    }
+    requireCurrentOperation(lease)
+    val cookies = redeemPortalTicket(lease, ticket) ?: return false
+    val outcome = verifyCiePortal(lease, ident, cookies, expectedPortal, invalidateRejected = false)
+    logCieDiag("renew: verification $outcome")
+    return outcome == CiePortalVerification.READY
+  }
+
+  /** Follows the bridge by hand, inside the portal origin only, into a private cookie jar. */
+  private fun redeemPortalTicket(lease: AccountSessionLease, ticket: String): List<StoredPortalCookie>? {
+    val candidate = CookieCandidate(lease, emptyList())
+    val hops = mutableListOf<String>()
+    candidateCookies.set(candidate)
+    try {
+      var url = portalOrigin.newBuilder().encodedPath(PortalRestBridgePath).query(null)
+        .addQueryParameter("t", ticket).build()
+      for (hop in 0 until 6) {
+        val next = portalAssetHttpClient.newCall(
+          portalRequest().url(url).header("User-Agent", PortalUserAgent).build(),
+        ).execute().use { response ->
+          hops += "${response.code}:${url.encodedPath.take(64)}"
+          if (response.isRedirect) response.header("Location")?.let(url::resolve) else null
+        } ?: break
+        if (!isPortalOrigin(next)) {
+          hops += "fuori:" + next.host.filter { it.isLetterOrDigit() || it == '.' || it == '-' }.take(64)
+          break
+        }
+        url = next
+      }
+    } catch (error: Exception) {
+      hops += error.javaClass.simpleName
+    } finally {
+      candidateCookies.remove()
+    }
+    val cookies = candidate.metadata.values.filter { it.expiresAt?.let { expiry -> expiry > nowEpochMillis() } != false }
+    logCieDiag("bridge: ${hops.joinToString(" > ")} cookies=[${cookies.map { it.name }.distinct().joinToString(",")}]")
+    return cookies.takeIf { it.isNotEmpty() }
   }
 
   /** In-memory cookies become usable only after their complete verified snapshot is durable. */

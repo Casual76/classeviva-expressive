@@ -135,6 +135,72 @@ class CiePortalNetworkTest {
     assertEquals("stale-token", storage.readCurrentSession()?.token)
   }
 
+  /** The official app's way back into the portal: a REST ticket redeemed at restbridge.php. */
+  @Test fun expiredPortalIsRenewedFromTheRestTicketWithoutANewCieLogin() = runBlocking {
+    var tickets = 0
+    portal = client(ticket = { tickets++; "opaque-ticket+1/2=" })
+    server.enqueue(whoami())
+    assertTrue(portal.importCieCookies("PHPSESSID=expired-later", "S1234567X"))
+    server.takeRequest()
+    server.enqueue(MockResponse().setResponseCode(401))
+    server.enqueue(MockResponse().setResponseCode(302).setHeader("Location", "/home/app/default/menu.php")
+      .addHeader("Set-Cookie", "PHPSESSID=renewed; Path=/"))
+    server.enqueue(MockResponse().setBody("<html></html>"))
+    server.enqueue(whoami())
+    server.enqueue(json("""{"homeworks":[]}"""))
+    portal.getHomeworksIndex("1234567")
+    assertEquals("PHPSESSID=expired-later", server.takeRequest().getHeader("Cookie"))
+    val bridge = server.takeRequest()
+    assertEquals("/repx/app/default/restbridge.php", bridge.requestUrl?.encodedPath)
+    assertEquals("opaque-ticket+1/2=", bridge.requestUrl?.queryParameter("t"))
+    assertNull(bridge.getHeader("Cookie"))
+    val landing = server.takeRequest()
+    assertEquals("/home/app/default/menu.php", landing.path)
+    assertEquals("PHPSESSID=renewed", landing.getHeader("Cookie"))
+    val check = server.takeRequest()
+    assertEquals("/rest/w1/misc/whoami", check.path)
+    assertEquals("PHPSESSID=renewed", check.getHeader("Cookie"))
+    val homeworks = server.takeRequest()
+    assertEquals("/rest/w1/students/9123456/homeworks/index", homeworks.path)
+    assertEquals("PHPSESSID=renewed", homeworks.getHeader("Cookie"))
+    assertEquals(1, tickets)
+    assertEquals(PortalAuthenticationState.READY, storage.readAuthSnapshot()?.authenticationState?.portal)
+    assertEquals("renewed", storage.readAuthSnapshot()?.portal?.cookies?.single()?.value)
+  }
+
+  @Test fun aTicketThatOpensNoStudentSessionStillAsksForTheCie() = runBlocking {
+    portal = client(ticket = { "opaque-ticket" })
+    server.enqueue(whoami())
+    assertTrue(portal.importCieCookies("PHPSESSID=expired-later", "S1234567X"))
+    server.enqueue(MockResponse().setResponseCode(401))
+    server.enqueue(MockResponse().setBody("<html></html>").addHeader("Set-Cookie", "PHPSESSID=anonymous; Path=/"))
+    server.enqueue(MockResponse().setResponseCode(401))
+    try { portal.getHomeworksIndex("1234567"); fail("An anonymous portal session must not be adopted") }
+    catch (_: ClassevivaPortalReauthenticationException) { }
+    assertEquals(PortalAuthenticationState.REAUTHENTICATION_REQUIRED, storage.readAuthSnapshot()?.authenticationState?.portal)
+    assertNull(storage.readAuthSnapshot()?.portal)
+    assertEquals(RestAuthenticationState.READY, storage.readAuthSnapshot()?.authenticationState?.rest)
+  }
+
+  @Test fun anExpiredStateIsRenewedOnTheNextReadWithoutTheOldCookie() = runBlocking {
+    portal = client(ticket = { "opaque-ticket" })
+    server.enqueue(whoami())
+    assertTrue(portal.importCieCookies("PHPSESSID=expired-later", "S1234567X"))
+    server.enqueue(MockResponse().setResponseCode(401))
+    server.enqueue(MockResponse().setResponseCode(500))
+    try { portal.getHomeworksIndex("1234567"); fail() } catch (_: ClassevivaPortalReauthenticationException) { }
+    assertNull(storage.readAuthSnapshot()?.portal)
+    repeat(3) { server.takeRequest() }
+    val restored = client(ticket = { "opaque-ticket" })
+    server.enqueue(MockResponse().setBody("<html></html>").addHeader("Set-Cookie", "PHPSESSID=renewed; Path=/"))
+    server.enqueue(whoami())
+    server.enqueue(json("""{"homeworks":[]}"""))
+    restored.getHomeworksIndex("1234567")
+    assertEquals("/repx/app/default/restbridge.php", server.takeRequest().requestUrl?.encodedPath)
+    assertEquals("PHPSESSID=renewed", server.takeRequest().getHeader("Cookie"))
+    assertEquals(PortalAuthenticationState.READY, storage.readAuthSnapshot()?.authenticationState?.portal)
+  }
+
   @Test fun serverCookieRotationPreservesRealAttributesAndDistinctPaths() = runBlocking {
     server.enqueue(whoami().addHeader("Set-Cookie", "PHPSESSID=rotated; Path=/; HttpOnly; Max-Age=3600")
       .addHeader("Set-Cookie", "PHPSESSID=scoped; Path=/rest; Max-Age=1800"))
@@ -371,9 +437,12 @@ class CiePortalNetworkTest {
     assertEquals(1, server.requestCount)
   }
 
-  private fun client(clock: () -> Long = System::currentTimeMillis) = PortalClient(
+  private fun client(
+    clock: () -> Long = System::currentTimeMillis,
+    ticket: suspend () -> String? = { null },
+  ) = PortalClient(
     storage, HttpLoggingInterceptor(), server.url("/home/app/default/login.php").toString(),
-    "https://web.spaggiari.eu/".toHttpUrl(), clock,
+    "https://web.spaggiari.eu/".toHttpUrl(), clock, PortalTicketSource { ticket() },
   )
   private fun whoami(ident: String = "S1234567X") = json("""{"id":9123456,"ident":"$ident"}""")
   private fun json(body: String) = MockResponse().setHeader("Content-Type", "application/json").setBody(body)

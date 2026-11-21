@@ -186,6 +186,10 @@ interface ClassevivaApiService {
   @GET("w1/students/{id}/homeworks/index")
   suspend fun getHomeworksIndex(@Path("id") studentId: String): Response<ResponseBody>
 
+  /** One-time ticket that opens the web portal for this REST session. See [PortalTicketSource]. */
+  @GET("v1/auth/ticket")
+  suspend fun getPortalTicket(): Response<ResponseBody>
+
   @POST("v1/students/{id}/documents")
   suspend fun getDocumentsPost(@Path("id") studentId: String): JsonElement
 
