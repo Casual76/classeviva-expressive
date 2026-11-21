@@ -88,7 +88,10 @@ import org.junit.Test
 
 class SchoolSyncCoordinatorTest {
 
-  private val restClient = mockk<ClassevivaRestClient>(relaxed = true)
+  private val restClient = mockk<ClassevivaRestClient>(relaxed = true).also { client ->
+    // Without this a relaxed mock answers the token route with an empty section.
+    coEvery { client.getHomeworksSection() } throws ClassevivaNetworkException("v1 non disponibile")
+  }
   private val portalClient = mockk<PortalClient>(relaxed = true)
   private val sessionStore = testSessionStore(null)
   private val schoolYearStore = mockk<SchoolYearStore>(relaxed = true)
@@ -661,7 +664,22 @@ class SchoolSyncCoordinatorTest {
   }
 
   @Test
-  fun refreshHomeworks_readsTheSectionThroughThePortalFirst() = runTest {
+  fun refreshHomeworks_readsTheSectionWithTheTokenBeforeThePortal() = runTest {
+    homeworkTestCache()
+    coEvery { restClient.getHomeworksSection() } returns listOf(dedicatedHomework())
+    coEvery { restClient.getAgenda(any(), any()) } returns emptyList()
+    val coordinator = buildCoordinator()
+
+    val result = coordinator.refreshHomeworks(force = true)
+
+    assertEquals(listOf("hw-1"), result.map { it.id })
+    coVerify(exactly = 0) { portalClient.getHomeworksIndex(any()) }
+    coVerify(exactly = 0) { restClient.getHomeworksIndex() }
+    coVerify(exactly = 0) { restClient.getHomeworks() }
+  }
+
+  @Test
+  fun refreshHomeworks_readsTheSectionThroughThePortalWhenTheTokenRouteFails() = runTest {
     homeworkTestCache()
     coEvery { restClient.currentStudentId() } returns "55"
     coEvery { portalClient.getHomeworksIndex("55") } returns listOf(dedicatedHomework())

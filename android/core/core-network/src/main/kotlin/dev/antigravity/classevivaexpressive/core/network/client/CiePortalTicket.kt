@@ -14,7 +14,8 @@ fun interface PortalTicketSource {
 }
 
 internal const val PortalRestBridgePath = "/repx/app/default/restbridge.php"
-private val ticketPattern = Regex("[A-Za-z0-9._~+/=-]{8,4096}")
+// Printable ASCII without spaces: the real ticket (Nov 2026, ~160 chars) is not plain base64.
+private fun usableTicket(value: String): Boolean = value.length in 8..4096 && value.all { it in '!'..'~' }
 
 /** Never logs the ticket: only the HTTP code and the JSON shape. */
 internal suspend fun fetchPortalTicket(api: ClassevivaApiService): String? {
@@ -29,5 +30,8 @@ internal suspend fun fetchPortalTicket(api: ClassevivaApiService): String? {
   }
   val payload = runCatching { Json.parseToJsonElement(text) }.getOrNull()
   logCieDiag("ticket: ${response.code()} shape=${jsonShape(payload)}")
-  return payload.obj().string("ticket")?.takeIf(ticketPattern::matches)
+  val ticket = payload.obj().string("ticket") ?: return null
+  // Which punctuation it uses (never the ticket): tells how it must travel in the URL.
+  logCieDiag("ticket: len=${ticket.length} punct=[${ticket.filterNot(Char::isLetterOrDigit).toSet().sorted().joinToString("")}]")
+  return ticket.takeIf(::usableTicket)
 }

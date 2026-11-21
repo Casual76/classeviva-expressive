@@ -663,6 +663,34 @@ class RestClientNetworkTest {
     }
   }
 
+  /** The official app's route: v1 with the token, answering in the shape of the w1 section. */
+  @Test
+  fun getHomeworksSection_readsV1WithTheTokenInTheSectionShape() = runBlocking {
+    setActiveSession(token = "token-hw", studentId = "312345")
+    server.enqueue(jsonResponse("""{ "items": [$HomeworksIndexItem] }"""))
+
+    val homework = restClient.getHomeworksSection().single()
+    val request = server.takeRequest()
+
+    assertEquals("/rest/v1/students/312345/homeworks", request.path)
+    assertEquals("token-hw", request.getHeader("Z-Auth-Token"))
+    assertEquals("hw-48213", homework.id)
+    assertEquals("BIANCHI ANNA", homework.teacher)
+  }
+
+  @Test
+  fun getHomeworksSection_rejectsAnotherShapeInsteadOfReadingItAsEmpty() = runBlocking {
+    setActiveSession(token = "token-hw", studentId = "312345")
+    server.enqueue(jsonResponse("""{ "homeworks": [] }"""))
+
+    try {
+      restClient.getHomeworksSection()
+      fail("A response without items is not the section")
+    } catch (exception: ClassevivaNetworkException) {
+      assertTrue(exception.message.orEmpty().contains("Compiti"))
+    }
+  }
+
   @Test
   fun getHomeworksIndex_callsW1WithTokenAndParsesItems() = runBlocking {
     setActiveSession(token = "token-hw", studentId = "312345")

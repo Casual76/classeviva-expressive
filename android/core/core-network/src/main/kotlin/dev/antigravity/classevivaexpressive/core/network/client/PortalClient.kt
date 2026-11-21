@@ -521,13 +521,21 @@ class PortalClient private constructor(
     val hops = mutableListOf<String>()
     candidateCookies.set(candidate)
     try {
+      // The ticket arrives already percent-encoded (it contains '%'): it travels as issued.
       var url = portalOrigin.newBuilder().encodedPath(PortalRestBridgePath).query(null)
-        .addQueryParameter("t", ticket).build()
+        .addEncodedQueryParameter("t", ticket).build()
       for (hop in 0 until 6) {
         val next = portalAssetHttpClient.newCall(
           portalRequest().url(url).header("User-Agent", PortalUserAgent).build(),
         ).execute().use { response ->
           hops += "${response.code}:${url.encodedPath.take(64)}"
+          if (!response.isSuccessful && !response.isRedirect) {
+            // The error page's title only (a generic server message, never a value of ours).
+            val title = runCatching { response.peekBody(64_000).string() }.getOrDefault("")
+              .let { Regex("<title>([^<]{0,80})</title>", RegexOption.IGNORE_CASE).find(it)?.groupValues?.get(1) }
+              ?.filter { it.isLetterOrDigit() || it == ' ' || it == '-' }?.trim()
+            if (!title.isNullOrEmpty()) hops += "titolo:$title"
+          }
           if (response.isRedirect) response.header("Location")?.let(url::resolve) else null
         } ?: break
         if (!isPortalOrigin(next)) {

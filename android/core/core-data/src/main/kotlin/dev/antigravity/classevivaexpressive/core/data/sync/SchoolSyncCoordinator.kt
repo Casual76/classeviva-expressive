@@ -1519,19 +1519,23 @@ class SchoolSyncCoordinator @Inject constructor(
   }
 
   /**
-   * La sezione Compiti: con la sessione del portale, e col token REST solo se quella non va.
+   * La sezione Compiti: col token REST su `v1`, poi con la sessione del portale, poi `w1` col token.
    *
-   * L'ordine viene dalla prova sul dispositivo (30 set 2026): col token la sezione risponde 401,
-   * con i cookie del portale 200 e i compiti. Il token resta dietro, perche' costa una richiesta e
-   * copre il giorno in cui il portale rifiutasse l'accesso con la password.
+   * Dal 21 nov 2026 (prova su un account CIE) `v1/students/{id}/homeworks` risponde col token con
+   * la stessa forma della sezione `w1`, come la legge l'app ufficiale: non dipende dalla sessione
+   * del portale, che con la CIE scade senza una password per rientrare. Il portale resta il primo
+   * ripiego (30 set 2026: `w1` col token 401, coi cookie 200); `w1` col token chiude la fila.
    */
   private suspend fun fetchDedicatedHomeworks(): Result<List<Homework>> {
+    val viaToken = runSyncCatching { restClient.getHomeworksSection() }
+    if (viaToken.isSuccess) return viaToken
     val viaPortal = runSyncCatching { portalClient.getHomeworksIndex(restClient.currentStudentId()) }
     if (viaPortal.isSuccess) return viaPortal
     val viaRest = runSyncCatching { restClient.getHomeworksIndex() }
     if (viaRest.isSuccess) return viaRest
     return Result.failure(
       viaPortal.exceptionOrNull()
+        ?: viaToken.exceptionOrNull()
         ?: viaRest.exceptionOrNull()
         ?: ClassevivaNetworkException("La sezione Compiti non e' raggiungibile."),
     )

@@ -158,16 +158,32 @@ class ClassevivaRestClient @Inject constructor(
 
   suspend fun getHomeworks(): List<Homework> = withContext(Dispatchers.IO) {
     val session = requireSession()
+    apiCall {
+      extractArray(apiService.getHomeworks(session.studentId).toPayload(), "homeworks", "items", "agenda")
+        .map(::normalizeHomework)
+    }
+  }
+
+  /**
+   * La sezione Compiti col token REST, la strada dell'app ufficiale (5.12.4).
+   *
+   * `v1/students/{id}/homeworks` risponde con la stessa forma di `w1/.../homeworks/index`
+   * (`items[]` con `evtId`, `homeworkDesc`, `expiryDate`, … — visto il 21 nov 2026 su un account
+   * CIE, 25 voci). Col token non scade come la sessione del portale, che con la CIE non ha una
+   * password per rientrare. Una risposta senza `items` non e' la sezione: si passa alle altre strade.
+   */
+  suspend fun getHomeworksSection(): List<Homework> = withContext(Dispatchers.IO) {
+    val session = requireSession()
     try {
-      apiCall {
-        val payload = apiService.getHomeworks(session.studentId).toPayload()
-        // The official app (5.12.4) reads its Compiti here with the token: the shape tells whether
-        // this can replace the portal session. Keys and types only, never values.
+      // Validated outside apiCall, which would turn this app error into a network one.
+      val payload = apiCall { apiService.getHomeworks(session.studentId).toPayload() }
+      if (payload["items"] !is kotlinx.serialization.json.JsonArray) {
         logCieDiag("v1-homeworks: shape=${jsonShape(payload)}")
-        extractArray(payload, "homeworks", "items", "agenda").map(::normalizeHomework)
+        throw ClassevivaNetworkException("La sezione Compiti non ha risposto nella forma attesa.")
       }
+      normalizeHomeworkIndex(payload).also { logHomeworksIndexAttempt("rest-v1", 200, null, it.size) }
     } catch (error: Exception) {
-      logHomeworksIndexFailure("v1-homeworks", error)
+      logHomeworksIndexFailure("rest-v1", error)
       throw error
     }
   }

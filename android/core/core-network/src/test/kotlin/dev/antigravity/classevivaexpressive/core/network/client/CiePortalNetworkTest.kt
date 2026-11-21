@@ -138,7 +138,7 @@ class CiePortalNetworkTest {
   /** The official app's way back into the portal: a REST ticket redeemed at restbridge.php. */
   @Test fun expiredPortalIsRenewedFromTheRestTicketWithoutANewCieLogin() = runBlocking {
     var tickets = 0
-    portal = client(ticket = { tickets++; "opaque-ticket+1/2=" })
+    portal = client(ticket = { tickets++; "opaque%2Bticket%3D" })
     server.enqueue(whoami())
     assertTrue(portal.importCieCookies("PHPSESSID=expired-later", "S1234567X"))
     server.takeRequest()
@@ -152,7 +152,7 @@ class CiePortalNetworkTest {
     assertEquals("PHPSESSID=expired-later", server.takeRequest().getHeader("Cookie"))
     val bridge = server.takeRequest()
     assertEquals("/repx/app/default/restbridge.php", bridge.requestUrl?.encodedPath)
-    assertEquals("opaque-ticket+1/2=", bridge.requestUrl?.queryParameter("t"))
+    assertEquals("t=opaque%2Bticket%3D", bridge.requestUrl?.encodedQuery)
     assertNull(bridge.getHeader("Cookie"))
     val landing = server.takeRequest()
     assertEquals("/home/app/default/menu.php", landing.path)
