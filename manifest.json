@@ -24,15 +24,24 @@
       "sha256": "d964909cd44341a08cadd29b89c6d5b847c04a7c0aeeceba165475bd11fda34a"
     },
     "beta": {
-      "version": "7.17.1-beta.1",
+      "version": "7.17.1-beta.2",
       "releaseDate": "2026-11-21",
-      "changelog": "# Classeviva Expressive 7.17.1-beta.1\n\n## Compiti con l’accesso CIE, anche dopo ore\n\n- Con la CIE la sessione del portale (quella che serve ai Compiti) scadeva dopo un po’, e l’app chiedeva di rifare l’accesso con la CIE. Con le credenziali non succedeva perché l’app rientra da sola con la password, che con la CIE non c’è.\n- Ora, quando la sessione del portale scade, l’app la riapre da sola come fa l’app ufficiale: chiede al registro un ticket monouso con l’accesso CIE già attivo (che si rinnova da solo) e lo usa per aprire il portale. La nuova sessione passa lo stesso controllo d’identità di quella creata al login.\n- Se il rinnovo non riesce, l’app continua a chiedere di rifare l’accesso con la CIE, come prima.\n- Se l’avviso «Accesso al portale scaduto» è già comparso, basta aggiornare: l’app prova a rientrare senza la CIE.\n\n## Limiti della beta\n\nIl passaggio dal ticket al portale è ricostruito dall’app ufficiale e non ha documentazione pubblica: va confermato sul telefono. Il log (`adb logcat -s CieDiag`) mostra ogni passaggio, cioè i codici di risposta, i percorsi senza parametri e i nomi dei cookie, mai valori, token o dati personali.",
-      "releaseTag": "beta-classeviva-expressive-v7.17.1-beta.1",
-      "apkAsset": "classeviva-expressive-7.17.1-beta.1.apk",
-      "sizeBytes": 34655201,
-      "sha256": "5912501357db2b75954c2b441c468336e4cd3a235bcfdbb4d1126a32bba976d0"
+      "changelog": "# Classeviva Expressive 7.17.1-beta.2\n\n## Con la CIE niente più «Accesso al portale scaduto»\n\n- **Compiti:** ora si leggono con l’accesso CIE stesso (`v1/students/…/homeworks`), come fa l’app ufficiale, e non dipendono più dalla sessione del portale. Sul telefono vengono letti tutti i compiti (25) senza passare dal portale. Vale anche per chi accede con le credenziali: una richiesta in meno e nessun accesso al portale in sottofondo.\n- **Colloqui, pagella e azioni in Bacheca:** quando la sessione del portale scade, l’app la riapre da sola con un ticket monouso dell’accesso CIE, senza chiedere di rifare la CIE. Provato sul telefono: portale riaperto e identità verificata in meno di un secondo.\n- Corretto un errore della beta.1: il ticket arriva già codificato per l’indirizzo e veniva codificato una seconda volta, così il portale lo rifiutava.\n\n## Limiti della beta\n\nResta da capire l’avviso d’errore che compare un istante al momento del login con la CIE. Resta valido anche quanto scritto nelle beta precedenti sul problema dell’archivio protetto illeggibile.",
+      "releaseTag": "beta-classeviva-expressive-v7.17.1-beta.2",
+      "apkAsset": "classeviva-expressive-7.17.1-beta.2.apk",
+      "sizeBytes": 34655199,
+      "sha256": "1fa11864537a8558b508447014bfecec8d51ed71c6d7cdf28e9492127089fb5f"
     },
     "history": [
+      {
+        "version": "7.17.1-beta.1",
+        "releaseDate": "2026-11-21",
+        "changelog": "# Classeviva Expressive 7.17.1-beta.1\n\n## Compiti con l’accesso CIE, anche dopo ore\n\n- Con la CIE la sessione del portale (quella che serve ai Compiti) scadeva dopo un po’, e l’app chiedeva di rifare l’accesso con la CIE. Con le credenziali non succedeva perché l’app rientra da sola con la password, che con la CIE non c’è.\n- Ora, quando la sessione del portale scade, l’app la riapre da sola come fa l’app ufficiale: chiede al registro un ticket monouso con l’accesso CIE già attivo (che si rinnova da solo) e lo usa per aprire il portale. La nuova sessione passa lo stesso controllo d’identità di quella creata al login.\n- Se il rinnovo non riesce, l’app continua a chiedere di rifare l’accesso con la CIE, come prima.\n- Se l’avviso «Accesso al portale scaduto» è già comparso, basta aggiornare: l’app prova a rientrare senza la CIE.\n\n## Limiti della beta\n\nIl passaggio dal ticket al portale è ricostruito dall’app ufficiale e non ha documentazione pubblica: va confermato sul telefono. Il log (`adb logcat -s CieDiag`) mostra ogni passaggio, cioè i codici di risposta, i percorsi senza parametri e i nomi dei cookie, mai valori, token o dati personali.",
+        "releaseTag": "beta-classeviva-expressive-v7.17.1-beta.1",
+        "apkAsset": "classeviva-expressive-7.17.1-beta.1.apk",
+        "sizeBytes": 34655201,
+        "sha256": "5912501357db2b75954c2b441c468336e4cd3a235bcfdbb4d1126a32bba976d0"
+      },
       {
         "version": "7.17.0",
         "releaseDate": "2026-11-20",
