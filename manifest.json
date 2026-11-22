@@ -15,22 +15,22 @@
       "ref": "main"
     },
     "stable": {
-      "version": "7.17.0",
-      "releaseDate": "2026-11-20",
-      "changelog": "## Accesso con la CIE\n\n- Nuovo «Entra con la CIE» accanto alle credenziali, anche per rinnovare l’accesso dell’account corrente senza perdere i dati offline. Serve l’app CieID ufficiale. Vale per un profilo studente; genitori e più figli non sono supportati.\n- La sessione REST si rinnova da sola. La sessione del portale (Compiti, colloqui e le altre funzioni del sito) viene presa dall’accesso CIE e verificata con il portale. Se scade, l’app chiede di rifare l’accesso e intanto conserva i dati già salvati.\n- Se un passaggio dell’accesso viene rifiutato, il messaggio d’errore riporta un breve codice con il solo indirizzo coinvolto, così si può segnalarlo.\n- Isolamento tra account più rigoroso per sincronizzazione, notifiche, lavori in sottofondo, backup e download.\n- Nelle Informazioni, un ringraziamento a **Leone**: «Metodo [omissis] nella fossa dei leoni: è entrato fra le API di Spaggiari ed è uscito con il token.»\n\n## Notifiche e sincronizzazione\n\n- Toccando una notifica si apre il voto, il compito, l’evento, la comunicazione, la nota o l’assenza a cui si riferisce. Se riguarda un altro account o anno, l’app lo spiega.\n- Aprire l’app o aggiornare una schermata non fa più perdere le novità alle notifiche. Gli aggiornamenti ai voti possono comparire insieme ai nuovi voti.\n- Quando una fonte del registro non risponde, l’app conserva i dati già salvati.\n\n## Consultazione quotidiana\n\n- La Bacheca apre il dettaglio dell’ultimo elemento toccato anche quando le risposte arrivano fuori ordine.\n- L’Agenda mantiene il giorno selezionato; l’orario segue il giorno e la settimana anche se l’app resta aperta.\n- Home, Voti e statistiche usano la stessa media, con i voti pesati in ogni materia.\n- Le notifiche aprono anche le assenze già giustificate e lo storico mostra tutte le registrazioni.\n- Il widget conta tutti i voti da vedere, filtra gli impegni prima di limitarli e si aggiorna quando si esce dall’account.\n\n## Aria e PampAI\n\n- ClasseViva può fornire alla memoria di Aria letture verificabili del registro, legate ad account, studente, anno e filtri, con autorizzazioni brevi che decadono al cambio di sessione.\n\n## Problemi noti\n\n- Al momento dell’accesso con la CIE può comparire un avviso d’errore che si risolve da solo con l’aggiornamento successivo.\n- Se l’archivio protetto dell’accesso è illeggibile e un nuovo accesso fallisce al salvataggio, possono andare persi orari personalizzati, eventi e punteggi offline.",
-      "releaseTag": "stable-classeviva-expressive-v7.17.0",
-      "apkAsset": "classeviva-expressive-7.17.0.apk",
-      "sizeBytes": 34655199,
-      "sha256": "d964909cd44341a08cadd29b89c6d5b847c04a7c0aeeceba165475bd11fda34a"
+      "version": "7.17.1",
+      "releaseDate": "2026-11-22",
+      "changelog": "## Accesso CIE e portale\n\n- I compiti si aggiornano direttamente con la sessione dell'app, senza dipendere dal portale.\n- Colloqui, pagella e azioni in Bacheca riaprono automaticamente la sessione del portale quando scade, senza richiedere di nuovo la CIE.\n- Corretto il rinnovo del portale introdotto nella beta precedente.\n\n## Problemi noti\n\n- Durante l'accesso CIE può comparire brevemente un avviso che si risolve con l'aggiornamento successivo.\n- Se l'archivio protetto dell'accesso è illeggibile e un nuovo accesso fallisce al salvataggio, possono andare persi orari personalizzati, eventi e punteggi offline.",
+      "releaseTag": "stable-classeviva-expressive-v7.17.1",
+      "apkAsset": "classeviva-expressive-7.17.1.apk",
+      "sizeBytes": 34655197,
+      "sha256": "3f67193d46338f51ab4de0ea6e682a50bc628c3e8fdea42d524f2cd3126a1084"
     },
     "beta": {
-      "version": "7.17.1-beta.2",
-      "releaseDate": "2026-11-21",
-      "changelog": "# Classeviva Expressive 7.17.1-beta.2\n\n## Con la CIE niente più «Accesso al portale scaduto»\n\n- **Compiti:** ora si leggono con l’accesso CIE stesso (`v1/students/…/homeworks`), come fa l’app ufficiale, e non dipendono più dalla sessione del portale. Sul telefono vengono letti tutti i compiti (25) senza passare dal portale. Vale anche per chi accede con le credenziali: una richiesta in meno e nessun accesso al portale in sottofondo.\n- **Colloqui, pagella e azioni in Bacheca:** quando la sessione del portale scade, l’app la riapre da sola con un ticket monouso dell’accesso CIE, senza chiedere di rifare la CIE. Provato sul telefono: portale riaperto e identità verificata in meno di un secondo.\n- Corretto un errore della beta.1: il ticket arriva già codificato per l’indirizzo e veniva codificato una seconda volta, così il portale lo rifiutava.\n\n## Limiti della beta\n\nResta da capire l’avviso d’errore che compare un istante al momento del login con la CIE. Resta valido anche quanto scritto nelle beta precedenti sul problema dell’archivio protetto illeggibile.",
-      "releaseTag": "beta-classeviva-expressive-v7.17.1-beta.2",
-      "apkAsset": "classeviva-expressive-7.17.1-beta.2.apk",
-      "sizeBytes": 34655199,
-      "sha256": "1fa11864537a8558b508447014bfecec8d51ed71c6d7cdf28e9492127089fb5f"
+      "version": "7.17.1",
+      "releaseDate": "2026-11-22",
+      "changelog": "## Accesso CIE e portale\n\n- I compiti si aggiornano direttamente con la sessione dell'app, senza dipendere dal portale.\n- Colloqui, pagella e azioni in Bacheca riaprono automaticamente la sessione del portale quando scade, senza richiedere di nuovo la CIE.\n- Corretto il rinnovo del portale introdotto nella beta precedente.\n\n## Problemi noti\n\n- Durante l'accesso CIE può comparire brevemente un avviso che si risolve con l'aggiornamento successivo.\n- Se l'archivio protetto dell'accesso è illeggibile e un nuovo accesso fallisce al salvataggio, possono andare persi orari personalizzati, eventi e punteggi offline.",
+      "releaseTag": "stable-classeviva-expressive-v7.17.1",
+      "apkAsset": "classeviva-expressive-7.17.1.apk",
+      "sizeBytes": 34655197,
+      "sha256": "3f67193d46338f51ab4de0ea6e682a50bc628c3e8fdea42d524f2cd3126a1084"
     },
     "history": [
       {
